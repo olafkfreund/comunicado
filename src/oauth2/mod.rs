@@ -83,11 +83,17 @@ pub enum OAuth2Scope {
     Profile,
     Email,
     
+    // Google Contacts scope
+    GoogleContacts,
+    
     // Outlook scopes
     OutlookMailRead,
     OutlookMailReadWrite,
     OutlookMailSend,
     OutlookOfflineAccess,
+    
+    // Outlook Contacts scope
+    OutlookContacts,
     
     // Yahoo scopes  
     YahooMailRead,
@@ -106,10 +112,12 @@ impl OAuth2Scope {
             OAuth2Scope::OpenId => "openid",
             OAuth2Scope::Profile => "profile", 
             OAuth2Scope::Email => "email",
+            OAuth2Scope::GoogleContacts => "https://www.googleapis.com/auth/contacts.readonly",
             OAuth2Scope::OutlookMailRead => "https://graph.microsoft.com/Mail.Read",
             OAuth2Scope::OutlookMailReadWrite => "https://graph.microsoft.com/Mail.ReadWrite",
             OAuth2Scope::OutlookMailSend => "https://graph.microsoft.com/Mail.Send",
             OAuth2Scope::OutlookOfflineAccess => "offline_access",
+            OAuth2Scope::OutlookContacts => "https://graph.microsoft.com/Contacts.Read",
             OAuth2Scope::YahooMailRead => "mail-r",
             OAuth2Scope::YahooMailWrite => "mail-w",
             OAuth2Scope::Custom(s) => s,
