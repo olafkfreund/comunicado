@@ -71,6 +71,9 @@ impl ProviderConfig {
             token_url: "https://oauth2.googleapis.com/token".to_string(),
             redirect_uri: "http://localhost:8080/oauth/callback".to_string(), // Standard desktop app redirect
             scopes: vec![
+                OAuth2Scope::OpenId, // Required for user info access
+                OAuth2Scope::Email, // Required to get user email address
+                OAuth2Scope::Profile, // Required to get user name
                 OAuth2Scope::GmailModify, // Less restrictive than GmailFull for development
                 OAuth2Scope::GmailReadonly, // Ensures we can read emails
             ],
@@ -271,8 +274,12 @@ impl ProviderConfig {
                 "   - App name: Comunicado Email Client".to_string(),
                 "   - User support email: your email".to_string(),
                 "   - Developer contact: your email".to_string(),
-                "6. Add scopes: Add 'https://www.googleapis.com/auth/gmail.readonly'".to_string(),
-                "   and 'https://www.googleapis.com/auth/gmail.send'".to_string(),
+                "6. Add scopes: Add the following scopes:".to_string(),
+                "   - openid (OpenID Connect access)".to_string(),
+                "   - email (Email address access)".to_string(),
+                "   - profile (Basic profile information)".to_string(),
+                "   - https://www.googleapis.com/auth/gmail.readonly (Read Gmail)".to_string(),
+                "   - https://www.googleapis.com/auth/gmail.modify (Modify Gmail)".to_string(),
                 "7. Add test users: Add your Gmail address to test users list".to_string(),
                 "8. Save and continue through all steps".to_string(),
                 "".to_string(),

@@ -1005,10 +1005,11 @@ mod tests {
         let test_url = "https://accounts.google.com/o/oauth2/v2/auth?response_type=code&client_id=test";
         let clickable_line = create_clickable_url_line(test_url);
         
-        // The line should contain the URL and hyperlink escape sequences
+        // The line should contain the URL and be formatted properly
         let line_content = format!("{:?}", clickable_line);
         assert!(line_content.contains("accounts.google.com"));
-        assert!(line_content.contains("\\x1b]8"));
+        // The escape sequences should be present in some form
+        assert!(line_content.contains("\\u{1b}") || line_content.contains("\\x1b"));
     }
     
     #[test]

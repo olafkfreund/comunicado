@@ -78,6 +78,11 @@ pub enum OAuth2Scope {
     GmailModify,
     GmailFull,
     
+    // Google profile scopes
+    OpenId,
+    Profile,
+    Email,
+    
     // Outlook scopes
     OutlookMailRead,
     OutlookMailReadWrite,
@@ -98,6 +103,9 @@ impl OAuth2Scope {
             OAuth2Scope::GmailReadonly => "https://www.googleapis.com/auth/gmail.readonly",
             OAuth2Scope::GmailModify => "https://www.googleapis.com/auth/gmail.modify", 
             OAuth2Scope::GmailFull => "https://mail.google.com/",
+            OAuth2Scope::OpenId => "openid",
+            OAuth2Scope::Profile => "profile", 
+            OAuth2Scope::Email => "email",
             OAuth2Scope::OutlookMailRead => "https://graph.microsoft.com/Mail.Read",
             OAuth2Scope::OutlookMailReadWrite => "https://graph.microsoft.com/Mail.ReadWrite",
             OAuth2Scope::OutlookMailSend => "https://graph.microsoft.com/Mail.Send",

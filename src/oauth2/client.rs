@@ -222,7 +222,7 @@ impl OAuth2Client {
     /// Get user info using access token (for email address detection)
     pub async fn get_user_info(&self, access_token: &str) -> OAuth2Result<UserInfo> {
         let user_info_url = match self.config.provider {
-            crate::oauth2::OAuth2Provider::Gmail => "https://www.googleapis.com/oauth2/v2/userinfo",
+            crate::oauth2::OAuth2Provider::Gmail => "https://www.googleapis.com/oauth2/v1/userinfo",
             crate::oauth2::OAuth2Provider::Outlook => "https://graph.microsoft.com/v1.0/me",
             crate::oauth2::OAuth2Provider::Yahoo => "https://api.login.yahoo.com/openid/v1/userinfo",
             crate::oauth2::OAuth2Provider::Custom(_) => {
@@ -240,9 +240,19 @@ impl OAuth2Client {
             .map_err(OAuth2Error::NetworkError)?;
         
         if !response.status().is_success() {
-            return Err(OAuth2Error::NetworkError(
-                reqwest::Error::from(response.error_for_status().unwrap_err())
-            ));
+            let status = response.status();
+            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+            
+            // Provide helpful error messages for common issues
+            let helpful_message = if status == 401 {
+                format!("Access token unauthorized (401): {}\n\nThis usually means:\n• Access token is expired or invalid\n• Missing required scopes (openid, email, profile)\n• Token was revoked by the user\n• OAuth app needs re-authorization", error_text)
+            } else if status == 403 {
+                format!("Access forbidden (403): {}\n\nThis usually means:\n• Insufficient permissions for this API\n• API not enabled in Google Cloud Console\n• Rate limiting or quota exceeded", error_text)
+            } else {
+                format!("HTTP {} error: {}", status, error_text)
+            };
+            
+            return Err(OAuth2Error::InvalidToken(helpful_message));
         }
         
         let user_data: Value = response.json().await
