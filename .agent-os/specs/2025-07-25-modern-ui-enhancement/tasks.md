@@ -17,14 +17,14 @@ These are the tasks to be completed for the spec detailed in @.agent-os/specs/20
   - [x] 1.7 Add accessibility features (high contrast, color blind support)
   - [x] 1.8 Verify all theme system tests pass
 
-- [ ] 2. Professional Status Bar and Navigation
-  - [ ] 2.1 Write tests for status bar components and real-time updates
-  - [ ] 2.2 Implement modular status bar architecture
-  - [ ] 2.3 Create real-time email/calendar counters and indicators
-  - [ ] 2.4 Build network status and sync progress indicators
-  - [ ] 2.5 Add customizable status bar layout system
-  - [ ] 2.6 Implement keyboard shortcuts display and help system
-  - [ ] 2.7 Verify all status bar tests pass
+- [x] 2. Professional Status Bar and Navigation
+  - [x] 2.1 Write tests for status bar components and real-time updates
+  - [x] 2.2 Implement modular status bar architecture
+  - [x] 2.3 Create real-time email/calendar counters and indicators
+  - [x] 2.4 Build network status and sync progress indicators
+  - [x] 2.5 Add customizable status bar layout system
+  - [x] 2.6 Implement keyboard shortcuts display and help system
+  - [x] 2.7 Verify all status bar tests pass
 
 - [ ] 3. Enhanced Email Threading and Organization
   - [ ] 3.1 Write tests for conversation threading algorithms

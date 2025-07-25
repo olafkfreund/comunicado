@@ -16,7 +16,18 @@ impl AppLayout {
     }
 
     pub fn calculate_layout(&self, area: Rect) -> Vec<Rect> {
-        // Create horizontal layout: [Folders | Messages | Content]
+        // First, split vertically to reserve space for status bar
+        let vertical_chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Min(3),      // Main content area
+                Constraint::Length(3),   // Status bar (fixed height)
+            ])
+            .split(area);
+
+        let main_area = vertical_chunks[0];
+        
+        // Then create horizontal layout in the main area: [Folders | Messages | Content]
         let horizontal_chunks = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([
@@ -24,9 +35,12 @@ impl AppLayout {
                 Constraint::Percentage(self.message_width_ratio), // Percentage for messages
                 Constraint::Min(30),                             // Remaining space for content
             ])
-            .split(area);
+            .split(main_area);
 
-        horizontal_chunks.to_vec()
+        // Return all chunks: [folder, message, content, status_bar]
+        let mut all_chunks = horizontal_chunks.to_vec();
+        all_chunks.push(vertical_chunks[1]); // Add status bar area
+        all_chunks
     }
 
     pub fn set_folder_width(&mut self, width: u16) {
