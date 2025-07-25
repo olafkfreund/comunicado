@@ -53,8 +53,13 @@ impl OAuth2Client {
         let actual_port = callback_server.port;
         
         // Build redirect URI with the actual port
-        let actual_redirect_uri = if self.config.redirect_uri.starts_with("http://localhost") {
+        let actual_redirect_uri = if self.config.redirect_uri.starts_with("http://localhost") && !self.config.redirect_uri.contains(":") {
+            // Only modify if it's just "http://localhost" without a port
             format!("http://localhost:{}/oauth/callback", actual_port)
+        } else if self.config.redirect_uri.starts_with("http://localhost:") {
+            // If there's already a port specified, use the dynamic port but keep the path
+            let path = self.config.redirect_uri.split("/").skip(3).collect::<Vec<_>>().join("/");
+            format!("http://localhost:{}/{}", actual_port, path)
         } else {
             self.config.redirect_uri.clone()
         };
@@ -137,7 +142,19 @@ impl OAuth2Client {
         
         if !response.status().is_success() {
             let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-            return Err(OAuth2Error::TokenExchangeFailed(error_text));
+            
+            // Provide helpful error messages for common Google OAuth2 issues
+            let helpful_message = if error_text.contains("invalid_request") {
+                format!("{}\n\nThis usually means:\n• OAuth consent screen is not properly configured\n• Your email is not added to test users list\n• Gmail API is not enabled\n• App verification is required", error_text)
+            } else if error_text.contains("access_denied") {
+                format!("{}\n\nThe user denied access or your app is not approved by Google.\nEnsure your email is in the test users list.", error_text)
+            } else if error_text.contains("redirect_uri_mismatch") {
+                format!("{}\n\nRedirect URI mismatch. For desktop apps:\n• Ensure you selected 'Desktop application' type\n• Don't manually configure redirect URIs", error_text)
+            } else {
+                error_text
+            };
+            
+            return Err(OAuth2Error::TokenExchangeFailed(helpful_message));
         }
         
         let token_data: Value = response.json().await
@@ -520,9 +537,12 @@ impl CallbackServer {
                 "code" => code = Some(value.to_string()),
                 "state" => state = Some(value.to_string()),
                 "error" => {
-                    return Err(OAuth2Error::AuthorizationFailed(
-                        format!("OAuth2 error: {}", value)
-                    ));
+                    let error_message = if value.as_ref() == "access_denied" {
+                        "Access denied by user or Google compliance issues.\n\nCommon causes:\n• User cancelled authorization\n• App not in approved test users list\n• OAuth consent screen incomplete\n• App requires Google verification".to_string()
+                    } else {
+                        format!("OAuth2 authorization error: {}", value)
+                    };
+                    return Err(OAuth2Error::AuthorizationFailed(error_message));
                 }
                 _ => {}
             }
