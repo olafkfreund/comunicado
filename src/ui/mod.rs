@@ -171,6 +171,10 @@ impl UI {
     }
 
     // Accessors for pane components
+    pub fn folder_tree(&self) -> &FolderTree {
+        &self.folder_tree
+    }
+    
     pub fn folder_tree_mut(&mut self) -> &mut FolderTree {
         &mut self.folder_tree
     }

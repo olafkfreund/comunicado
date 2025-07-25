@@ -149,6 +149,54 @@ impl EventHandler {
                 }
             }
             
+            // Folder management shortcuts (when folder tree is focused)
+            KeyCode::Char('f') => {
+                // Toggle folder search/filter
+                if let FocusedPane::FolderTree = ui.focused_pane() {
+                    // For now, just clear search - in production this would open search input
+                    ui.folder_tree_mut().clear_search();
+                }
+            }
+            KeyCode::Char('n') => {
+                // Create new folder (when folder tree focused)
+                if let FocusedPane::FolderTree = ui.focused_pane() {
+                    // In production, this would open a dialog for folder name input
+                    // For demo, create a sample folder
+                    let parent_path = ui.folder_tree().selected_folder().map(|f| f.path.clone());
+                    if let Some(parent_path) = parent_path {
+                        let _ = ui.folder_tree_mut().create_folder(Some(&parent_path), "New Folder".to_string());
+                    }
+                }
+            }
+            KeyCode::Char('d') => {
+                // Delete folder (when folder tree focused, non-Ctrl)
+                if matches!(ui.focused_pane(), FocusedPane::FolderTree) && !key.modifiers.contains(KeyModifiers::CONTROL) {
+                    let folder_path = ui.folder_tree().selected_folder().map(|f| f.path.clone());
+                    if let Some(path) = folder_path {
+                        let _ = ui.folder_tree_mut().delete_folder(&path);
+                    }
+                }
+            }
+            KeyCode::Char('R') => {
+                // Refresh folder (capital R)
+                if let FocusedPane::FolderTree = ui.focused_pane() {
+                    let folder_path = ui.folder_tree().selected_folder().map(|f| f.path.clone());
+                    if let Some(path) = folder_path {
+                        ui.folder_tree_mut().refresh_folder(&path);
+                        // Simulate sync completion after a moment (in production this would be async)
+                        ui.folder_tree_mut().mark_folder_synced(&path, 0, 42);
+                    }
+                }
+            }
+            KeyCode::Char('/') => {
+                // Start folder search
+                if let FocusedPane::FolderTree = ui.focused_pane() {
+                    // In production, this would open search input
+                    // For demo, toggle showing unsubscribed folders
+                    ui.folder_tree_mut().toggle_show_unsubscribed();
+                }
+            }
+            
             _ => {}
         }
     }
