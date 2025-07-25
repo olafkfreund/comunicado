@@ -15,6 +15,7 @@ use tokio::time::{Duration, Instant};
 use crate::events::EventHandler;
 use crate::ui::UI;
 use crate::email::{EmailDatabase, EmailNotificationManager};
+use crate::oauth2::{SetupWizard, SecureStorage, AccountConfig};
 
 pub struct App {
     should_quit: bool,
@@ -22,17 +23,20 @@ pub struct App {
     event_handler: EventHandler,
     database: Option<Arc<EmailDatabase>>,
     notification_manager: Option<Arc<EmailNotificationManager>>,
+    storage: SecureStorage,
 }
 
 impl App {
-    pub fn new() -> Self {
-        Self {
+    pub fn new() -> Result<Self> {
+        Ok(Self {
             should_quit: false,
             ui: UI::new(),
             event_handler: EventHandler::new(),
             database: None,
             notification_manager: None,
-        }
+            storage: SecureStorage::new("comunicado".to_string())
+                .map_err(|e| anyhow::anyhow!("Failed to initialize secure storage: {}", e))?,
+        })
     }
     
     /// Initialize the database connection
@@ -71,7 +75,102 @@ impl App {
         Ok(())
     }
     
-    /// Load sample data for demonstration
+    /// Check for existing accounts and run setup wizard if needed
+    pub async fn check_accounts_and_setup(&mut self) -> Result<()> {
+        let account_ids = self.storage.list_account_ids()
+            .map_err(|e| anyhow::anyhow!("Failed to list accounts: {}", e))?;
+        
+        if account_ids.is_empty() {
+            // No accounts found, run setup wizard
+            self.run_setup_wizard().await?;
+        } else {
+            // Load existing accounts
+            self.load_existing_accounts().await?;
+        }
+        
+        Ok(())
+    }
+    
+    /// Run the OAuth2 setup wizard
+    async fn run_setup_wizard(&mut self) -> Result<()> {
+        let mut wizard = SetupWizard::new()
+            .map_err(|e| anyhow::anyhow!("Failed to create setup wizard: {}", e))?;
+        
+        if let Some(account_config) = wizard.run().await
+            .map_err(|e| anyhow::anyhow!("Setup wizard failed: {}", e))? {
+            
+            // Store the account configuration in database
+            self.create_account_from_config(&account_config).await?;
+            
+            println!("Account setup completed successfully!");
+            println!("Account: {} ({})", account_config.display_name, account_config.email_address);
+        } else {
+            return Err(anyhow::anyhow!("Account setup was cancelled"));
+        }
+        
+        Ok(())
+    }
+    
+    /// Load existing accounts from storage
+    async fn load_existing_accounts(&mut self) -> Result<()> {
+        let accounts = self.storage.load_all_accounts()
+            .map_err(|e| anyhow::anyhow!("Failed to load accounts: {}", e))?;
+        
+        if accounts.is_empty() {
+            return self.load_sample_data().await;
+        }
+        
+        // For now, load the first account
+        if let Some(account) = accounts.first() {
+            self.create_account_from_config(account).await?;
+            
+            // Try to load messages from the first account's INBOX
+            let _ = self.ui.load_messages(account.account_id.clone(), "INBOX".to_string()).await;
+        }
+        
+        Ok(())
+    }
+    
+    /// Create account and folder in database from OAuth2 config
+    async fn create_account_from_config(&self, config: &AccountConfig) -> Result<()> {
+        if let Some(ref database) = self.database {
+            // Check if account already exists
+            let account_exists = sqlx::query("SELECT id FROM accounts WHERE id = ?")
+                .bind(&config.account_id)
+                .fetch_optional(&database.pool)
+                .await?
+                .is_some();
+            
+            if !account_exists {
+                // Create account
+                sqlx::query("INSERT INTO accounts (id, name, email, provider, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)")
+                    .bind(&config.account_id)
+                    .bind(&config.display_name)
+                    .bind(&config.email_address)
+                    .bind(&config.provider)
+                    .bind(chrono::Utc::now().to_rfc3339())
+                    .bind(chrono::Utc::now().to_rfc3339())
+                    .execute(&database.pool)
+                    .await?;
+                
+                // Create INBOX folder (always create this for email accounts)
+                sqlx::query("INSERT INTO folders (account_id, name, full_name, delimiter, attributes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
+                    .bind(&config.account_id)
+                    .bind("INBOX")
+                    .bind("INBOX")
+                    .bind(".")
+                    .bind("[]")
+                    .bind(chrono::Utc::now().to_rfc3339())
+                    .bind(chrono::Utc::now().to_rfc3339())
+                    .execute(&database.pool)
+                    .await?;
+            }
+        }
+        
+        Ok(())
+    }
+    
+    /// Load sample data for demonstration (fallback)
     pub async fn load_sample_data(&mut self) -> Result<()> {
         if let Some(ref database) = self.database {
             // Create sample account and folder if they don't exist
@@ -194,6 +293,6 @@ impl App {
 
 impl Default for App {
     fn default() -> Self {
-        Self::new()
+        Self::new().expect("Failed to create default App")
     }
 }

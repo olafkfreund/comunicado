@@ -355,7 +355,7 @@ impl CallbackServer {
         // In production, you'd use a proper HTTP server like warp or axum
         
         use std::io::Read;
-        use std::net::{TcpListener, TcpStream};
+        use std::net::TcpListener;
         
         let listener = TcpListener::bind(format!("127.0.0.1:{}", self.port))
             .map_err(|e| OAuth2Error::StorageError(format!("Failed to bind to port {}: {}", self.port, e)))?;

@@ -11,9 +11,7 @@ pub use wizard::SetupWizard;
 pub use storage::SecureStorage;
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use thiserror::Error;
-use url::Url;
 
 /// OAuth2 authentication errors
 #[derive(Error, Debug)]

@@ -3,7 +3,7 @@ use crate::imap::{
     ImapFolder, ImapMessage, MessageFlag, SearchCriteria, ImapAuthMethod,
     IdleNotification, IdleNotificationService
 };
-use crate::oauth2::{TokenManager, OAuth2Result};
+use crate::oauth2::TokenManager;
 use crate::imap::connection::ConnectionState;
 use crate::imap::protocol::ImapProtocol;
 use std::collections::HashMap;
@@ -397,7 +397,7 @@ impl ImapClient {
         let response = self.connection.send_command(&command).await?;
         
         // Parse STATUS response (simplified)
-        let mut folder = ImapFolder::new(folder_name.to_string(), folder_name.to_string());
+        let folder = ImapFolder::new(folder_name.to_string(), folder_name.to_string());
         
         // TODO: Parse STATUS response properly
         // For now, return basic folder info

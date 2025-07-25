@@ -1,7 +1,6 @@
 use crate::oauth2::{OAuth2Error, OAuth2Result, AccountConfig};
-use keyring::{Entry, Error as KeyringError};
+use keyring::Entry;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 

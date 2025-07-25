@@ -1,4 +1,4 @@
-use crate::oauth2::{OAuth2Error, OAuth2Result, TokenResponse, AccountConfig};
+use crate::oauth2::{OAuth2Error, OAuth2Result, TokenResponse};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;

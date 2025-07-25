@@ -7,13 +7,13 @@ async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
 
     // Create and initialize the application
-    let mut app = App::new();
+    let mut app = App::new()?;
     
     // Initialize database connection
     app.initialize_database().await?;
     
-    // Load sample data if available
-    app.load_sample_data().await?;
+    // Check for existing accounts and run setup wizard if needed
+    app.check_accounts_and_setup().await?;
     
     // Run the application
     app.run().await?;

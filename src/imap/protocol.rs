@@ -1,9 +1,7 @@
 use crate::imap::{
     ImapError, ImapResult, ImapCapability, ImapFolder, ImapMessage, 
-    MessageFlag, MessageEnvelope, Address, FolderAttribute, SearchCriteria
+    MessageFlag, FolderAttribute, SearchCriteria
 };
-use std::collections::HashMap;
-use chrono::{DateTime, Utc};
 
 /// IMAP protocol parser and formatter
 pub struct ImapProtocol;

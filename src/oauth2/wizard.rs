@@ -10,9 +10,9 @@ use crossterm::{
 };
 use ratatui::{
     backend::CrosstermBackend,
-    layout::{Alignment, Constraint, Direction, Layout, Margin, Rect},
+    layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
-    text::{Line, Span, Text},
+    text::{Line, Span},
     widgets::{
         Block, Borders, Clear, List, ListItem, ListState, Paragraph, 
         Gauge, Wrap
@@ -362,7 +362,7 @@ impl SetupWizard {
     
     async fn setup_oauth_client(&mut self) -> OAuth2Result<()> {
         if let Some(provider) = &self.selected_provider {
-            let mut config = ProviderConfig::get_config(provider)?
+            let config = ProviderConfig::get_config(provider)?
                 .with_credentials(
                     self.client_id_input.clone(),
                     if self.client_secret_input.is_empty() { 
