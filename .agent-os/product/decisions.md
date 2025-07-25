@@ -128,3 +128,87 @@ Keyboard efficiency is essential for terminal users' productivity, while modern 
 **Negative:**
 - Steeper learning curve for non-terminal users
 - Additional complexity in UI design and implementation
+
+## 2025-07-25: Product Scope Expansion to Productivity Hub
+
+**ID:** DEC-004
+**Status:** Accepted
+**Category:** Product
+**Stakeholders:** Product Owner, Tech Lead, Team
+**Related Spec:** @.agent-os/specs/2025-07-25-modern-ui-enhancement/
+
+### Decision
+
+Expand Comunicado from a focused email and calendar client into a comprehensive communication and productivity hub with AI assistant integration, plugin architecture, RSS content aggregation, and voice control capabilities.
+
+### Context
+
+Initial user feedback and market analysis revealed demand for a unified terminal-based productivity platform that goes beyond traditional email clients. Modern terminal users seek integrated workflows that reduce context switching between multiple applications and services.
+
+### Alternatives Considered
+
+1. **Maintain narrow focus on email/calendar only**
+   - Pros: Simpler development scope, faster time to market, clearer value proposition
+   - Cons: Misses market opportunity for comprehensive solution, users still need multiple tools
+
+2. **Create separate applications for each feature**
+   - Pros: Focused development, easier maintenance, modular distribution
+   - Cons: Fragments user workflow, increases context switching, harder to achieve integration benefits
+
+3. **Build basic plugin system without AI or advanced features**
+   - Pros: Extensible without complexity, community-driven feature development
+   - Cons: Incomplete solution for productivity hub vision, competitive disadvantage
+
+### Rationale
+
+The terminal power user market values comprehensive, integrated solutions that enable complete workflows within their preferred environment. AI integration provides competitive differentiation while plugin architecture ensures extensibility for diverse user needs. The productivity hub approach addresses the core problem of workflow fragmentation.
+
+### Consequences
+
+**Positive:**
+- Creates unique market position as comprehensive terminal productivity platform
+- AI integration provides significant competitive advantage and user value
+- Plugin architecture enables community ecosystem and extended functionality
+- Unified interface reduces context switching and improves workflow efficiency
+- RSS and content aggregation addresses information management needs
+
+**Negative:**
+- Significantly increased development complexity and timeline
+- Larger attack surface for security concerns
+- Higher resource requirements and potential performance impact
+- Risk of feature bloat affecting core email/calendar experience
+- Dependencies on external AI services may conflict with privacy positioning
+
+## 2025-07-25: AI Integration and Privacy Balance
+
+**ID:** DEC-005
+**Status:** Accepted
+**Category:** Technical
+**Stakeholders:** Tech Lead, Privacy Lead, Product Owner
+**Related Spec:** @.agent-os/specs/2025-07-25-modern-ui-enhancement/
+
+### Decision
+
+Implement multi-provider AI integration with strong emphasis on local processing options (Ollama), user consent mechanisms, and privacy-first design while supporting cloud-based AI services for enhanced functionality.
+
+### Context
+
+AI assistance provides significant value for email management, content summarization, and productivity workflows, but conflicts with our privacy-conscious user base and zero-external-dependency philosophy for core features.
+
+### Rationale
+
+Modern productivity requires AI assistance, but implementation must respect user privacy preferences and provide local alternatives. Multi-provider approach prevents vendor lock-in while local options maintain privacy principles.
+
+### Consequences
+
+**Positive:**
+- Competitive AI features without compromising privacy principles
+- User choice between convenience (cloud) and privacy (local)
+- Future-proof architecture supporting emerging local AI models
+- Differentiated positioning in privacy-conscious market segment
+
+**Negative:**
+- Complex implementation supporting multiple AI backends
+- Local AI requires significant system resources
+- User education needed for privacy/convenience tradeoffs
+- Potential inconsistency in AI experience across providers

@@ -1,10 +1,11 @@
 use ratatui::{
     layout::Rect,
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, List, ListItem, ListState},
     Frame,
 };
+use crate::theme::Theme;
 
 #[derive(Debug, Clone)]
 pub struct MessageItem {
@@ -127,7 +128,7 @@ impl MessageList {
         ];
     }
 
-    pub fn render(&self, frame: &mut Frame, area: Rect, block: Block, is_focused: bool) {
+    pub fn render(&self, frame: &mut Frame, area: Rect, block: Block, _is_focused: bool, theme: &Theme) {
         let items: Vec<ListItem> = self.messages
             .iter()
             .enumerate()
@@ -135,57 +136,38 @@ impl MessageList {
                 let is_selected = self.state.selected() == Some(i);
                 
                 // Style based on message state
-                let subject_style = if is_selected && is_focused {
-                    Style::default()
-                        .bg(Color::Cyan)
-                        .fg(Color::Black)
-                        .add_modifier(Modifier::BOLD)
-                } else if is_selected {
-                    Style::default()
-                        .bg(Color::DarkGray)
-                        .fg(Color::White)
+                let subject_style = if is_selected {
+                    theme.styles.get_selected_style("message_list", &theme.colors)
                 } else if !message.is_read {
                     Style::default()
-                        .fg(Color::White)
+                        .fg(theme.colors.message_list.subject_unread)
                         .add_modifier(Modifier::BOLD)
                 } else {
-                    Style::default().fg(Color::Gray)
+                    Style::default().fg(theme.colors.message_list.subject_read)
                 };
 
-                let sender_style = if is_selected && is_focused {
-                    Style::default()
-                        .bg(Color::Cyan)
-                        .fg(Color::Black)
-                } else if is_selected {
-                    Style::default()
-                        .bg(Color::DarkGray)
-                        .fg(Color::White)
+                let sender_style = if is_selected {
+                    theme.styles.get_selected_style("message_list", &theme.colors)
                 } else {
-                    Style::default().fg(Color::Blue)
+                    Style::default().fg(theme.colors.message_list.sender)
                 };
 
-                let date_style = if is_selected && is_focused {
-                    Style::default()
-                        .bg(Color::Cyan)
-                        .fg(Color::Black)
-                } else if is_selected {
-                    Style::default()
-                        .bg(Color::DarkGray)
-                        .fg(Color::White)
+                let date_style = if is_selected {
+                    theme.styles.get_selected_style("message_list", &theme.colors)
                 } else {
-                    Style::default().fg(Color::Yellow)
+                    Style::default().fg(theme.colors.message_list.date)
                 };
 
-                // Create indicators
+                // Create indicators (professional, text-based)
                 let mut indicators = String::new();
                 if message.is_important {
-                    indicators.push('⭐');
+                    indicators.push('!');
                 }
                 if message.has_attachments {
-                    indicators.push('📎');
+                    indicators.push('@');
                 }
                 if !message.is_read {
-                    indicators.push('●');
+                    indicators.push('•');
                 }
                 if !indicators.is_empty() {
                     indicators.push(' ');

@@ -5,10 +5,10 @@ pub mod layout;
 
 use ratatui::{
     layout::Rect,
-    style::{Color, Modifier, Style},
     widgets::{Block, Borders},
     Frame,
 };
+use crate::theme::{Theme, ThemeManager};
 
 use self::{
     folder_tree::FolderTree,
@@ -30,6 +30,7 @@ pub struct UI {
     message_list: MessageList,
     content_preview: ContentPreview,
     layout: AppLayout,
+    theme_manager: ThemeManager,
 }
 
 impl UI {
@@ -40,6 +41,7 @@ impl UI {
             message_list: MessageList::new(),
             content_preview: ContentPreview::new(),
             layout: AppLayout::new(),
+            theme_manager: ThemeManager::new(),
         }
     }
 
@@ -55,44 +57,41 @@ impl UI {
 
     fn render_folder_tree(&self, frame: &mut Frame, area: Rect) {
         let is_focused = matches!(self.focused_pane, FocusedPane::FolderTree);
+        let theme = self.theme_manager.current_theme();
+        
+        let border_style = theme.get_component_style("border", is_focused);
         let block = Block::default()
             .title("Folders")
             .borders(Borders::ALL)
-            .border_style(if is_focused {
-                Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
-            } else {
-                Style::default().fg(Color::Gray)
-            });
+            .border_style(border_style);
 
-        self.folder_tree.render(frame, area, block, is_focused);
+        self.folder_tree.render(frame, area, block, is_focused, theme);
     }
 
     fn render_message_list(&self, frame: &mut Frame, area: Rect) {
         let is_focused = matches!(self.focused_pane, FocusedPane::MessageList);
+        let theme = self.theme_manager.current_theme();
+        
+        let border_style = theme.get_component_style("border", is_focused);
         let block = Block::default()
             .title("Messages")
             .borders(Borders::ALL)
-            .border_style(if is_focused {
-                Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
-            } else {
-                Style::default().fg(Color::Gray)
-            });
+            .border_style(border_style);
 
-        self.message_list.render(frame, area, block, is_focused);
+        self.message_list.render(frame, area, block, is_focused, theme);
     }
 
     fn render_content_preview(&self, frame: &mut Frame, area: Rect) {
         let is_focused = matches!(self.focused_pane, FocusedPane::ContentPreview);
+        let theme = self.theme_manager.current_theme();
+        
+        let border_style = theme.get_component_style("border", is_focused);
         let block = Block::default()
             .title("Content")
             .borders(Borders::ALL)
-            .border_style(if is_focused {
-                Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
-            } else {
-                Style::default().fg(Color::Gray)
-            });
+            .border_style(border_style);
 
-        self.content_preview.render(frame, area, block, is_focused);
+        self.content_preview.render(frame, area, block, is_focused, theme);
     }
 
     // Navigation methods
@@ -127,6 +126,23 @@ impl UI {
 
     pub fn content_preview_mut(&mut self) -> &mut ContentPreview {
         &mut self.content_preview
+    }
+
+    // Theme management methods
+    pub fn theme_manager(&self) -> &ThemeManager {
+        &self.theme_manager
+    }
+
+    pub fn theme_manager_mut(&mut self) -> &mut ThemeManager {
+        &mut self.theme_manager
+    }
+
+    pub fn set_theme(&mut self, theme_name: &str) -> Result<(), String> {
+        self.theme_manager.set_theme(theme_name)
+    }
+
+    pub fn current_theme(&self) -> &Theme {
+        self.theme_manager.current_theme()
     }
 }
 

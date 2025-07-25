@@ -1,10 +1,11 @@
 use ratatui::{
     layout::Rect,
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Paragraph, Wrap},
     Frame,
 };
+use crate::theme::Theme;
 
 pub struct ContentPreview {
     content: Vec<String>,
@@ -36,27 +37,27 @@ impl ContentPreview {
             "We're excited to have you try out our terminal-based email experience.".to_string(),
             "Comunicado brings modern email features directly to your terminal with:".to_string(),
             "".to_string(),
-            "✨ Modern TUI Interface".to_string(),
+            "Modern TUI Interface".to_string(),
             "   - Clean, intuitive design with ratatui".to_string(),
             "   - Vim-style keyboard navigation".to_string(),
             "   - Responsive three-pane layout".to_string(),
             "".to_string(),
-            "📧 Rich Email Support".to_string(),
+            "Rich Email Support".to_string(),
             "   - HTML email rendering (coming soon)".to_string(),
             "   - Image and animation display".to_string(),
             "   - Attachment handling".to_string(),
             "".to_string(),
-            "🔒 Secure Authentication".to_string(),
+            "Secure Authentication".to_string(),
             "   - OAuth2 support for major providers".to_string(),
             "   - Multi-account management".to_string(),
             "   - Local email storage with Maildir".to_string(),
             "".to_string(),
-            "📅 Integrated Calendar (upcoming)".to_string(),
+            "Integrated Calendar (upcoming)".to_string(),
             "   - CalDAV synchronization".to_string(),
             "   - Meeting invitation handling".to_string(),
             "   - Desktop environment integration".to_string(),
             "".to_string(),
-            "🚀 Getting Started".to_string(),
+            "Getting Started".to_string(),
             "".to_string(),
             "Use these keyboard shortcuts to navigate:".to_string(),
             "".to_string(),
@@ -89,7 +90,7 @@ impl ContentPreview {
         ];
     }
 
-    pub fn render(&self, frame: &mut Frame, area: Rect, block: Block, is_focused: bool) {
+    pub fn render(&self, frame: &mut Frame, area: Rect, block: Block, is_focused: bool, theme: &Theme) {
         let content_height = area.height.saturating_sub(2) as usize; // Account for block borders
         
         // Calculate visible content range
@@ -106,39 +107,39 @@ impl ContentPreview {
                     // Header styling
                     Line::from(vec![
                         Span::styled(line.clone(), Style::default()
-                            .fg(Color::Cyan)
+                            .fg(theme.colors.content_preview.header)
                             .add_modifier(Modifier::BOLD))
                     ])
-                } else if line.starts_with("✨") || line.starts_with("📧") || 
-                          line.starts_with("🔒") || line.starts_with("📅") || 
-                          line.starts_with("🚀") {
-                    // Section headers with emojis
+                } else if line.starts_with("Modern TUI") || line.starts_with("Rich Email") || 
+                          line.starts_with("Secure Auth") || line.starts_with("Integrated Calendar") || 
+                          line.starts_with("Getting Started") {
+                    // Section headers (removed emojis)
                     Line::from(vec![
                         Span::styled(line.clone(), Style::default()
-                            .fg(Color::Yellow)
+                            .fg(theme.colors.palette.accent)
                             .add_modifier(Modifier::BOLD))
                     ])
                 } else if line.starts_with("  ") && (line.contains("-") || line.contains("•")) {
                     // Bullet points
                     Line::from(vec![
-                        Span::styled(line.clone(), Style::default().fg(Color::Green))
+                        Span::styled(line.clone(), Style::default().fg(theme.colors.palette.success))
                     ])
                 } else if line.starts_with("Navigation:") || line.starts_with("Global:") {
                     // Keyboard shortcut section headers
                     Line::from(vec![
                         Span::styled(line.clone(), Style::default()
-                            .fg(Color::Magenta)
+                            .fg(theme.colors.palette.info)
                             .add_modifier(Modifier::BOLD))
                     ])
                 } else if line.contains("/") && (line.contains("Tab") || line.contains("Ctrl")) {
                     // Keyboard shortcuts
                     Line::from(vec![
-                        Span::styled(line.clone(), Style::default().fg(Color::Blue))
+                        Span::styled(line.clone(), Style::default().fg(theme.colors.content_preview.link))
                     ])
                 } else if line.starts_with("---") {
                     // Separators
                     Line::from(vec![
-                        Span::styled(line.clone(), Style::default().fg(Color::DarkGray))
+                        Span::styled(line.clone(), Style::default().fg(theme.colors.palette.border))
                     ])
                 } else if line.is_empty() {
                     // Empty lines
@@ -146,7 +147,7 @@ impl ContentPreview {
                 } else {
                     // Regular content
                     Line::from(vec![
-                        Span::styled(line.clone(), Style::default().fg(Color::White))
+                        Span::styled(line.clone(), Style::default().fg(theme.colors.content_preview.body))
                     ])
                 }
             })

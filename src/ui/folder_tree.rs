@@ -1,10 +1,11 @@
 use ratatui::{
     layout::Rect,
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, List, ListItem, ListState},
     Frame,
 };
+use crate::theme::Theme;
 
 #[derive(Debug, Clone)]
 pub struct FolderItem {
@@ -60,27 +61,27 @@ impl FolderTree {
 
     fn initialize_sample_folders(&mut self) {
         self.folders = vec![
-            FolderItem::new("📥 Inbox".to_string(), "INBOX".to_string(), 0)
+            FolderItem::new("Inbox".to_string(), "INBOX".to_string(), 0)
                 .with_unread_count(5),
-            FolderItem::new("📤 Sent".to_string(), "INBOX/Sent".to_string(), 0),
-            FolderItem::new("📝 Drafts".to_string(), "INBOX/Drafts".to_string(), 0)
+            FolderItem::new("Sent".to_string(), "INBOX/Sent".to_string(), 0),
+            FolderItem::new("Drafts".to_string(), "INBOX/Drafts".to_string(), 0)
                 .with_unread_count(2),
-            FolderItem::new("🗑️ Trash".to_string(), "INBOX/Trash".to_string(), 0),
-            FolderItem::new("📁 Work".to_string(), "INBOX/Work".to_string(), 0)
+            FolderItem::new("Trash".to_string(), "INBOX/Trash".to_string(), 0),
+            FolderItem::new("Work".to_string(), "INBOX/Work".to_string(), 0)
                 .with_children()
                 .with_unread_count(3),
-            FolderItem::new("📊 Projects".to_string(), "INBOX/Work/Projects".to_string(), 1)
+            FolderItem::new("Projects".to_string(), "INBOX/Work/Projects".to_string(), 1)
                 .with_unread_count(1),
-            FolderItem::new("👥 Team".to_string(), "INBOX/Work/Team".to_string(), 1),
-            FolderItem::new("📁 Personal".to_string(), "INBOX/Personal".to_string(), 0)
+            FolderItem::new("Team".to_string(), "INBOX/Work/Team".to_string(), 1),
+            FolderItem::new("Personal".to_string(), "INBOX/Personal".to_string(), 0)
                 .with_children(),
-            FolderItem::new("🏠 Family".to_string(), "INBOX/Personal/Family".to_string(), 1),
-            FolderItem::new("🎯 Important".to_string(), "INBOX/Important".to_string(), 0)
+            FolderItem::new("Family".to_string(), "INBOX/Personal/Family".to_string(), 1),
+            FolderItem::new("Important".to_string(), "INBOX/Important".to_string(), 0)
                 .with_unread_count(1),
         ];
     }
 
-    pub fn render(&self, frame: &mut Frame, area: Rect, block: Block, is_focused: bool) {
+    pub fn render(&self, frame: &mut Frame, area: Rect, block: Block, is_focused: bool, theme: &Theme) {
         let items: Vec<ListItem> = self.folders
             .iter()
             .enumerate()
@@ -100,27 +101,22 @@ impl FolderTree {
 
                 let is_selected = self.state.selected() == Some(i);
                 let style = if is_selected && is_focused {
-                    Style::default()
-                        .bg(Color::Cyan)
-                        .fg(Color::Black)
-                        .add_modifier(Modifier::BOLD)
+                    theme.styles.get_selected_style("folder_tree", &theme.colors)
                 } else if is_selected {
-                    Style::default()
-                        .bg(Color::DarkGray)
-                        .fg(Color::White)
+                    theme.styles.get_selected_style("folder_tree", &theme.colors)
                 } else if folder.unread_count > 0 {
                     Style::default()
-                        .fg(Color::White)
+                        .fg(theme.colors.folder_tree.folder_unread)
                         .add_modifier(Modifier::BOLD)
                 } else {
-                    Style::default().fg(Color::Gray)
+                    Style::default().fg(theme.colors.folder_tree.folder_normal)
                 };
 
                 let line = Line::from(vec![
-                    Span::raw(indent),
-                    Span::raw(expand_icon),
+                    Span::styled(indent, Style::default().fg(theme.colors.folder_tree.expand_icon)),
+                    Span::styled(expand_icon, Style::default().fg(theme.colors.folder_tree.expand_icon)),
                     Span::styled(folder.name.clone(), style),
-                    Span::styled(unread_indicator, Style::default().fg(Color::Yellow)),
+                    Span::styled(unread_indicator, Style::default().fg(theme.colors.folder_tree.count_badge)),
                 ]);
 
                 ListItem::new(line)

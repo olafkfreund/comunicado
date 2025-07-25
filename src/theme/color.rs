@@ -1,0 +1,332 @@
+use ratatui::style::Color;
+use serde::{Deserialize, Serialize};
+use crate::theme::accessibility::ColorBlindness;
+
+/// Professional color palette for clean, minimalistic design
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ColorPalette {
+    // Base colors
+    pub background: Color,
+    pub foreground: Color,
+    pub surface: Color,
+    pub overlay: Color,
+
+    // Text colors
+    pub text_primary: Color,
+    pub text_secondary: Color,
+    pub text_muted: Color,
+    pub text_inverse: Color,
+
+    // UI element colors
+    pub border: Color,
+    pub border_focused: Color,
+    pub selection: Color,
+    pub selection_text: Color,
+
+    // Status colors
+    pub success: Color,
+    pub warning: Color,
+    pub error: Color,
+    pub info: Color,
+
+    // Special purpose colors
+    pub accent: Color,
+    pub highlight: Color,
+    pub disabled: Color,
+}
+
+/// Complete theme color scheme
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ThemeColors {
+    pub palette: ColorPalette,
+    
+    // Component-specific colors
+    pub folder_tree: FolderTreeColors,
+    pub message_list: MessageListColors,
+    pub content_preview: ContentPreviewColors,
+    pub status_bar: StatusBarColors,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FolderTreeColors {
+    pub folder_normal: Color,
+    pub folder_selected: Color,
+    pub folder_unread: Color,
+    pub count_badge: Color,
+    pub expand_icon: Color,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MessageListColors {
+    pub sender: Color,
+    pub subject_read: Color,
+    pub subject_unread: Color,
+    pub date: Color,
+    pub thread_indicator: Color,
+    pub attachment_icon: Color,
+    pub priority_high: Color,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ContentPreviewColors {
+    pub header: Color,
+    pub body: Color,
+    pub quote: Color,
+    pub link: Color,
+    pub code: Color,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StatusBarColors {
+    pub background: Color,
+    pub text: Color,
+    pub section_separator: Color,
+    pub active_indicator: Color,
+}
+
+impl ThemeColors {
+    /// Professional dark theme colors
+    pub fn professional_dark() -> Self {
+        let palette = ColorPalette {
+            background: Color::Rgb(16, 16, 20),
+            foreground: Color::Rgb(224, 224, 230),
+            surface: Color::Rgb(24, 24, 28),
+            overlay: Color::Rgb(32, 32, 36),
+
+            text_primary: Color::Rgb(224, 224, 230),
+            text_secondary: Color::Rgb(160, 160, 168),
+            text_muted: Color::Rgb(112, 112, 120),
+            text_inverse: Color::Rgb(16, 16, 20),
+
+            border: Color::Rgb(64, 64, 72),
+            border_focused: Color::Rgb(88, 166, 255),
+            selection: Color::Rgb(88, 166, 255),
+            selection_text: Color::Rgb(16, 16, 20),
+
+            success: Color::Rgb(76, 175, 80),
+            warning: Color::Rgb(255, 193, 7),
+            error: Color::Rgb(244, 67, 54),
+            info: Color::Rgb(33, 150, 243),
+
+            accent: Color::Rgb(88, 166, 255),
+            highlight: Color::Rgb(255, 235, 59),
+            disabled: Color::Rgb(96, 96, 104),
+        };
+
+        Self {
+            palette: palette.clone(),
+            folder_tree: FolderTreeColors {
+                folder_normal: palette.text_secondary,
+                folder_selected: palette.selection_text,
+                folder_unread: palette.text_primary,
+                count_badge: palette.warning,
+                expand_icon: palette.text_muted,
+            },
+            message_list: MessageListColors {
+                sender: palette.info,
+                subject_read: palette.text_secondary,
+                subject_unread: palette.text_primary,
+                date: palette.text_muted,
+                thread_indicator: palette.accent,
+                attachment_icon: palette.text_muted,
+                priority_high: palette.error,
+            },
+            content_preview: ContentPreviewColors {
+                header: palette.accent,
+                body: palette.text_primary,
+                quote: palette.text_muted,
+                link: palette.info,
+                code: Color::Rgb(152, 195, 121),
+            },
+            status_bar: StatusBarColors {
+                background: palette.surface,
+                text: palette.text_primary,
+                section_separator: palette.border,
+                active_indicator: palette.accent,
+            },
+        }
+    }
+
+    /// Professional light theme colors
+    pub fn professional_light() -> Self {
+        let palette = ColorPalette {
+            background: Color::Rgb(250, 250, 252),
+            foreground: Color::Rgb(32, 32, 40),
+            surface: Color::Rgb(242, 242, 245),
+            overlay: Color::Rgb(234, 234, 238),
+
+            text_primary: Color::Rgb(32, 32, 40),
+            text_secondary: Color::Rgb(96, 96, 104),
+            text_muted: Color::Rgb(144, 144, 152),
+            text_inverse: Color::Rgb(250, 250, 252),
+
+            border: Color::Rgb(208, 208, 216),
+            border_focused: Color::Rgb(0, 122, 255),
+            selection: Color::Rgb(0, 122, 255),
+            selection_text: Color::Rgb(250, 250, 252),
+
+            success: Color::Rgb(52, 199, 89),
+            warning: Color::Rgb(255, 149, 0),
+            error: Color::Rgb(255, 59, 48),
+            info: Color::Rgb(0, 122, 255),
+
+            accent: Color::Rgb(0, 122, 255),
+            highlight: Color::Rgb(255, 204, 0),
+            disabled: Color::Rgb(174, 174, 178),
+        };
+
+        Self {
+            palette: palette.clone(),
+            folder_tree: FolderTreeColors {
+                folder_normal: palette.text_secondary,
+                folder_selected: palette.selection_text,
+                folder_unread: palette.text_primary,
+                count_badge: palette.warning,
+                expand_icon: palette.text_muted,
+            },
+            message_list: MessageListColors {
+                sender: palette.info,
+                subject_read: palette.text_secondary,
+                subject_unread: palette.text_primary,
+                date: palette.text_muted,
+                thread_indicator: palette.accent,
+                attachment_icon: palette.text_muted,
+                priority_high: palette.error,
+            },
+            content_preview: ContentPreviewColors {
+                header: palette.accent,
+                body: palette.text_primary,
+                quote: palette.text_muted,
+                link: palette.info,
+                code: Color::Rgb(108, 113, 196),
+            },
+            status_bar: StatusBarColors {
+                background: palette.surface,
+                text: palette.text_primary,
+                section_separator: palette.border,
+                active_indicator: palette.accent,
+            },
+        }
+    }
+
+    /// High contrast theme for accessibility
+    pub fn high_contrast() -> Self {
+        let palette = ColorPalette {
+            background: Color::Black,
+            foreground: Color::White,
+            surface: Color::Rgb(32, 32, 32),
+            overlay: Color::Rgb(48, 48, 48),
+
+            text_primary: Color::White,
+            text_secondary: Color::Rgb(200, 200, 200),
+            text_muted: Color::Rgb(160, 160, 160),
+            text_inverse: Color::Black,
+
+            border: Color::Rgb(128, 128, 128),
+            border_focused: Color::Yellow,
+            selection: Color::Yellow,
+            selection_text: Color::Black,
+
+            success: Color::Green,
+            warning: Color::Yellow,
+            error: Color::Red,
+            info: Color::Cyan,
+
+            accent: Color::Yellow,
+            highlight: Color::Magenta,
+            disabled: Color::Rgb(80, 80, 80),
+        };
+
+        Self {
+            palette: palette.clone(),
+            folder_tree: FolderTreeColors {
+                folder_normal: palette.text_secondary,
+                folder_selected: palette.selection_text,
+                folder_unread: palette.text_primary,
+                count_badge: palette.warning,
+                expand_icon: palette.text_muted,
+            },
+            message_list: MessageListColors {
+                sender: palette.info,
+                subject_read: palette.text_secondary,
+                subject_unread: palette.text_primary,
+                date: palette.text_muted,
+                thread_indicator: palette.accent,
+                attachment_icon: palette.text_muted,
+                priority_high: palette.error,
+            },
+            content_preview: ContentPreviewColors {
+                header: palette.accent,
+                body: palette.text_primary,
+                quote: palette.text_muted,
+                link: palette.info,
+                code: palette.success,
+            },
+            status_bar: StatusBarColors {
+                background: palette.surface,
+                text: palette.text_primary,
+                section_separator: palette.border,
+                active_indicator: palette.accent,
+            },
+        }
+    }
+
+    /// Convert to high contrast version
+    pub fn to_high_contrast(&self) -> Self {
+        Self::high_contrast()
+    }
+
+    /// Adjust colors for color blindness
+    pub fn adjust_for_color_blindness(&self, color_blindness: ColorBlindness) -> Self {
+        // This is a simplified implementation
+        // In a real application, you'd use proper color blindness simulation algorithms
+        match color_blindness {
+            ColorBlindness::Protanopia | ColorBlindness::Deuteranopia => {
+                // Adjust red-green colors to blue-yellow spectrum
+                let mut adjusted = self.clone();
+                adjusted.palette.error = Color::Rgb(255, 140, 0); // Orange instead of red
+                adjusted.palette.success = Color::Rgb(0, 162, 232); // Blue instead of green
+                adjusted
+            }
+            ColorBlindness::Tritanopia => {
+                // Adjust blue-yellow colors
+                let mut adjusted = self.clone();
+                adjusted.palette.info = Color::Rgb(150, 150, 150); // Gray instead of blue
+                adjusted.palette.warning = Color::Rgb(255, 100, 100); // Red-orange instead of yellow
+                adjusted
+            }
+        }
+    }
+
+    /// Validate contrast ratios for accessibility compliance
+    pub fn validate_contrast_ratios(&self) -> Result<(), String> {
+        // Simplified contrast validation
+        // In a real implementation, you'd calculate actual WCAG contrast ratios
+        
+        // Check that there's sufficient contrast between text and background
+        if self.is_similar_color(self.palette.text_primary, self.palette.background) {
+            return Err("Insufficient contrast between primary text and background".to_string());
+        }
+        
+        if self.is_similar_color(self.palette.text_secondary, self.palette.background) {
+            return Err("Insufficient contrast between secondary text and background".to_string());
+        }
+
+        Ok(())
+    }
+
+    /// Check if two colors are too similar (simplified)
+    fn is_similar_color(&self, color1: Color, color2: Color) -> bool {
+        // This is a very simplified color similarity check
+        // In a real implementation, you'd use proper color space calculations
+        match (color1, color2) {
+            (Color::Rgb(r1, g1, b1), Color::Rgb(r2, g2, b2)) => {
+                let diff = ((r1 as i32 - r2 as i32).abs() + 
+                           (g1 as i32 - g2 as i32).abs() + 
+                           (b1 as i32 - b2 as i32).abs()) as f32;
+                diff < 150.0 // Arbitrary threshold
+            }
+            _ => false,
+        }
+    }
+}
