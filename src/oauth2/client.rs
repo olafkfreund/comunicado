@@ -16,6 +16,7 @@ pub struct OAuth2Client {
     http_client: HttpClient,
     callback_server: Option<Arc<Mutex<CallbackServer>>>,
     actual_redirect_uri: Option<String>, // Store the actual redirect URI used
+    current_code_verifier: Option<String>, // Store the PKCE code verifier for current session
 }
 
 impl OAuth2Client {
@@ -33,6 +34,7 @@ impl OAuth2Client {
             http_client,
             callback_server: None,
             actual_redirect_uri: None,
+            current_code_verifier: None,
         })
     }
     
@@ -67,6 +69,9 @@ impl OAuth2Client {
         // Store the actual redirect URI for token exchange
         self.actual_redirect_uri = Some(actual_redirect_uri.clone());
         
+        // Store the PKCE code verifier for token exchange
+        self.current_code_verifier = pkce_challenge.as_ref().map(|p| p.code_verifier.clone());
+        
         // Temporarily update config for URL building
         let original_redirect_uri = self.config.redirect_uri.clone();
         self.config.redirect_uri = actual_redirect_uri;
@@ -91,7 +96,17 @@ impl OAuth2Client {
     pub async fn try_get_authorization(&mut self) -> Option<OAuth2Result<AuthorizationCode>> {
         let callback_server = self.callback_server.as_ref()?;
         let mut server = callback_server.lock().await;
-        server.try_receive_callback()
+        
+        match server.try_receive_callback() {
+            Some(Ok(mut auth_code)) => {
+                // Fill in the PKCE code verifier from the current session
+                if let Some(code_verifier) = &self.current_code_verifier {
+                    auth_code.code_verifier = code_verifier.clone();
+                }
+                Some(Ok(auth_code))
+            }
+            other => other,
+        }
     }
     
     /// Wait for authorization callback
@@ -107,7 +122,13 @@ impl OAuth2Client {
         ).await;
         
         match result {
-            Ok(Ok(callback)) => Ok(callback),
+            Ok(Ok(mut callback)) => {
+                // Fill in the PKCE code verifier from the current session
+                if let Some(code_verifier) = &self.current_code_verifier {
+                    callback.code_verifier = code_verifier.clone();
+                }
+                Ok(callback)
+            },
             Ok(Err(e)) => Err(e),
             Err(_) => Err(OAuth2Error::AuthorizationTimeout),
         }
