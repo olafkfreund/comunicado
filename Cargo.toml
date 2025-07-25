@@ -1,0 +1,40 @@
+[package]
+name = "comunicado"
+version = "0.1.0"
+edition = "2021"
+authors = ["Your Name <your.email@example.com>"]
+description = "A modern TUI-based email and calendar client"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/your-username/comunicado"
+keywords = ["email", "calendar", "tui", "terminal", "imap"]
+categories = ["command-line-utilities", "email"]
+
+[dependencies]
+# TUI Framework
+ratatui = "0.26"
+crossterm = "0.27"
+
+# Async Runtime
+tokio = { version = "1.35", features = ["full"] }
+
+# Error Handling
+anyhow = "1.0"
+thiserror = "1.0"
+
+# Configuration
+serde = { version = "1.0", features = ["derive"] }
+toml = "0.8"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = "0.3"
+
+[dev-dependencies]
+# Testing
+tokio-test = "0.4"
+
+[profile.release]
+strip = true
+lto = true
+codegen-units = 1
+panic = "abort"

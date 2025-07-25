@@ -1,0 +1,31 @@
+# Rust
+/target/
+Cargo.lock
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Development
+.devenv/
+.direnv/
+result
+result-*
+
+# Application data
+config/
+data/
+logs/
+emails/
+cache/
+
+# Temporary files
+*.tmp
+*.log
