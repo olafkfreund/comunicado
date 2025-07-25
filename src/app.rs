@@ -15,7 +15,8 @@ use tokio::time::{Duration, Instant};
 use crate::events::EventHandler;
 use crate::ui::UI;
 use crate::email::{EmailDatabase, EmailNotificationManager};
-use crate::oauth2::{SetupWizard, SecureStorage, AccountConfig};
+use crate::oauth2::{SetupWizard, SecureStorage, AccountConfig, TokenManager};
+use crate::imap::ImapAccountManager;
 
 pub struct App {
     should_quit: bool,
@@ -24,6 +25,8 @@ pub struct App {
     database: Option<Arc<EmailDatabase>>,
     notification_manager: Option<Arc<EmailNotificationManager>>,
     storage: SecureStorage,
+    imap_manager: Option<ImapAccountManager>,
+    token_manager: Option<TokenManager>,
 }
 
 impl App {
@@ -36,6 +39,8 @@ impl App {
             notification_manager: None,
             storage: SecureStorage::new("comunicado".to_string())
                 .map_err(|e| anyhow::anyhow!("Failed to initialize secure storage: {}", e))?,
+            imap_manager: None,
+            token_manager: None,
         })
     }
     
@@ -71,6 +76,25 @@ impl App {
         
         self.database = Some(database_arc);
         self.notification_manager = Some(notification_manager);
+        
+        Ok(())
+    }
+    
+    /// Initialize IMAP account manager with OAuth2 support
+    pub async fn initialize_imap_manager(&mut self) -> Result<()> {
+        // Create token manager for OAuth2 authentication
+        let token_manager = TokenManager::new();
+        
+        // Create IMAP account manager with OAuth2 support
+        let mut imap_manager = ImapAccountManager::new_with_oauth2(token_manager.clone())
+            .map_err(|e| anyhow::anyhow!("Failed to create IMAP account manager: {}", e))?;
+        
+        // Load existing accounts from OAuth2 storage
+        imap_manager.load_accounts().await
+            .map_err(|e| anyhow::anyhow!("Failed to load IMAP accounts: {}", e))?;
+        
+        self.token_manager = Some(token_manager);
+        self.imap_manager = Some(imap_manager);
         
         Ok(())
     }
@@ -124,8 +148,23 @@ impl App {
         if let Some(account) = accounts.first() {
             self.create_account_from_config(account).await?;
             
-            // Try to load messages from the first account's INBOX
-            let _ = self.ui.load_messages(account.account_id.clone(), "INBOX".to_string()).await;
+            // Try to fetch real messages from IMAP
+            if let Some(ref mut _imap_manager) = self.imap_manager {
+                match self.fetch_messages_from_imap(&account.account_id, "INBOX").await {
+                    Ok(_) => {
+                        // Successfully fetched messages via IMAP
+                        let _ = self.ui.load_messages(account.account_id.clone(), "INBOX".to_string()).await;
+                    }
+                    Err(e) => {
+                        tracing::warn!("Failed to fetch messages via IMAP: {}, falling back to sample data", e);
+                        // Fall back to sample data if IMAP fails
+                        let _ = self.load_sample_data().await;
+                    }
+                }
+            } else {
+                // Fall back to sample data if IMAP manager not initialized
+                let _ = self.load_sample_data().await;
+            }
         }
         
         Ok(())
@@ -215,6 +254,69 @@ impl App {
                 .bind(chrono::Utc::now().to_rfc3339())
                 .execute(&database.pool)
                 .await?;
+        }
+        
+        Ok(())
+    }
+    
+    /// Fetch messages from IMAP and store in database
+    async fn fetch_messages_from_imap(&mut self, account_id: &str, folder_name: &str) -> Result<()> {
+        let imap_manager = self.imap_manager.as_mut()
+            .ok_or_else(|| anyhow::anyhow!("IMAP manager not initialized"))?;
+        
+        let _database = self.database.as_ref()
+            .ok_or_else(|| anyhow::anyhow!("Database not initialized"))?;
+        
+        // Test connection first
+        match imap_manager.test_connection(account_id).await {
+            Ok(true) => {
+                tracing::info!("IMAP connection test successful for account: {}", account_id);
+            }
+            Ok(false) => {
+                return Err(anyhow::anyhow!("IMAP connection test failed for account: {}", account_id));
+            }
+            Err(e) => {
+                return Err(anyhow::anyhow!("IMAP connection error for account {}: {}", account_id, e));
+            }
+        }
+        
+        // Get IMAP client
+        let client_arc = imap_manager.get_client(account_id).await
+            .map_err(|e| anyhow::anyhow!("Failed to get IMAP client: {}", e))?;
+        
+        {
+            let mut client = client_arc.lock().await;
+            
+            // Select the folder (typically INBOX)
+            let folder = client.select_folder(folder_name).await
+                .map_err(|e| anyhow::anyhow!("Failed to select folder {}: {}", folder_name, e))?;
+            
+            tracing::info!("Selected folder '{}': {:?} messages exist, {:?} recent", 
+                         folder_name, folder.exists, folder.recent);
+            
+            // Fetch recent messages (limit to 50 for now)
+            let message_count = std::cmp::min(folder.exists.unwrap_or(0) as usize, 50);
+            if message_count > 0 {
+                let sequence_set = format!("1:{}", message_count);
+                let fetch_items = vec!["UID", "FLAGS", "ENVELOPE", "BODY.PEEK[HEADER]"];
+                
+                let messages = client.fetch_messages(&sequence_set, &fetch_items).await
+                    .map_err(|e| anyhow::anyhow!("Failed to fetch messages: {}", e))?;
+                
+                tracing::info!("Fetched {} messages from IMAP", messages.len());
+                
+                // Store messages in database
+                for message in messages {
+                    // Convert IMAP message to database format and store
+                    // For now, just log the message info
+                    tracing::debug!("Message UID: {:?}, Subject: {:?}", 
+                                  message.uid, message.envelope.as_ref().map(|e| &e.subject));
+                    
+                    // TODO: Convert and store message in database
+                    // This would involve parsing the envelope and headers,
+                    // storing in the messages table, etc.
+                }
+            }
         }
         
         Ok(())
