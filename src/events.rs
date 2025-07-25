@@ -99,6 +99,56 @@ impl EventHandler {
                 }
             }
             
+            // Threading and view mode controls
+            KeyCode::Char('t') => {
+                // Toggle threaded view
+                if let FocusedPane::MessageList = ui.focused_pane() {
+                    ui.message_list_mut().toggle_view_mode();
+                }
+            }
+            KeyCode::Char(' ') => {
+                // Toggle thread expansion/collapse (Space key)
+                if let FocusedPane::MessageList = ui.focused_pane() {
+                    ui.message_list_mut().toggle_selected_thread();
+                }
+            }
+            KeyCode::Char('o') => {
+                // Open/expand thread
+                if let FocusedPane::MessageList = ui.focused_pane() {
+                    ui.message_list_mut().expand_selected_thread();
+                }
+            }
+            KeyCode::Char('c') if !key.modifiers.contains(KeyModifiers::CONTROL) => {
+                // Close/collapse thread (c without Ctrl)
+                if let FocusedPane::MessageList = ui.focused_pane() {
+                    ui.message_list_mut().collapse_selected_thread();
+                }
+            }
+            
+            // Sorting controls
+            KeyCode::Char('s') => {
+                // Cycle through sort modes (date, sender, subject)
+                if let FocusedPane::MessageList = ui.focused_pane() {
+                    // For now, just demonstrate different sort criteria
+                    use crate::email::{SortCriteria, SortOrder};
+                    ui.message_list_mut().set_sort_criteria(SortCriteria::Date(SortOrder::Descending));
+                }
+            }
+            KeyCode::Char('r') => {
+                // Sort by sender
+                if let FocusedPane::MessageList = ui.focused_pane() {
+                    use crate::email::{SortCriteria, SortOrder};
+                    ui.message_list_mut().set_sort_criteria(SortCriteria::Sender(SortOrder::Ascending));
+                }
+            }
+            KeyCode::Char('u') => {
+                // Sort by subject
+                if let FocusedPane::MessageList = ui.focused_pane() {
+                    use crate::email::{SortCriteria, SortOrder};
+                    ui.message_list_mut().set_sort_criteria(SortCriteria::Subject(SortOrder::Ascending));
+                }
+            }
+            
             _ => {}
         }
     }

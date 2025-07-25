@@ -6,6 +6,7 @@ use ratatui::{
     Frame,
 };
 use crate::theme::Theme;
+use crate::email::{EmailThread, SortCriteria, MultiCriteriaSorter, ThreadingEngine, ThreadingAlgorithm};
 
 #[derive(Debug, Clone)]
 pub struct MessageItem {
@@ -15,6 +16,11 @@ pub struct MessageItem {
     pub is_read: bool,
     pub is_important: bool,
     pub has_attachments: bool,
+    pub thread_depth: usize,
+    pub thread_id: Option<String>,
+    pub message_count: usize, // For thread root, number of messages in thread
+    pub is_thread_expanded: bool,
+    pub is_thread_root: bool,
 }
 
 impl MessageItem {
@@ -26,6 +32,27 @@ impl MessageItem {
             is_read: true,
             is_important: false,
             has_attachments: false,
+            thread_depth: 0,
+            thread_id: None,
+            message_count: 1,
+            is_thread_expanded: false,
+            is_thread_root: false,
+        }
+    }
+    
+    pub fn new_threaded(subject: String, sender: String, date: String, thread_depth: usize, thread_id: String) -> Self {
+        Self {
+            subject,
+            sender,
+            date,
+            is_read: true,
+            is_important: false,
+            has_attachments: false,
+            thread_depth,
+            thread_id: Some(thread_id),
+            message_count: 1,
+            is_thread_expanded: false,
+            is_thread_root: thread_depth == 0,
         }
     }
 
@@ -43,18 +70,47 @@ impl MessageItem {
         self.has_attachments = true;
         self
     }
+    
+    pub fn with_thread_count(mut self, count: usize) -> Self {
+        self.message_count = count;
+        self
+    }
+    
+    pub fn expanded(mut self) -> Self {
+        self.is_thread_expanded = true;
+        self
+    }
+    
+    pub fn as_thread_root(mut self) -> Self {
+        self.is_thread_root = true;
+        self
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ViewMode {
+    List,        // Traditional flat list view
+    Threaded,    // Hierarchical threaded view
 }
 
 pub struct MessageList {
     messages: Vec<MessageItem>,
+    threads: Vec<EmailThread>,
     state: ListState,
+    view_mode: ViewMode,
+    sorter: MultiCriteriaSorter,
+    threading_engine: ThreadingEngine,
 }
 
 impl MessageList {
     pub fn new() -> Self {
         let mut list = Self {
             messages: Vec::new(),
+            threads: Vec::new(),
             state: ListState::default(),
+            view_mode: ViewMode::List,
+            sorter: MultiCriteriaSorter::default(),
+            threading_engine: ThreadingEngine::new(ThreadingAlgorithm::Simple),
         };
         
         // Initialize with sample messages
@@ -158,6 +214,9 @@ impl MessageList {
                     Style::default().fg(theme.colors.message_list.date)
                 };
 
+                // Create threading visualization
+                let threading_prefix = self.get_threading_prefix(message);
+                
                 // Create indicators (professional, text-based)
                 let mut indicators = String::new();
                 if message.is_important {
@@ -169,13 +228,24 @@ impl MessageList {
                 if !message.is_read {
                     indicators.push('•');
                 }
+                
+                // Add thread count for root messages
+                if message.is_thread_root && message.message_count > 1 {
+                    indicators.push_str(&format!("({})", message.message_count));
+                }
+                
                 if !indicators.is_empty() {
                     indicators.push(' ');
                 }
 
-                // Format the message line
-                let subject_truncated = if message.subject.len() > 35 {
-                    format!("{}...", &message.subject[..32])
+                // Format the message line with threading
+                let available_width = match self.view_mode {
+                    ViewMode::Threaded => 35_usize.saturating_sub(message.thread_depth * 2),
+                    ViewMode::List => 35,
+                };
+                
+                let subject_truncated = if message.subject.len() > available_width {
+                    format!("{}...", &message.subject[..available_width.saturating_sub(3)])
                 } else {
                     message.subject.clone()
                 };
@@ -186,14 +256,25 @@ impl MessageList {
                     message.sender.clone()
                 };
 
-                let line = Line::from(vec![
-                    Span::raw(indicators),
-                    Span::styled(subject_truncated, subject_style),
-                    Span::raw("\n  "),
-                    Span::styled(format!("From: {}", sender_truncated), sender_style),
-                    Span::raw(" • "),
-                    Span::styled(message.date.clone(), date_style),
-                ]);
+                let line = match self.view_mode {
+                    ViewMode::List => Line::from(vec![
+                        Span::raw(indicators),
+                        Span::styled(subject_truncated, subject_style),
+                        Span::raw("\n  "),
+                        Span::styled(format!("From: {}", sender_truncated), sender_style),
+                        Span::raw(" • "),
+                        Span::styled(message.date.clone(), date_style),
+                    ]),
+                    ViewMode::Threaded => Line::from(vec![
+                        Span::raw(threading_prefix),
+                        Span::raw(indicators),
+                        Span::styled(subject_truncated, subject_style),
+                        Span::raw("\n  "),
+                        Span::styled(format!("From: {}", sender_truncated), sender_style),
+                        Span::raw(" • "),
+                        Span::styled(message.date.clone(), date_style),
+                    ])
+                };
 
                 ListItem::new(line)
             })
@@ -262,6 +343,225 @@ impl MessageList {
                 message.is_important = !message.is_important;
             }
         }
+    }
+    
+    // Threading and view mode methods
+    
+    pub fn toggle_view_mode(&mut self) {
+        self.view_mode = match self.view_mode {
+            ViewMode::List => ViewMode::Threaded,
+            ViewMode::Threaded => ViewMode::List,
+        };
+        self.rebuild_view();
+    }
+    
+    pub fn set_view_mode(&mut self, mode: ViewMode) {
+        if self.view_mode != mode {
+            self.view_mode = mode;
+            self.rebuild_view();
+        }
+    }
+    
+    pub fn current_view_mode(&self) -> ViewMode {
+        self.view_mode
+    }
+    
+    pub fn set_sort_criteria(&mut self, criteria: SortCriteria) {
+        self.sorter = MultiCriteriaSorter::new(vec![criteria]);
+        self.rebuild_view();
+    }
+    
+    pub fn add_sort_criteria(&mut self, criteria: SortCriteria) {
+        self.sorter.add_criteria(criteria);
+        self.rebuild_view();
+    }
+    
+    pub fn clear_sort_criteria(&mut self) {
+        self.sorter.clear();
+        self.rebuild_view();
+    }
+    
+    pub fn expand_selected_thread(&mut self) {
+        if self.view_mode != ViewMode::Threaded {
+            return;
+        }
+        
+        if let Some(selected) = self.state.selected() {
+            if let Some(message) = self.messages.get_mut(selected) {
+                if message.is_thread_root && !message.is_thread_expanded {
+                    message.is_thread_expanded = true;
+                    self.rebuild_view();
+                }
+            }
+        }
+    }
+    
+    pub fn collapse_selected_thread(&mut self) {
+        if self.view_mode != ViewMode::Threaded {
+            return;
+        }
+        
+        if let Some(selected) = self.state.selected() {
+            if let Some(message) = self.messages.get_mut(selected) {
+                if message.is_thread_root && message.is_thread_expanded {
+                    message.is_thread_expanded = false;
+                    self.rebuild_view();
+                }
+            }
+        }
+    }
+    
+    pub fn toggle_selected_thread(&mut self) {
+        if self.view_mode != ViewMode::Threaded {
+            return;
+        }
+        
+        if let Some(selected) = self.state.selected() {
+            if let Some(message) = self.messages.get(selected) {
+                if message.is_thread_root {
+                    if message.is_thread_expanded {
+                        self.collapse_selected_thread();
+                    } else {
+                        self.expand_selected_thread();
+                    }
+                }
+            }
+        }
+    }
+    
+    fn rebuild_view(&mut self) {
+        match self.view_mode {
+            ViewMode::List => self.build_flat_view(),
+            ViewMode::Threaded => self.build_threaded_view(),
+        }
+    }
+    
+    fn build_flat_view(&mut self) {
+        // For now, use the existing sample messages
+        // In a real implementation, this would sort the actual email messages
+        self.initialize_sample_messages();
+        
+        // Apply sorting to messages
+        // Note: This would use actual EmailMessage objects in production
+    }
+    
+    fn build_threaded_view(&mut self) {
+        // Clear current view
+        self.messages.clear();
+        
+        // Generate sample threaded messages for demonstration
+        self.initialize_sample_threaded_messages();
+    }
+    
+    fn initialize_sample_threaded_messages(&mut self) {
+        self.messages = vec![
+            // Thread 1: Project Planning (expanded)
+            MessageItem::new_threaded(
+                "Project Update: Q1 Planning".to_string(),
+                "Alice Johnson".to_string(),
+                "Today 09:15".to_string(),
+                0,
+                "thread1".to_string()
+            ).with_attachments().with_thread_count(3).expanded().as_thread_root(),
+            
+            MessageItem::new_threaded(
+                "Re: Project Update: Q1 Planning".to_string(),
+                "Bob Smith".to_string(),
+                "Today 10:30".to_string(),
+                1,
+                "thread1".to_string()
+            ),
+            
+            MessageItem::new_threaded(
+                "Re: Project Update: Q1 Planning".to_string(),
+                "Carol Davis".to_string(),
+                "Today 11:45".to_string(),
+                1,
+                "thread1".to_string()
+            ).unread(),
+            
+            // Thread 2: Meeting Notes (collapsed)
+            MessageItem::new_threaded(
+                "Meeting Notes from Yesterday".to_string(),
+                "David Wilson".to_string(),
+                "Yesterday 16:45".to_string(),
+                0,
+                "thread2".to_string()
+            ).with_thread_count(2).as_thread_root(),
+            
+            // Thread 3: Security Alert (expanded)
+            MessageItem::new_threaded(
+                "Security Alert: Password Change Required".to_string(),
+                "IT Security".to_string(),
+                "Mon 09:00".to_string(),
+                0,
+                "thread3".to_string()
+            ).unread().important().with_thread_count(4).expanded().as_thread_root(),
+            
+            MessageItem::new_threaded(
+                "Re: Security Alert: Action Required".to_string(),
+                "System Admin".to_string(),
+                "Mon 09:15".to_string(),
+                1,
+                "thread3".to_string()
+            ).important(),
+            
+            MessageItem::new_threaded(
+                "Re: Security Alert: Completed".to_string(),
+                "Alice Johnson".to_string(),
+                "Mon 09:30".to_string(),
+                1,
+                "thread3".to_string()
+            ),
+            
+            MessageItem::new_threaded(
+                "Re: Security Alert: All Clear".to_string(),
+                "IT Security".to_string(),
+                "Mon 10:00".to_string(),
+                1,
+                "thread3".to_string()
+            ),
+            
+            // Standalone messages
+            MessageItem::new(
+                "Welcome to Comunicado!".to_string(),
+                "Comunicado Team".to_string(),
+                "Today 10:30".to_string(),
+            ).unread().important(),
+            
+            MessageItem::new(
+                "Monthly Newsletter - Tech Updates".to_string(),
+                "TechNews Daily".to_string(),
+                "Yesterday 14:20".to_string(),
+            ).unread(),
+        ];
+    }
+    
+    fn get_threading_prefix(&self, message: &MessageItem) -> String {
+        if self.view_mode != ViewMode::Threaded {
+            return String::new();
+        }
+        
+        let mut prefix = String::new();
+        
+        // Add indentation based on thread depth
+        for _ in 0..message.thread_depth {
+            prefix.push_str("  ");
+        }
+        
+        // Add thread indicators
+        if message.thread_depth > 0 {
+            prefix.push_str("├─ ");
+        } else if message.is_thread_root && message.message_count > 1 {
+            // Root message with children
+            if message.is_thread_expanded {
+                prefix.push_str("▼ ");
+            } else {
+                prefix.push_str("► ");
+            }
+        }
+        
+        prefix
     }
 }
 

@@ -29,6 +29,9 @@ toml = "0.8"
 tracing = "0.1"
 tracing-subscriber = "0.3"
 
+# Date/Time handling
+chrono = { version = "0.4", features = ["serde"] }
+
 [dev-dependencies]
 # Testing
 tokio-test = "0.4"

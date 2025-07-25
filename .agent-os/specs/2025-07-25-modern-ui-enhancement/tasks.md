@@ -26,15 +26,15 @@ These are the tasks to be completed for the spec detailed in @.agent-os/specs/20
   - [x] 2.6 Implement keyboard shortcuts display and help system
   - [x] 2.7 Verify all status bar tests pass
 
-- [ ] 3. Enhanced Email Threading and Organization
-  - [ ] 3.1 Write tests for conversation threading algorithms
-  - [ ] 3.2 Implement email message relationship detection
-  - [ ] 3.3 Create conversation tree data structures
-  - [ ] 3.4 Build thread visualization in email list view
-  - [ ] 3.5 Add advanced sorting options (priority, thread depth, etc.)
-  - [ ] 3.6 Implement thread expansion/collapse functionality
-  - [ ] 3.7 Create smart email grouping and duplicate detection
-  - [ ] 3.8 Verify all email threading tests pass
+- [x] 3. Enhanced Email Threading and Organization
+  - [x] 3.1 Write tests for conversation threading algorithms
+  - [x] 3.2 Implement email message relationship detection
+  - [x] 3.3 Create conversation tree data structures
+  - [x] 3.4 Build thread visualization in email list view
+  - [x] 3.5 Add advanced sorting options (priority, thread depth, etc.)
+  - [x] 3.6 Implement thread expansion/collapse functionality
+  - [x] 3.7 Create smart email grouping and duplicate detection
+  - [x] 3.8 Verify all email threading tests pass
 
 - [ ] 4. Multi-Account Visual Identity System
   - [ ] 4.1 Write tests for account visual differentiation
