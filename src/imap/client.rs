@@ -1,11 +1,14 @@
 use crate::imap::{
     ImapConnection, ImapConfig, ImapError, ImapResult, ImapCapability, 
-    ImapFolder, ImapMessage, MessageFlag, SearchCriteria, ImapAuthMethod
+    ImapFolder, ImapMessage, MessageFlag, SearchCriteria, ImapAuthMethod,
+    IdleNotification, IdleNotificationService
 };
 use crate::oauth2::{TokenManager, OAuth2Result};
 use crate::imap::connection::ConnectionState;
 use crate::imap::protocol::ImapProtocol;
 use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 /// High-level IMAP client
 pub struct ImapClient {
@@ -14,6 +17,7 @@ pub struct ImapClient {
     selected_folder: Option<String>,
     folders_cache: HashMap<String, ImapFolder>,
     token_manager: Option<TokenManager>,
+    idle_service: Option<Arc<IdleNotificationService>>,
 }
 
 impl ImapClient {
@@ -25,6 +29,7 @@ impl ImapClient {
             selected_folder: None,
             folders_cache: HashMap::new(),
             token_manager: None,
+            idle_service: None,
         }
     }
     
@@ -36,6 +41,7 @@ impl ImapClient {
             selected_folder: None,
             folders_cache: HashMap::new(),
             token_manager: Some(token_manager),
+            idle_service: None,
         }
     }
     
@@ -399,7 +405,69 @@ impl ImapClient {
         Ok(folder)
     }
     
-    /// Start IDLE mode to receive server notifications
+    /// Initialize IDLE notification service
+    pub fn init_idle_service(&mut self) -> ImapResult<()> {
+        if self.idle_service.is_some() {
+            return Ok(()); // Already initialized
+        }
+        
+        // Create a shared connection wrapper for IDLE
+        let connection = Arc::new(Mutex::new(ImapConnection::new(self.connection.config().clone())));
+        let idle_service = Arc::new(IdleNotificationService::new(connection));
+        
+        self.idle_service = Some(idle_service);
+        Ok(())
+    }
+    
+    /// Start monitoring a folder for real-time updates
+    pub async fn start_folder_monitoring(&mut self, folder_name: String) -> ImapResult<()> {
+        if !self.capabilities.contains(&ImapCapability::Idle) {
+            return Err(ImapError::not_supported("IDLE not supported by server"));
+        }
+        
+        // Initialize IDLE service if not already done
+        if self.idle_service.is_none() {
+            self.init_idle_service()?;
+        }
+        
+        let idle_service = self.idle_service.as_ref()
+            .ok_or_else(|| ImapError::invalid_state("IDLE service not initialized"))?;
+        
+        idle_service.start_monitoring(folder_name).await?;
+        Ok(())
+    }
+    
+    /// Stop folder monitoring
+    pub async fn stop_folder_monitoring(&mut self) -> ImapResult<()> {
+        if let Some(idle_service) = &self.idle_service {
+            idle_service.stop_monitoring().await?;
+        }
+        Ok(())
+    }
+    
+    /// Add a callback for IDLE notifications
+    pub async fn add_idle_callback<F>(&self, callback: F) -> ImapResult<()> 
+    where
+        F: Fn(IdleNotification) + Send + Sync + 'static,
+    {
+        if let Some(idle_service) = &self.idle_service {
+            idle_service.add_callback(callback).await;
+            Ok(())
+        } else {
+            Err(ImapError::invalid_state("IDLE service not initialized"))
+        }
+    }
+    
+    /// Get IDLE statistics
+    pub async fn get_idle_stats(&self) -> Option<crate::imap::IdleStats> {
+        if let Some(idle_service) = &self.idle_service {
+            Some(idle_service.get_stats().await)
+        } else {
+            None
+        }
+    }
+    
+    /// Start IDLE mode (legacy method - kept for compatibility)
     pub async fn idle(&mut self) -> ImapResult<()> {
         if !self.capabilities.contains(&ImapCapability::Idle) {
             return Err(ImapError::not_supported("IDLE not supported by server"));
@@ -414,7 +482,7 @@ impl ImapClient {
         Ok(())
     }
     
-    /// Stop IDLE mode
+    /// Stop IDLE mode (legacy method - kept for compatibility)
     pub async fn done(&mut self) -> ImapResult<()> {
         let command = ImapProtocol::format_done();
         let _response = self.connection.send_command(&command).await?;
@@ -426,10 +494,6 @@ impl ImapClient {
         self.connection.state()
     }
     
-    /// Get server capabilities
-    pub fn capabilities(&self) -> &[ImapCapability] {
-        &self.capabilities
-    }
     
     /// Get selected folder name
     pub fn selected_folder(&self) -> Option<&String> {
@@ -450,6 +514,16 @@ impl ImapClient {
     /// Get all cached folders
     pub fn cached_folders(&self) -> impl Iterator<Item = &ImapFolder> {
         self.folders_cache.values()
+    }
+    
+    /// Get client capabilities (for testing)
+    pub fn capabilities(&self) -> &[ImapCapability] {
+        &self.capabilities
+    }
+    
+    /// Set capabilities (for testing)
+    pub fn set_capabilities(&mut self, capabilities: Vec<ImapCapability>) {
+        self.capabilities = capabilities;
     }
 }
 

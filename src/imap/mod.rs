@@ -4,10 +4,12 @@ pub mod protocol;
 pub mod types;
 pub mod error;
 pub mod account_manager;
+pub mod idle;
 
 pub use client::ImapClient;
 pub use connection::ImapConnection;
 pub use account_manager::{ImapAccountManager, ImapAccount, AccountManagerStats};
+pub use idle::{IdleNotification, IdleNotificationService, IdleManager, IdleStats};
 pub use types::*;
 pub use error::{ImapError, ImapResult};
 

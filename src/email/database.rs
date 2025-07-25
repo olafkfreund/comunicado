@@ -1,0 +1,831 @@
+use sqlx::{SqlitePool, Row, sqlite::SqlitePoolOptions};
+use sqlx::migrate::MigrateDatabase;
+use chrono::{DateTime, Utc};
+use serde::{Serialize, Deserialize};
+use uuid::Uuid;
+use crate::imap::{ImapMessage, MessageFlag};
+use thiserror::Error;
+
+/// Database-related errors
+#[derive(Error, Debug)]
+pub enum DatabaseError {
+    #[error("Database connection error: {0}")]
+    Connection(#[from] sqlx::Error),
+    
+    #[error("Migration error: {0}")]
+    Migration(String),
+    
+    #[error("Query error: {0}")]
+    Query(String),
+    
+    #[error("Serialization error: {0}")]
+    Serialization(#[from] serde_json::Error),
+    
+    #[error("UUID error: {0}")]
+    Uuid(#[from] uuid::Error),
+    
+    #[error("Date parsing error: {0}")]
+    DateParse(#[from] chrono::ParseError),
+}
+
+pub type DatabaseResult<T> = Result<T, DatabaseError>;
+
+/// Stored email message in the database
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StoredMessage {
+    pub id: Uuid,
+    pub account_id: String,
+    pub folder_name: String,
+    pub imap_uid: u32,
+    pub message_id: Option<String>,
+    pub thread_id: Option<String>,
+    pub in_reply_to: Option<String>,
+    pub references: Vec<String>,
+    
+    // Headers
+    pub subject: String,
+    pub from_addr: String,
+    pub from_name: Option<String>,
+    pub to_addrs: Vec<String>,
+    pub cc_addrs: Vec<String>,
+    pub bcc_addrs: Vec<String>,
+    pub reply_to: Option<String>,
+    pub date: DateTime<Utc>,
+    
+    // Content
+    pub body_text: Option<String>,
+    pub body_html: Option<String>,
+    pub attachments: Vec<StoredAttachment>,
+    
+    // Metadata
+    pub flags: Vec<String>,
+    pub labels: Vec<String>,
+    pub size: Option<u32>,
+    pub priority: Option<String>,
+    
+    // Sync metadata
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub last_synced: DateTime<Utc>,
+    pub sync_version: i64,
+    pub is_draft: bool,
+    pub is_deleted: bool,
+}
+
+/// Stored email attachment
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StoredAttachment {
+    pub id: String,
+    pub filename: String,
+    pub content_type: String,
+    pub size: u32,
+    pub content_id: Option<String>,
+    pub is_inline: bool,
+    pub data: Option<Vec<u8>>, // Stored inline for small attachments
+    pub file_path: Option<String>, // File path for large attachments
+}
+
+/// Folder synchronization state
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FolderSyncState {
+    pub account_id: String,
+    pub folder_name: String,
+    pub uid_validity: u32,
+    pub uid_next: u32,
+    pub highest_modseq: Option<u64>,
+    pub last_sync: DateTime<Utc>,
+    pub message_count: u32,
+    pub unread_count: u32,
+    pub sync_status: SyncStatus,
+}
+
+/// Synchronization status
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum SyncStatus {
+    Idle,
+    Syncing,
+    Error(String),
+    Complete,
+}
+
+/// Email database manager
+pub struct EmailDatabase {
+    pool: SqlitePool,
+    db_path: String,
+}
+
+impl EmailDatabase {
+    /// Create a new email database
+    pub async fn new(db_path: &str) -> DatabaseResult<Self> {
+        // Create database if it doesn't exist
+        if !sqlx::Sqlite::database_exists(db_path).await.unwrap_or(false) {
+            sqlx::Sqlite::create_database(db_path).await
+                .map_err(|e| DatabaseError::Migration(format!("Failed to create database: {}", e)))?;
+        }
+        
+        // Create connection pool
+        let pool = SqlitePoolOptions::new()
+            .max_connections(20)
+            .connect(db_path)
+            .await
+            .map_err(DatabaseError::Connection)?;
+        
+        let db = Self {
+            pool,
+            db_path: db_path.to_string(),
+        };
+        
+        // Run migrations
+        db.migrate().await?;
+        
+        Ok(db)
+    }
+    
+    /// Run database migrations
+    async fn migrate(&self) -> DatabaseResult<()> {
+        sqlx::query(r#"
+            CREATE TABLE IF NOT EXISTS accounts (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                email TEXT NOT NULL,
+                provider TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+        "#).execute(&self.pool).await?;
+        
+        sqlx::query(r#"
+            CREATE TABLE IF NOT EXISTS folders (
+                account_id TEXT NOT NULL,
+                name TEXT NOT NULL,
+                full_name TEXT NOT NULL,
+                delimiter TEXT,
+                attributes TEXT NOT NULL, -- JSON array
+                uid_validity INTEGER,
+                uid_next INTEGER,
+                exists_count INTEGER,
+                recent_count INTEGER,
+                unseen_count INTEGER,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY (account_id, name),
+                FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE
+            )
+        "#).execute(&self.pool).await?;
+        
+        sqlx::query(r#"
+            CREATE TABLE IF NOT EXISTS messages (
+                id TEXT PRIMARY KEY,
+                account_id TEXT NOT NULL,
+                folder_name TEXT NOT NULL,
+                imap_uid INTEGER NOT NULL,
+                message_id TEXT,
+                thread_id TEXT,
+                in_reply_to TEXT,
+                "references" TEXT NOT NULL, -- JSON array
+                
+                -- Headers
+                subject TEXT NOT NULL,
+                from_addr TEXT NOT NULL,
+                from_name TEXT,
+                to_addrs TEXT NOT NULL, -- JSON array
+                cc_addrs TEXT NOT NULL, -- JSON array
+                bcc_addrs TEXT NOT NULL, -- JSON array
+                reply_to TEXT,
+                date TEXT NOT NULL,
+                
+                -- Content
+                body_text TEXT,
+                body_html TEXT,
+                attachments TEXT NOT NULL, -- JSON array
+                
+                -- Metadata
+                flags TEXT NOT NULL, -- JSON array
+                labels TEXT NOT NULL, -- JSON array
+                size INTEGER,
+                priority TEXT,
+                
+                -- Sync metadata
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                last_synced TEXT NOT NULL,
+                sync_version INTEGER NOT NULL DEFAULT 1,
+                is_draft BOOLEAN NOT NULL DEFAULT FALSE,
+                is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
+                
+                FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE,
+                FOREIGN KEY (account_id, folder_name) REFERENCES folders(account_id, name) ON DELETE CASCADE
+            )
+        "#).execute(&self.pool).await?;
+        
+        sqlx::query(r#"
+            CREATE TABLE IF NOT EXISTS folder_sync_state (
+                account_id TEXT NOT NULL,
+                folder_name TEXT NOT NULL,
+                uid_validity INTEGER NOT NULL,
+                uid_next INTEGER NOT NULL,
+                highest_modseq INTEGER,
+                last_sync TEXT NOT NULL,
+                message_count INTEGER NOT NULL DEFAULT 0,
+                unread_count INTEGER NOT NULL DEFAULT 0,
+                sync_status TEXT NOT NULL,
+                PRIMARY KEY (account_id, folder_name),
+                FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE
+            )
+        "#).execute(&self.pool).await?;
+        
+        // Create indexes for performance
+        sqlx::query("CREATE INDEX IF NOT EXISTS idx_messages_account_folder ON messages(account_id, folder_name)").execute(&self.pool).await?;
+        sqlx::query("CREATE INDEX IF NOT EXISTS idx_messages_uid ON messages(account_id, folder_name, imap_uid)").execute(&self.pool).await?;
+        sqlx::query("CREATE INDEX IF NOT EXISTS idx_messages_message_id ON messages(message_id)").execute(&self.pool).await?;
+        sqlx::query("CREATE INDEX IF NOT EXISTS idx_messages_thread_id ON messages(thread_id)").execute(&self.pool).await?;
+        sqlx::query("CREATE INDEX IF NOT EXISTS idx_messages_date ON messages(date DESC)").execute(&self.pool).await?;
+        sqlx::query("CREATE INDEX IF NOT EXISTS idx_messages_subject ON messages(subject)").execute(&self.pool).await?;
+        sqlx::query("CREATE INDEX IF NOT EXISTS idx_messages_from ON messages(from_addr)").execute(&self.pool).await?;
+        sqlx::query("CREATE INDEX IF NOT EXISTS idx_messages_sync ON messages(last_synced)").execute(&self.pool).await?;
+        
+        // Full-text search virtual table
+        sqlx::query(r#"
+            CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
+                message_id UNINDEXED,
+                subject,
+                from_addr,
+                from_name,
+                body_text,
+                content='messages',
+                content_rowid='rowid'
+            )
+        "#).execute(&self.pool).await?;
+        
+        // Triggers to keep FTS table in sync
+        sqlx::query(r#"
+            CREATE TRIGGER IF NOT EXISTS messages_fts_insert AFTER INSERT ON messages BEGIN
+                INSERT INTO messages_fts(rowid, message_id, subject, from_addr, from_name, body_text)
+                VALUES (new.rowid, new.message_id, new.subject, new.from_addr, new.from_name, new.body_text);
+            END
+        "#).execute(&self.pool).await?;
+        
+        sqlx::query(r#"
+            CREATE TRIGGER IF NOT EXISTS messages_fts_delete AFTER DELETE ON messages BEGIN
+                INSERT INTO messages_fts(messages_fts, rowid, message_id, subject, from_addr, from_name, body_text)
+                VALUES ('delete', old.rowid, old.message_id, old.subject, old.from_addr, old.from_name, old.body_text);
+            END
+        "#).execute(&self.pool).await?;
+        
+        sqlx::query(r#"
+            CREATE TRIGGER IF NOT EXISTS messages_fts_update AFTER UPDATE ON messages BEGIN
+                INSERT INTO messages_fts(messages_fts, rowid, message_id, subject, from_addr, from_name, body_text)
+                VALUES ('delete', old.rowid, old.message_id, old.subject, old.from_addr, old.from_name, old.body_text);
+                INSERT INTO messages_fts(rowid, message_id, subject, from_addr, from_name, body_text)
+                VALUES (new.rowid, new.message_id, new.subject, new.from_addr, new.from_name, new.body_text);
+            END
+        "#).execute(&self.pool).await?;
+        
+        Ok(())
+    }
+    
+    /// Store a message in the database
+    pub async fn store_message(&self, message: &StoredMessage) -> DatabaseResult<()> {
+        let now = Utc::now().to_rfc3339();
+        
+        sqlx::query(r#"
+            INSERT OR REPLACE INTO messages (
+                id, account_id, folder_name, imap_uid, message_id, thread_id, in_reply_to, "references",
+                subject, from_addr, from_name, to_addrs, cc_addrs, bcc_addrs, reply_to, date,
+                body_text, body_html, attachments,
+                flags, labels, size, priority,
+                created_at, updated_at, last_synced, sync_version, is_draft, is_deleted
+            ) VALUES (
+                ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8,
+                ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16,
+                ?17, ?18, ?19,
+                ?20, ?21, ?22, ?23,
+                COALESCE((SELECT created_at FROM messages WHERE id = ?1), ?24), ?25, ?26, ?27, ?28, ?29
+            )
+        "#)
+        .bind(message.id.to_string())
+        .bind(&message.account_id)
+        .bind(&message.folder_name)
+        .bind(message.imap_uid as i64)
+        .bind(&message.message_id)
+        .bind(&message.thread_id)
+        .bind(&message.in_reply_to)
+        .bind(serde_json::to_string(&message.references)?)
+        .bind(&message.subject)
+        .bind(&message.from_addr)
+        .bind(&message.from_name)
+        .bind(serde_json::to_string(&message.to_addrs)?)
+        .bind(serde_json::to_string(&message.cc_addrs)?)
+        .bind(serde_json::to_string(&message.bcc_addrs)?)
+        .bind(&message.reply_to)
+        .bind(message.date.to_rfc3339())
+        .bind(&message.body_text)
+        .bind(&message.body_html)
+        .bind(serde_json::to_string(&message.attachments)?)
+        .bind(serde_json::to_string(&message.flags)?)
+        .bind(serde_json::to_string(&message.labels)?)
+        .bind(message.size.map(|s| s as i64))
+        .bind(&message.priority)
+        .bind(now.clone())
+        .bind(now.clone())
+        .bind(message.last_synced.to_rfc3339())
+        .bind(message.sync_version)
+        .bind(message.is_draft)
+        .bind(message.is_deleted)
+        .execute(&self.pool)
+        .await?;
+        
+        Ok(())
+    }
+    
+    /// Get messages from a folder
+    pub async fn get_messages(&self, account_id: &str, folder_name: &str, limit: Option<u32>, offset: Option<u32>) -> DatabaseResult<Vec<StoredMessage>> {
+        let limit = limit.unwrap_or(100) as i64;
+        let offset = offset.unwrap_or(0) as i64;
+        
+        let rows = sqlx::query(r#"
+            SELECT id, account_id, folder_name, imap_uid, message_id, thread_id, in_reply_to, "references",
+                   subject, from_addr, from_name, to_addrs, cc_addrs, bcc_addrs, reply_to, date,
+                   body_text, body_html, attachments,
+                   flags, labels, size, priority,
+                   created_at, updated_at, last_synced, sync_version, is_draft, is_deleted
+            FROM messages
+            WHERE account_id = ?1 AND folder_name = ?2 AND is_deleted = FALSE
+            ORDER BY date DESC
+            LIMIT ?3 OFFSET ?4
+        "#)
+        .bind(account_id)
+        .bind(folder_name)
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(&self.pool)
+        .await?;
+        
+        let mut messages = Vec::new();
+        for row in rows {
+            messages.push(self.row_to_stored_message(row)?);
+        }
+        
+        Ok(messages)
+    }
+    
+    /// Get a message by UID
+    pub async fn get_message_by_uid(&self, account_id: &str, folder_name: &str, uid: u32) -> DatabaseResult<Option<StoredMessage>> {
+        let row = sqlx::query(r#"
+            SELECT id, account_id, folder_name, imap_uid, message_id, thread_id, in_reply_to, "references",
+                   subject, from_addr, from_name, to_addrs, cc_addrs, bcc_addrs, reply_to, date,
+                   body_text, body_html, attachments,
+                   flags, labels, size, priority,
+                   created_at, updated_at, last_synced, sync_version, is_draft, is_deleted
+            FROM messages
+            WHERE account_id = ?1 AND folder_name = ?2 AND imap_uid = ?3
+        "#)
+        .bind(account_id)
+        .bind(folder_name)
+        .bind(uid as i64)
+        .fetch_optional(&self.pool)
+        .await?;
+        
+        match row {
+            Some(row) => Ok(Some(self.row_to_stored_message(row)?)),
+            None => Ok(None),
+        }
+    }
+    
+    /// Search messages with full-text search
+    pub async fn search_messages(&self, account_id: &str, query: &str, limit: Option<u32>) -> DatabaseResult<Vec<StoredMessage>> {
+        let limit = limit.unwrap_or(100) as i64;
+        
+        let rows = sqlx::query(r#"
+            SELECT m.id, m.account_id, m.folder_name, m.imap_uid, m.message_id, m.thread_id, m.in_reply_to, m."references",
+                   m.subject, m.from_addr, m.from_name, m.to_addrs, m.cc_addrs, m.bcc_addrs, m.reply_to, m.date,
+                   m.body_text, m.body_html, m.attachments,
+                   m.flags, m.labels, m.size, m.priority,
+                   m.created_at, m.updated_at, m.last_synced, m.sync_version, m.is_draft, m.is_deleted
+            FROM messages m
+            JOIN messages_fts fts ON m.rowid = fts.rowid
+            WHERE m.account_id = ?1 AND m.is_deleted = FALSE AND messages_fts MATCH ?2
+            ORDER BY rank
+            LIMIT ?3
+        "#)
+        .bind(account_id)
+        .bind(query)
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await?;
+        
+        let mut messages = Vec::new();
+        for row in rows {
+            messages.push(self.row_to_stored_message(row)?);
+        }
+        
+        Ok(messages)
+    }
+    
+    /// Update folder sync state
+    pub async fn update_folder_sync_state(&self, state: &FolderSyncState) -> DatabaseResult<()> {
+        sqlx::query(r#"
+            INSERT OR REPLACE INTO folder_sync_state (
+                account_id, folder_name, uid_validity, uid_next, highest_modseq,
+                last_sync, message_count, unread_count, sync_status
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+        "#)
+        .bind(&state.account_id)
+        .bind(&state.folder_name)
+        .bind(state.uid_validity as i64)
+        .bind(state.uid_next as i64)
+        .bind(state.highest_modseq.map(|m| m as i64))
+        .bind(state.last_sync.to_rfc3339())
+        .bind(state.message_count as i64)
+        .bind(state.unread_count as i64)
+        .bind(serde_json::to_string(&state.sync_status)?)
+        .execute(&self.pool)
+        .await?;
+        
+        Ok(())
+    }
+    
+    /// Get folder sync state
+    pub async fn get_folder_sync_state(&self, account_id: &str, folder_name: &str) -> DatabaseResult<Option<FolderSyncState>> {
+        let row = sqlx::query(r#"
+            SELECT account_id, folder_name, uid_validity, uid_next, highest_modseq,
+                   last_sync, message_count, unread_count, sync_status
+            FROM folder_sync_state
+            WHERE account_id = ?1 AND folder_name = ?2
+        "#)
+        .bind(account_id)
+        .bind(folder_name)
+        .fetch_optional(&self.pool)
+        .await?;
+        
+        match row {
+            Some(row) => {
+                let sync_status: SyncStatus = serde_json::from_str(row.get("sync_status"))?;
+                let last_sync: DateTime<Utc> = DateTime::parse_from_rfc3339(row.get("last_sync"))?.into();
+                
+                Ok(Some(FolderSyncState {
+                    account_id: row.get("account_id"),
+                    folder_name: row.get("folder_name"),
+                    uid_validity: row.get::<i64, _>("uid_validity") as u32,
+                    uid_next: row.get::<i64, _>("uid_next") as u32,
+                    highest_modseq: row.get::<Option<i64>, _>("highest_modseq").map(|m| m as u64),
+                    last_sync,
+                    message_count: row.get::<i64, _>("message_count") as u32,
+                    unread_count: row.get::<i64, _>("unread_count") as u32,
+                    sync_status,
+                }))
+            }
+            None => Ok(None),
+        }
+    }
+    
+    /// Delete messages by UIDs
+    pub async fn delete_messages_by_uids(&self, account_id: &str, folder_name: &str, uids: &[u32]) -> DatabaseResult<()> {
+        for uid in uids {
+            sqlx::query("UPDATE messages SET is_deleted = TRUE, updated_at = ?1 WHERE account_id = ?2 AND folder_name = ?3 AND imap_uid = ?4")
+                .bind(Utc::now().to_rfc3339())
+                .bind(account_id)
+                .bind(folder_name)
+                .bind(*uid as i64)
+                .execute(&self.pool)
+                .await?;
+        }
+        
+        Ok(())
+    }
+    
+    /// Get database statistics
+    pub async fn get_stats(&self) -> DatabaseResult<DatabaseStats> {
+        let message_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM messages WHERE is_deleted = FALSE")
+            .fetch_one(&self.pool).await?;
+            
+        let unread_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM messages WHERE is_deleted = FALSE AND flags NOT LIKE '%\"\\\\Seen\"%'")
+            .fetch_one(&self.pool).await?;
+            
+        let account_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM accounts")
+            .fetch_one(&self.pool).await?;
+            
+        let folder_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM folders")
+            .fetch_one(&self.pool).await?;
+        
+        let db_size = std::fs::metadata(&self.db_path)
+            .map(|metadata| metadata.len())
+            .unwrap_or(0);
+        
+        Ok(DatabaseStats {
+            message_count: message_count as u32,
+            unread_count: unread_count as u32,
+            account_count: account_count as u32,
+            folder_count: folder_count as u32,
+            db_size_bytes: db_size,
+        })
+    }
+    
+    /// Helper to convert database row to StoredMessage
+    fn row_to_stored_message(&self, row: sqlx::sqlite::SqliteRow) -> DatabaseResult<StoredMessage> {
+        let id = Uuid::parse_str(row.get("id"))?;
+        let references: Vec<String> = serde_json::from_str(row.get("references"))?;
+        let to_addrs: Vec<String> = serde_json::from_str(row.get("to_addrs"))?;
+        let cc_addrs: Vec<String> = serde_json::from_str(row.get("cc_addrs"))?;
+        let bcc_addrs: Vec<String> = serde_json::from_str(row.get("bcc_addrs"))?;
+        let attachments: Vec<StoredAttachment> = serde_json::from_str(row.get("attachments"))?;
+        let flags: Vec<String> = serde_json::from_str(row.get("flags"))?;
+        let labels: Vec<String> = serde_json::from_str(row.get("labels"))?;
+        
+        let date: DateTime<Utc> = DateTime::parse_from_rfc3339(row.get("date"))?.into();
+        let created_at: DateTime<Utc> = DateTime::parse_from_rfc3339(row.get("created_at"))?.into();
+        let updated_at: DateTime<Utc> = DateTime::parse_from_rfc3339(row.get("updated_at"))?.into();
+        let last_synced: DateTime<Utc> = DateTime::parse_from_rfc3339(row.get("last_synced"))?.into();
+        
+        Ok(StoredMessage {
+            id,
+            account_id: row.get("account_id"),
+            folder_name: row.get("folder_name"),
+            imap_uid: row.get::<i64, _>("imap_uid") as u32,
+            message_id: row.get("message_id"),
+            thread_id: row.get("thread_id"),
+            in_reply_to: row.get("in_reply_to"),
+            references,
+            subject: row.get("subject"),
+            from_addr: row.get("from_addr"),
+            from_name: row.get("from_name"),
+            to_addrs,
+            cc_addrs,
+            bcc_addrs,
+            reply_to: row.get("reply_to"),
+            date,
+            body_text: row.get("body_text"),
+            body_html: row.get("body_html"),
+            attachments,
+            flags,
+            labels,
+            size: row.get::<Option<i64>, _>("size").map(|s| s as u32),
+            priority: row.get("priority"),
+            created_at,
+            updated_at,
+            last_synced,
+            sync_version: row.get("sync_version"),
+            is_draft: row.get("is_draft"),
+            is_deleted: row.get("is_deleted"),
+        })
+    }
+}
+
+/// Database statistics
+#[derive(Debug, Clone)]
+pub struct DatabaseStats {
+    pub message_count: u32,
+    pub unread_count: u32,
+    pub account_count: u32,
+    pub folder_count: u32,
+    pub db_size_bytes: u64,
+}
+
+/// Convert IMAP message to stored message
+impl StoredMessage {
+    pub fn from_imap_message(
+        imap_message: &ImapMessage,
+        account_id: String,
+        folder_name: String,
+    ) -> Self {
+        let now = Utc::now();
+        
+        // Extract envelope information if available
+        let envelope = imap_message.envelope.as_ref();
+        
+        Self {
+            id: Uuid::new_v4(),
+            account_id,
+            folder_name,
+            imap_uid: imap_message.uid.unwrap_or(0),
+            message_id: envelope.and_then(|env| env.message_id.clone()),
+            thread_id: None, // Will be computed by threading engine
+            in_reply_to: envelope.and_then(|env| env.in_reply_to.clone()),
+            references: Vec::new(), // Would need to parse from headers
+            subject: envelope
+                .and_then(|env| env.subject.clone())
+                .unwrap_or_default(),
+            from_addr: envelope
+                .and_then(|env| env.from.first())
+                .and_then(|addr| addr.email_address())
+                .unwrap_or_default(),
+            from_name: envelope
+                .and_then(|env| env.from.first())
+                .and_then(|addr| addr.name.clone()),
+            to_addrs: envelope
+                .map(|env| env.to.iter().filter_map(|addr| addr.email_address()).collect())
+                .unwrap_or_default(),
+            cc_addrs: envelope
+                .map(|env| env.cc.iter().filter_map(|addr| addr.email_address()).collect())
+                .unwrap_or_default(),
+            bcc_addrs: envelope
+                .map(|env| env.bcc.iter().filter_map(|addr| addr.email_address()).collect())
+                .unwrap_or_default(),
+            reply_to: envelope
+                .and_then(|env| env.reply_to.first())
+                .and_then(|addr| addr.email_address()),
+            date: imap_message.internal_date.unwrap_or(now),
+            body_text: imap_message.body.clone(), // Simplified - would need body parsing
+            body_html: None, // Would need proper MIME parsing
+            attachments: Vec::new(), // Would need body structure parsing
+            flags: imap_message.flags.iter().map(|flag| {
+                match flag {
+                    MessageFlag::Seen => "\\Seen".to_string(),
+                    MessageFlag::Answered => "\\Answered".to_string(),
+                    MessageFlag::Flagged => "\\Flagged".to_string(),
+                    MessageFlag::Deleted => "\\Deleted".to_string(),
+                    MessageFlag::Draft => "\\Draft".to_string(),
+                    MessageFlag::Recent => "\\Recent".to_string(),
+                    MessageFlag::Custom(s) => s.clone(),
+                }
+            }).collect(),
+            labels: Vec::new(), // Gmail-specific labels handled separately
+            size: imap_message.size,
+            priority: None, // Extract from headers if needed
+            created_at: now,
+            updated_at: now,
+            last_synced: now,
+            sync_version: 1,
+            is_draft: imap_message.flags.contains(&MessageFlag::Draft),
+            is_deleted: imap_message.flags.contains(&MessageFlag::Deleted),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+    
+    #[tokio::test]
+    async fn test_database_creation() {
+        let temp_dir = tempdir().unwrap();
+        let db_path = temp_dir.path().join("test.db");
+        let db_path_str = db_path.to_str().unwrap();
+        
+        let db = EmailDatabase::new(db_path_str).await.unwrap();
+        assert!(std::path::Path::new(db_path_str).exists());
+        
+        let stats = db.get_stats().await.unwrap();
+        assert_eq!(stats.message_count, 0);
+        assert_eq!(stats.account_count, 0);
+    }
+    
+    #[tokio::test]
+    async fn test_message_storage_and_retrieval() {
+        let temp_dir = tempdir().unwrap();
+        let db_path = temp_dir.path().join("test.db");
+        let db_path_str = db_path.to_str().unwrap();
+        
+        let db = EmailDatabase::new(db_path_str).await.unwrap();
+        
+        // Insert a test account first (to satisfy foreign key constraints)
+        sqlx::query("INSERT INTO accounts (id, name, email, provider, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)")
+            .bind("test-account")
+            .bind("Test Account")
+            .bind("test@example.com")
+            .bind("test")
+            .bind(chrono::Utc::now().to_rfc3339())
+            .bind(chrono::Utc::now().to_rfc3339())
+            .execute(&db.pool)
+            .await.unwrap();
+            
+        // Insert a test folder
+        sqlx::query("INSERT INTO folders (account_id, name, full_name, delimiter, attributes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
+            .bind("test-account")
+            .bind("INBOX")
+            .bind("INBOX")
+            .bind(".")
+            .bind("[]")
+            .bind(chrono::Utc::now().to_rfc3339())
+            .bind(chrono::Utc::now().to_rfc3339())
+            .execute(&db.pool)
+            .await.unwrap();
+        
+        let message = StoredMessage {
+            id: Uuid::new_v4(),
+            account_id: "test-account".to_string(),
+            folder_name: "INBOX".to_string(),
+            imap_uid: 1,
+            message_id: Some("test@example.com".to_string()),
+            thread_id: None,
+            in_reply_to: None,
+            references: vec![],
+            subject: "Test Subject".to_string(),
+            from_addr: "sender@example.com".to_string(),
+            from_name: Some("Test Sender".to_string()),
+            to_addrs: vec!["recipient@example.com".to_string()],
+            cc_addrs: vec![],
+            bcc_addrs: vec![],
+            reply_to: None,
+            date: Utc::now(),
+            body_text: Some("Test body".to_string()),
+            body_html: None,
+            attachments: vec![],
+            flags: vec!["\\Seen".to_string()],
+            labels: vec![],
+            size: Some(100),
+            priority: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+            last_synced: Utc::now(),
+            sync_version: 1,
+            is_draft: false,
+            is_deleted: false,
+        };
+        
+        // Store message
+        db.store_message(&message).await.unwrap();
+        
+        // Retrieve message
+        let retrieved = db.get_message_by_uid("test-account", "INBOX", 1).await.unwrap();
+        assert!(retrieved.is_some());
+        let retrieved = retrieved.unwrap();
+        assert_eq!(retrieved.subject, "Test Subject");
+        assert_eq!(retrieved.from_addr, "sender@example.com");
+        
+        // Get messages from folder
+        let messages = db.get_messages("test-account", "INBOX", None, None).await.unwrap();
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0].subject, "Test Subject");
+    }
+    
+    #[tokio::test]
+    async fn test_full_text_search() {
+        let temp_dir = tempdir().unwrap();
+        let db_path = temp_dir.path().join("test.db");
+        let db_path_str = db_path.to_str().unwrap();
+        
+        let db = EmailDatabase::new(db_path_str).await.unwrap();
+        
+        // Insert a test account first (to satisfy foreign key constraints)
+        sqlx::query("INSERT INTO accounts (id, name, email, provider, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)")
+            .bind("test-account")
+            .bind("Test Account")
+            .bind("test@example.com")
+            .bind("test")
+            .bind(chrono::Utc::now().to_rfc3339())
+            .bind(chrono::Utc::now().to_rfc3339())
+            .execute(&db.pool)
+            .await.unwrap();
+            
+        // Insert a test folder
+        sqlx::query("INSERT INTO folders (account_id, name, full_name, delimiter, attributes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
+            .bind("test-account")
+            .bind("INBOX")
+            .bind("INBOX")
+            .bind(".")
+            .bind("[]")
+            .bind(chrono::Utc::now().to_rfc3339())
+            .bind(chrono::Utc::now().to_rfc3339())
+            .execute(&db.pool)
+            .await.unwrap();
+        
+        let message = StoredMessage {
+            id: Uuid::new_v4(),
+            account_id: "test-account".to_string(),
+            folder_name: "INBOX".to_string(),
+            imap_uid: 1,
+            message_id: Some("search-test@example.com".to_string()),
+            thread_id: None,
+            in_reply_to: None,
+            references: vec![],
+            subject: "Important Meeting Tomorrow".to_string(),
+            from_addr: "boss@company.com".to_string(),
+            from_name: Some("The Boss".to_string()),
+            to_addrs: vec!["employee@company.com".to_string()],
+            cc_addrs: vec![],
+            bcc_addrs: vec![],
+            reply_to: None,
+            date: Utc::now(),
+            body_text: Some("Please attend the quarterly meeting tomorrow at 2 PM".to_string()),
+            body_html: None,
+            attachments: vec![],
+            flags: vec![],
+            labels: vec![],
+            size: Some(200),
+            priority: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+            last_synced: Utc::now(),
+            sync_version: 1,
+            is_draft: false,
+            is_deleted: false,
+        };
+        
+        db.store_message(&message).await.unwrap();
+        
+        // Search by subject
+        let results = db.search_messages("test-account", "meeting", None).await.unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].subject, "Important Meeting Tomorrow");
+        
+        // Search by body
+        let results = db.search_messages("test-account", "quarterly", None).await.unwrap();
+        assert_eq!(results.len(), 1);
+        
+        // Search by sender
+        let results = db.search_messages("test-account", "boss", None).await.unwrap();
+        assert_eq!(results.len(), 1);
+    }
+}

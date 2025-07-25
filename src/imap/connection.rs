@@ -160,8 +160,8 @@ impl ImapConnection {
         Ok(responses.join("\n"))
     }
     
-    /// Read a single response line from the server  
-    async fn read_response(&mut self) -> ImapResult<String> {
+    /// Read a single response line from the server (public for IDLE)
+    pub async fn read_response(&mut self) -> ImapResult<String> {
         let reader = self.reader.as_mut()
             .ok_or_else(|| ImapError::invalid_state("No reader available"))?;
         
