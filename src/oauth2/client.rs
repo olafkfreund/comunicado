@@ -82,13 +82,20 @@ impl OAuth2Client {
         })
     }
     
+    /// Try to check for authorization callback (non-blocking)
+    pub async fn try_get_authorization(&mut self) -> Option<OAuth2Result<AuthorizationCode>> {
+        let callback_server = self.callback_server.as_ref()?;
+        let mut server = callback_server.lock().await;
+        server.try_receive_callback()
+    }
+    
     /// Wait for authorization callback
     pub async fn wait_for_authorization(&mut self, timeout_secs: u64) -> OAuth2Result<AuthorizationCode> {
         let callback_server = self.callback_server
             .as_ref()
             .ok_or_else(|| OAuth2Error::InvalidConfig("Authorization not started".to_string()))?;
         
-        let server = callback_server.lock().await;
+        let mut server = callback_server.lock().await;
         let result = timeout(
             Duration::from_secs(timeout_secs),
             server.wait_for_callback()
@@ -368,11 +375,21 @@ pub struct UserInfo {
 /// Simple HTTP server for OAuth2 callback
 struct CallbackServer {
     port: u16,
+    receiver: Option<tokio::sync::oneshot::Receiver<AuthorizationCode>>,
 }
 
 impl CallbackServer {
     fn new(port: u16) -> OAuth2Result<Self> {
-        Ok(Self { port })
+        let (sender, receiver) = tokio::sync::oneshot::channel();
+        
+        // Start the async server in the background
+        tokio::spawn(async move {
+            if let Err(e) = Self::run_callback_server(port, sender).await {
+                eprintln!("Callback server error: {}", e);
+            }
+        });
+        
+        Ok(Self { port, receiver: Some(receiver) })
     }
     
     /// Create a new callback server with dynamic port allocation
@@ -385,7 +402,17 @@ impl CallbackServer {
         // Try preferred ports first
         for &port in &preferred_ports {
             if let Ok(_listener) = TcpListener::bind(format!("127.0.0.1:{}", port)) {
-                return Ok(Self { port });
+                let (sender, receiver) = tokio::sync::oneshot::channel();
+                
+                // Start the async server in the background
+                let server_port = port;
+                tokio::spawn(async move {
+                    if let Err(e) = Self::run_callback_server(server_port, sender).await {
+                        eprintln!("Callback server error: {}", e);
+                    }
+                });
+                
+                return Ok(Self { port, receiver: Some(receiver) });
             }
         }
         
@@ -401,40 +428,76 @@ impl CallbackServer {
             ))?
             .port();
         
-        Ok(Self { port })
+        let (sender, receiver) = tokio::sync::oneshot::channel();
+        
+        // Start the async server in the background
+        tokio::spawn(async move {
+            if let Err(e) = Self::run_callback_server(port, sender).await {
+                eprintln!("Callback server error: {}", e);
+            }
+        });
+        
+        Ok(Self { port, receiver: Some(receiver) })
     }
     
-    async fn wait_for_callback(&self) -> OAuth2Result<AuthorizationCode> {
-        // This is a simplified implementation
-        // In production, you'd use a proper HTTP server like warp or axum
+    /// Try to receive a callback (non-blocking)
+    fn try_receive_callback(&mut self) -> Option<OAuth2Result<AuthorizationCode>> {
+        if let Some(receiver) = &mut self.receiver {
+            match receiver.try_recv() {
+                Ok(auth_code) => Some(Ok(auth_code)),
+                Err(tokio::sync::oneshot::error::TryRecvError::Empty) => None,
+                Err(tokio::sync::oneshot::error::TryRecvError::Closed) => {
+                    Some(Err(OAuth2Error::AuthorizationFailed("Callback server closed".to_string())))
+                }
+            }
+        } else {
+            None
+        }
+    }
+    
+    /// Wait for callback with timeout
+    async fn wait_for_callback(&mut self) -> OAuth2Result<AuthorizationCode> {
+        if let Some(receiver) = self.receiver.take() {
+            receiver.await
+                .map_err(|_| OAuth2Error::AuthorizationFailed("Callback server closed".to_string()))
+        } else {
+            Err(OAuth2Error::AuthorizationFailed("No callback receiver available".to_string()))
+        }
+    }
+    
+    /// Run the async callback server
+    async fn run_callback_server(
+        port: u16,
+        sender: tokio::sync::oneshot::Sender<AuthorizationCode>
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        use tokio::net::TcpListener;
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
         
-        use std::io::Read;
-        use std::net::TcpListener;
-        
-        let listener = TcpListener::bind(format!("127.0.0.1:{}", self.port))
-            .map_err(|e| OAuth2Error::StorageError(format!("Failed to bind to port {}: {}", self.port, e)))?;
+        let listener = TcpListener::bind(format!("127.0.0.1:{}", port)).await?;
         
         // Wait for incoming connection
-        let (mut stream, _) = listener.accept()
-            .map_err(|e| OAuth2Error::AuthorizationFailed(format!("Failed to accept connection: {}", e)))?;
+        let (mut stream, _) = listener.accept().await?;
         
         // Read HTTP request
         let mut buffer = [0; 4096];
-        let bytes_read = stream.read(&mut buffer)
-            .map_err(|e| OAuth2Error::AuthorizationFailed(format!("Failed to read request: {}", e)))?;
+        let bytes_read = stream.read(&mut buffer).await?;
         
         let request = String::from_utf8_lossy(&buffer[..bytes_read]);
         
         // Send response
         let response = "HTTP/1.1 200 OK\r\n\r\n<html><body><h1>Authorization successful!</h1><p>You can close this window and return to Comunicado.</p></body></html>";
-        std::io::Write::write_all(&mut stream, response.as_bytes())
-            .map_err(|e| OAuth2Error::AuthorizationFailed(format!("Failed to send response: {}", e)))?;
+        stream.write_all(response.as_bytes()).await?;
         
         // Parse callback URL from request
-        self.parse_callback_from_request(&request)
+        let auth_code = Self::parse_callback_from_request_static(&request)?;
+        
+        // Send the authorization code back
+        let _ = sender.send(auth_code);
+        
+        Ok(())
     }
     
-    fn parse_callback_from_request(&self, request: &str) -> OAuth2Result<AuthorizationCode> {
+    fn parse_callback_from_request_static(request: &str) -> OAuth2Result<AuthorizationCode> {
         // Extract the first line (GET request)
         let first_line = request.lines().next()
             .ok_or_else(|| OAuth2Error::AuthorizationFailed("Invalid HTTP request".to_string()))?;

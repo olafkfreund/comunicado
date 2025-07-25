@@ -54,6 +54,7 @@ pub struct SetupWizard {
     oauth_client: Option<OAuth2Client>,
     account_config: Option<AccountConfig>,
     auth_request: Option<crate::oauth2::client::AuthorizationRequest>,
+    authorization_started: bool,
     
     // UI state
     input_mode: InputMode,
@@ -90,6 +91,7 @@ impl SetupWizard {
             oauth_client: None,
             account_config: None,
             auth_request: None,
+            authorization_started: false,
             input_mode: InputMode::Navigation,
             scroll_offset: 0,
             show_help: false,
@@ -383,21 +385,24 @@ impl SetupWizard {
     
     async fn handle_authorization(&mut self) -> OAuth2Result<()> {
         if let Some(oauth_client) = &mut self.oauth_client {
-            // Start authorization flow
-            let auth_request = oauth_client.start_authorization().await?;
-            self.auth_request = Some(auth_request);
+            // Only start authorization once
+            if !self.authorization_started {
+                // Start authorization flow
+                let auth_request = oauth_client.start_authorization().await?;
+                self.auth_request = Some(auth_request);
+                self.authorization_started = true;
+                
+                // Open browser (in a real implementation, you'd use a system command)
+                // For now, we'll display the URL and wait for manual completion
+                
+                return Ok(()); // Return early, let the UI update
+            }
             
-            // Open browser (in a real implementation, you'd use a system command)
-            // For now, we'll display the URL and wait for manual completion
-            
-            // Wait for callback with timeout
-            let auth_code = match timeout(
-                Duration::from_secs(300), // 5 minute timeout
-                oauth_client.wait_for_authorization(300)
-            ).await {
-                Ok(Ok(code)) => code,
-                Ok(Err(e)) => return Err(e),
-                Err(_) => return Err(OAuth2Error::AuthorizationTimeout),
+            // Check for callback (non-blocking)
+            let auth_code = match oauth_client.try_get_authorization().await {
+                Some(Ok(code)) => code,
+                Some(Err(e)) => return Err(e),
+                None => return Ok(()), // Still waiting, not an error
             };
             
             // Exchange code for tokens
@@ -443,6 +448,7 @@ impl SetupWizard {
         self.oauth_client = None;
         self.account_config = None;
         self.auth_request = None;
+        self.authorization_started = false;
         self.input_mode = InputMode::Navigation;
         self.scroll_offset = 0;
     }
