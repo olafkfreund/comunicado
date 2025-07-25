@@ -55,6 +55,28 @@ impl Theme {
         }
     }
 
+    /// Create a Gruvbox dark theme
+    pub fn gruvbox_dark() -> Self {
+        Self {
+            name: "Gruvbox Dark".to_string(),
+            description: "Retro groove dark theme with warm, earthy colors".to_string(),
+            colors: ThemeColors::gruvbox_dark(),
+            styles: StyleSet::default(),
+            accessibility: AccessibilityOptions::default(),
+        }
+    }
+
+    /// Create a Gruvbox light theme
+    pub fn gruvbox_light() -> Self {
+        Self {
+            name: "Gruvbox Light".to_string(),
+            description: "Retro groove light theme with warm, earthy colors".to_string(),
+            colors: ThemeColors::gruvbox_light(),
+            styles: StyleSet::default(),
+            accessibility: AccessibilityOptions::default(),
+        }
+    }
+
     /// Get style for a specific UI component
     pub fn get_component_style(&self, component: &str, focused: bool) -> Style {
         self.styles.get_style(component, focused, &self.colors)
@@ -80,7 +102,7 @@ impl Theme {
 
 impl Default for Theme {
     fn default() -> Self {
-        Self::professional_dark()
+        Self::gruvbox_dark()
     }
 }
 
@@ -95,6 +117,8 @@ pub struct ThemeManager {
 impl ThemeManager {
     pub fn new() -> Self {
         let themes = vec![
+            Theme::gruvbox_dark(),
+            Theme::gruvbox_light(),
             Theme::professional_dark(),
             Theme::professional_light(),
             Theme::high_contrast(),

@@ -13,6 +13,17 @@ fn test_theme_creation() {
     
     let high_contrast_theme = Theme::high_contrast();
     assert_eq!(high_contrast_theme.name, "High Contrast");
+
+    // Test Gruvbox themes
+    let gruvbox_dark = Theme::gruvbox_dark();
+    assert_eq!(gruvbox_dark.name, "Gruvbox Dark");
+    assert!(!gruvbox_dark.description.is_empty());
+    assert!(gruvbox_dark.description.contains("Retro groove"));
+
+    let gruvbox_light = Theme::gruvbox_light();
+    assert_eq!(gruvbox_light.name, "Gruvbox Light");
+    assert!(!gruvbox_light.description.is_empty());
+    assert!(gruvbox_light.description.contains("Retro groove"));
 }
 
 #[test]
@@ -21,6 +32,13 @@ fn test_theme_accessibility() {
     
     // Test accessibility validation
     assert!(theme.validate_accessibility().is_ok());
+    
+    // Test Gruvbox themes accessibility
+    let gruvbox_dark = Theme::gruvbox_dark();
+    assert!(gruvbox_dark.validate_accessibility().is_ok());
+    
+    let gruvbox_light = Theme::gruvbox_light();
+    assert!(gruvbox_light.validate_accessibility().is_ok());
     
     // Test accessibility options
     let accessibility = AccessibilityOptions::high_contrast();
@@ -54,21 +72,30 @@ fn test_color_blindness_support() {
 fn test_theme_manager() {
     let mut manager = ThemeManager::new();
     
-    // Test initial state
-    assert_eq!(manager.current_theme().name, "Professional Dark");
+    // Test initial state - now defaults to Gruvbox Dark
+    assert_eq!(manager.current_theme().name, "Gruvbox Dark");
     
     // Test theme switching
     assert!(manager.set_theme("Professional Light").is_ok());
     assert_eq!(manager.current_theme().name, "Professional Light");
     
+    // Test switching to Gruvbox Light
+    assert!(manager.set_theme("Gruvbox Light").is_ok());
+    assert_eq!(manager.current_theme().name, "Gruvbox Light");
+    
     // Test invalid theme
     assert!(manager.set_theme("Nonexistent Theme").is_err());
     
-    // Test available themes
+    // Test available themes - now includes Gruvbox themes
     let available = manager.available_themes();
+    assert!(available.contains(&"Gruvbox Dark"));
+    assert!(available.contains(&"Gruvbox Light"));
     assert!(available.contains(&"Professional Dark"));
     assert!(available.contains(&"Professional Light"));
     assert!(available.contains(&"High Contrast"));
+    
+    // Verify Gruvbox Dark is first (default)
+    assert_eq!(available[0], "Gruvbox Dark");
 }
 
 #[test]
