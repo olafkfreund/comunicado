@@ -389,11 +389,15 @@ impl SetupWizard {
             if !self.authorization_started {
                 // Start authorization flow
                 let auth_request = oauth_client.start_authorization().await?;
+                
+                // Attempt to open browser automatically
+                if let Err(e) = open_browser_url(&auth_request.authorization_url) {
+                    tracing::warn!("Failed to open browser automatically: {}", e);
+                    // Continue anyway, user can click the link manually
+                }
+                
                 self.auth_request = Some(auth_request);
                 self.authorization_started = true;
-                
-                // Open browser (in a real implementation, you'd use a system command)
-                // For now, we'll display the URL and wait for manual completion
                 
                 return Ok(()); // Return early, let the UI update
             }
@@ -729,13 +733,13 @@ impl SetupWizard {
                 Line::from(format!("✓ Callback server started on port {}", auth_request.callback_port)),
                 Line::from(""),
                 Line::from("Steps:"),
-                Line::from("1. Your browser should open automatically"),
+                Line::from("1. ✓ Browser should open automatically"),
                 Line::from("2. Log in to your email provider"),
                 Line::from("3. Grant permission to Comunicado"),
                 Line::from("4. Return to this window"),
                 Line::from(""),
-                Line::from("If your browser doesn't open, copy this URL:"),
-                Line::from(auth_request.authorization_url.clone()),
+                Line::from("If browser didn't open, click this URL:"),
+                create_clickable_url_line(&auth_request.authorization_url),
                 Line::from(""),
                 Line::from("This process will timeout in 5 minutes."),
             ]);
@@ -920,6 +924,61 @@ fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
         .split(popup_layout[1])[1]
 }
 
+/// Attempt to open URL in the default browser
+fn open_browser_url(url: &str) -> Result<(), String> {
+    use std::process::Command;
+    
+    // Try different browser opening commands based on the platform
+    let commands = if cfg!(target_os = "linux") {
+        vec!["xdg-open", "firefox", "chromium", "google-chrome"]
+    } else if cfg!(target_os = "macos") {
+        vec!["open"]
+    } else if cfg!(target_os = "windows") {
+        vec!["start", "explorer"]
+    } else {
+        return Err("Unsupported platform for automatic browser opening".to_string());
+    };
+    
+    for command in commands {
+        match Command::new(command).arg(url).spawn() {
+            Ok(_) => {
+                tracing::info!("Successfully opened browser with command: {}", command);
+                return Ok(());
+            }
+            Err(e) => {
+                tracing::debug!("Failed to open browser with {}: {}", command, e);
+                continue;
+            }
+        }
+    }
+    
+    Err("Failed to open browser with any available command".to_string())
+}
+
+/// Create a clickable URL line for the terminal
+fn create_clickable_url_line(url: &str) -> Line {
+    // OSC 8 hyperlink escape sequence: \e]8;;URL\e\\TEXT\e]8;;\e\\
+    // This makes the URL clickable in terminals that support hyperlinks
+    let hyperlink_start = format!("\x1b]8;;{}\x1b\\", url);
+    let hyperlink_end = "\x1b]8;;\x1b\\";
+    
+    // Create a shortened display version for long URLs
+    let display_url = if url.len() > 80 {
+        format!("{}...{}", &url[..40], &url[url.len()-30..])
+    } else {
+        url.to_string()
+    };
+    
+    Line::from(vec![
+        Span::styled(
+            format!("{}{}{}", hyperlink_start, display_url, hyperlink_end),
+            Style::default()
+                .fg(Color::Blue)
+                .add_modifier(Modifier::UNDERLINED)
+        )
+    ])
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -939,5 +998,26 @@ mod tests {
     fn test_input_modes() {
         let wizard = SetupWizard::new().unwrap();
         assert!(matches!(wizard.input_mode, InputMode::Navigation));
+    }
+    
+    #[test]
+    fn test_clickable_url_creation() {
+        let test_url = "https://accounts.google.com/o/oauth2/v2/auth?response_type=code&client_id=test";
+        let clickable_line = create_clickable_url_line(test_url);
+        
+        // The line should contain the URL and hyperlink escape sequences
+        let line_content = format!("{:?}", clickable_line);
+        assert!(line_content.contains("accounts.google.com"));
+        assert!(line_content.contains("\\x1b]8"));
+    }
+    
+    #[test]
+    fn test_long_url_truncation() {
+        let long_url = "https://accounts.google.com/o/oauth2/v2/auth?response_type=code&client_id=very_long_client_id_that_makes_url_exceed_80_characters&redirect_uri=http://localhost:8080/oauth/callback&scope=read%20write&state=random_state_string";
+        let clickable_line = create_clickable_url_line(long_url);
+        
+        // Should contain truncation indicator
+        let line_content = format!("{:?}", clickable_line);
+        assert!(line_content.contains("..."));
     }
 }
