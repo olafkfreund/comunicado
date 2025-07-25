@@ -3,6 +3,7 @@ pub mod message_list;
 pub mod content_preview;
 pub mod layout;
 pub mod status_bar;
+pub mod sync_progress;
 
 use ratatui::{
     layout::Rect,
@@ -10,7 +11,8 @@ use ratatui::{
     Frame,
 };
 use crate::theme::{Theme, ThemeManager};
-use crate::email::{EmailDatabase, EmailNotificationManager, UIEmailUpdater, EmailNotification};
+use crate::email::{EmailDatabase, EmailNotificationManager, UIEmailUpdater, EmailNotification, sync_engine::SyncProgress};
+use chrono::Duration as ChronoDuration;
 use std::sync::Arc;
 
 use self::{
@@ -19,6 +21,7 @@ use self::{
     content_preview::ContentPreview,
     layout::AppLayout,
     status_bar::{StatusBar, EmailStatusSegment, CalendarStatusSegment, SystemInfoSegment, NavigationHintsSegment, SyncStatus},
+    sync_progress::SyncProgressOverlay,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -37,6 +40,7 @@ pub struct UI {
     theme_manager: ThemeManager,
     status_bar: StatusBar,
     email_updater: Option<UIEmailUpdater>,
+    sync_progress_overlay: SyncProgressOverlay,
 }
 
 impl UI {
@@ -50,6 +54,7 @@ impl UI {
             theme_manager: ThemeManager::new(),
             status_bar: StatusBar::default(),
             email_updater: None,
+            sync_progress_overlay: SyncProgressOverlay::new(),
         };
         
         // Initialize status bar with default segments
@@ -104,6 +109,12 @@ impl UI {
         // Render the status bar
         if chunks.len() > 3 {
             self.render_status_bar(frame, chunks[3]);
+        }
+        
+        // Render sync progress overlay (on top of everything)
+        if self.sync_progress_overlay.is_visible() {
+            let theme = self.theme_manager.current_theme();
+            self.sync_progress_overlay.render(frame, size, theme);
         }
     }
 
@@ -414,6 +425,19 @@ impl UI {
                     }
                 }
                 
+                // Create initial sync progress entry
+                let initial_progress = SyncProgress {
+                    account_id: account_id.clone(),
+                    folder_name: folder_name.clone(),
+                    phase: crate::email::sync_engine::SyncPhase::Initializing,
+                    messages_processed: 0,
+                    total_messages: 0,
+                    bytes_downloaded: 0,
+                    started_at: chrono::Utc::now(),
+                    estimated_completion: None,
+                };
+                self.update_sync_progress(initial_progress);
+                
                 tracing::info!("Sync started for {}/{}", account_id, folder_name);
             }
             
@@ -432,6 +456,19 @@ impl UI {
                     }
                 }
                 
+                // Update sync progress to completed
+                let completed_progress = SyncProgress {
+                    account_id: account_id.clone(),
+                    folder_name: folder_name.clone(),
+                    phase: crate::email::sync_engine::SyncPhase::Complete,
+                    messages_processed: new_count + updated_count,
+                    total_messages: new_count + updated_count,
+                    bytes_downloaded: 0, // TODO: Get actual bytes from sync engine
+                    started_at: chrono::Utc::now() - chrono::Duration::seconds(1), // Approximate
+                    estimated_completion: Some(chrono::Utc::now()),
+                };
+                self.update_sync_progress(completed_progress);
+                
                 tracing::info!("Sync completed for {}/{}: {} new, {} updated", 
                              account_id, folder_name, new_count, updated_count);
             }
@@ -448,9 +485,77 @@ impl UI {
                     }
                 }
                 
+                // Update sync progress to error state
+                let error_progress = SyncProgress {
+                    account_id: account_id.clone(),
+                    folder_name: folder_name.clone(),
+                    phase: crate::email::sync_engine::SyncPhase::Error(error.clone()),
+                    messages_processed: 0,
+                    total_messages: 0,
+                    bytes_downloaded: 0,
+                    started_at: chrono::Utc::now() - chrono::Duration::seconds(1), // Approximate
+                    estimated_completion: None,
+                };
+                self.update_sync_progress(error_progress);
+                
                 tracing::error!("Sync failed for {}/{}: {}", account_id, folder_name, error);
             }
         }
+    }
+    
+    /// Update sync progress indicators
+    pub fn update_sync_progress(&mut self, progress: SyncProgress) {
+        self.sync_progress_overlay.update_progress(progress.clone());
+        
+        // Also update status bar with progress if this is for the current folder
+        if let (Some(current_account), Some(current_folder)) = self.message_list.get_current_context() {
+            if current_account == &progress.account_id && current_folder == &progress.folder_name {
+                let message_count = self.message_list.messages().len();
+                let unread_count = self.message_list.messages().iter()
+                    .filter(|msg| !msg.is_read)
+                    .count();
+                    
+                let sync_status = match progress.phase {
+                    crate::email::sync_engine::SyncPhase::Complete => SyncStatus::Online,
+                    crate::email::sync_engine::SyncPhase::Error(_) => SyncStatus::Error,
+                    _ => {
+                        if progress.total_messages > 0 {
+                            SyncStatus::SyncingWithProgress(progress.messages_processed, progress.total_messages)
+                        } else {
+                            SyncStatus::Syncing
+                        }
+                    }
+                };
+                
+                self.update_email_status(unread_count, message_count, sync_status);
+            }
+        }
+    }
+    
+    /// Toggle sync progress overlay visibility
+    pub fn toggle_sync_progress_overlay(&mut self) {
+        self.sync_progress_overlay.toggle_visibility();
+    }
+    
+    /// Clean up completed sync progress entries
+    pub fn cleanup_sync_progress(&mut self) {
+        // Remove completed syncs after 3 seconds
+        let threshold = ChronoDuration::seconds(3);
+        self.sync_progress_overlay.cleanup_completed(threshold);
+    }
+    
+    /// Navigate sync progress overlay (for keyboard interaction)
+    pub fn sync_progress_next(&mut self) {
+        self.sync_progress_overlay.next_sync();
+    }
+    
+    pub fn sync_progress_previous(&mut self) {
+        self.sync_progress_overlay.previous_sync();
+    }
+    
+    /// Check if sync progress overlay is currently visible
+    pub fn is_sync_progress_visible(&self) -> bool {
+        self.sync_progress_overlay.is_visible()
     }
 }
 

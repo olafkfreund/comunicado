@@ -57,6 +57,7 @@ pub struct SystemInfoSegment {
 pub enum SyncStatus {
     Online,
     Syncing,
+    SyncingWithProgress(u32, u32), // (processed, total)
     Offline,
     Error,
 }
@@ -70,11 +71,19 @@ pub struct NavigationHintsSegment {
 
 impl StatusSegment for EmailStatusSegment {
     fn content(&self) -> String {
-        let sync_indicator = match self.sync_status {
-            SyncStatus::Online => "●",
-            SyncStatus::Syncing => "⟳",
-            SyncStatus::Offline => "○",
-            SyncStatus::Error => "⚠",
+        let sync_indicator = match &self.sync_status {
+            SyncStatus::Online => "●".to_string(),
+            SyncStatus::Syncing => "⟳".to_string(),
+            SyncStatus::SyncingWithProgress(processed, total) => {
+                if *total > 0 {
+                    let percent = (*processed * 100) / *total;
+                    format!("⟳{}%", percent)
+                } else {
+                    "⟳".to_string()
+                }
+            },
+            SyncStatus::Offline => "○".to_string(),
+            SyncStatus::Error => "⚠".to_string(),
         };
         
         if self.unread_count > 0 {
