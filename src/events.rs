@@ -197,6 +197,32 @@ impl EventHandler {
                 }
             }
             
+            // Content preview controls (when content preview is focused)
+            KeyCode::Char('v') => {
+                // Toggle view mode (Raw, Formatted, Headers)
+                if let FocusedPane::ContentPreview = ui.focused_pane() {
+                    ui.content_preview_mut().toggle_view_mode();
+                }
+            }
+            KeyCode::Char('H') => {
+                // Toggle expanded headers (capital H)
+                if let FocusedPane::ContentPreview = ui.focused_pane() {
+                    ui.content_preview_mut().toggle_headers();
+                }
+            }
+            KeyCode::Home => {
+                // Jump to top of content
+                if let FocusedPane::ContentPreview = ui.focused_pane() {
+                    ui.content_preview_mut().scroll_to_top();
+                }
+            }
+            KeyCode::End => {
+                // Jump to bottom of content
+                if let FocusedPane::ContentPreview = ui.focused_pane() {
+                    ui.content_preview_mut().scroll_to_bottom();
+                }
+            }
+            
             _ => {}
         }
     }

@@ -236,7 +236,9 @@ impl UI {
             FocusedPane::ContentPreview => vec![
                 ("Tab".to_string(), "Switch".to_string()),
                 ("j/k".to_string(), "Scroll".to_string()),
-                ("q".to_string(), "Quit".to_string()),
+                ("v".to_string(), "View Mode".to_string()),
+                ("H".to_string(), "Headers".to_string()),
+                ("Home/End".to_string(), "Jump".to_string()),
             ],
         }
     }

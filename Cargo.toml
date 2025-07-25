@@ -23,6 +23,7 @@ thiserror = "1.0"
 
 # Configuration
 serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
 toml = "0.8"
 
 # Logging
@@ -32,9 +33,24 @@ tracing-subscriber = "0.3"
 # Date/Time handling
 chrono = { version = "0.4", features = ["serde"] }
 
+# Text processing
+regex = "1.10"
+
+# Email and networking
+base64 = "0.22"
+oauth2 = { version = "4.4", default-features = false, features = ["rustls-tls"] }
+reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
+url = "2.5"
+sha2 = "0.10"
+rand = "0.8"
+
+# Secure storage
+keyring = "2.3"
+
 [dev-dependencies]
 # Testing
 tokio-test = "0.4"
+tempfile = "3.8"
 
 [profile.release]
 strip = true

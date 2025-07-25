@@ -144,16 +144,16 @@ impl FolderItem {
         }
     }
     
-    /// Get text-based indicator for folder type (professional, no emojis)
+    /// Get professional folder type indicator
     pub fn get_type_indicator(&self) -> &'static str {
         match self.folder_type {
-            FolderType::Inbox => "[I]",
-            FolderType::Sent => "[S]",
-            FolderType::Drafts => "[D]",
-            FolderType::Trash => "[T]",
-            FolderType::Archive => "[A]",
-            FolderType::Spam => "[X]",
-            FolderType::Custom(_) => "   ",
+            FolderType::Inbox => "▶",       // Inbox - triangle pointing right
+            FolderType::Sent => "◀",        // Sent - triangle pointing left  
+            FolderType::Drafts => "◆",      // Drafts - diamond
+            FolderType::Trash => "×",       // Trash - X symbol
+            FolderType::Archive => "▣",     // Archive - square with pattern
+            FolderType::Spam => "⚠",        // Spam - warning triangle
+            FolderType::Custom(_) => "●",   // Custom - solid circle
         }
     }
     
@@ -327,7 +327,7 @@ impl FolderTree {
                     "  "
                 };
                 
-                // Type indicator (professional, no emojis per user request)
+                // Type indicator (professional monochrome icons)
                 let type_indicator = folder.get_type_indicator();
                 
                 // Sync status indicator
@@ -370,7 +370,7 @@ impl FolderTree {
                 let line = Line::from(vec![
                     Span::styled(indent, Style::default().fg(theme.colors.folder_tree.expand_icon)),
                     Span::styled(expand_icon, Style::default().fg(theme.colors.folder_tree.expand_icon)),
-                    Span::styled(type_indicator, Style::default().fg(theme.colors.palette.text_muted)),
+                    Span::styled(type_indicator, Style::default().fg(theme.colors.folder_tree.folder_normal)),
                     Span::raw(" "),
                     Span::styled(folder.name.clone(), folder_style),
                     Span::styled(count_display, Style::default().fg(theme.colors.folder_tree.count_badge)),
