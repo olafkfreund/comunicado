@@ -11,7 +11,7 @@
 
 ### Must-Have Features
 
-- [ ] Basic TUI Interface with Ratatui - Create main application window with folder tree and message list `L`
+- [x] Basic TUI Interface with Ratatui - Create main application window with folder tree and message list `L`
 - [ ] IMAP Connection and Authentication - Implement basic IMAP client with login support `L`
 - [ ] Email List and Reading - Display email list and allow reading individual messages `M`
 - [ ] Basic Email Composition - Create and send simple text emails via SMTP `M`
