@@ -53,6 +53,7 @@ pub struct SetupWizard {
     // OAuth2 client and config
     oauth_client: Option<OAuth2Client>,
     account_config: Option<AccountConfig>,
+    auth_request: Option<crate::oauth2::client::AuthorizationRequest>,
     
     // UI state
     input_mode: InputMode,
@@ -88,6 +89,7 @@ impl SetupWizard {
             client_secret_input: String::new(),
             oauth_client: None,
             account_config: None,
+            auth_request: None,
             input_mode: InputMode::Navigation,
             scroll_offset: 0,
             show_help: false,
@@ -383,6 +385,7 @@ impl SetupWizard {
         if let Some(oauth_client) = &mut self.oauth_client {
             // Start authorization flow
             let auth_request = oauth_client.start_authorization().await?;
+            self.auth_request = Some(auth_request);
             
             // Open browser (in a real implementation, you'd use a system command)
             // For now, we'll display the URL and wait for manual completion
@@ -439,6 +442,7 @@ impl SetupWizard {
         self.selected_provider = None;
         self.oauth_client = None;
         self.account_config = None;
+        self.auth_request = None;
         self.input_mode = InputMode::Navigation;
         self.scroll_offset = 0;
     }
@@ -709,20 +713,39 @@ impl SetupWizard {
         f.render_widget(gauge, chunks[0]);
         
         // Instructions
-        let instructions = vec![
+        let mut instructions = vec![
             Line::from("OAuth2 authorization is in progress."),
             Line::from(""),
-            Line::from("Steps:"),
-            Line::from("1. Your browser should open automatically"),
-            Line::from("2. Log in to your email provider"),
-            Line::from("3. Grant permission to Comunicado"),
-            Line::from("4. Return to this window"),
-            Line::from(""),
-            Line::from("If your browser doesn't open, copy this URL:"),
-            Line::from("(Authorization URL will be displayed here)"),
-            Line::from(""),
-            Line::from("This process will timeout in 5 minutes."),
         ];
+        
+        if let Some(auth_request) = &self.auth_request {
+            instructions.extend(vec![
+                Line::from(format!("✓ Callback server started on port {}", auth_request.callback_port)),
+                Line::from(""),
+                Line::from("Steps:"),
+                Line::from("1. Your browser should open automatically"),
+                Line::from("2. Log in to your email provider"),
+                Line::from("3. Grant permission to Comunicado"),
+                Line::from("4. Return to this window"),
+                Line::from(""),
+                Line::from("If your browser doesn't open, copy this URL:"),
+                Line::from(auth_request.authorization_url.clone()),
+                Line::from(""),
+                Line::from("This process will timeout in 5 minutes."),
+            ]);
+        } else {
+            instructions.extend(vec![
+                Line::from("Preparing authorization..."),
+                Line::from(""),
+                Line::from("Steps:"),
+                Line::from("1. Your browser should open automatically"),
+                Line::from("2. Log in to your email provider"),
+                Line::from("3. Grant permission to Comunicado"),
+                Line::from("4. Return to this window"),
+                Line::from(""),
+                Line::from("This process will timeout in 5 minutes."),
+            ]);
+        }
         
         let paragraph = Paragraph::new(instructions)
             .wrap(Wrap { trim: true })

@@ -46,17 +46,27 @@ impl OAuth2Client {
         // Generate state parameter for CSRF protection
         let state = generate_random_string(32);
         
-        // Build authorization URL
+        // Start callback server with dynamic port allocation
+        let callback_server = CallbackServer::new_with_dynamic_port()?;
+        let actual_port = callback_server.port;
+        
+        // Update redirect URI with the actual port
+        let original_redirect_uri = self.config.redirect_uri.clone();
+        self.config.redirect_uri = format!("http://localhost:{}/oauth/callback", actual_port);
+        
+        // Build authorization URL with updated redirect URI
         let auth_url = self.build_authorization_url(&state, &pkce_challenge)?;
         
-        // Start callback server
-        let callback_server = CallbackServer::new(8080)?;
+        // Restore original redirect URI for future use
+        self.config.redirect_uri = original_redirect_uri;
+        
         self.callback_server = Some(Arc::new(Mutex::new(callback_server)));
         
         Ok(AuthorizationRequest {
             authorization_url: auth_url,
             state: state.clone(),
             code_verifier: pkce_challenge.map(|p| p.code_verifier),
+            callback_port: actual_port,
         })
     }
     
@@ -331,6 +341,7 @@ pub struct AuthorizationRequest {
     pub authorization_url: String,
     pub state: String,
     pub code_verifier: Option<String>,
+    pub callback_port: u16,
 }
 
 /// User information from OAuth2 provider
@@ -347,6 +358,35 @@ struct CallbackServer {
 
 impl CallbackServer {
     fn new(port: u16) -> OAuth2Result<Self> {
+        Ok(Self { port })
+    }
+    
+    /// Create a new callback server with dynamic port allocation
+    fn new_with_dynamic_port() -> OAuth2Result<Self> {
+        use std::net::TcpListener;
+        
+        // Try ports 8080-8089, then random ports
+        let preferred_ports = [8080, 8081, 8082, 8083, 8084, 8085, 8086, 8087, 8088, 8089];
+        
+        // Try preferred ports first
+        for &port in &preferred_ports {
+            if let Ok(_listener) = TcpListener::bind(format!("127.0.0.1:{}", port)) {
+                return Ok(Self { port });
+            }
+        }
+        
+        // If all preferred ports are taken, bind to any available port
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .map_err(|e| OAuth2Error::StorageError(
+                format!("Failed to bind to any available port: {}", e)
+            ))?;
+        
+        let port = listener.local_addr()
+            .map_err(|e| OAuth2Error::StorageError(
+                format!("Failed to get local address: {}", e)
+            ))?
+            .port();
+        
         Ok(Self { port })
     }
     
