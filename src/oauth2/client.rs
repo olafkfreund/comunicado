@@ -15,6 +15,7 @@ pub struct OAuth2Client {
     config: ProviderConfig,
     http_client: HttpClient,
     callback_server: Option<Arc<Mutex<CallbackServer>>>,
+    actual_redirect_uri: Option<String>, // Store the actual redirect URI used
 }
 
 impl OAuth2Client {
@@ -31,6 +32,7 @@ impl OAuth2Client {
             config,
             http_client,
             callback_server: None,
+            actual_redirect_uri: None,
         })
     }
     
@@ -50,9 +52,19 @@ impl OAuth2Client {
         let callback_server = CallbackServer::new_with_dynamic_port()?;
         let actual_port = callback_server.port;
         
-        // Update redirect URI with the actual port
+        // Build redirect URI with the actual port
+        let actual_redirect_uri = if self.config.redirect_uri.starts_with("http://localhost") {
+            format!("http://localhost:{}/oauth/callback", actual_port)
+        } else {
+            self.config.redirect_uri.clone()
+        };
+        
+        // Store the actual redirect URI for token exchange
+        self.actual_redirect_uri = Some(actual_redirect_uri.clone());
+        
+        // Temporarily update config for URL building
         let original_redirect_uri = self.config.redirect_uri.clone();
-        self.config.redirect_uri = format!("http://localhost:{}/oauth/callback", actual_port);
+        self.config.redirect_uri = actual_redirect_uri;
         
         // Build authorization URL with updated redirect URI
         let auth_url = self.build_authorization_url(&state, &pkce_challenge)?;
@@ -94,7 +106,9 @@ impl OAuth2Client {
         let mut params = HashMap::new();
         params.insert("grant_type", "authorization_code");
         params.insert("code", &auth_code.code);
-        params.insert("redirect_uri", &self.config.redirect_uri);
+        // Use the same redirect URI that was used in authorization
+        let redirect_uri = self.actual_redirect_uri.as_ref().unwrap_or(&self.config.redirect_uri);
+        params.insert("redirect_uri", redirect_uri);
         params.insert("client_id", &self.config.client_id);
         
         // Add client secret if required
