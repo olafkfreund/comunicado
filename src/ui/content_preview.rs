@@ -6,8 +6,11 @@ use ratatui::{
     Frame,
 };
 use crate::theme::Theme;
+use crate::email::{EmailDatabase, StoredMessage};
 use regex::Regex;
 use std::collections::HashMap;
+use std::sync::Arc;
+use uuid::Uuid;
 
 #[derive(Debug, Clone)]
 pub struct EmailHeader {
@@ -85,6 +88,9 @@ pub struct ContentPreview {
     show_headers_expanded: bool,
     url_regex: Regex,
     email_regex: Regex,
+    database: Option<Arc<EmailDatabase>>,
+    current_message_id: Option<Uuid>,
+    loading: bool,
 }
 
 impl ContentPreview {
@@ -100,6 +106,9 @@ impl ContentPreview {
             show_headers_expanded: false,
             url_regex,
             email_regex,
+            database: None,
+            current_message_id: None,
+            loading: false,
         };
         
         // Initialize with sample content
@@ -625,6 +634,173 @@ impl ContentPreview {
     /// Toggle expanded header display
     pub fn toggle_headers(&mut self) {
         self.show_headers_expanded = !self.show_headers_expanded;
+    }
+    
+    /// Set the database for loading email content
+    pub fn set_database(&mut self, database: Arc<EmailDatabase>) {
+        self.database = Some(database);
+    }
+    
+    /// Load email content from database by message ID
+    pub async fn load_message_by_id(&mut self, message_id: Uuid) -> Result<(), Box<dyn std::error::Error>> {
+        if let Some(ref database) = self.database {
+            self.loading = true;
+            self.current_message_id = Some(message_id);
+            
+            // Find the message in the database by ID
+            if let Some(message) = self.find_message_by_id(database, message_id).await? {
+                self.load_stored_message(&message).await?;
+            } else {
+                self.show_error_message(&format!("Message with ID {} not found", message_id));
+            }
+            
+            self.loading = false;
+        }
+        
+        Ok(())
+    }
+    
+    /// Load email content from a StoredMessage
+    pub async fn load_stored_message(&mut self, message: &StoredMessage) -> Result<(), Box<dyn std::error::Error>> {
+        self.current_message_id = Some(message.id);
+        
+        // Convert StoredMessage to EmailContent
+        let email_content = self.convert_stored_message_to_email_content(message);
+        
+        // Set the content
+        self.set_email_content(email_content);
+        
+        Ok(())
+    }
+    
+    /// Clear the current message and show empty state
+    pub fn clear_message(&mut self) {
+        self.email_content = None;
+        self.current_message_id = None;
+        self.loading = false;
+        self.scroll = 0;
+        
+        // Show empty state message
+        self.raw_content = vec![
+            "".to_string(),
+            "No message selected".to_string(),
+            "".to_string(),
+            "Select a message from the list to view its content here.".to_string(),
+            "".to_string(),
+            "Navigation:".to_string(),
+            "  ↑/↓ or j/k  - Scroll content".to_string(),
+            "  v           - Toggle view mode".to_string(),
+            "  H           - Toggle headers".to_string(),
+            "  Home/End    - Jump to top/bottom".to_string(),
+        ];
+    }
+    
+    /// Show an error message in the content area
+    fn show_error_message(&mut self, error: &str) {
+        self.raw_content = vec![
+            "".to_string(),
+            "Error loading message".to_string(),
+            "".to_string(),
+            error.to_string(),
+            "".to_string(),
+            "Try selecting another message or refreshing the folder.".to_string(),
+        ];
+        self.email_content = None;
+    }
+    
+    /// Find a message by ID in the database (helper method)
+    async fn find_message_by_id(&self, database: &EmailDatabase, message_id: Uuid) -> Result<Option<StoredMessage>, Box<dyn std::error::Error>> {
+        // Since we don't have a direct "get by ID" method, we'll need to query
+        // This is a simplified approach - in practice, we'd want to add an index lookup
+        let query = format!("SELECT id, account_id, folder_name, imap_uid, message_id, thread_id, in_reply_to, \"references\",
+                           subject, from_addr, from_name, to_addrs, cc_addrs, bcc_addrs, reply_to, date,
+                           body_text, body_html, attachments,
+                           flags, labels, size, priority,
+                           created_at, updated_at, last_synced, sync_version, is_draft, is_deleted
+                    FROM messages WHERE id = ? AND is_deleted = FALSE");
+                    
+        let row = sqlx::query(&query)
+            .bind(message_id.to_string())
+            .fetch_optional(&database.pool)
+            .await?;
+            
+        match row {
+            Some(row) => {
+                let message = database.row_to_stored_message(row)?;
+                Ok(Some(message))
+            }
+            None => Ok(None),
+        }
+    }
+    
+    /// Convert a StoredMessage to EmailContent for display
+    fn convert_stored_message_to_email_content(&self, message: &StoredMessage) -> EmailContent {
+        let headers = EmailHeader {
+            from: format!("{} <{}>", 
+                message.from_name.as_deref().unwrap_or(""), 
+                message.from_addr),
+            to: message.to_addrs.clone(),
+            cc: message.cc_addrs.clone(),
+            bcc: message.bcc_addrs.clone(),
+            subject: message.subject.clone(),
+            date: message.date.format("%Y-%m-%d %H:%M:%S UTC").to_string(),
+            message_id: message.message_id.clone().unwrap_or_default(),
+            reply_to: message.reply_to.clone(),
+            in_reply_to: message.in_reply_to.clone(),
+        };
+        
+        // Use text body if available, otherwise HTML body, otherwise empty
+        let body = message.body_text.as_deref()
+            .or(message.body_html.as_deref())
+            .unwrap_or("")
+            .to_string();
+            
+        // Parse URLs from the body
+        let parsed_urls = self.extract_urls(&body);
+        
+        // Parse content into structured lines
+        let parsed_content = self.parse_content_lines(&body);
+        
+        // Convert attachments
+        let attachments = message.attachments.iter().map(|att| {
+            Attachment {
+                filename: att.filename.clone(),
+                content_type: att.content_type.clone(),
+                size: att.size as usize,
+                is_inline: att.is_inline,
+            }
+        }).collect();
+        
+        // Determine content type
+        let content_type = if message.body_html.is_some() {
+            ContentType::Html
+        } else {
+            ContentType::PlainText
+        };
+        
+        EmailContent {
+            headers,
+            body,
+            content_type,
+            attachments,
+            parsed_urls,
+            parsed_content,
+        }
+    }
+    
+    /// Get the current message ID being displayed
+    pub fn current_message_id(&self) -> Option<Uuid> {
+        self.current_message_id
+    }
+    
+    /// Check if content is currently loading
+    pub fn is_loading(&self) -> bool {
+        self.loading
+    }
+    
+    /// Check if there is content to display
+    pub fn has_content(&self) -> bool {
+        self.email_content.is_some() || !self.raw_content.is_empty()
     }
 }
 

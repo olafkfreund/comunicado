@@ -10,6 +10,8 @@ use ratatui::{
     Frame,
 };
 use crate::theme::{Theme, ThemeManager};
+use crate::email::{EmailDatabase, EmailNotificationManager, UIEmailUpdater, EmailNotification};
+use std::sync::Arc;
 
 use self::{
     folder_tree::FolderTree,
@@ -34,6 +36,7 @@ pub struct UI {
     layout: AppLayout,
     theme_manager: ThemeManager,
     status_bar: StatusBar,
+    email_updater: Option<UIEmailUpdater>,
 }
 
 impl UI {
@@ -46,6 +49,7 @@ impl UI {
             layout: AppLayout::new(),
             theme_manager: ThemeManager::new(),
             status_bar: StatusBar::default(),
+            email_updater: None,
         };
         
         // Initialize status bar with default segments
@@ -259,6 +263,194 @@ impl UI {
             active_account: "work@example.com".to_string(), // TODO: Get from actual account
         };
         self.status_bar.add_segment("system".to_string(), system_segment);
+    }
+    
+    /// Set the database for email operations
+    pub fn set_database(&mut self, database: Arc<EmailDatabase>) {
+        self.message_list.set_database(database.clone());
+        self.content_preview.set_database(database);
+    }
+    
+    /// Set the notification manager for real-time updates
+    pub fn set_notification_manager(&mut self, notification_manager: Arc<EmailNotificationManager>) {
+        self.email_updater = Some(UIEmailUpdater::new(&notification_manager));
+    }
+    
+    /// Load messages for a specific account and folder
+    pub async fn load_messages(&mut self, account_id: String, folder_name: String) -> Result<(), Box<dyn std::error::Error>> {
+        self.message_list.load_messages(account_id.clone(), folder_name.clone()).await?;
+        
+        // Subscribe to notifications for this folder
+        if let Some(ref mut updater) = self.email_updater {
+            updater.subscribe_to_folder(account_id, folder_name);
+        }
+        
+        // Update email status after loading
+        let message_count = self.message_list.messages().len();
+        let unread_count = self.message_list.messages().iter()
+            .filter(|msg| !msg.is_read)
+            .count();
+            
+        self.update_email_status(unread_count, message_count, SyncStatus::Online);
+        Ok(())
+    }
+    
+    /// Refresh current folder's messages
+    pub async fn refresh_messages(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        self.message_list.refresh_messages().await
+    }
+    
+    /// Get reference to message list for direct access
+    pub fn message_list(&self) -> &MessageList {
+        &self.message_list
+    }
+    
+    /// Handle message selection and load content in preview
+    pub async fn handle_message_selection(&mut self) {
+        if let Some(selected_message) = self.message_list.get_selected_message_for_preview() {
+            if let Some(message_id) = selected_message.message_id {
+                // Load the selected message content
+                if let Err(e) = self.content_preview.load_message_by_id(message_id).await {
+                    tracing::error!("Failed to load message content: {}", e);
+                    // Show error in preview if loading fails
+                    self.content_preview.clear_message();
+                }
+            } else {
+                // No message ID available (probably sample data)
+                self.content_preview.clear_message();
+            }
+        } else {
+            // No message selected
+            self.content_preview.clear_message();
+        }
+    }
+    
+    /// Process pending email notifications (non-blocking)
+    pub async fn process_notifications(&mut self) {
+        let mut notifications = Vec::new();
+        
+        // Collect all pending notifications first
+        if let Some(ref mut updater) = self.email_updater {
+            while let Some(notification) = updater.try_recv_notification() {
+                notifications.push(notification);
+            }
+        }
+        
+        // Process all collected notifications
+        for notification in notifications {
+            self.handle_notification(notification).await;
+        }
+    }
+    
+    /// Handle a specific email notification
+    async fn handle_notification(&mut self, notification: EmailNotification) {
+        match notification {
+            EmailNotification::NewMessage { account_id, folder_name, message } => {
+                // Check if this notification is for the currently displayed folder
+                if let (Some(current_account), Some(current_folder)) = self.message_list.get_current_context() {
+                    if current_account == &account_id && current_folder == &folder_name {
+                        // Refresh the message list to show the new message
+                        let _ = self.message_list.refresh_messages().await;
+                        
+                        // Update status bar with new counts
+                        let message_count = self.message_list.messages().len();
+                        let unread_count = self.message_list.messages().iter()
+                            .filter(|msg| !msg.is_read)
+                            .count();
+                        self.update_email_status(unread_count, message_count, SyncStatus::Online);
+                    }
+                }
+                
+                tracing::info!("New message received: {} from {}", message.subject, message.from_addr);
+            }
+            
+            EmailNotification::MessageUpdated { account_id, folder_name, message, .. } => {
+                // Check if this notification is for the currently displayed folder
+                if let (Some(current_account), Some(current_folder)) = self.message_list.get_current_context() {
+                    if current_account == &account_id && current_folder == &folder_name {
+                        // Refresh the message list to show updated message
+                        let _ = self.message_list.refresh_messages().await;
+                        
+                        // Update status bar
+                        let message_count = self.message_list.messages().len();
+                        let unread_count = self.message_list.messages().iter()
+                            .filter(|msg| !msg.is_read)
+                            .count();
+                        self.update_email_status(unread_count, message_count, SyncStatus::Online);
+                    }
+                }
+                
+                tracing::info!("Message updated: {}", message.subject);
+            }
+            
+            EmailNotification::MessageDeleted { account_id, folder_name, .. } => {
+                // Check if this notification is for the currently displayed folder
+                if let (Some(current_account), Some(current_folder)) = self.message_list.get_current_context() {
+                    if current_account == &account_id && current_folder == &folder_name {
+                        // Refresh the message list to remove deleted message
+                        let _ = self.message_list.refresh_messages().await;
+                        
+                        // Update status bar
+                        let message_count = self.message_list.messages().len();
+                        let unread_count = self.message_list.messages().iter()
+                            .filter(|msg| !msg.is_read)
+                            .count();
+                        self.update_email_status(unread_count, message_count, SyncStatus::Online);
+                    }
+                }
+                
+                tracing::info!("Message deleted from {}/{}", account_id, folder_name);
+            }
+            
+            EmailNotification::SyncStarted { account_id, folder_name } => {
+                // Update status bar to show sync in progress
+                if let (Some(current_account), Some(current_folder)) = self.message_list.get_current_context() {
+                    if current_account == &account_id && current_folder == &folder_name {
+                        let message_count = self.message_list.messages().len();
+                        let unread_count = self.message_list.messages().iter()
+                            .filter(|msg| !msg.is_read)
+                            .count();
+                        self.update_email_status(unread_count, message_count, SyncStatus::Syncing);
+                    }
+                }
+                
+                tracing::info!("Sync started for {}/{}", account_id, folder_name);
+            }
+            
+            EmailNotification::SyncCompleted { account_id, folder_name, new_count, updated_count } => {
+                // Update status bar to show sync completed
+                if let (Some(current_account), Some(current_folder)) = self.message_list.get_current_context() {
+                    if current_account == &account_id && current_folder == &folder_name {
+                        // Refresh messages after sync
+                        let _ = self.message_list.refresh_messages().await;
+                        
+                        let message_count = self.message_list.messages().len();
+                        let unread_count = self.message_list.messages().iter()
+                            .filter(|msg| !msg.is_read)
+                            .count();
+                        self.update_email_status(unread_count, message_count, SyncStatus::Online);
+                    }
+                }
+                
+                tracing::info!("Sync completed for {}/{}: {} new, {} updated", 
+                             account_id, folder_name, new_count, updated_count);
+            }
+            
+            EmailNotification::SyncFailed { account_id, folder_name, error } => {
+                // Update status bar to show sync error
+                if let (Some(current_account), Some(current_folder)) = self.message_list.get_current_context() {
+                    if current_account == &account_id && current_folder == &folder_name {
+                        let message_count = self.message_list.messages().len();
+                        let unread_count = self.message_list.messages().iter()
+                            .filter(|msg| !msg.is_read)
+                            .count();
+                        self.update_email_status(unread_count, message_count, SyncStatus::Error);
+                    }
+                }
+                
+                tracing::error!("Sync failed for {}/{}: {}", account_id, folder_name, error);
+            }
+        }
     }
 }
 

@@ -6,7 +6,10 @@ use ratatui::{
     Frame,
 };
 use crate::theme::Theme;
-use crate::email::{EmailThread, SortCriteria, MultiCriteriaSorter, ThreadingEngine, ThreadingAlgorithm};
+use crate::email::{EmailThread, SortCriteria, MultiCriteriaSorter, ThreadingEngine, ThreadingAlgorithm, EmailDatabase, StoredMessage};
+use std::sync::Arc;
+use chrono::{DateTime, Utc};
+use uuid::Uuid;
 
 #[derive(Debug, Clone)]
 pub struct MessageItem {
@@ -21,6 +24,7 @@ pub struct MessageItem {
     pub message_count: usize, // For thread root, number of messages in thread
     pub is_thread_expanded: bool,
     pub is_thread_root: bool,
+    pub message_id: Option<Uuid>, // Database ID for loading full content
 }
 
 impl MessageItem {
@@ -37,6 +41,7 @@ impl MessageItem {
             message_count: 1,
             is_thread_expanded: false,
             is_thread_root: false,
+            message_id: None,
         }
     }
     
@@ -53,6 +58,7 @@ impl MessageItem {
             message_count: 1,
             is_thread_expanded: false,
             is_thread_root: thread_depth == 0,
+            message_id: None,
         }
     }
 
@@ -100,6 +106,9 @@ pub struct MessageList {
     view_mode: ViewMode,
     sorter: MultiCriteriaSorter,
     threading_engine: ThreadingEngine,
+    database: Option<Arc<EmailDatabase>>,
+    current_account: Option<String>,
+    current_folder: Option<String>,
 }
 
 impl MessageList {
@@ -111,6 +120,9 @@ impl MessageList {
             view_mode: ViewMode::List,
             sorter: MultiCriteriaSorter::default(),
             threading_engine: ThreadingEngine::new(ThreadingAlgorithm::Simple),
+            database: None,
+            current_account: None,
+            current_folder: None,
         };
         
         // Initialize with sample messages
@@ -562,6 +574,135 @@ impl MessageList {
         }
         
         prefix
+    }
+    
+    /// Set the database for loading real messages
+    pub fn set_database(&mut self, database: Arc<EmailDatabase>) {
+        self.database = Some(database);
+    }
+    
+    /// Load messages from database for a specific account and folder
+    pub async fn load_messages(&mut self, account_id: String, folder_name: String) -> Result<(), Box<dyn std::error::Error>> {
+        if let Some(ref database) = self.database {
+            self.current_account = Some(account_id.clone());
+            self.current_folder = Some(folder_name.clone());
+            
+            // Load messages from database
+            let stored_messages = database.get_messages(&account_id, &folder_name, Some(100), None).await?;
+            
+            // Convert stored messages to MessageItems
+            self.messages = stored_messages.into_iter().map(|msg| {
+                MessageItem::from_stored_message(&msg)
+            }).collect();
+            
+            // Sort messages by date (newest first)
+            self.messages.sort_by(|a, b| b.date.cmp(&a.date));
+            
+            // Reset selection
+            if !self.messages.is_empty() {
+                self.state.select(Some(0));
+            } else {
+                self.state.select(None);
+            }
+        }
+        
+        Ok(())
+    }
+    
+    /// Refresh current folder's messages
+    pub async fn refresh_messages(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        if let (Some(account), Some(folder)) = (self.current_account.clone(), self.current_folder.clone()) {
+            self.load_messages(account, folder).await?;
+        }
+        Ok(())
+    }
+    
+    /// Get the currently selected message
+    pub fn get_selected_stored_message(&self) -> Option<&MessageItem> {
+        if let Some(selected) = self.state.selected() {
+            self.messages.get(selected)
+        } else {
+            None
+        }
+    }
+    
+    /// Check if we have a database connection
+    pub fn has_database(&self) -> bool {
+        self.database.is_some()
+    }
+    
+    /// Get current account and folder
+    pub fn get_current_context(&self) -> (Option<&String>, Option<&String>) {
+        (self.current_account.as_ref(), self.current_folder.as_ref())
+    }
+    
+    /// Get all messages (read-only access)
+    pub fn messages(&self) -> &Vec<MessageItem> {
+        &self.messages
+    }
+    
+    /// Get the selected message for loading in content preview
+    pub fn get_selected_message_for_preview(&self) -> Option<MessageItem> {
+        if let Some(selected_index) = self.state.selected() {
+            self.messages.get(selected_index).cloned()
+        } else {
+            None
+        }
+    }
+    
+    /// Get the current selection state
+    pub fn get_selection_state(&self) -> Option<usize> {
+        self.state.selected()
+    }
+}
+
+impl MessageItem {
+    /// Convert a StoredMessage from the database to a MessageItem for display
+    pub fn from_stored_message(stored: &StoredMessage) -> Self {
+        // Format the date in a user-friendly way
+        let date_str = Self::format_message_date(stored.date);
+        
+        Self {
+            subject: stored.subject.clone(),
+            sender: if let Some(ref name) = stored.from_name {
+                name.clone()
+            } else {
+                stored.from_addr.clone()
+            },
+            date: date_str,
+            is_read: stored.flags.contains(&"\\Seen".to_string()),
+            is_important: stored.flags.contains(&"\\Flagged".to_string()),
+            has_attachments: !stored.attachments.is_empty(),
+            thread_depth: 0,
+            thread_id: stored.thread_id.clone(),
+            message_count: 1,
+            is_thread_expanded: false,
+            is_thread_root: false,
+            message_id: Some(stored.id),
+        }
+    }
+    
+    /// Helper function to format message dates in a human-readable way
+    fn format_message_date(date: DateTime<Utc>) -> String {
+        let now = Utc::now();
+        let duration = now.signed_duration_since(date);
+        
+        if duration.num_days() == 0 {
+            // Today
+            date.format("Today %H:%M").to_string()
+        } else if duration.num_days() == 1 {
+            // Yesterday
+            date.format("Yesterday %H:%M").to_string()
+        } else if duration.num_days() < 7 {
+            // This week
+            date.format("%a %H:%M").to_string()
+        } else if duration.num_days() < 365 {
+            // This year
+            date.format("%b %d").to_string()
+        } else {
+            // Older
+            date.format("%b %d %Y").to_string()
+        }
     }
 }
 

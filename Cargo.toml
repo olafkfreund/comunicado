@@ -51,6 +51,9 @@ keyring = "2.3"
 sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "sqlite", "chrono", "uuid"] }
 uuid = { version = "1.6", features = ["v4", "serde"] }
 
+# System directories
+dirs = "5.0"
+
 # Full-text search and indexing  
 # tantivy = "0.20"  # Temporarily disabled due to dependency conflicts
 

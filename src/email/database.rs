@@ -110,7 +110,7 @@ pub enum SyncStatus {
 
 /// Email database manager
 pub struct EmailDatabase {
-    pool: SqlitePool,
+    pub pool: SqlitePool,
     db_path: String,
 }
 
@@ -522,7 +522,7 @@ impl EmailDatabase {
     }
     
     /// Helper to convert database row to StoredMessage
-    fn row_to_stored_message(&self, row: sqlx::sqlite::SqliteRow) -> DatabaseResult<StoredMessage> {
+    pub fn row_to_stored_message(&self, row: sqlx::sqlite::SqliteRow) -> DatabaseResult<StoredMessage> {
         let id = Uuid::parse_str(row.get("id"))?;
         let references: Vec<String> = serde_json::from_str(row.get("references"))?;
         let to_addrs: Vec<String> = serde_json::from_str(row.get("to_addrs"))?;
