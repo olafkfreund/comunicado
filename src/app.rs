@@ -19,6 +19,7 @@ use crate::oauth2::{SetupWizard, SecureStorage, AccountConfig, TokenManager};
 use crate::imap::ImapAccountManager;
 use crate::smtp::{SmtpService, SmtpServiceBuilder};
 use crate::contacts::ContactsManager;
+use crate::services::ServiceManager;
 
 pub struct App {
     should_quit: bool,
@@ -31,6 +32,7 @@ pub struct App {
     token_manager: Option<TokenManager>,
     smtp_service: Option<SmtpService>,
     contacts_manager: Option<Arc<ContactsManager>>,
+    services: Option<ServiceManager>,
 }
 
 impl App {
@@ -47,6 +49,7 @@ impl App {
             token_manager: None,
             smtp_service: None,
             contacts_manager: None,
+            services: None,
         })
     }
     
@@ -82,6 +85,52 @@ impl App {
         
         self.database = Some(database_arc);
         self.notification_manager = Some(notification_manager);
+        
+        Ok(())
+    }
+    
+    /// Initialize dashboard services for start page
+    pub async fn initialize_dashboard_services(&mut self) -> Result<()> {
+        let services = ServiceManager::new()
+            .map_err(|e| anyhow::anyhow!("Failed to initialize dashboard services: {}", e))?;
+        
+        self.services = Some(services);
+        
+        // Start background service updates
+        self.update_start_page_data().await?;
+        
+        Ok(())
+    }
+    
+    /// Update start page with fresh data
+    pub async fn update_start_page_data(&mut self) -> Result<()> {
+        if let Some(ref mut services) = self.services {
+            // Update weather
+            match services.weather.get_weather(None).await {
+                Ok(weather) => {
+                    self.ui.start_page_mut().set_weather(weather);
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to get weather data: {}", e);
+                }
+            }
+            
+            // Update system stats
+            let stats = services.system_stats.get_stats();
+            self.ui.start_page_mut().set_system_stats(stats);
+            
+            // Update tasks
+            let tasks = services.tasks.get_pending_tasks()
+                .into_iter()
+                .take(8) // Limit for display
+                .cloned()
+                .collect();
+            self.ui.start_page_mut().set_tasks(tasks);
+            
+            // TODO: Update calendar events when CalDAV is implemented
+            // For now, set empty calendar events
+            self.ui.start_page_mut().set_calendar_events(vec![]);
+        }
         
         Ok(())
     }

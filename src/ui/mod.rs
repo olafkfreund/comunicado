@@ -6,6 +6,7 @@ pub mod status_bar;
 pub mod sync_progress;
 pub mod compose;
 pub mod account_switcher;
+pub mod start_page;
 
 use ratatui::{
     layout::Rect,
@@ -26,6 +27,7 @@ use self::{
     sync_progress::SyncProgressOverlay,
     compose::ComposeUI,
     account_switcher::AccountSwitcher,
+    start_page::StartPage,
 };
 
 // Re-export compose types for external use
@@ -41,10 +43,12 @@ pub enum FocusedPane {
     MessageList,
     ContentPreview,
     Compose,
+    StartPage,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum UIMode {
+    StartPage,
     Normal,
     Compose,
 }
@@ -62,12 +66,13 @@ pub struct UI {
     sync_progress_overlay: SyncProgressOverlay,
     mode: UIMode,
     compose_ui: Option<ComposeUI>,
+    start_page: StartPage,
 }
 
 impl UI {
     pub fn new() -> Self {
         let mut ui = Self {
-            focused_pane: FocusedPane::AccountSwitcher,
+            focused_pane: FocusedPane::StartPage,
             account_switcher: AccountSwitcher::new(),
             folder_tree: FolderTree::new(),
             message_list: MessageList::new(),
@@ -77,8 +82,9 @@ impl UI {
             status_bar: StatusBar::default(),
             email_updater: None,
             sync_progress_overlay: SyncProgressOverlay::new(),
-            mode: UIMode::Normal,
+            mode: UIMode::StartPage,
             compose_ui: None,
+            start_page: StartPage::new(),
         };
         
         // Initialize status bar with default segments
@@ -125,6 +131,11 @@ impl UI {
         let size = frame.size();
         
         match self.mode {
+            UIMode::StartPage => {
+                // Render start page dashboard in full screen
+                let theme = self.theme_manager.current_theme();
+                self.start_page.render(frame, size, theme);
+            }
             UIMode::Normal => {
                 let chunks = self.layout.calculate_layout(size);
 
@@ -223,6 +234,7 @@ impl UI {
             FocusedPane::MessageList => FocusedPane::ContentPreview,
             FocusedPane::ContentPreview => FocusedPane::AccountSwitcher,
             FocusedPane::Compose => FocusedPane::Compose, // Stay in compose
+            FocusedPane::StartPage => FocusedPane::StartPage, // Stay in start page
         };
         self.update_navigation_hints();
     }
@@ -238,6 +250,7 @@ impl UI {
             FocusedPane::MessageList => FocusedPane::FolderTree,
             FocusedPane::ContentPreview => FocusedPane::MessageList,
             FocusedPane::Compose => FocusedPane::Compose, // Stay in compose
+            FocusedPane::StartPage => FocusedPane::StartPage, // Stay in start page
         };
         self.update_navigation_hints();
     }
@@ -301,8 +314,10 @@ impl UI {
                 FocusedPane::MessageList => "Messages", 
                 FocusedPane::ContentPreview => "Content",
                 FocusedPane::Compose => "Compose", // Shouldn't happen in normal mode
+                FocusedPane::StartPage => "Start Page", // Shouldn't happen in normal mode
             },
             UIMode::Compose => "Compose Email",
+            UIMode::StartPage => "Dashboard",
         };
         
         let nav_segment = NavigationHintsSegment {
@@ -350,6 +365,7 @@ impl UI {
                     ("r".to_string(), "Reply".to_string()),
                     ("f".to_string(), "Forward".to_string()),
                 ],
+                FocusedPane::StartPage => vec![],
                 _ => vec![],
             },
             UIMode::Compose => vec![
@@ -358,6 +374,13 @@ impl UI {
                 ("F2".to_string(), "Save Draft".to_string()),
                 ("@".to_string(), "Contact Lookup".to_string()),
                 ("Esc".to_string(), "Cancel".to_string()),
+            ],
+            UIMode::StartPage => vec![
+                ("h/l".to_string(), "Navigate".to_string()),
+                ("Enter/e".to_string(), "Email".to_string()),
+                ("c".to_string(), "Compose".to_string()),
+                ("/".to_string(), "Search".to_string()),
+                ("q".to_string(), "Quit".to_string()),
             ],
         }
     }
@@ -776,6 +799,53 @@ impl UI {
     pub fn is_composing(&self) -> bool {
         matches!(self.mode, UIMode::Compose)
     }
+    
+    /// Check if currently on start page
+    pub fn is_on_start_page(&self) -> bool {
+        matches!(self.mode, UIMode::StartPage)
+    }
+    
+    /// Switch to start page mode
+    pub fn show_start_page(&mut self) {
+        self.mode = UIMode::StartPage;
+        self.focused_pane = FocusedPane::StartPage;
+    }
+    
+    /// Switch to normal email mode
+    pub fn show_email_interface(&mut self) {
+        self.mode = UIMode::Normal;
+        self.focused_pane = FocusedPane::AccountSwitcher;
+    }
+    
+    /// Get mutable reference to start page for data updates
+    pub fn start_page_mut(&mut self) -> &mut StartPage {
+        &mut self.start_page
+    }
+    
+    /// Get reference to start page
+    pub fn start_page(&self) -> &StartPage {
+        &self.start_page
+    }
+    
+    /// Handle start page navigation
+    pub fn handle_start_page_navigation(&mut self, direction: StartPageNavigation) {
+        match direction {
+            StartPageNavigation::Next => self.start_page.next_widget(),
+            StartPageNavigation::Previous => self.start_page.previous_widget(),
+        }
+    }
+    
+    /// Get selected quick action from start page
+    pub fn get_start_page_quick_action(&self, action_id: &str) -> Option<&crate::ui::start_page::QuickAction> {
+        self.start_page.get_quick_action(action_id)
+    }
+}
+
+/// Navigation directions for start page
+#[derive(Debug, Clone, Copy)]
+pub enum StartPageNavigation {
+    Next,
+    Previous,
 }
 
 impl Default for UI {

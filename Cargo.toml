@@ -69,6 +69,9 @@ uuid = { version = "1.6", features = ["v4", "serde"] }
 # System directories
 dirs = "5.0"
 
+# System monitoring
+sysinfo = "0.30"
+
 # Full-text search and indexing  
 # tantivy = "0.20"  # Temporarily disabled due to dependency conflicts
 

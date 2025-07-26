@@ -1,5 +1,5 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-use crate::ui::{FocusedPane, UI, UIMode, ComposeAction};
+use crate::ui::{FocusedPane, UI, UIMode, ComposeAction, StartPageNavigation};
 
 pub struct EventHandler {
     should_quit: bool,
@@ -31,6 +31,11 @@ impl EventHandler {
             return EventResult::Continue;
         }
         
+        // Handle start page mode
+        if ui.mode() == &UIMode::StartPage {
+            return self.handle_start_page_keys(key, ui).await;
+        }
+        
         match key.code {
             // Global quit commands
             KeyCode::Char('q') => {
@@ -38,6 +43,11 @@ impl EventHandler {
             }
             KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 self.should_quit = true;
+            }
+            
+            // Go back to start page
+            KeyCode::Char('~') => {
+                ui.show_start_page();
             }
             
             // Navigation between panes
@@ -100,6 +110,9 @@ impl EventHandler {
                     FocusedPane::Compose => {
                         // Handled separately in compose mode
                     }
+                    FocusedPane::StartPage => {
+                        // Should not happen in normal mode
+                    }
                 }
             }
             KeyCode::Char('k') | KeyCode::Up => {
@@ -129,6 +142,9 @@ impl EventHandler {
                     FocusedPane::Compose => {
                         // Handled separately in compose mode
                     }
+                    FocusedPane::StartPage => {
+                        // Should not happen in normal mode
+                    }
                 }
             }
             
@@ -153,6 +169,9 @@ impl EventHandler {
                     }
                     FocusedPane::Compose => {
                         // Handled separately in compose mode
+                    }
+                    FocusedPane::StartPage => {
+                        // Should not happen in normal mode
                     }
                 }
             }
@@ -334,6 +353,77 @@ impl EventHandler {
                         return EventResult::RemoveAccount(account_id.clone());
                     }
                 }
+            }
+            
+            _ => {}
+        }
+        
+        EventResult::Continue
+    }
+    
+    /// Handle key events for start page mode
+    async fn handle_start_page_keys(&mut self, key: KeyEvent, ui: &mut UI) -> EventResult {
+        match key.code {
+            // Global quit commands
+            KeyCode::Char('q') => {
+                self.should_quit = true;
+            }
+            KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.should_quit = true;
+            }
+            
+            // Navigate between widgets on start page
+            KeyCode::Left | KeyCode::Char('h') => {
+                ui.handle_start_page_navigation(StartPageNavigation::Previous);
+            }
+            KeyCode::Right | KeyCode::Char('l') => {
+                ui.handle_start_page_navigation(StartPageNavigation::Next);
+            }
+            KeyCode::Tab => {
+                ui.handle_start_page_navigation(StartPageNavigation::Next);
+            }
+            KeyCode::BackTab => {
+                ui.handle_start_page_navigation(StartPageNavigation::Previous);
+            }
+            
+            // Switch to email interface
+            KeyCode::Enter | KeyCode::Char('e') => {
+                ui.show_email_interface();
+            }
+            
+            // Quick actions from start page
+            KeyCode::Char('c') => {
+                // Compose email - switch to email interface and start compose
+                ui.show_email_interface();
+                return EventResult::ComposeAction(crate::ui::ComposeAction::StartCompose);
+            }
+            KeyCode::Char('/') => {
+                // Search - switch to email interface and focus search
+                ui.show_email_interface();
+                // TODO: Focus search when implemented
+            }
+            KeyCode::Char('a') => {
+                // Address book - switch to email interface and show contacts
+                ui.show_email_interface();
+                // TODO: Show contacts when implemented
+            }
+            KeyCode::Char('C') => {
+                // Calendar - switch to email interface and show calendar
+                ui.show_email_interface();
+                // TODO: Show calendar when implemented
+            }
+            
+            // Task management on start page
+            KeyCode::Char('t') => {
+                // TODO: Add new task functionality
+            }
+            KeyCode::Char('x') => {
+                // TODO: Mark task as complete
+            }
+            
+            // Refresh data
+            KeyCode::F(5) | KeyCode::Char('r') => {
+                // TODO: Add refresh functionality to app events
             }
             
             _ => {}

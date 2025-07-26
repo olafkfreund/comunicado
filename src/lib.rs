@@ -9,5 +9,6 @@ pub mod contacts;
 pub mod smtp;
 pub mod html;
 pub mod images;
+pub mod services;
 
 pub use app::App;

@@ -30,6 +30,9 @@ async fn main() -> Result<()> {
     // Initialize SMTP service and contacts manager
     app.initialize_services().await?;
     
+    // Initialize dashboard services for start page
+    app.initialize_dashboard_services().await?;
+    
     // Run the application
     app.run().await?;
 
