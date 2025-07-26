@@ -85,6 +85,18 @@ pub struct StoredAttachment {
     pub file_path: Option<String>, // File path for large attachments
 }
 
+/// Stored folder in the database
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StoredFolder {
+    pub account_id: String,
+    pub name: String,
+    pub full_name: String,
+    pub delimiter: Option<String>,
+    pub attributes: Vec<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
 /// Folder synchronization state
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FolderSyncState {
@@ -445,6 +457,40 @@ impl EmailDatabase {
         Ok(())
     }
     
+    /// Get all folders for an account
+    pub async fn get_folders(&self, account_id: &str) -> DatabaseResult<Vec<StoredFolder>> {
+        let rows = sqlx::query(r#"
+            SELECT account_id, name, full_name, delimiter, attributes, created_at, updated_at
+            FROM folders
+            WHERE account_id = ?1
+            ORDER BY name
+        "#)
+        .bind(account_id)
+        .fetch_all(&self.pool)
+        .await?;
+        
+        let mut folders = Vec::new();
+        for row in rows {
+            let attributes_json: String = row.get("attributes");
+            let attributes: Vec<String> = serde_json::from_str(&attributes_json)
+                .unwrap_or_else(|_| Vec::new());
+            let created_at: DateTime<Utc> = DateTime::parse_from_rfc3339(row.get("created_at"))?.into();
+            let updated_at: DateTime<Utc> = DateTime::parse_from_rfc3339(row.get("updated_at"))?.into();
+            
+            folders.push(StoredFolder {
+                account_id: row.get("account_id"),
+                name: row.get("name"),
+                full_name: row.get("full_name"),
+                delimiter: Some(row.get("delimiter")),
+                attributes,
+                created_at,
+                updated_at,
+            });
+        }
+        
+        Ok(folders)
+    }
+
     /// Get folder sync state
     pub async fn get_folder_sync_state(&self, account_id: &str, folder_name: &str) -> DatabaseResult<Option<FolderSyncState>> {
         let row = sqlx::query(r#"

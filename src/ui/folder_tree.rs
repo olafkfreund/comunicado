@@ -6,6 +6,8 @@ use ratatui::{
     Frame,
 };
 use crate::theme::Theme;
+use crate::email::EmailDatabase;
+use std::sync::Arc;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FolderType {
@@ -196,6 +198,7 @@ pub struct FolderTree {
     filtered_folders: Vec<usize>, // Indices of folders matching search
     show_unsubscribed: bool,
     selected_for_operation: Option<(usize, FolderOperation)>,
+    database: Option<Arc<EmailDatabase>>,
 }
 
 impl FolderTree {
@@ -207,6 +210,7 @@ impl FolderTree {
             filtered_folders: Vec::new(),
             show_unsubscribed: false,
             selected_for_operation: None,
+            database: None,
         };
         
         // Initialize with sample folder structure
@@ -631,6 +635,63 @@ impl FolderTree {
         let subscribed_folders = self.folders.iter().filter(|f| f.is_subscribed).count();
         let unread_folders = self.folders.iter().filter(|f| f.unread_count > 0).count();
         (total_folders, subscribed_folders, unread_folders)
+    }
+    
+    /// Set the database for loading folders
+    pub fn set_database(&mut self, database: Arc<EmailDatabase>) {
+        self.database = Some(database);
+    }
+    
+    /// Load folders from database for a specific account
+    pub async fn load_folders(&mut self, account_id: &str) -> Result<(), Box<dyn std::error::Error>> {
+        if let Some(database) = &self.database {
+            let stored_folders = database.get_folders(account_id).await?;
+            
+            // Convert stored folders to FolderItems
+            let mut folder_items = Vec::new();
+            
+            for stored_folder in stored_folders {
+                let folder_type = FolderItem::detect_folder_type(&stored_folder.name, &stored_folder.full_name);
+                
+                let mut folder_item = FolderItem::new_with_type(
+                    stored_folder.name.clone(),
+                    stored_folder.full_name.clone(),
+                    0, // Depth will be calculated later if needed
+                    folder_type,
+                );
+                
+                // Set folder as synced since it exists in database
+                folder_item.sync_status = SyncStatus::Synced;
+                
+                folder_items.push(folder_item);
+            }
+            
+            // Sort folders: INBOX first, then alphabetically
+            folder_items.sort_by(|a, b| {
+                match (&a.folder_type, &b.folder_type) {
+                    (FolderType::Inbox, FolderType::Inbox) => std::cmp::Ordering::Equal,
+                    (FolderType::Inbox, _) => std::cmp::Ordering::Less,
+                    (_, FolderType::Inbox) => std::cmp::Ordering::Greater,
+                    _ => a.name.cmp(&b.name),
+                }
+            });
+            
+            self.folders = folder_items;
+            self.rebuild_filtered_list();
+            
+            // Select INBOX by default if it exists
+            if let Some(inbox_index) = self.folders.iter().position(|f| matches!(f.folder_type, FolderType::Inbox)) {
+                self.state.select(Some(inbox_index));
+            } else if !self.folders.is_empty() {
+                self.state.select(Some(0));
+            }
+            
+            tracing::info!("Loaded {} folders from database", self.folders.len());
+        } else {
+            return Err("Database not set".into());
+        }
+        
+        Ok(())
     }
 }
 

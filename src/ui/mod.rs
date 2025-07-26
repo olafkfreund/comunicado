@@ -408,7 +408,8 @@ impl UI {
     /// Set the database for email operations
     pub fn set_database(&mut self, database: Arc<EmailDatabase>) {
         self.message_list.set_database(database.clone());
-        self.content_preview.set_database(database);
+        self.content_preview.set_database(database.clone());
+        self.folder_tree.set_database(database);
     }
     
     /// Set the notification manager for real-time updates
@@ -416,6 +417,12 @@ impl UI {
         self.email_updater = Some(UIEmailUpdater::new(&notification_manager));
     }
     
+    /// Load folders for a specific account
+    pub async fn load_folders(&mut self, account_id: &str) -> Result<(), Box<dyn std::error::Error>> {
+        self.folder_tree.load_folders(account_id).await?;
+        Ok(())
+    }
+
     /// Load messages for a specific account and folder
     pub async fn load_messages(&mut self, account_id: String, folder_name: String) -> Result<(), Box<dyn std::error::Error>> {
         self.message_list.load_messages(account_id.clone(), folder_name.clone()).await?;
@@ -463,6 +470,9 @@ impl UI {
     /// Switch to a specific account
     pub async fn switch_to_account(&mut self, account_id: &str) -> Result<(), Box<dyn std::error::Error>> {
         if self.account_switcher.set_current_account(account_id) {
+            // Load folders for the new account
+            self.load_folders(account_id).await?;
+            
             // Load messages for the new account's INBOX
             self.load_messages(account_id.to_string(), "INBOX".to_string()).await?;
             

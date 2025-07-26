@@ -381,8 +381,18 @@ impl App {
                 println!("DEBUG: Starting IMAP sync for account: {}", current_account_id);
                 match self.sync_account_from_imap(&current_account_id).await {
                     Ok(_) => {
-                        // Successfully synced from IMAP
-                        let _ = self.ui.load_messages(current_account_id.clone(), "INBOX".to_string()).await;
+                        println!("DEBUG: IMAP sync completed successfully, loading folders and messages");
+                        // Successfully synced from IMAP, load folders first
+                        match self.ui.load_folders(&current_account_id).await {
+                            Ok(_) => println!("DEBUG: Successfully loaded folders from database"),
+                            Err(e) => println!("DEBUG: Failed to load folders from database: {}", e),
+                        }
+                        
+                        // Then load messages for INBOX
+                        match self.ui.load_messages(current_account_id.clone(), "INBOX".to_string()).await {
+                            Ok(_) => println!("DEBUG: Successfully loaded messages for INBOX"),
+                            Err(e) => println!("DEBUG: Failed to load messages for INBOX: {}", e),
+                        }
                     }
                     Err(e) => {
                         tracing::error!("IMAP sync failed for account {}: {}", current_account_id, e);
@@ -598,8 +608,13 @@ impl App {
             let mut client = client_arc.lock().await;
             
             // List all folders from IMAP server
+            println!("DEBUG: About to call client.list_folders()");
             let folders = client.list_folders("", "*").await
-                .map_err(|e| anyhow::anyhow!("Failed to list folders: {}", e))?;
+                .map_err(|e| {
+                    println!("DEBUG: Failed to list folders: {}", e);
+                    anyhow::anyhow!("Failed to list folders: {}", e)
+                })?;
+            println!("DEBUG: Successfully listed {} folders", folders.len());
             
             let folder_count = folders.len();
             tracing::info!("Found {} folders from IMAP", folder_count);
@@ -611,7 +626,9 @@ impl App {
                 .await?;
             
             // Store each folder in database
+            println!("DEBUG: About to store {} folders in database", folders.len());
             for folder in folders {
+                println!("DEBUG: Storing folder: {} ({})", folder.name, folder.full_name);
                 tracing::debug!("Storing folder: {} ({})", folder.name, folder.full_name);
                 
                 let attributes_json = serde_json::to_string(&folder.attributes)

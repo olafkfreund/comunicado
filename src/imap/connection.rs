@@ -7,6 +7,7 @@ use tokio::net::TcpStream as AsyncTcpStream;
 use tokio::time::timeout;
 use tokio_rustls::{TlsConnector, client::TlsStream};
 use rustls::{ClientConfig, RootCertStore};
+use base64::prelude::*;
 
 /// Connection stream that can be either plain TCP or TLS
 enum ConnectionStream {
@@ -376,6 +377,25 @@ impl ImapConnection {
                     return Err(ImapError::server(format!("Authentication failed: {}", line)));
                 } else if line.starts_with(&format!("{} BAD", tag)) {
                     return Err(ImapError::protocol(format!("Bad authenticate command: {}", line)));
+                }
+            } else if line.starts_with("+ ") {
+                // This is an additional continuation response - could be an error from Gmail
+                let continuation_data = &line[2..]; // Remove "+ " prefix
+                if !continuation_data.is_empty() {
+                    // Try to decode base64 and see if it's an error
+                    if let Ok(decoded_bytes) = base64::prelude::BASE64_STANDARD.decode(continuation_data) {
+                        if let Ok(decoded_str) = String::from_utf8(decoded_bytes) {
+                            println!("DEBUG: send_authenticate - Decoded continuation: {}", decoded_str);
+                            // Check if this looks like a JSON error response
+                            if decoded_str.contains("\"status\"") && decoded_str.contains("400") {
+                                println!("DEBUG: send_authenticate - Gmail returned error in continuation: {}", decoded_str);
+                                // Send empty line to complete the authentication attempt
+                                self.send_raw("\r\n").await?;
+                                // Continue to read the final tagged response
+                                continue;
+                            }
+                        }
+                    }
                 }
             }
         }
