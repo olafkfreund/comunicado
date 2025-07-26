@@ -4,6 +4,7 @@ pub mod content_preview;
 pub mod layout;
 pub mod status_bar;
 pub mod sync_progress;
+pub mod compose;
 
 use ratatui::{
     layout::Rect,
@@ -22,13 +23,24 @@ use self::{
     layout::AppLayout,
     status_bar::{StatusBar, EmailStatusSegment, CalendarStatusSegment, SystemInfoSegment, NavigationHintsSegment, SyncStatus},
     sync_progress::SyncProgressOverlay,
+    compose::ComposeUI,
 };
+
+// Re-export compose types for external use
+pub use compose::{ComposeAction, EmailComposeData};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FocusedPane {
     FolderTree,
     MessageList,
     ContentPreview,
+    Compose,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum UIMode {
+    Normal,
+    Compose,
 }
 
 pub struct UI {
@@ -41,6 +53,8 @@ pub struct UI {
     status_bar: StatusBar,
     email_updater: Option<UIEmailUpdater>,
     sync_progress_overlay: SyncProgressOverlay,
+    mode: UIMode,
+    compose_ui: Option<ComposeUI>,
 }
 
 impl UI {
@@ -55,6 +69,8 @@ impl UI {
             status_bar: StatusBar::default(),
             email_updater: None,
             sync_progress_overlay: SyncProgressOverlay::new(),
+            mode: UIMode::Normal,
+            compose_ui: None,
         };
         
         // Initialize status bar with default segments
@@ -99,22 +115,34 @@ impl UI {
 
     pub fn render(&mut self, frame: &mut Frame) {
         let size = frame.size();
-        let chunks = self.layout.calculate_layout(size);
+        
+        match self.mode {
+            UIMode::Normal => {
+                let chunks = self.layout.calculate_layout(size);
 
-        // Render each pane with focus styling
-        self.render_folder_tree(frame, chunks[0]);
-        self.render_message_list(frame, chunks[1]);
-        self.render_content_preview(frame, chunks[2]);
-        
-        // Render the status bar
-        if chunks.len() > 3 {
-            self.render_status_bar(frame, chunks[3]);
-        }
-        
-        // Render sync progress overlay (on top of everything)
-        if self.sync_progress_overlay.is_visible() {
-            let theme = self.theme_manager.current_theme();
-            self.sync_progress_overlay.render(frame, size, theme);
+                // Render each pane with focus styling
+                self.render_folder_tree(frame, chunks[0]);
+                self.render_message_list(frame, chunks[1]);
+                self.render_content_preview(frame, chunks[2]);
+                
+                // Render the status bar
+                if chunks.len() > 3 {
+                    self.render_status_bar(frame, chunks[3]);
+                }
+                
+                // Render sync progress overlay (on top of everything)
+                if self.sync_progress_overlay.is_visible() {
+                    let theme = self.theme_manager.current_theme();
+                    self.sync_progress_overlay.render(frame, size, theme);
+                }
+            }
+            UIMode::Compose => {
+                // Render compose UI in full screen
+                if let Some(ref mut compose_ui) = self.compose_ui {
+                    let theme = self.theme_manager.current_theme();
+                    compose_ui.render(frame, size, theme);
+                }
+            }
         }
     }
 
@@ -164,19 +192,29 @@ impl UI {
 
     // Navigation methods
     pub fn next_pane(&mut self) {
+        if matches!(self.mode, UIMode::Compose) {
+            return; // No pane switching in compose mode
+        }
+        
         self.focused_pane = match self.focused_pane {
             FocusedPane::FolderTree => FocusedPane::MessageList,
             FocusedPane::MessageList => FocusedPane::ContentPreview,
             FocusedPane::ContentPreview => FocusedPane::FolderTree,
+            FocusedPane::Compose => FocusedPane::Compose, // Stay in compose
         };
         self.update_navigation_hints();
     }
 
     pub fn previous_pane(&mut self) {
+        if matches!(self.mode, UIMode::Compose) {
+            return; // No pane switching in compose mode
+        }
+        
         self.focused_pane = match self.focused_pane {
             FocusedPane::FolderTree => FocusedPane::ContentPreview,
             FocusedPane::MessageList => FocusedPane::FolderTree,
             FocusedPane::ContentPreview => FocusedPane::MessageList,
+            FocusedPane::Compose => FocusedPane::Compose, // Stay in compose
         };
         self.update_navigation_hints();
     }
@@ -221,10 +259,14 @@ impl UI {
 
     // Status bar management methods
     pub fn update_navigation_hints(&mut self) {
-        let current_pane_name = match self.focused_pane {
-            FocusedPane::FolderTree => "Folders",
-            FocusedPane::MessageList => "Messages", 
-            FocusedPane::ContentPreview => "Content",
+        let current_pane_name = match self.mode {
+            UIMode::Normal => match self.focused_pane {
+                FocusedPane::FolderTree => "Folders",
+                FocusedPane::MessageList => "Messages", 
+                FocusedPane::ContentPreview => "Content",
+                FocusedPane::Compose => "Compose", // Shouldn't happen in normal mode
+            },
+            UIMode::Compose => "Compose Email",
         };
         
         let nav_segment = NavigationHintsSegment {
@@ -236,24 +278,40 @@ impl UI {
     }
     
     fn get_current_shortcuts(&self) -> Vec<(String, String)> {
-        match self.focused_pane {
-            FocusedPane::FolderTree => vec![
-                ("Tab".to_string(), "Switch".to_string()),
-                ("j/k".to_string(), "Navigate".to_string()),
-                ("l".to_string(), "Expand".to_string()),
-                ("h".to_string(), "Collapse".to_string()),
-            ],
-            FocusedPane::MessageList => vec![
-                ("Tab".to_string(), "Switch".to_string()),
-                ("j/k".to_string(), "Navigate".to_string()),
-                ("Enter".to_string(), "Open".to_string()),
-            ],
-            FocusedPane::ContentPreview => vec![
-                ("Tab".to_string(), "Switch".to_string()),
-                ("j/k".to_string(), "Scroll".to_string()),
-                ("v".to_string(), "View Mode".to_string()),
-                ("H".to_string(), "Headers".to_string()),
-                ("Home/End".to_string(), "Jump".to_string()),
+        match self.mode {
+            UIMode::Normal => match self.focused_pane {
+                FocusedPane::FolderTree => vec![
+                    ("Tab".to_string(), "Switch".to_string()),
+                    ("j/k".to_string(), "Navigate".to_string()),
+                    ("l".to_string(), "Expand".to_string()),
+                    ("h".to_string(), "Collapse".to_string()),
+                    ("c".to_string(), "Compose".to_string()),
+                ],
+                FocusedPane::MessageList => vec![
+                    ("Tab".to_string(), "Switch".to_string()),
+                    ("j/k".to_string(), "Navigate".to_string()),
+                    ("Enter".to_string(), "Open".to_string()),
+                    ("c".to_string(), "Compose".to_string()),
+                    ("r".to_string(), "Reply".to_string()),
+                    ("f".to_string(), "Forward".to_string()),
+                ],
+                FocusedPane::ContentPreview => vec![
+                    ("Tab".to_string(), "Switch".to_string()),
+                    ("j/k".to_string(), "Scroll".to_string()),
+                    ("v".to_string(), "View Mode".to_string()),
+                    ("H".to_string(), "Headers".to_string()),
+                    ("Home/End".to_string(), "Jump".to_string()),
+                    ("r".to_string(), "Reply".to_string()),
+                    ("f".to_string(), "Forward".to_string()),
+                ],
+                _ => vec![],
+            },
+            UIMode::Compose => vec![
+                ("Tab".to_string(), "Next Field".to_string()),
+                ("F1".to_string(), "Send".to_string()),
+                ("F2".to_string(), "Save Draft".to_string()),
+                ("@".to_string(), "Contact Lookup".to_string()),
+                ("Esc".to_string(), "Cancel".to_string()),
             ],
         }
     }
@@ -556,6 +614,72 @@ impl UI {
     /// Check if sync progress overlay is currently visible
     pub fn is_sync_progress_visible(&self) -> bool {
         self.sync_progress_overlay.is_visible()
+    }
+    
+    // Compose mode methods
+    
+    /// Enter compose mode with a new email
+    pub fn start_compose(&mut self, contacts_manager: Arc<crate::contacts::ContactsManager>) {
+        self.compose_ui = Some(ComposeUI::new(contacts_manager));
+        self.mode = UIMode::Compose;
+        self.focused_pane = FocusedPane::Compose;
+    }
+    
+    /// Enter compose mode for replying to a message
+    pub fn start_reply(&mut self, contacts_manager: Arc<crate::contacts::ContactsManager>, reply_to: &str, subject: &str) {
+        self.compose_ui = Some(ComposeUI::new_reply(contacts_manager, reply_to, subject));
+        self.mode = UIMode::Compose;
+        self.focused_pane = FocusedPane::Compose;
+    }
+    
+    /// Enter compose mode for forwarding a message
+    pub fn start_forward(&mut self, contacts_manager: Arc<crate::contacts::ContactsManager>, subject: &str, body: &str) {
+        self.compose_ui = Some(ComposeUI::new_forward(contacts_manager, subject, body));
+        self.mode = UIMode::Compose;
+        self.focused_pane = FocusedPane::Compose;
+    }
+    
+    /// Exit compose mode and return to normal view
+    pub fn exit_compose(&mut self) {
+        self.compose_ui = None;
+        self.mode = UIMode::Normal;
+        self.focused_pane = FocusedPane::FolderTree;
+    }
+    
+    /// Handle key input for compose mode
+    pub async fn handle_compose_key(&mut self, key: crossterm::event::KeyCode) -> Option<ComposeAction> {
+        if let Some(ref mut compose_ui) = self.compose_ui {
+            Some(compose_ui.handle_key(key).await)
+        } else {
+            None
+        }
+    }
+    
+    /// Get the current email composition data
+    pub fn get_compose_data(&self) -> Option<EmailComposeData> {
+        self.compose_ui.as_ref().map(|ui| ui.get_email_data())
+    }
+    
+    /// Check if compose form has been modified
+    pub fn is_compose_modified(&self) -> bool {
+        self.compose_ui.as_ref().map(|ui| ui.is_modified()).unwrap_or(false)
+    }
+    
+    /// Clear the compose modified flag
+    pub fn clear_compose_modified(&mut self) {
+        if let Some(ref mut compose_ui) = self.compose_ui {
+            compose_ui.clear_modified();
+        }
+    }
+    
+    /// Get current UI mode
+    pub fn mode(&self) -> &UIMode {
+        &self.mode
+    }
+    
+    /// Check if currently in compose mode
+    pub fn is_composing(&self) -> bool {
+        matches!(self.mode, UIMode::Compose)
     }
 }
 

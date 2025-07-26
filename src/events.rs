@@ -67,6 +67,9 @@ impl EventHandler {
                     FocusedPane::ContentPreview => {
                         ui.content_preview_mut().handle_down();
                     }
+                    FocusedPane::Compose => {
+                        // Handled separately in compose mode
+                    }
                 }
             }
             KeyCode::Char('k') | KeyCode::Up => {
@@ -80,6 +83,9 @@ impl EventHandler {
                     }
                     FocusedPane::ContentPreview => {
                         ui.content_preview_mut().handle_up();
+                    }
+                    FocusedPane::Compose => {
+                        // Handled separately in compose mode
                     }
                 }
             }
@@ -95,6 +101,9 @@ impl EventHandler {
                     }
                     FocusedPane::ContentPreview => {
                         // Maybe handle links or attachments in the future
+                    }
+                    FocusedPane::Compose => {
+                        // Handled separately in compose mode
                     }
                 }
             }
