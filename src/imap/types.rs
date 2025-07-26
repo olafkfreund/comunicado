@@ -1,4 +1,5 @@
 use chrono::{DateTime, Utc};
+use serde::{Serialize, Deserialize};
 use std::collections::HashMap;
 
 /// IMAP folder/mailbox information
@@ -44,7 +45,7 @@ impl ImapFolder {
 }
 
 /// IMAP folder attributes
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum FolderAttribute {
     Noinferiors,
     Noselect,

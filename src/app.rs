@@ -165,15 +165,15 @@ impl App {
         
         // Load messages for the first account (or current account)
         if let Some(current_account_id) = self.ui.get_current_account_id().cloned() {
-            // Try to fetch real messages from IMAP
+            // Try to sync folders and messages from IMAP
             if let Some(ref mut _imap_manager) = self.imap_manager {
-                match self.fetch_messages_from_imap(&current_account_id, "INBOX").await {
+                match self.sync_account_from_imap(&current_account_id).await {
                     Ok(_) => {
-                        // Successfully fetched messages via IMAP
+                        // Successfully synced from IMAP
                         let _ = self.ui.load_messages(current_account_id.clone(), "INBOX".to_string()).await;
                     }
                     Err(e) => {
-                        tracing::warn!("Failed to fetch messages via IMAP: {}, falling back to sample data", e);
+                        tracing::warn!("Failed to sync from IMAP: {}, falling back to sample data", e);
                         // Fall back to sample data if IMAP fails
                         let _ = self.load_sample_data().await;
                     }
@@ -345,6 +345,74 @@ impl App {
                     }
                 }
             }
+        }
+        
+        Ok(())
+    }
+    
+    /// Sync account data from IMAP (folders and messages)
+    async fn sync_account_from_imap(&mut self, account_id: &str) -> Result<()> {
+        tracing::info!("Starting IMAP sync for account: {}", account_id);
+        
+        // First sync folders
+        self.sync_folders_from_imap(account_id).await?;
+        
+        // Then sync messages for INBOX (or first available folder)
+        self.fetch_messages_from_imap(account_id, "INBOX").await?;
+        
+        Ok(())
+    }
+    
+    /// Sync folders from IMAP and store in database
+    async fn sync_folders_from_imap(&mut self, account_id: &str) -> Result<()> {
+        let imap_manager = self.imap_manager.as_mut()
+            .ok_or_else(|| anyhow::anyhow!("IMAP manager not initialized"))?;
+        
+        let database = self.database.as_ref()
+            .ok_or_else(|| anyhow::anyhow!("Database not initialized"))?;
+        
+        tracing::info!("Syncing folders for account: {}", account_id);
+        
+        // Get IMAP client
+        let client_arc = imap_manager.get_client(account_id).await
+            .map_err(|e| anyhow::anyhow!("Failed to get IMAP client: {}", e))?;
+        
+        {
+            let mut client = client_arc.lock().await;
+            
+            // List all folders from IMAP server
+            let folders = client.list_folders("", "*").await
+                .map_err(|e| anyhow::anyhow!("Failed to list folders: {}", e))?;
+            
+            let folder_count = folders.len();
+            tracing::info!("Found {} folders from IMAP", folder_count);
+            
+            // Delete existing folders for this account to refresh the list
+            sqlx::query("DELETE FROM folders WHERE account_id = ?")
+                .bind(account_id)
+                .execute(&database.pool)
+                .await?;
+            
+            // Store each folder in database
+            for folder in folders {
+                tracing::debug!("Storing folder: {} ({})", folder.name, folder.full_name);
+                
+                let attributes_json = serde_json::to_string(&folder.attributes)
+                    .unwrap_or_else(|_| "[]".to_string());
+                
+                sqlx::query("INSERT INTO folders (account_id, name, full_name, delimiter, attributes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
+                    .bind(account_id)
+                    .bind(&folder.name)
+                    .bind(&folder.full_name)
+                    .bind(folder.delimiter.as_deref().unwrap_or("."))
+                    .bind(&attributes_json)
+                    .bind(chrono::Utc::now().to_rfc3339())
+                    .bind(chrono::Utc::now().to_rfc3339())
+                    .execute(&database.pool)
+                    .await?;
+            }
+            
+            tracing::info!("Successfully synced {} folders for account {}", folder_count, account_id);
         }
         
         Ok(())
@@ -648,20 +716,34 @@ impl App {
         // Update account status to show we're attempting to connect
         self.ui.update_account_status(account_id, crate::ui::AccountSyncStatus::Syncing, None);
         
-        // Try to switch account - catch any errors gracefully
-        match self.ui.switch_to_account(account_id).await {
+        // First sync folders and messages from IMAP, then switch to account
+        match self.sync_account_from_imap(account_id).await {
             Ok(()) => {
-                tracing::info!("Successfully switched to account: {}", account_id);
-                // Update status to online if successful
-                self.ui.update_account_status(account_id, crate::ui::AccountSyncStatus::Online, None);
+                tracing::info!("Successfully synced account: {}", account_id);
+                
+                // Now switch to the account in UI (which will load from local database)
+                match self.ui.switch_to_account(account_id).await {
+                    Ok(()) => {
+                        tracing::info!("Successfully switched to account: {}", account_id);
+                        // Update status to online if successful
+                        self.ui.update_account_status(account_id, crate::ui::AccountSyncStatus::Online, None);
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to switch to account {}: {}", account_id, e);
+                        // Update status to error if failed
+                        self.ui.update_account_status(account_id, crate::ui::AccountSyncStatus::Error, None);
+                    }
+                }
             }
             Err(e) => {
-                tracing::error!("Failed to switch to account {}: {}", account_id, e);
+                tracing::error!("Failed to sync account {}: {}", account_id, e);
                 // Update status to error if failed
                 self.ui.update_account_status(account_id, crate::ui::AccountSyncStatus::Error, None);
                 
-                // Don't crash the app - just log the error and continue
-                // The user can try again or switch to a different account
+                // Still try to switch to account with local data as fallback
+                if let Err(e) = self.ui.switch_to_account(account_id).await {
+                    tracing::error!("Failed to switch to account {} even with local data: {}", account_id, e);
+                }
             }
         }
     }
