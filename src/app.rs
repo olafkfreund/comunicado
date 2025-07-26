@@ -270,7 +270,7 @@ impl App {
         let imap_manager = self.imap_manager.as_mut()
             .ok_or_else(|| anyhow::anyhow!("IMAP manager not initialized"))?;
         
-        let _database = self.database.as_ref()
+        let database = self.database.as_ref()
             .ok_or_else(|| anyhow::anyhow!("Database not initialized"))?;
         
         // Test connection first
@@ -304,7 +304,7 @@ impl App {
             let message_count = std::cmp::min(folder.exists.unwrap_or(0) as usize, 50);
             if message_count > 0 {
                 let sequence_set = format!("1:{}", message_count);
-                let fetch_items = vec!["UID", "FLAGS", "ENVELOPE", "BODY.PEEK[HEADER]"];
+                let fetch_items = vec!["UID", "FLAGS", "ENVELOPE", "BODY.PEEK[TEXT]", "BODYSTRUCTURE"];
                 
                 let messages = client.fetch_messages(&sequence_set, &fetch_items).await
                     .map_err(|e| anyhow::anyhow!("Failed to fetch messages: {}", e))?;
@@ -313,14 +313,25 @@ impl App {
                 
                 // Store messages in database
                 for message in messages {
-                    // Convert IMAP message to database format and store
-                    // For now, just log the message info
-                    tracing::debug!("Message UID: {:?}, Subject: {:?}", 
+                    tracing::debug!("Processing message UID: {:?}, Subject: {:?}", 
                                   message.uid, message.envelope.as_ref().map(|e| &e.subject));
                     
-                    // TODO: Convert and store message in database
-                    // This would involve parsing the envelope and headers,
-                    // storing in the messages table, etc.
+                    // Convert IMAP message to StoredMessage format
+                    match self.convert_imap_to_stored_message(&message, account_id, folder_name).await {
+                        Ok(stored_message) => {
+                            // Store in database
+                            if let Err(e) = database.store_message(&stored_message).await {
+                                tracing::error!("Failed to store message UID {}: {}", 
+                                              message.uid.unwrap_or(0), e);
+                            } else {
+                                tracing::debug!("Stored message: {}", stored_message.subject);
+                            }
+                        }
+                        Err(e) => {
+                            tracing::error!("Failed to convert message UID {}: {}", 
+                                          message.uid.unwrap_or(0), e);
+                        }
+                    }
                 }
             }
         }
@@ -587,6 +598,160 @@ impl App {
         } else {
             tracing::warn!("Cannot start compose mode: contacts manager not initialized");
         }
+    }
+    
+    /// Convert IMAP message to StoredMessage format for database storage
+    async fn convert_imap_to_stored_message(
+        &self,
+        imap_message: &crate::imap::ImapMessage,
+        account_id: &str,
+        folder_name: &str,
+    ) -> Result<crate::email::StoredMessage> {
+        use uuid::Uuid;
+        use chrono::Utc;
+        
+        // Extract envelope data
+        let envelope = imap_message.envelope.as_ref();
+        
+        // Extract subject
+        let subject = envelope
+            .and_then(|e| e.subject.as_ref())
+            .map(|s| s.clone())
+            .unwrap_or_else(|| "(No Subject)".to_string());
+        
+        // Extract sender information
+        let (from_addr, from_name) = if let Some(env) = envelope {
+            if let Some(from) = env.from.first() {
+                let addr = format!("{}@{}", 
+                    from.mailbox.as_deref().unwrap_or("unknown"),
+                    from.host.as_deref().unwrap_or("unknown.com")
+                );
+                let name = from.name.clone();
+                (addr, name)
+            } else {
+                ("unknown@unknown.com".to_string(), None)
+            }
+        } else {
+            ("unknown@unknown.com".to_string(), None)
+        };
+        
+        // Extract recipient addresses
+        let to_addrs = envelope
+            .map(|e| e.to.iter().map(|addr| {
+                format!("{}@{}", 
+                    addr.mailbox.as_deref().unwrap_or("unknown"),
+                    addr.host.as_deref().unwrap_or("unknown.com")
+                )
+            }).collect())
+            .unwrap_or_default();
+            
+        let cc_addrs = envelope
+            .map(|e| e.cc.iter().map(|addr| {
+                format!("{}@{}", 
+                    addr.mailbox.as_deref().unwrap_or("unknown"),
+                    addr.host.as_deref().unwrap_or("unknown.com")
+                )
+            }).collect())
+            .unwrap_or_default();
+            
+        let bcc_addrs = envelope
+            .map(|e| e.bcc.iter().map(|addr| {
+                format!("{}@{}", 
+                    addr.mailbox.as_deref().unwrap_or("unknown"),
+                    addr.host.as_deref().unwrap_or("unknown.com")
+                )
+            }).collect())
+            .unwrap_or_default();
+        
+        // Extract message ID and threading info
+        let message_id = envelope.and_then(|e| e.message_id.clone());
+        let in_reply_to = envelope.and_then(|e| e.in_reply_to.clone());
+        
+        // Extract reply-to address
+        let reply_to = envelope
+            .and_then(|e| e.reply_to.first())
+            .map(|addr| format!("{}@{}", 
+                addr.mailbox.as_deref().unwrap_or("unknown"),
+                addr.host.as_deref().unwrap_or("unknown.com")
+            ));
+        
+        // Parse date
+        let date = if let Some(env) = envelope {
+            if let Some(date_str) = &env.date {
+                // Try to parse RFC 2822 date format
+                match chrono::DateTime::parse_from_rfc2822(date_str) {
+                    Ok(parsed) => parsed.with_timezone(&Utc),
+                    Err(_) => {
+                        // Fall back to internal date or current time
+                        imap_message.internal_date.unwrap_or_else(Utc::now)
+                    }
+                }
+            } else {
+                imap_message.internal_date.unwrap_or_else(Utc::now)
+            }
+        } else {
+            imap_message.internal_date.unwrap_or_else(Utc::now)
+        };
+        
+        // Convert IMAP flags to string format
+        let flags: Vec<String> = imap_message.flags
+            .iter()
+            .map(|flag| match flag {
+                crate::imap::MessageFlag::Seen => "\\Seen".to_string(),
+                crate::imap::MessageFlag::Answered => "\\Answered".to_string(),
+                crate::imap::MessageFlag::Flagged => "\\Flagged".to_string(),
+                crate::imap::MessageFlag::Deleted => "\\Deleted".to_string(),
+                crate::imap::MessageFlag::Draft => "\\Draft".to_string(),
+                crate::imap::MessageFlag::Recent => "\\Recent".to_string(),
+                crate::imap::MessageFlag::Custom(s) => s.clone(),
+            })
+            .collect();
+        
+        // Extract email body (text content for now)
+        let body_text = imap_message.body.clone();
+        
+        // Create StoredMessage
+        let stored_message = crate::email::StoredMessage {
+            id: Uuid::new_v4(),
+            account_id: account_id.to_string(),
+            folder_name: folder_name.to_string(),
+            imap_uid: imap_message.uid.unwrap_or(0),
+            message_id,
+            thread_id: None, // Will be populated by threading engine later
+            in_reply_to,
+            references: Vec::new(), // TODO: Parse References header
+            
+            // Headers
+            subject,
+            from_addr,
+            from_name,
+            to_addrs,
+            cc_addrs,
+            bcc_addrs,
+            reply_to,
+            date,
+            
+            // Content
+            body_text,
+            body_html: None, // TODO: Extract HTML body if present
+            attachments: Vec::new(), // TODO: Parse attachments
+            
+            // Metadata
+            flags,
+            labels: Vec::new(),
+            size: imap_message.size,
+            priority: None,
+            
+            // Timestamps
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+            last_synced: Utc::now(),
+            sync_version: 1,
+            is_draft: false,
+            is_deleted: false,
+        };
+        
+        Ok(stored_message)
     }
 }
 

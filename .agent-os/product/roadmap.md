@@ -13,8 +13,8 @@
 
 - [x] Basic TUI Interface with Ratatui - Create main application window with folder tree and message list `L`
 - [x] IMAP Connection and Authentication - Implement basic IMAP client with login support `L`
-- [ ] Email List and Reading - Display email list and allow reading individual messages `M`
-- [ ] Basic Email Composition - Create and send simple text emails via SMTP `M`
+- [x] Email List and Reading - Display email list and allow reading individual messages `M`
+- [x] Basic Email Composition - Create and send simple text emails via SMTP `M`
 - [x] Account Configuration - Setup wizard for adding IMAP/SMTP accounts `M`
 
 ### Should-Have Features

@@ -18,6 +18,9 @@ async fn main() -> Result<()> {
     // Check for existing accounts and run setup wizard if needed
     app.check_accounts_and_setup().await?;
     
+    // Initialize SMTP service and contacts manager
+    app.initialize_services().await?;
+    
     // Run the application
     app.run().await?;
 
