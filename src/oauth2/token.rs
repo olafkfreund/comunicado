@@ -84,6 +84,7 @@ impl RefreshToken {
 #[derive(Clone)]
 pub struct TokenManager {
     tokens: Arc<RwLock<HashMap<String, TokenPair>>>,
+    storage: Option<Arc<crate::oauth2::SecureStorage>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -99,6 +100,15 @@ impl TokenManager {
     pub fn new() -> Self {
         Self {
             tokens: Arc::new(RwLock::new(HashMap::new())),
+            storage: None,
+        }
+    }
+    
+    /// Create a new token manager with storage backend
+    pub fn new_with_storage(storage: Arc<crate::oauth2::SecureStorage>) -> Self {
+        Self {
+            tokens: Arc::new(RwLock::new(HashMap::new())),
+            storage: Some(storage),
         }
     }
     
@@ -139,35 +149,160 @@ impl TokenManager {
     
     /// Get a valid access token, refreshing if necessary
     pub async fn get_valid_access_token(&self, account_id: &str) -> OAuth2Result<Option<AccessToken>> {
-        let needs_refresh = {
+        let (needs_refresh, is_expired) = {
             let tokens = self.tokens.read().await;
             if let Some(token_pair) = tokens.get(account_id) {
-                token_pair.access_token.needs_refresh(5) // 5 minute buffer
+                (
+                    token_pair.access_token.needs_refresh(5), // 5 minute buffer
+                    token_pair.access_token.is_expired()
+                )
             } else {
                 return Ok(None);
             }
         };
         
-        if needs_refresh {
-            self.refresh_access_token(account_id).await?;
+        if needs_refresh || is_expired {
+            tracing::info!("Token for account {} needs refresh (expired: {}, needs_refresh: {})", 
+                         account_id, is_expired, needs_refresh);
+            
+            match self.refresh_access_token(account_id).await {
+                Ok(refreshed_token) => {
+                    tracing::info!("Successfully refreshed token for account {}", account_id);
+                    return Ok(Some(refreshed_token));
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to refresh token for account {}: {}", account_id, e);
+                    // If refresh fails and token is expired, return None to indicate re-auth needed
+                    if is_expired {
+                        return Ok(None);
+                    }
+                    // If not expired but refresh failed, still try to use existing token
+                }
+            }
         }
         
         self.get_access_token(account_id).await
     }
     
     /// Refresh access token using refresh token
-    /// Note: This is a simplified version that doesn't actually refresh tokens
-    /// In a full implementation, this would need access to OAuth2 clients
     pub async fn refresh_access_token(&self, account_id: &str) -> OAuth2Result<AccessToken> {
-        let tokens = self.tokens.read().await;
-        let token_pair = tokens.get(account_id)
-            .ok_or_else(|| OAuth2Error::InvalidToken(
-                format!("No tokens found for account {}", account_id)
-            ))?;
+        let (refresh_token, provider) = {
+            let tokens = self.tokens.read().await;
+            let token_pair = tokens.get(account_id)
+                .ok_or_else(|| OAuth2Error::InvalidToken(
+                    format!("No tokens found for account {}", account_id)
+                ))?;
+            
+            let refresh_token = token_pair.refresh_token.as_ref()
+                .ok_or_else(|| OAuth2Error::InvalidToken(
+                    format!("No refresh token available for account {}", account_id)
+                ))?
+                .token
+                .clone();
+                
+            (refresh_token, token_pair.provider.clone())
+        };
         
-        // For now, just return the existing token
-        // In a full implementation, this would refresh via the OAuth2 client
-        Ok(token_pair.access_token.clone())
+        // Try to refresh the token using the OAuth2 client
+        match self.refresh_token_with_provider(&refresh_token, &provider).await {
+            Ok(new_token_response) => {
+                // Update stored tokens with new response
+                self.store_tokens(account_id.to_string(), provider.clone(), &new_token_response).await?;
+                
+                // Update persistent storage if available
+                if let Some(ref storage) = self.storage {
+                    storage.update_tokens(
+                        account_id,
+                        &new_token_response.access_token,
+                        new_token_response.refresh_token.as_deref(),
+                        new_token_response.expires_in.map(|seconds| {
+                            chrono::Utc::now() + chrono::Duration::seconds(seconds as i64)
+                        }),
+                    ).map_err(|e| OAuth2Error::StorageError(format!("Failed to update tokens in storage: {}", e)))?;
+                }
+                
+                // Return the new access token
+                let new_access_token = AccessToken::from_response(&new_token_response);
+                tracing::info!("Successfully refreshed token for account {}", account_id);
+                Ok(new_access_token)
+            }
+            Err(e) => {
+                tracing::error!("Failed to refresh token for account {}: {}", account_id, e);
+                Err(OAuth2Error::TokenRefreshFailed(
+                    format!("Token refresh failed for account {}: {}. Please re-authenticate using the OAuth2 setup wizard", account_id, e)
+                ))
+            }
+        }
+    }
+    
+    /// Refresh token using the appropriate OAuth2 provider
+    async fn refresh_token_with_provider(&self, refresh_token: &str, provider: &str) -> OAuth2Result<TokenResponse> {
+        use crate::oauth2::{ProviderConfig, OAuth2Client};
+        
+        // First, get the account ID for this refresh token to load stored credentials
+        let account_id = {
+            let tokens = self.tokens.read().await;
+            tokens.iter()
+                .find(|(_, pair)| {
+                    pair.refresh_token.as_ref()
+                        .map(|rt| rt.token == refresh_token)
+                        .unwrap_or(false)
+                })
+                .map(|(id, _)| id.clone())
+        };
+        
+        let account_id = account_id.ok_or_else(|| {
+            OAuth2Error::InvalidToken("Cannot find account for refresh token".to_string())
+        })?;
+        
+        // Load stored OAuth2 credentials for this account
+        let (client_id, client_secret) = if let Some(ref storage) = self.storage {
+            match storage.load_oauth_credentials(&account_id)? {
+                Some((id, secret)) => (id, secret),
+                None => {
+                    // Fallback to environment variables
+                    tracing::warn!("No stored OAuth2 credentials found for account {}, trying environment variables", account_id);
+                    match (std::env::var("GMAIL_CLIENT_ID"), std::env::var("GMAIL_CLIENT_SECRET")) {
+                        (Ok(id), Ok(secret)) => (id, secret),
+                        _ => {
+                            return Err(OAuth2Error::InvalidToken(
+                                format!("No OAuth2 credentials available for token refresh. Account {} needs re-authentication.", account_id)
+                            ));
+                        }
+                    }
+                }
+            }
+        } else {
+            // No storage backend, try environment variables
+            match (std::env::var("GMAIL_CLIENT_ID"), std::env::var("GMAIL_CLIENT_SECRET")) {
+                (Ok(id), Ok(secret)) => (id, secret),
+                _ => {
+                    return Err(OAuth2Error::InvalidToken(
+                        "No OAuth2 credentials available for token refresh".to_string()
+                    ));
+                }
+            }
+        };
+        
+        // Create provider configuration with stored credentials
+        let config = match provider {
+            "gmail" => {
+                let mut config = ProviderConfig::gmail();
+                config.client_id = client_id;
+                config.client_secret = Some(client_secret);
+                config
+            }
+            _ => {
+                return Err(OAuth2Error::InvalidProvider(
+                    format!("Token refresh not supported for provider: {}", provider)
+                ));
+            }
+        };
+        
+        // Create OAuth2 client and refresh token
+        let client = OAuth2Client::new(config)?;
+        tracing::info!("Refreshing token for account {} using stored credentials", account_id);
+        client.refresh_token(refresh_token).await
     }
     
     /// Remove tokens for an account
@@ -272,6 +407,58 @@ impl TokenManager {
             expiring_soon,
         }
     }
+    
+    /// Diagnose token issues for a specific account
+    pub async fn diagnose_account_tokens(&self, account_id: &str) -> TokenDiagnosis {
+        let tokens = self.tokens.read().await;
+        
+        if let Some(token_pair) = tokens.get(account_id) {
+            let access_token = &token_pair.access_token;
+            let has_refresh_token = token_pair.refresh_token.is_some();
+            
+            if access_token.is_expired() {
+                if has_refresh_token {
+                    TokenDiagnosis::ExpiredWithRefresh {
+                        account_id: account_id.to_string(),
+                        expired_at: access_token.expires_at,
+                        can_refresh: true,
+                    }
+                } else {
+                    TokenDiagnosis::ExpiredNoRefresh {
+                        account_id: account_id.to_string(),
+                        expired_at: access_token.expires_at,
+                    }
+                }
+            } else if access_token.needs_refresh(5) {
+                TokenDiagnosis::ExpiringSoon {
+                    account_id: account_id.to_string(),
+                    expires_at: access_token.expires_at,
+                    has_refresh_token,
+                }
+            } else {
+                TokenDiagnosis::Valid {
+                    account_id: account_id.to_string(),
+                    expires_at: access_token.expires_at,
+                }
+            }
+        } else {
+            TokenDiagnosis::NotFound {
+                account_id: account_id.to_string(),
+            }
+        }
+    }
+    
+    /// Get diagnosis for all accounts
+    pub async fn diagnose_all_accounts(&self) -> Vec<TokenDiagnosis> {
+        let account_ids = self.get_account_ids().await;
+        let mut diagnoses = Vec::new();
+        
+        for account_id in account_ids {
+            diagnoses.push(self.diagnose_account_tokens(&account_id).await);
+        }
+        
+        diagnoses
+    }
 }
 
 impl Default for TokenManager {
@@ -287,6 +474,107 @@ pub struct TokenStats {
     pub valid_tokens: usize,
     pub expired_tokens: usize,
     pub expiring_soon: usize,
+}
+
+/// Token diagnosis for an account
+#[derive(Debug, Clone)]
+pub enum TokenDiagnosis {
+    Valid {
+        account_id: String,
+        expires_at: Option<chrono::DateTime<chrono::Utc>>,
+    },
+    ExpiringSoon {
+        account_id: String,
+        expires_at: Option<chrono::DateTime<chrono::Utc>>,
+        has_refresh_token: bool,
+    },
+    ExpiredWithRefresh {
+        account_id: String,
+        expired_at: Option<chrono::DateTime<chrono::Utc>>,
+        can_refresh: bool,
+    },
+    ExpiredNoRefresh {
+        account_id: String,
+        expired_at: Option<chrono::DateTime<chrono::Utc>>,
+    },
+    NotFound {
+        account_id: String,
+    },
+}
+
+impl TokenDiagnosis {
+    /// Get a user-friendly description of the diagnosis
+    pub fn description(&self) -> String {
+        match self {
+            TokenDiagnosis::Valid { account_id, expires_at } => {
+                if let Some(expires) = expires_at {
+                    format!("Account '{}' has a valid token that expires at {}", account_id, expires.format("%Y-%m-%d %H:%M:%S UTC"))
+                } else {
+                    format!("Account '{}' has a valid token with no expiration", account_id)
+                }
+            },
+            TokenDiagnosis::ExpiringSoon { account_id, expires_at, has_refresh_token } => {
+                let expires_str = expires_at
+                    .map(|e| e.format("%Y-%m-%d %H:%M:%S UTC").to_string())
+                    .unwrap_or_else(|| "unknown time".to_string());
+                
+                if *has_refresh_token {
+                    format!("Account '{}' token expires soon at {} (can be refreshed)", account_id, expires_str)
+                } else {
+                    format!("Account '{}' token expires soon at {} (requires re-authentication)", account_id, expires_str)
+                }
+            },
+            TokenDiagnosis::ExpiredWithRefresh { account_id, expired_at, .. } => {
+                let expired_str = expired_at
+                    .map(|e| e.format("%Y-%m-%d %H:%M:%S UTC").to_string())
+                    .unwrap_or_else(|| "unknown time".to_string());
+                
+                format!("Account '{}' token expired at {} (can be refreshed)", account_id, expired_str)
+            },
+            TokenDiagnosis::ExpiredNoRefresh { account_id, expired_at } => {
+                let expired_str = expired_at
+                    .map(|e| e.format("%Y-%m-%d %H:%M:%S UTC").to_string())
+                    .unwrap_or_else(|| "unknown time".to_string());
+                
+                format!("Account '{}' token expired at {} (requires re-authentication)", account_id, expired_str)
+            },
+            TokenDiagnosis::NotFound { account_id } => {
+                format!("No tokens found for account '{}'", account_id)
+            },
+        }
+    }
+    
+    /// Get recommended action for this diagnosis
+    pub fn recommended_action(&self) -> String {
+        match self {
+            TokenDiagnosis::Valid { .. } => {
+                "No action needed - token is valid".to_string()
+            },
+            TokenDiagnosis::ExpiringSoon { has_refresh_token, .. } => {
+                if *has_refresh_token {
+                    "Token will be automatically refreshed when needed".to_string()
+                } else {
+                    "Consider re-authenticating before the token expires".to_string()
+                }
+            },
+            TokenDiagnosis::ExpiredWithRefresh { account_id, .. } => {
+                format!("Run automatic token refresh or re-authenticate account '{}'", account_id)
+            },
+            TokenDiagnosis::ExpiredNoRefresh { account_id, .. } |
+            TokenDiagnosis::NotFound { account_id } => {
+                format!("Re-authenticate account '{}' using the OAuth2 setup wizard", account_id)
+            },
+        }
+    }
+    
+    /// Check if this diagnosis indicates a problem that needs user action
+    pub fn needs_action(&self) -> bool {
+        matches!(self, 
+            TokenDiagnosis::ExpiredWithRefresh { .. } |
+            TokenDiagnosis::ExpiredNoRefresh { .. } |
+            TokenDiagnosis::NotFound { .. }
+        )
+    }
 }
 
 /// Token refresh scheduler for automatic token refresh

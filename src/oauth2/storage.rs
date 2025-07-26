@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use base64::prelude::*;
 
 /// Secure storage for OAuth2 tokens and account configurations
+#[derive(Clone)]
 pub struct SecureStorage {
     app_name: String,
     config_dir: PathBuf,
@@ -33,6 +34,59 @@ impl SecureStorage {
             app_name,
             config_dir,
         })
+    }
+    
+    /// Store OAuth2 client credentials securely for token refresh
+    pub fn store_oauth_credentials(
+        &self,
+        account_id: &str,
+        client_id: &str,
+        client_secret: &str,
+    ) -> OAuth2Result<()> {
+        // Store credentials in keyring with different service names
+        let client_id_service = format!("{}-oauth-client-id", self.app_name);
+        let client_secret_service = format!("{}-oauth-client-secret", self.app_name);
+        
+        match Entry::new(&client_id_service, account_id) {
+            Ok(entry) => {
+                if entry.set_password(client_id).is_err() {
+                    tracing::warn!("Failed to store OAuth client ID in keyring, using file fallback");
+                    self.store_credential_to_file(account_id, "client_id", client_id)?;
+                }
+            }
+            Err(_) => {
+                self.store_credential_to_file(account_id, "client_id", client_id)?;
+            }
+        }
+        
+        match Entry::new(&client_secret_service, account_id) {
+            Ok(entry) => {
+                if entry.set_password(client_secret).is_err() {
+                    tracing::warn!("Failed to store OAuth client secret in keyring, using file fallback");
+                    self.store_credential_to_file(account_id, "client_secret", client_secret)?;
+                }
+            }
+            Err(_) => {
+                self.store_credential_to_file(account_id, "client_secret", client_secret)?;
+            }
+        }
+        
+        tracing::info!("OAuth2 credentials stored securely for account {}", account_id);
+        Ok(())
+    }
+    
+    /// Load OAuth2 client credentials for token refresh
+    pub fn load_oauth_credentials(&self, account_id: &str) -> OAuth2Result<Option<(String, String)>> {
+        let client_id = self.load_oauth_client_id(account_id);
+        let client_secret = self.load_oauth_client_secret(account_id);
+        
+        match (client_id, client_secret) {
+            (Some(id), Some(secret)) => Ok(Some((id, secret))),
+            _ => {
+                tracing::debug!("OAuth2 credentials not found for account {}", account_id);
+                Ok(None)
+            }
+        }
     }
     
     /// Store account configuration securely
@@ -146,6 +200,9 @@ impl SecureStorage {
         // Remove tokens from keyring
         let _ = self.delete_access_token(account_id);
         let _ = self.delete_refresh_token(account_id);
+        
+        // Remove OAuth2 credentials
+        let _ = self.delete_oauth_credentials(account_id);
         
         // Remove config file
         let config_path = self.get_account_config_path(account_id);
@@ -330,6 +387,54 @@ impl SecureStorage {
         self.load_token_from_file(account_id, "refresh")
     }
     
+    /// Load OAuth2 client ID
+    fn load_oauth_client_id(&self, account_id: &str) -> Option<String> {
+        let service = format!("{}-oauth-client-id", self.app_name);
+        match Entry::new(&service, account_id) {
+            Ok(entry) => {
+                if let Ok(client_id) = entry.get_password() {
+                    return Some(client_id);
+                }
+            }
+            Err(_) => {}
+        }
+        
+        // Fallback to file storage
+        self.load_credential_from_file(account_id, "client_id")
+    }
+    
+    /// Load OAuth2 client secret
+    fn load_oauth_client_secret(&self, account_id: &str) -> Option<String> {
+        let service = format!("{}-oauth-client-secret", self.app_name);
+        match Entry::new(&service, account_id) {
+            Ok(entry) => {
+                if let Ok(client_secret) = entry.get_password() {
+                    return Some(client_secret);
+                }
+            }
+            Err(_) => {}
+        }
+        
+        // Fallback to file storage
+        self.load_credential_from_file(account_id, "client_secret")
+    }
+    
+    /// Delete OAuth2 credentials
+    fn delete_oauth_credentials(&self, account_id: &str) -> OAuth2Result<()> {
+        // Delete from file storage
+        let client_id_file = self.config_dir.join(format!("{}.client_id.cred", account_id));
+        let client_secret_file = self.config_dir.join(format!("{}.client_secret.cred", account_id));
+        
+        if client_id_file.exists() {
+            let _ = fs::remove_file(&client_id_file);
+        }
+        if client_secret_file.exists() {
+            let _ = fs::remove_file(&client_secret_file);
+        }
+        
+        Ok(())
+    }
+    
     /// Delete refresh token from file storage (keyring temporarily disabled)
     fn delete_refresh_token(&self, account_id: &str) -> OAuth2Result<()> {
         // Keyring temporarily disabled
@@ -384,6 +489,45 @@ impl SecureStorage {
         
         let encoded_token = fs::read_to_string(&token_file).ok()?;
         base64::prelude::BASE64_STANDARD.decode(encoded_token.trim()).ok()
+            .and_then(|decoded| String::from_utf8(decoded).ok())
+    }
+    
+    /// Store OAuth2 credential to encrypted file
+    fn store_credential_to_file(&self, account_id: &str, credential_type: &str, credential: &str) -> OAuth2Result<()> {
+        let cred_file = self.config_dir.join(format!("{}.{}.cred", account_id, credential_type));
+        
+        // Simple base64 encoding for basic obfuscation (not cryptographically secure)
+        let encoded_credential = base64::prelude::BASE64_STANDARD.encode(credential);
+        
+        fs::write(&cred_file, encoded_credential)
+            .map_err(|e| OAuth2Error::StorageError(
+                format!("Failed to write credential file: {}", e)
+            ))?;
+        
+        // Set restrictive permissions (user read/write only)
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let permissions = std::fs::Permissions::from_mode(0o600);
+            fs::set_permissions(&cred_file, permissions)
+                .map_err(|e| OAuth2Error::StorageError(
+                    format!("Failed to set credential file permissions: {}", e)
+                ))?;
+        }
+        
+        Ok(())
+    }
+    
+    /// Load OAuth2 credential from file
+    fn load_credential_from_file(&self, account_id: &str, credential_type: &str) -> Option<String> {
+        let cred_file = self.config_dir.join(format!("{}.{}.cred", account_id, credential_type));
+        
+        if !cred_file.exists() {
+            return None;
+        }
+        
+        let encoded_credential = fs::read_to_string(&cred_file).ok()?;
+        base64::prelude::BASE64_STANDARD.decode(encoded_credential.trim()).ok()
             .and_then(|decoded| String::from_utf8(decoded).ok())
     }
     

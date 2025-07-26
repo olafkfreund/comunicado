@@ -450,6 +450,29 @@ impl SetupWizard {
             // Store the account configuration
             self.storage.store_account(account)?;
             
+            // Store OAuth2 client credentials securely for automatic token refresh
+            if !self.client_id_input.is_empty() {
+                let client_secret = if self.client_secret_input.is_empty() {
+                    "" // PKCE doesn't need client secret
+                } else {
+                    &self.client_secret_input
+                };
+                
+                match self.storage.store_oauth_credentials(
+                    &account.account_id,
+                    &self.client_id_input,
+                    client_secret,
+                ) {
+                    Ok(()) => {
+                        tracing::info!("OAuth2 credentials stored securely for account {}", account.account_id);
+                    }
+                    Err(e) => {
+                        tracing::warn!("Failed to store OAuth2 credentials for account {}: {}. Token refresh may not work automatically.", account.account_id, e);
+                        // Don't fail the setup process, just warn the user
+                    }
+                }
+            }
+            
             // Test IMAP connection (simplified - in real implementation, test actual connection)
             tokio::time::sleep(Duration::from_millis(1000)).await;
             

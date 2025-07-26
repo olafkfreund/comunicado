@@ -138,8 +138,8 @@ impl App {
     
     /// Initialize IMAP account manager with OAuth2 support
     pub async fn initialize_imap_manager(&mut self) -> Result<()> {
-        // Create token manager for OAuth2 authentication
-        let token_manager = TokenManager::new();
+        // Create token manager for OAuth2 authentication with storage backend
+        let token_manager = TokenManager::new_with_storage(Arc::new(self.storage.clone()));
         
         // Create IMAP account manager with OAuth2 support
         let mut imap_manager = ImapAccountManager::new_with_oauth2(token_manager.clone())
@@ -148,6 +148,13 @@ impl App {
         // Load existing accounts from OAuth2 storage
         imap_manager.load_accounts().await
             .map_err(|e| anyhow::anyhow!("Failed to load IMAP accounts: {}", e))?;
+        
+        // Start automatic token refresh scheduler
+        if let Ok(scheduler) = crate::oauth2::token::TokenRefreshScheduler::new(Arc::new(token_manager.clone())).start().await {
+            tracing::info!("Started automatic OAuth2 token refresh scheduler");
+        } else {
+            tracing::warn!("Failed to start automatic token refresh scheduler");
+        }
         
         self.token_manager = Some(token_manager);
         self.imap_manager = Some(imap_manager);

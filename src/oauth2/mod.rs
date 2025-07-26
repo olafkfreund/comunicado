@@ -9,7 +9,7 @@ pub use client::OAuth2Client;
 pub use file_import::OAuth2FileImporter;
 pub use providers::{OAuth2Provider, ProviderConfig, ProviderDetector};
 pub use storage::SecureStorage;
-pub use token::{TokenManager, AccessToken, RefreshToken};
+pub use token::{TokenManager, AccessToken, RefreshToken, TokenStats, TokenDiagnosis};
 pub use wizard::SetupWizard;
 
 use serde::{Deserialize, Serialize};

@@ -115,7 +115,19 @@ impl ImapClient {
                     .map_err(|e| {
                         println!("DEBUG: Failed to create XOAUTH2 string: {}", e);
                         tracing::error!("Failed to create XOAUTH2 string for account {}: {}", account_id, e);
-                        ImapError::authentication(&format!("Failed to create XOAUTH2 string: {}", e))
+                        
+                        // Provide helpful error message for token issues
+                        let error_msg = if e.to_string().contains("No valid access token") {
+                            format!("OAuth2 token has expired for account '{}'. Please re-authenticate using:\n\
+                                    ./comunicado --reauth-account {}", account_id, account_id)
+                        } else if e.to_string().contains("requires re-authentication") {
+                            format!("OAuth2 token refresh failed for account '{}'. Please re-authenticate using:\n\
+                                    ./comunicado --reauth-account {}", account_id, account_id)
+                        } else {
+                            format!("Failed to create XOAUTH2 string: {}", e)
+                        };
+                        
+                        ImapError::authentication(&error_msg)
                     })?;
                 
                 println!("DEBUG: XOAUTH2 string created successfully");
