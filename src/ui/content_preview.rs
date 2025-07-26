@@ -7,7 +7,7 @@ use ratatui::{
 };
 use crate::theme::Theme;
 use crate::email::{EmailDatabase, StoredMessage};
-use crate::images::{ImageManager, extract_images_from_html, ImageReference};
+use crate::images::{ImageManager, extract_images_from_html};
 use regex::Regex;
 use std::collections::HashMap;
 use std::sync::Arc;

@@ -446,23 +446,40 @@ impl App {
             self.smtp_service = Some(smtp_service);
         }
         
-        // Initialize contacts manager
-        if let (Some(ref database), Some(ref token_manager)) = (&self.database, &self.token_manager) {
+        // Initialize contacts manager (optional - don't fail if it can't be initialized)
+        if let (Some(ref _database), Some(ref token_manager)) = (&self.database, &self.token_manager) {
             // Create contacts database from email database path  
             let data_dir = dirs::data_dir()
-                .ok_or_else(|| anyhow::anyhow!("Failed to get data directory"))?;
-            let contacts_db_path = data_dir.join("comunicado").join("contacts.db");
+                .ok_or_else(|| anyhow::anyhow!("Failed to get data directory"))?
+                .join("comunicado");
             
-            let contacts_database = crate::contacts::ContactsDatabase::new(
+            // Ensure the directory exists
+            if let Err(e) = std::fs::create_dir_all(&data_dir) {
+                tracing::warn!("Failed to create contacts directory: {}", e);
+                return Ok(()); // Don't fail initialization
+            }
+            
+            let contacts_db_path = data_dir.join("contacts.db");
+            
+            // Try to initialize contacts database, but don't fail if it can't be created
+            match crate::contacts::ContactsDatabase::new(
                 &format!("sqlite:{}", contacts_db_path.display())
-            ).await
-            .map_err(|e| anyhow::anyhow!("Failed to initialize contacts database: {}", e))?;
-            
-            let contacts_manager = ContactsManager::new(contacts_database, token_manager.clone())
-                .await
-                .map_err(|e| anyhow::anyhow!("Failed to initialize contacts manager: {}", e))?;
-            
-            self.contacts_manager = Some(Arc::new(contacts_manager));
+            ).await {
+                Ok(contacts_database) => {
+                    match ContactsManager::new(contacts_database, token_manager.clone()).await {
+                        Ok(contacts_manager) => {
+                            self.contacts_manager = Some(Arc::new(contacts_manager));
+                            tracing::info!("Contacts manager initialized successfully");
+                        }
+                        Err(e) => {
+                            tracing::warn!("Failed to initialize contacts manager: {}", e);
+                        }
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to initialize contacts database: {}", e);
+                }
+            }
         }
         
         tracing::info!("Services initialized successfully");
@@ -605,9 +622,13 @@ impl App {
     pub fn start_compose_mode(&mut self) {
         if let Some(ref contacts_manager) = self.contacts_manager {
             self.ui.start_compose(contacts_manager.clone());
-            tracing::info!("Started compose mode");
+            tracing::info!("Started compose mode with contacts support");
         } else {
-            tracing::warn!("Cannot start compose mode: contacts manager not initialized");
+            // Create a minimal contacts manager for compose mode without contacts support
+            tracing::info!("Started compose mode without contacts support");
+            // For now, just skip compose mode if no contacts manager
+            // TODO: Implement a basic compose mode without contacts
+            tracing::warn!("Compose mode requires contacts manager - skipping for now");
         }
     }
     
@@ -780,7 +801,7 @@ impl App {
             let html_body = Some(raw_body.clone());
             
             // Convert HTML to plain text for the text body
-            let mut html_renderer = crate::html::HtmlRenderer::new(80);
+            let html_renderer = crate::html::HtmlRenderer::new(80);
             let text_body = Some(html_renderer.html_to_plain_text(raw_body));
             
             (text_body, html_body)

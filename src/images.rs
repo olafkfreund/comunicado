@@ -302,7 +302,7 @@ impl ImageManager {
     }
     
     /// Encode image using Kitty graphics protocol
-    fn encode_kitty(&self, img: &DynamicImage, format: ImageFormat) -> Result<String> {
+    fn encode_kitty(&self, img: &DynamicImage, _format: ImageFormat) -> Result<String> {
         // Convert image to PNG for transmission
         let mut buffer = Vec::new();
         let mut cursor = Cursor::new(&mut buffer);
@@ -342,8 +342,8 @@ impl ImageManager {
         // Define some basic colors (simplified)
         for i in 0..16 {
             let r = (i * 16) % 256;
-            let g = ((i * 32) % 256);
-            let b = ((i * 64) % 256);
+            let g = (i * 32) % 256;
+            let b = (i * 64) % 256;
             sixel.push_str(&format!("#{};2;{};{};{}", i, r * 100 / 255, g * 100 / 255, b * 100 / 255));
         }
         

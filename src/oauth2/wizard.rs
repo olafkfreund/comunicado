@@ -20,7 +20,7 @@ use ratatui::{
     Frame, Terminal,
 };
 use std::io;
-use tokio::time::{timeout, Duration};
+use tokio::time::Duration;
 
 /// OAuth2 setup wizard states
 #[derive(Debug, Clone)]
