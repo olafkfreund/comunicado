@@ -3,6 +3,7 @@ use crossterm::{
     event::{self, DisableMouseCapture, EnableMouseCapture, Event},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    tty::IsTty,
 };
 use ratatui::{
     backend::CrosstermBackend,
@@ -501,24 +502,14 @@ impl App {
     
     /// Fetch messages from IMAP and store in database
     async fn fetch_messages_from_imap(&mut self, account_id: &str, folder_name: &str) -> Result<()> {
+        println!("DEBUG: fetch_messages_from_imap called for account: {}, folder: {}", account_id, folder_name);
         let imap_manager = self.imap_manager.as_mut()
             .ok_or_else(|| anyhow::anyhow!("IMAP manager not initialized"))?;
         
         let database = self.database.as_ref()
             .ok_or_else(|| anyhow::anyhow!("Database not initialized"))?;
         
-        // Test connection first
-        match imap_manager.test_connection(account_id).await {
-            Ok(true) => {
-                tracing::info!("IMAP connection test successful for account: {}", account_id);
-            }
-            Ok(false) => {
-                return Err(anyhow::anyhow!("IMAP connection test failed for account: {}", account_id));
-            }
-            Err(e) => {
-                return Err(anyhow::anyhow!("IMAP connection error for account {}: {}", account_id, e));
-            }
-        }
+        tracing::info!("Starting message fetch for account: {}, folder: {}", account_id, folder_name);
         
         // Get IMAP client
         let client_arc = imap_manager.get_client(account_id).await
@@ -536,6 +527,7 @@ impl App {
             
             // Fetch recent messages (limit to 50 for now)
             let message_count = std::cmp::min(folder.exists.unwrap_or(0) as usize, 50);
+            
             if message_count > 0 {
                 let sequence_set = format!("1:{}", message_count);
                 let fetch_items = vec!["UID", "FLAGS", "ENVELOPE", "BODY.PEEK[]", "BODYSTRUCTURE"];
@@ -567,9 +559,12 @@ impl App {
                         }
                     }
                 }
+            } else {
+                tracing::info!("No messages found in folder: {}", folder_name);
             }
         }
         
+        tracing::info!("Message fetch completed successfully for account: {}", account_id);
         Ok(())
     }
     
@@ -653,12 +648,21 @@ impl App {
     }
 
     pub async fn run(&mut self) -> Result<()> {
+        // Check if we're running in a proper terminal
+        if !std::io::stdout().is_tty() {
+            return Err(anyhow::anyhow!(
+                "Comunicado requires a proper terminal (TTY) to run. Please run this application in a terminal emulator."
+            ));
+        }
+        
         // Setup terminal
-        enable_raw_mode()?;
+        enable_raw_mode().map_err(|e| anyhow::anyhow!("Failed to enable raw mode: {}. Make sure you're running in a proper terminal.", e))?;
         let mut stdout = io::stdout();
-        execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
+        execute!(stdout, EnterAlternateScreen, EnableMouseCapture)
+            .map_err(|e| anyhow::anyhow!("Failed to setup terminal: {}. Make sure your terminal supports these features.", e))?;
         let backend = CrosstermBackend::new(stdout);
-        let mut terminal = Terminal::new(backend)?;
+        let mut terminal = Terminal::new(backend)
+            .map_err(|e| anyhow::anyhow!("Failed to create terminal: {}", e))?;
 
         // Run the main loop
         let result = self.run_loop(&mut terminal).await;
@@ -723,6 +727,12 @@ impl App {
                         }
                         EventResult::SyncAccount(account_id) => {
                             self.handle_sync_account(&account_id).await?;
+                        }
+                        EventResult::FolderSelect(folder_path) => {
+                            self.handle_folder_select(&folder_path).await?;
+                        }
+                        EventResult::FolderOperation(operation) => {
+                            self.handle_folder_operation(operation).await?;
                         }
                     }
                     
@@ -1374,6 +1384,248 @@ impl App {
                 return Err(anyhow::anyhow!("Failed to sync account: {}", e));
             }
         }
+        
+        Ok(())
+    }
+    
+    /// Handle folder selection event - load messages from the selected folder
+    async fn handle_folder_select(&mut self, folder_path: &str) -> Result<()> {
+        // Get the current account ID and clone it to avoid borrowing issues
+        let current_account_id = match self.ui.get_current_account_id() {
+            Some(id) => id.clone(),
+            None => {
+                tracing::warn!("No current account selected for folder selection");
+                return Ok(());
+            }
+        };
+        
+        tracing::info!("Loading messages from folder: {} for account: {}", folder_path, current_account_id);
+        
+        // Load messages from the selected folder
+        match self.ui.load_messages(current_account_id.clone(), folder_path.to_string()).await {
+            Ok(()) => {
+                tracing::info!("Successfully loaded messages from folder: {}", folder_path);
+            }
+            Err(e) => {
+                tracing::error!("Failed to load messages from folder {}: {}", folder_path, e);
+                // Try to fetch fresh messages from IMAP if database load fails
+                if let Err(fetch_error) = self.fetch_messages_from_imap(&current_account_id, folder_path).await {
+                    tracing::error!("Failed to fetch messages from IMAP for folder {}: {}", folder_path, fetch_error);
+                } else {
+                    // Retry loading from database after fetch
+                    if let Err(retry_error) = self.ui.load_messages(current_account_id.clone(), folder_path.to_string()).await {
+                        tracing::error!("Failed to load messages even after IMAP fetch for folder {}: {}", folder_path, retry_error);
+                    }
+                }
+            }
+        }
+        
+        Ok(())
+    }
+    
+    /// Handle folder operation events
+    async fn handle_folder_operation(&mut self, operation: crate::ui::folder_tree::FolderOperation) -> Result<()> {
+        use crate::ui::folder_tree::FolderOperation;
+        
+        // Get current account and selected folder
+        let current_account_id = match self.ui.get_current_account_id() {
+            Some(id) => id.clone(),
+            None => {
+                tracing::warn!("No current account selected for folder operation");
+                return Ok(());
+            }
+        };
+        
+        let selected_folder = self.ui.folder_tree().selected_folder().map(|f| f.clone());
+        
+        match operation {
+            FolderOperation::Refresh => {
+                self.handle_folder_refresh(&current_account_id).await?;
+            }
+            FolderOperation::MarkAllRead => {
+                self.handle_mark_all_read(&current_account_id).await?;
+            }
+            FolderOperation::Properties => {
+                self.handle_folder_properties(&current_account_id).await?;
+            }
+            FolderOperation::Create => {
+                self.handle_create_folder(&current_account_id, None).await?;
+            }
+            FolderOperation::CreateSubfolder => {
+                if let Some(folder) = selected_folder {
+                    self.handle_create_folder(&current_account_id, Some(&folder.path)).await?;
+                }
+            }
+            FolderOperation::Delete => {
+                if let Some(folder) = selected_folder {
+                    self.handle_delete_folder(&current_account_id, &folder.path).await?;
+                }
+            }
+            FolderOperation::Rename => {
+                if let Some(folder) = selected_folder {
+                    self.handle_rename_folder(&current_account_id, &folder.path).await?;
+                }
+            }
+            FolderOperation::EmptyFolder => {
+                if let Some(folder) = selected_folder {
+                    self.handle_empty_folder(&current_account_id, &folder.path).await?;
+                }
+            }
+            FolderOperation::Subscribe => {
+                if let Some(folder) = selected_folder {
+                    self.handle_folder_subscription(&current_account_id, &folder.path, true).await?;
+                }
+            }
+            FolderOperation::Unsubscribe => {
+                if let Some(folder) = selected_folder {
+                    self.handle_folder_subscription(&current_account_id, &folder.path, false).await?;
+                }
+            }
+            FolderOperation::Move => {
+                // TODO: Implement move folder functionality
+                tracing::info!("Move folder operation not yet implemented");
+            }
+        }
+        
+        Ok(())
+    }
+    
+    /// Handle folder refresh
+    async fn handle_folder_refresh(&mut self, account_id: &str) -> Result<()> {
+        tracing::info!("Refreshing folder for account: {}", account_id);
+        
+        // Sync folders first
+        self.sync_folders_from_imap(account_id).await?;
+        
+        // Reload folders in UI
+        if let Err(e) = self.ui.load_folders(account_id).await {
+            tracing::error!("Failed to reload folders: {}", e);
+        }
+        
+        // If a folder is currently selected, refresh its messages
+        if let Some(selected_folder) = self.ui.folder_tree().selected_folder() {
+            let folder_path = selected_folder.path.clone();
+            self.fetch_messages_from_imap(account_id, &folder_path).await?;
+            if let Err(e) = self.ui.load_messages(account_id.to_string(), folder_path).await {
+                tracing::error!("Failed to reload messages: {}", e);
+            }
+        }
+        
+        tracing::info!("Folder refresh completed for account: {}", account_id);
+        Ok(())
+    }
+    
+    /// Handle mark all messages as read in current folder
+    async fn handle_mark_all_read(&mut self, account_id: &str) -> Result<()> {
+        if let Some(selected_folder) = self.ui.folder_tree().selected_folder() {
+            let folder_path = selected_folder.path.clone();
+            tracing::info!("Marking all messages as read in folder: {} for account: {}", folder_path, account_id);
+            
+            // TODO: Implement IMAP STORE command to mark messages as read
+            // For now, just update the database
+            if let Some(ref database) = self.database {
+                let result = sqlx::query("UPDATE messages SET is_read = 1, flags = flags || ',\\Seen' WHERE account_id = ? AND folder_name = ? AND is_read = 0")
+                    .bind(account_id)
+                    .bind(&folder_path)
+                    .execute(&database.pool)
+                    .await?;
+                
+                tracing::info!("Marked {} messages as read in folder: {}", result.rows_affected(), folder_path);
+                
+                // Reload messages to update UI
+                if let Err(e) = self.ui.load_messages(account_id.to_string(), folder_path).await {
+                    tracing::error!("Failed to reload messages after marking as read: {}", e);
+                }
+            }
+        }
+        
+        Ok(())
+    }
+    
+    /// Handle folder properties display
+    async fn handle_folder_properties(&mut self, account_id: &str) -> Result<()> {
+        if let Some(selected_folder) = self.ui.folder_tree().selected_folder() {
+            let folder_path = selected_folder.path.clone();
+            tracing::info!("Showing properties for folder: {} in account: {}", folder_path, account_id);
+            
+            // TODO: Implement folder properties dialog
+            // For now, just log the information
+            if let Some(ref database) = self.database {
+                let stats = sqlx::query_as::<_, (i64, i64, Option<i64>)>(
+                    "SELECT COUNT(*), COUNT(CASE WHEN is_read = 0 THEN 1 END), SUM(size) FROM messages WHERE account_id = ? AND folder_name = ?"
+                )
+                .bind(account_id)
+                .bind(&folder_path)
+                .fetch_one(&database.pool)
+                .await?;
+                
+                tracing::info!("Folder {} statistics: {} total messages, {} unread, {} bytes", 
+                             folder_path, stats.0, stats.1, stats.2.unwrap_or(0));
+            }
+        }
+        
+        Ok(())
+    }
+    
+    /// Handle create new folder
+    async fn handle_create_folder(&mut self, account_id: &str, parent_path: Option<&str>) -> Result<()> {
+        tracing::info!("Creating new folder in account: {}, parent: {:?}", account_id, parent_path);
+        
+        // TODO: Implement folder creation dialog
+        // For now, create a default folder name
+        let folder_name = if parent_path.is_some() {
+            "New Subfolder"
+        } else {
+            "New Folder"
+        };
+        
+        // TODO: Implement IMAP CREATE command
+        tracing::info!("Would create folder: {} in account: {}", folder_name, account_id);
+        
+        Ok(())
+    }
+    
+    /// Handle delete folder
+    async fn handle_delete_folder(&mut self, account_id: &str, folder_path: &str) -> Result<()> {
+        tracing::info!("Deleting folder: {} from account: {}", folder_path, account_id);
+        
+        // TODO: Implement confirmation dialog
+        // TODO: Implement IMAP DELETE command
+        tracing::info!("Would delete folder: {} from account: {}", folder_path, account_id);
+        
+        Ok(())
+    }
+    
+    /// Handle rename folder
+    async fn handle_rename_folder(&mut self, account_id: &str, folder_path: &str) -> Result<()> {
+        tracing::info!("Renaming folder: {} in account: {}", folder_path, account_id);
+        
+        // TODO: Implement rename dialog
+        // TODO: Implement IMAP RENAME command
+        tracing::info!("Would rename folder: {} in account: {}", folder_path, account_id);
+        
+        Ok(())
+    }
+    
+    /// Handle empty folder (delete all messages)
+    async fn handle_empty_folder(&mut self, account_id: &str, folder_path: &str) -> Result<()> {
+        tracing::info!("Emptying folder: {} in account: {}", folder_path, account_id);
+        
+        // TODO: Implement confirmation dialog
+        // TODO: Implement IMAP STORE/EXPUNGE commands to delete all messages
+        tracing::info!("Would empty folder: {} in account: {}", folder_path, account_id);
+        
+        Ok(())
+    }
+    
+    /// Handle folder subscription management
+    async fn handle_folder_subscription(&mut self, account_id: &str, folder_path: &str, subscribe: bool) -> Result<()> {
+        let action = if subscribe { "Subscribing to" } else { "Unsubscribing from" };
+        tracing::info!("{} folder: {} in account: {}", action, folder_path, account_id);
+        
+        // TODO: Implement IMAP SUBSCRIBE/UNSUBSCRIBE commands
+        // For now, just update local state
+        self.ui.folder_tree_mut().mark_folder_synced(folder_path, 0, 0);
         
         Ok(())
     }

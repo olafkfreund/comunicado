@@ -15,6 +15,8 @@ pub enum EventResult {
     RemoveAccount(String), // Account ID to remove
     RefreshAccount(String), // Account ID to refresh connection
     SyncAccount(String), // Account ID to manually sync
+    FolderSelect(String), // Folder path to load messages from
+    FolderOperation(crate::ui::folder_tree::FolderOperation), // Folder operation to execute
 }
 
 impl EventHandler {
@@ -45,6 +47,16 @@ impl EventHandler {
             }
             KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 self.should_quit = true;
+            }
+            
+            // Handle search input mode for folder tree
+            KeyCode::Char(c) if ui.focused_pane() == FocusedPane::FolderTree && ui.folder_tree().is_in_search_mode() => {
+                ui.folder_tree_mut().handle_search_input(c);
+                return EventResult::Continue;
+            }
+            KeyCode::Backspace if ui.focused_pane() == FocusedPane::FolderTree && ui.folder_tree().is_in_search_mode() => {
+                ui.folder_tree_mut().handle_search_backspace();
+                return EventResult::Continue;
             }
             
             // Go back to start page
@@ -150,6 +162,59 @@ impl EventHandler {
                 }
             }
             
+            // Escape key handling
+            KeyCode::Esc => {
+                match ui.focused_pane() {
+                    FocusedPane::FolderTree => {
+                        // Check if in search mode first
+                        if ui.folder_tree().is_in_search_mode() {
+                            ui.folder_tree_mut().exit_search_mode(false); // Cancel search
+                        } else {
+                            ui.folder_tree_mut().handle_escape();
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            
+            // Function keys for folder operations
+            KeyCode::F(5) => {
+                // F5 - Refresh
+                match ui.focused_pane() {
+                    FocusedPane::FolderTree => {
+                        if let Some(operation) = ui.folder_tree_mut().handle_function_key(key.code) {
+                            return EventResult::FolderOperation(operation);
+                        }
+                    }
+                    _ => {
+                        // Global F5 refresh
+                        // TODO: Add global refresh functionality
+                    }
+                }
+            }
+            KeyCode::F(2) => {
+                // F2 - Rename
+                match ui.focused_pane() {
+                    FocusedPane::FolderTree => {
+                        if let Some(operation) = ui.folder_tree_mut().handle_function_key(key.code) {
+                            return EventResult::FolderOperation(operation);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            KeyCode::Delete => {
+                // Delete key
+                match ui.focused_pane() {
+                    FocusedPane::FolderTree => {
+                        if let Some(operation) = ui.folder_tree_mut().handle_function_key(key.code) {
+                            return EventResult::FolderOperation(operation);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            
             // Enter key for selection
             KeyCode::Enter => {
                 match ui.focused_pane() {
@@ -161,7 +226,14 @@ impl EventHandler {
                         }
                     }
                     FocusedPane::FolderTree => {
-                        ui.folder_tree_mut().handle_enter();
+                        // Check if in search mode first
+                        if ui.folder_tree().is_in_search_mode() {
+                            ui.folder_tree_mut().exit_search_mode(true); // Apply search
+                        } else {
+                            if let Some(folder_path) = ui.folder_tree_mut().handle_enter() {
+                                return EventResult::FolderSelect(folder_path);
+                            }
+                        }
                     }
                     FocusedPane::MessageList => {
                         ui.message_list_mut().handle_enter();
@@ -250,10 +322,11 @@ impl EventHandler {
             
             // Folder management shortcuts (when folder tree is focused)
             KeyCode::Char('f') => {
-                // Toggle folder search/filter
+                // Enter folder search mode
                 if let FocusedPane::FolderTree = ui.focused_pane() {
-                    // For now, just clear search - in production this would open search input
-                    ui.folder_tree_mut().clear_search();
+                    if !ui.folder_tree().is_in_search_mode() {
+                        ui.folder_tree_mut().enter_search_mode();
+                    }
                 }
             }
             KeyCode::Char('n') => {
@@ -288,11 +361,11 @@ impl EventHandler {
                 }
             }
             KeyCode::Char('/') => {
-                // Start folder search
+                // Start folder search (alternative key)
                 if let FocusedPane::FolderTree = ui.focused_pane() {
-                    // In production, this would open search input
-                    // For demo, toggle showing unsubscribed folders
-                    ui.folder_tree_mut().toggle_show_unsubscribed();
+                    if !ui.folder_tree().is_in_search_mode() {
+                        ui.folder_tree_mut().enter_search_mode();
+                    }
                 }
             }
             
@@ -368,15 +441,6 @@ impl EventHandler {
                 }
             }
             
-            // Manual IMAP sync shortcut
-            KeyCode::F(5) => {
-                // F5 to manually trigger IMAP sync for current account
-                if let Some(account_id) = ui.account_switcher().get_current_account_id() {
-                    tracing::info!("Manual IMAP sync requested: {}", account_id);
-                    return EventResult::SyncAccount(account_id.clone());
-                }
-            }
-            
             _ => {}
         }
         
@@ -443,9 +507,49 @@ impl EventHandler {
                 // TODO: Mark task as complete
             }
             
-            // Refresh data
-            KeyCode::F(5) | KeyCode::Char('r') => {
+            // Refresh data (when not in folder tree - handled above)
+            KeyCode::Char('r') if ui.focused_pane() != FocusedPane::FolderTree => {
                 // TODO: Add refresh functionality to app events
+            }
+            
+            // Folder-specific character keys (only when folder tree is focused)
+            KeyCode::Char('m') if ui.focused_pane() == FocusedPane::FolderTree => {
+                if let Some(operation) = ui.folder_tree_mut().handle_char_key('m') {
+                    return EventResult::FolderOperation(operation);
+                }
+            }
+            KeyCode::Char('n') if ui.focused_pane() == FocusedPane::FolderTree => {
+                if let Some(operation) = ui.folder_tree_mut().handle_char_key('n') {
+                    return EventResult::FolderOperation(operation);
+                }
+            }
+            KeyCode::Char('N') if ui.focused_pane() == FocusedPane::FolderTree => {
+                if let Some(operation) = ui.folder_tree_mut().handle_char_key('N') {
+                    return EventResult::FolderOperation(operation);
+                }
+            }
+            KeyCode::Char('d') if ui.focused_pane() == FocusedPane::FolderTree => {
+                if let Some(operation) = ui.folder_tree_mut().handle_char_key('d') {
+                    return EventResult::FolderOperation(operation);
+                }
+            }
+            KeyCode::Char('R') if ui.focused_pane() == FocusedPane::FolderTree => {
+                if let Some(operation) = ui.folder_tree_mut().handle_char_key('R') {
+                    return EventResult::FolderOperation(operation);
+                }
+            }
+            KeyCode::Char('E') if ui.focused_pane() == FocusedPane::FolderTree => {
+                if let Some(operation) = ui.folder_tree_mut().handle_char_key('E') {
+                    return EventResult::FolderOperation(operation);
+                }
+            }
+            KeyCode::Char('p') if ui.focused_pane() == FocusedPane::FolderTree => {
+                if let Some(operation) = ui.folder_tree_mut().handle_char_key('p') {
+                    return EventResult::FolderOperation(operation);
+                }
+            }
+            KeyCode::Char('?') if ui.focused_pane() == FocusedPane::FolderTree => {
+                ui.folder_tree_mut().handle_char_key('?'); // Show context menu
             }
             
             _ => {}

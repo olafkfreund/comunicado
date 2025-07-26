@@ -189,6 +189,11 @@ pub enum FolderOperation {
     Move,
     Subscribe,
     Unsubscribe,
+    Refresh,
+    MarkAllRead,
+    EmptyFolder,
+    Properties,
+    CreateSubfolder,
 }
 
 pub struct FolderTree {
@@ -199,6 +204,11 @@ pub struct FolderTree {
     show_unsubscribed: bool,
     selected_for_operation: Option<(usize, FolderOperation)>,
     database: Option<Arc<EmailDatabase>>,
+    context_menu_visible: bool,
+    context_menu_selected: usize,
+    context_menu_items: Vec<(FolderOperation, String, bool)>, // (operation, label, enabled)
+    search_input_mode: bool,
+    search_input_buffer: String,
 }
 
 impl FolderTree {
@@ -211,6 +221,11 @@ impl FolderTree {
             show_unsubscribed: false,
             selected_for_operation: None,
             database: None,
+            context_menu_visible: false,
+            context_menu_selected: 0,
+            context_menu_items: Vec::new(),
+            search_input_mode: false,
+            search_input_buffer: String::new(),
         };
         
         // Initialize with sample folder structure
@@ -397,9 +412,125 @@ impl FolderTree {
             .highlight_style(Style::default().add_modifier(Modifier::BOLD));
 
         frame.render_stateful_widget(list, area, &mut self.state.clone());
+        
+        // Render search input if in search mode
+        if self.search_input_mode {
+            self.render_search_input(frame, area, theme);
+        }
+        
+        // Render context menu if visible
+        if self.context_menu_visible {
+            self.render_context_menu(frame, area, theme);
+        }
+    }
+    
+    /// Render the context menu overlay
+    fn render_context_menu(&self, frame: &mut Frame, area: Rect, theme: &Theme) {
+        if self.context_menu_items.is_empty() {
+            return;
+        }
+        
+        // Calculate context menu size
+        let menu_width = self.context_menu_items.iter()
+            .map(|(_, label, _)| label.len())
+            .max()
+            .unwrap_or(20)
+            .min(40) as u16 + 4; // Add padding
+        let menu_height = self.context_menu_items.len() as u16 + 2; // Add borders
+        
+        // Position context menu near the selected folder
+        let selected_row = self.state.selected().unwrap_or(0) as u16;
+        let menu_x = area.x + area.width.saturating_sub(menu_width).min(area.width - 2);
+        let menu_y = (area.y + selected_row + 2).min(area.height.saturating_sub(menu_height));
+        
+        let menu_area = Rect {
+            x: menu_x,
+            y: menu_y,
+            width: menu_width,
+            height: menu_height,
+        };
+        
+        // Create menu items
+        let menu_items: Vec<ListItem> = self.context_menu_items
+            .iter()
+            .enumerate()
+            .map(|(i, (_, label, enabled))| {
+                let style = if i == self.context_menu_selected {
+                    if *enabled {
+                        Style::default()
+                            .bg(theme.colors.palette.text_primary)
+                            .fg(theme.colors.palette.background)
+                            .add_modifier(Modifier::BOLD)
+                    } else {
+                        Style::default()
+                            .bg(theme.colors.palette.text_muted)
+                            .fg(theme.colors.palette.background)
+                    }
+                } else if *enabled {
+                    Style::default().fg(theme.colors.palette.text_primary)
+                } else {
+                    Style::default().fg(theme.colors.palette.text_muted)
+                };
+                
+                ListItem::new(Line::from(Span::styled(format!(" {} ", label), style)))
+            })
+            .collect();
+        
+        // Create the menu list with border
+        let menu_list = List::new(menu_items)
+            .block(Block::default()
+                .borders(ratatui::widgets::Borders::ALL)
+                .title("Menu")
+                .border_style(Style::default().fg(theme.colors.palette.text_primary))
+                .style(Style::default().bg(theme.colors.palette.background)));
+        
+        // Render the context menu
+        frame.render_widget(ratatui::widgets::Clear, menu_area); // Clear background
+        frame.render_widget(menu_list, menu_area);
+    }
+    
+    /// Render the search input overlay
+    fn render_search_input(&self, frame: &mut Frame, area: Rect, theme: &Theme) {
+        // Position search input at the top of the folder tree area
+        let input_height = 3;
+        let input_area = Rect {
+            x: area.x + 1,
+            y: area.y + 1, 
+            width: area.width.saturating_sub(2),
+            height: input_height,
+        };
+        
+        // Create search input display
+        let search_text = format!("Search: {}", self.search_input_buffer);
+        let cursor_position = search_text.len();
+        
+        // Create the input content with cursor indicator
+        let input_content = if cursor_position < search_text.len() {
+            format!("{}|{}", &search_text[..cursor_position], &search_text[cursor_position..])
+        } else {
+            format!("{}|", search_text)
+        };
+        
+        let input_widget = ratatui::widgets::Paragraph::new(input_content)
+            .block(Block::default()
+                .borders(ratatui::widgets::Borders::ALL)
+                .title("Search Folders")
+                .border_style(Style::default().fg(theme.colors.palette.accent))
+                .style(Style::default().bg(theme.colors.palette.background)))
+            .style(Style::default().fg(theme.colors.palette.text_primary));
+        
+        // Clear the area and render the search input
+        frame.render_widget(ratatui::widgets::Clear, input_area);
+        frame.render_widget(input_widget, input_area);
     }
 
     pub fn handle_up(&mut self) {
+        // If context menu is visible, navigate in context menu
+        if self.context_menu_visible {
+            self.context_menu_up();
+            return;
+        }
+        
         let selected = match self.state.selected() {
             Some(i) => {
                 if i > 0 {
@@ -414,6 +545,12 @@ impl FolderTree {
     }
 
     pub fn handle_down(&mut self) {
+        // If context menu is visible, navigate in context menu
+        if self.context_menu_visible {
+            self.context_menu_down();
+            return;
+        }
+        
         let selected = match self.state.selected() {
             Some(i) => {
                 if i < self.filtered_folders.len().saturating_sub(1) {
@@ -453,17 +590,73 @@ impl FolderTree {
         }
     }
 
-    pub fn handle_enter(&mut self) {
+    pub fn handle_enter(&mut self) -> Option<String> {
+        // If context menu is visible, execute the selected action
+        if self.context_menu_visible {
+            return self.execute_context_menu_action().map(|_| String::new()); // Return empty string to indicate handled
+        }
+        
         if let Some(selected) = self.state.selected() {
             if let Some(&folder_i) = self.filtered_folders.get(selected) {
                 if let Some(folder) = self.folders.get_mut(folder_i) {
                     if folder.has_children {
                         folder.is_expanded = !folder.is_expanded;
                         self.rebuild_filtered_list(); // Refresh display
+                        None // Don't trigger message loading for parent folders
+                    } else {
+                        // This is a leaf folder, trigger message loading
+                        Some(folder.path.clone())
                     }
-                    // In the future, this will also trigger loading emails from the selected folder
+                } else {
+                    None
                 }
+            } else {
+                None
             }
+        } else {
+            None
+        }
+    }
+    
+    /// Handle function keys and special operations
+    pub fn handle_function_key(&mut self, key: crossterm::event::KeyCode) -> Option<FolderOperation> {
+        match key {
+            crossterm::event::KeyCode::F(5) => Some(FolderOperation::Refresh),
+            crossterm::event::KeyCode::F(2) => Some(FolderOperation::Rename),
+            crossterm::event::KeyCode::Delete => Some(FolderOperation::Delete),
+            _ => None,
+        }
+    }
+    
+    /// Handle character keys for folder operations
+    pub fn handle_char_key(&mut self, c: char) -> Option<FolderOperation> {
+        match c {
+            'r' => Some(FolderOperation::Refresh),
+            'm' => Some(FolderOperation::MarkAllRead),
+            'n' => Some(FolderOperation::Create),
+            'N' => Some(FolderOperation::CreateSubfolder),
+            'd' => Some(FolderOperation::Delete),
+            'R' => Some(FolderOperation::Rename),
+            'E' => Some(FolderOperation::EmptyFolder),
+            'p' => Some(FolderOperation::Properties),
+            's' => Some(FolderOperation::Subscribe),
+            'u' => Some(FolderOperation::Unsubscribe),
+            '?' => {
+                // Show context menu
+                self.show_context_menu();
+                None
+            }
+            _ => None,
+        }
+    }
+    
+    /// Handle escape key (closes context menu)
+    pub fn handle_escape(&mut self) -> bool {
+        if self.context_menu_visible {
+            self.hide_context_menu();
+            true // Handled
+        } else {
+            false // Not handled
         }
     }
 
@@ -486,7 +679,68 @@ impl FolderTree {
     
     pub fn clear_search(&mut self) {
         self.search_query.clear();
+        self.search_input_buffer.clear();
         self.rebuild_filtered_list();
+    }
+    
+    /// Enter search input mode
+    pub fn enter_search_mode(&mut self) {
+        self.search_input_mode = true;
+        self.search_input_buffer = self.search_query.clone();
+    }
+    
+    /// Exit search input mode and apply the search
+    pub fn exit_search_mode(&mut self, apply_search: bool) {
+        self.search_input_mode = false;
+        if apply_search {
+            self.search_query = self.search_input_buffer.clone();
+            self.rebuild_filtered_list();
+            // Reset selection to first item if current selection is out of bounds
+            if self.state.selected().unwrap_or(0) >= self.filtered_folders.len() {
+                self.state.select(if self.filtered_folders.is_empty() { None } else { Some(0) });
+            }
+        } else {
+            // Restore previous search buffer
+            self.search_input_buffer = self.search_query.clone();
+        }
+    }
+    
+    /// Handle character input in search mode
+    pub fn handle_search_input(&mut self, c: char) {
+        if self.search_input_mode {
+            self.search_input_buffer.push(c);
+            // Live search: apply search immediately for better UX
+            self.search_query = self.search_input_buffer.clone();
+            self.rebuild_filtered_list();
+            // Reset selection to first result
+            if !self.filtered_folders.is_empty() {
+                self.state.select(Some(0));
+            }
+        }
+    }
+    
+    /// Handle backspace in search mode
+    pub fn handle_search_backspace(&mut self) {
+        if self.search_input_mode {
+            self.search_input_buffer.pop();
+            // Live search: apply search immediately
+            self.search_query = self.search_input_buffer.clone();
+            self.rebuild_filtered_list();
+            // Reset selection to first result
+            if !self.filtered_folders.is_empty() {
+                self.state.select(Some(0));
+            }
+        }
+    }
+    
+    /// Check if currently in search input mode
+    pub fn is_in_search_mode(&self) -> bool {
+        self.search_input_mode
+    }
+    
+    /// Get the current search input buffer
+    pub fn get_search_input(&self) -> &str {
+        &self.search_input_buffer
     }
     
     pub fn toggle_show_unsubscribed(&mut self) {
@@ -637,6 +891,101 @@ impl FolderTree {
         (total_folders, subscribed_folders, unread_folders)
     }
     
+    // Context menu functionality
+    
+    /// Show context menu for the currently selected folder
+    pub fn show_context_menu(&mut self) {
+        if let Some(selected_folder) = self.selected_folder() {
+            self.context_menu_items = self.build_context_menu_items(selected_folder);
+            self.context_menu_visible = true;
+            self.context_menu_selected = 0;
+        }
+    }
+    
+    /// Hide the context menu
+    pub fn hide_context_menu(&mut self) {
+        self.context_menu_visible = false;
+        self.context_menu_selected = 0;
+        self.context_menu_items.clear();
+    }
+    
+    /// Check if context menu is visible
+    pub fn is_context_menu_visible(&self) -> bool {
+        self.context_menu_visible
+    }
+    
+    /// Navigate up in context menu
+    pub fn context_menu_up(&mut self) {
+        if self.context_menu_visible && !self.context_menu_items.is_empty() {
+            if self.context_menu_selected > 0 {
+                self.context_menu_selected -= 1;
+            } else {
+                self.context_menu_selected = self.context_menu_items.len() - 1;
+            }
+        }
+    }
+    
+    /// Navigate down in context menu
+    pub fn context_menu_down(&mut self) {
+        if self.context_menu_visible && !self.context_menu_items.is_empty() {
+            if self.context_menu_selected < self.context_menu_items.len() - 1 {
+                self.context_menu_selected += 1;
+            } else {
+                self.context_menu_selected = 0;
+            }
+        }
+    }
+    
+    /// Execute selected context menu action
+    pub fn execute_context_menu_action(&mut self) -> Option<FolderOperation> {
+        if self.context_menu_visible && self.context_menu_selected < self.context_menu_items.len() {
+            let (operation, _, enabled) = &self.context_menu_items[self.context_menu_selected];
+            if *enabled {
+                let op = operation.clone();
+                self.hide_context_menu();
+                return Some(op);
+            }
+        }
+        None
+    }
+    
+    /// Build context menu items based on folder type and capabilities
+    fn build_context_menu_items(&self, folder: &FolderItem) -> Vec<(FolderOperation, String, bool)> {
+        let mut items = Vec::new();
+        
+        // Always available actions
+        items.push((FolderOperation::Refresh, "🔄 Refresh".to_string(), true));
+        items.push((FolderOperation::MarkAllRead, "✓ Mark All Read".to_string(), folder.unread_count > 0));
+        items.push((FolderOperation::Properties, "ℹ Properties".to_string(), true));
+        
+        // Separator (we'll handle this in rendering)
+        
+        // Folder management actions
+        items.push((FolderOperation::CreateSubfolder, "📁+ Create Subfolder".to_string(), folder.can_create_children));
+        
+        if folder.is_renamable() {
+            items.push((FolderOperation::Rename, "✏ Rename".to_string(), true));
+        }
+        
+        if folder.is_deletable() {
+            items.push((FolderOperation::Delete, "🗑 Delete".to_string(), !folder.has_children));
+        }
+        
+        // Advanced actions
+        if !matches!(folder.folder_type, FolderType::Inbox | FolderType::Sent | FolderType::Drafts) {
+            items.push((FolderOperation::EmptyFolder, "🗑 Empty Folder".to_string(), folder.total_count > 0));
+        }
+        
+        // Subscription management
+        if folder.is_subscribed {
+            items.push((FolderOperation::Unsubscribe, "👁‍🗨 Unsubscribe".to_string(), true));
+        } else {
+            items.push((FolderOperation::Subscribe, "👁 Subscribe".to_string(), true));
+        }
+        
+        items
+    }
+    
     /// Set the database for loading folders
     pub fn set_database(&mut self, database: Arc<EmailDatabase>) {
         self.database = Some(database);
@@ -653,10 +1002,17 @@ impl FolderTree {
             for stored_folder in stored_folders {
                 let folder_type = FolderItem::detect_folder_type(&stored_folder.name, &stored_folder.full_name);
                 
+                // Calculate depth based on path separators
+                let depth = if stored_folder.full_name.contains('/') {
+                    stored_folder.full_name.matches('/').count()
+                } else {
+                    0
+                };
+                
                 let mut folder_item = FolderItem::new_with_type(
                     stored_folder.name.clone(),
                     stored_folder.full_name.clone(),
-                    0, // Depth will be calculated later if needed
+                    depth,
                     folder_type,
                 );
                 
@@ -664,6 +1020,31 @@ impl FolderTree {
                 folder_item.sync_status = SyncStatus::Synced;
                 
                 folder_items.push(folder_item);
+            }
+            
+            // Build folder hierarchy (find children for each folder)
+            for i in 0..folder_items.len() {
+                let folder_path = folder_items[i].path.clone();
+                let mut children = Vec::new();
+                
+                for j in 0..folder_items.len() {
+                    if i != j {
+                        let potential_child = &folder_items[j].path;
+                        // Check if this folder is a direct child
+                        if potential_child.starts_with(&folder_path) && potential_child != &folder_path {
+                            let remaining = &potential_child[folder_path.len()..];
+                            // If it starts with '/' and has no other '/', it's a direct child
+                            if remaining.starts_with('/') && !remaining[1..].contains('/') {
+                                children.push(potential_child.clone());
+                            }
+                        }
+                    }
+                }
+                
+                if !children.is_empty() {
+                    folder_items[i].has_children = true;
+                    folder_items[i].children = children;
+                }
             }
             
             // Sort folders: INBOX first, then alphabetically
