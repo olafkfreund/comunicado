@@ -40,12 +40,16 @@ impl SpellChecker {
         let config = SpellCheckConfig::default();
         let dictionary_manager = DictionaryManager::new()?;
         
+        // Combine custom words and technical terms from config
+        let mut all_custom_words = config.custom_words.clone();
+        all_custom_words.extend(config.technical_terms.clone());
+        
         Ok(Self {
             dictionaries: HashMap::new(),
             dictionary_manager,
             config,
             current_language: "en_US".to_string(),
-            custom_words: Vec::new(),
+            custom_words: all_custom_words,
         })
     }
 
@@ -54,12 +58,16 @@ impl SpellChecker {
         let dictionary_manager = DictionaryManager::new()?;
         let current_language = config.default_language.clone();
         
+        // Combine custom words and technical terms from config
+        let mut all_custom_words = config.custom_words.clone();
+        all_custom_words.extend(config.technical_terms.clone());
+        
         Ok(Self {
             dictionaries: HashMap::new(),
             dictionary_manager,
             config,
             current_language,
-            custom_words: Vec::new(),
+            custom_words: all_custom_words,
         })
     }
 
@@ -121,8 +129,52 @@ impl SpellChecker {
     /// Add a single custom word
     pub fn add_custom_word(&mut self, word: String) {
         if !self.custom_words.contains(&word) {
-            self.custom_words.push(word);
+            self.custom_words.push(word.clone());
+            // Also add to config for persistence
+            if !self.config.custom_words.contains(&word) {
+                self.config.custom_words.push(word);
+            }
         }
+    }
+    
+    /// Remove a custom word
+    pub fn remove_custom_word(&mut self, word: &str) {
+        self.custom_words.retain(|w| w != word);
+        self.config.custom_words.retain(|w| w != word);
+    }
+    
+    /// Get all custom words
+    pub fn get_custom_words(&self) -> &Vec<String> {
+        &self.custom_words
+    }
+    
+    /// Add word to personal dictionary (triggered when user clicks "Add to Dictionary")
+    pub async fn add_to_personal_dictionary(&mut self, word: String) -> Result<()> {
+        self.add_custom_word(word);
+        // Save configuration to persist the change
+        self.save_config().await?;
+        Ok(())
+    }
+    
+    /// Import technical terms from a file
+    pub async fn import_technical_terms(&mut self, file_path: &str) -> Result<()> {
+        let content = tokio::fs::read_to_string(file_path).await?;
+        let words: Vec<String> = content
+            .lines()
+            .map(|line| line.trim().to_string())
+            .filter(|line| !line.is_empty() && !line.starts_with('#'))
+            .collect();
+        
+        for word in words {
+            if !self.config.technical_terms.contains(&word) {
+                self.config.technical_terms.push(word.clone());
+                self.custom_words.push(word);
+            }
+        }
+        
+        // Save configuration
+        self.save_config().await?;
+        Ok(())
     }
 
     /// Check if a word is spelled correctly

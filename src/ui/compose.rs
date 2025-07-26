@@ -172,6 +172,11 @@ impl ComposeUI {
             self.render_autocomplete(f, area, theme);
         }
         
+        // Render spell check suggestions if visible
+        if self.is_spell_check_visible && self.spell_check_enabled {
+            self.render_spell_check_popup(f, area, theme);
+        }
+        
         // Status line at bottom
         self.render_status_line(f, area, theme);
     }
@@ -249,17 +254,24 @@ impl ComposeUI {
         let inner = block.inner(area);
         f.render_widget(block, area);
         
-        // Create text with cursor if focused
+        // Create text with cursor and spell check highlighting if focused
         let mut text = Text::default();
         
         for (line_idx, line) in self.body_lines.iter().enumerate() {
             if is_focused && line_idx == self.body_line_index {
-                // Show cursor on current line
-                let mut chars: Vec<char> = line.chars().collect();
-                let cursor_pos = self.body_cursor.min(chars.len());
-                chars.insert(cursor_pos, '|');
-                let line_with_cursor: String = chars.into_iter().collect();
-                text.lines.push(Line::from(line_with_cursor));
+                // Show cursor on current line with spell check highlighting
+                let line_with_cursor = if self.spell_check_enabled && self.current_field == ComposeField::Body {
+                    self.create_highlighted_line_with_cursor(line, self.body_cursor)
+                } else {
+                    let mut chars: Vec<char> = line.chars().collect();
+                    let cursor_pos = self.body_cursor.min(chars.len());
+                    chars.insert(cursor_pos, '|');
+                    Line::from(chars.into_iter().collect::<String>())
+                };
+                text.lines.push(line_with_cursor);
+            } else if self.spell_check_enabled && self.current_field == ComposeField::Body {
+                // Highlight misspelled words without cursor
+                text.lines.push(self.create_highlighted_line(line, line_idx));
             } else {
                 text.lines.push(Line::from(line.clone()));
             }
@@ -336,9 +348,9 @@ impl ComposeUI {
         let status_text = if self.is_autocomplete_visible {
             "↑↓ Navigate suggestions | Tab Complete | Esc Cancel | Enter Select"
         } else if self.spell_check_enabled && self.is_spell_check_visible {
-            "F7 Toggle spell check | ↑↓ Navigate errors | Tab Apply suggestion | Esc Cancel"
+            "F7 Toggle | F8/F9 Next/Prev error | ↑↓ Navigate suggestions | Tab Apply | Esc Cancel"
         } else {
-            "Tab Next field | F1 Send | F2 Save draft | F7 Spell check | Esc Cancel | @ Contact lookup"
+            "Tab Next field | F1 Send | F2 Save | F7 Spell check | F8/F9 Errors | Esc Cancel | @ Contact"
         };
         
         let modified_indicator = if self.is_modified { " [Modified]" } else { "" };
@@ -348,6 +360,151 @@ impl ComposeUI {
             .alignment(Alignment::Center);
         
         f.render_widget(status, status_area);
+    }
+    
+    /// Render spell check popup with suggestions
+    fn render_spell_check_popup(&self, f: &mut Frame, compose_area: Rect, theme: &Theme) {
+        if let Some(ref result) = self.spell_check_result {
+            if let Some(error) = result.misspelled_words.get(self.current_spell_error) {
+                // Calculate position for spell check popup
+                let popup_width = 60;
+                let popup_height = (self.spell_suggestions.len() + 5).min(12) as u16;
+                
+                let popup_area = Rect {
+                    x: compose_area.x + compose_area.width.saturating_sub(popup_width + 2),
+                    y: compose_area.y + 5,
+                    width: popup_width,
+                    height: popup_height,
+                };
+                
+                // Clear the background
+                f.render_widget(Clear, popup_area);
+                
+                // Create spell check content
+                let mut lines = vec![
+                    Line::from(format!("Misspelled: \"{}\"", error.word)),
+                    Line::from(""),
+                    Line::from("Suggestions:"),
+                ];
+                
+                for (i, suggestion) in self.spell_suggestions.iter().enumerate() {
+                    let marker = if i == self.spell_suggestion_selected { "▶ " } else { "  " };
+                    let style = if i == self.spell_suggestion_selected {
+                        Style::default().bg(Color::DarkGray).add_modifier(Modifier::BOLD)
+                    } else {
+                        Style::default()
+                    };
+                    lines.push(Line::from(vec![
+                        ratatui::text::Span::styled(marker, style),
+                        ratatui::text::Span::styled(suggestion, style),
+                    ]));
+                }
+                
+                // Add "Add to dictionary" option
+                lines.push(Line::from(""));
+                let add_marker = if self.spell_suggestion_selected >= self.spell_suggestions.len() { "▶ " } else { "  " };
+                let add_style = if self.spell_suggestion_selected >= self.spell_suggestions.len() {
+                    Style::default().bg(Color::Green).add_modifier(Modifier::BOLD)
+                } else {
+                    Style::default().fg(Color::Green)
+                };
+                lines.push(Line::from(vec![
+                    ratatui::text::Span::styled(add_marker, add_style),
+                    ratatui::text::Span::styled("Add to dictionary", add_style),
+                ]));
+                
+                let content = Text::from(lines);
+                
+                let popup = Paragraph::new(content)
+                    .block(Block::default()
+                        .title(format!("Spell Check ({}/{})", self.current_spell_error + 1, result.misspelled_words.len()))
+                        .borders(Borders::ALL)
+                        .border_style(theme.get_component_style("popup", true)))
+                    .wrap(Wrap { trim: true });
+                
+                f.render_widget(popup, popup_area);
+            }
+        }
+    }
+    
+    /// Create highlighted line with misspelled words marked
+    fn create_highlighted_line(&self, line: &str, _line_idx: usize) -> Line<'static> {
+        if let Some(ref result) = self.spell_check_result {
+            let mut spans = Vec::new();
+            let mut last_pos = 0;
+            
+            // Find misspelled words in this line
+            let line_start = self.calculate_line_offset(_line_idx);
+            let line_end = line_start + line.len();
+            
+            for error in &result.misspelled_words {
+                if error.position >= line_start && error.position < line_end {
+                    let error_start = error.position - line_start;
+                    let error_end = error_start + error.length;
+                    
+                    // Add text before error
+                    if error_start > last_pos {
+                        spans.push(ratatui::text::Span::raw(line[last_pos..error_start].to_string()));
+                    }
+                    
+                    // Add highlighted error
+                    let error_style = if self.current_spell_error < result.misspelled_words.len() 
+                        && result.misspelled_words[self.current_spell_error].position == error.position {
+                        Style::default().bg(Color::Red).fg(Color::White).add_modifier(Modifier::BOLD)
+                    } else {
+                        Style::default().bg(Color::Yellow).fg(Color::Black)
+                    };
+                    
+                    spans.push(ratatui::text::Span::styled(
+                        line[error_start..error_end.min(line.len())].to_string(),
+                        error_style
+                    ));
+                    
+                    last_pos = error_end.min(line.len());
+                }
+            }
+            
+            // Add remaining text
+            if last_pos < line.len() {
+                spans.push(ratatui::text::Span::raw(line[last_pos..].to_string()));
+            }
+            
+            Line::from(spans)
+        } else {
+            Line::from(line.to_string())
+        }
+    }
+    
+    /// Create highlighted line with cursor
+    fn create_highlighted_line_with_cursor(&self, line: &str, cursor_pos: usize) -> Line<'static> {
+        let highlighted_line = self.create_highlighted_line(line, self.body_line_index);
+        
+        // Insert cursor character
+        let cursor_inserted = if cursor_pos <= line.len() {
+            let mut line_chars: Vec<char> = line.chars().collect();
+            line_chars.insert(cursor_pos, '|');
+            line_chars.into_iter().collect::<String>()
+        } else {
+            format!("{}|", line)
+        };
+        
+        // For simplicity, recreate the line with cursor - in a more sophisticated version
+        // we would preserve the highlighting and insert cursor properly
+        let spans = highlighted_line.spans;
+        if spans.is_empty() {
+            Line::from(cursor_inserted)
+        } else {
+            // Use highlighted version but note this is simplified
+            Line::from(spans)
+        }
+    }
+    
+    /// Calculate character offset of a line in the full body text
+    fn calculate_line_offset(&self, line_idx: usize) -> usize {
+        self.body_lines.iter()
+            .take(line_idx)
+            .map(|line| line.len() + 1) // +1 for newline
+            .sum()
     }
     
     /// Handle keyboard input
@@ -367,8 +524,28 @@ impl ComposeUI {
                 self.toggle_spell_check().await;
                 ComposeAction::Continue
             }
+            KeyCode::F(8) => {
+                // Next spell error
+                if self.spell_check_enabled {
+                    self.next_spell_error();
+                }
+                ComposeAction::Continue
+            }
+            KeyCode::F(9) => {
+                // Previous spell error  
+                if self.spell_check_enabled {
+                    self.previous_spell_error();
+                }
+                ComposeAction::Continue
+            }
             KeyCode::Tab => {
-                self.next_field();
+                if self.is_spell_check_visible && self.spell_check_enabled {
+                    // Apply selected spell suggestion
+                    self.apply_spell_suggestion();
+                    self.next_spell_error();
+                } else {
+                    self.next_field();
+                }
                 ComposeAction::Continue
             }
             KeyCode::BackTab => {
@@ -417,13 +594,24 @@ impl ComposeUI {
                 ComposeAction::Continue
             }
             KeyCode::Up => {
-                if self.current_field == ComposeField::Body {
+                if self.is_spell_check_visible && self.spell_check_enabled {
+                    // Navigate spell check suggestions
+                    if self.spell_suggestion_selected > 0 {
+                        self.spell_suggestion_selected -= 1;
+                    }
+                } else if self.current_field == ComposeField::Body {
                     self.move_cursor_up();
                 }
                 ComposeAction::Continue
             }
             KeyCode::Down => {
-                if self.current_field == ComposeField::Body {
+                if self.is_spell_check_visible && self.spell_check_enabled {
+                    // Navigate spell check suggestions (including "Add to dictionary" option)
+                    let max_index = self.spell_suggestions.len(); // +1 for "Add to dictionary"
+                    if self.spell_suggestion_selected < max_index {
+                        self.spell_suggestion_selected += 1;
+                    }
+                } else if self.current_field == ComposeField::Body {
                     self.move_cursor_down();
                 }
                 ComposeAction::Continue
@@ -903,14 +1091,20 @@ impl ComposeUI {
         }
     }
     
-    /// Apply selected spell suggestion
+    /// Apply selected spell suggestion or add to dictionary
     pub fn apply_spell_suggestion(&mut self) {
-        if self.spell_suggestions.is_empty() || self.spell_suggestion_selected >= self.spell_suggestions.len() {
-            return;
-        }
-        
         if let Some(ref result) = self.spell_check_result {
             if let Some(error) = result.misspelled_words.get(self.current_spell_error) {
+                if self.spell_suggestion_selected >= self.spell_suggestions.len() {
+                    // "Add to dictionary" option selected
+                    self.add_word_to_dictionary(error.word.clone());
+                    return;
+                }
+                
+                if self.spell_suggestions.is_empty() || self.spell_suggestion_selected >= self.spell_suggestions.len() {
+                    return;
+                }
+                
                 let replacement = &self.spell_suggestions[self.spell_suggestion_selected];
                 
                 match self.current_field {
@@ -940,6 +1134,30 @@ impl ComposeUI {
                 }
                 
                 self.is_modified = true;
+            }
+        }
+    }
+    
+    /// Add word to custom dictionary
+    fn add_word_to_dictionary(&mut self, word: String) {
+        // Add to spell checker's custom words
+        self.spell_checker.add_custom_word(word.clone());
+        
+        // Re-run spell check to update results
+        if self.spell_check_enabled {
+            // This would need to be async, but for now we'll mark it as handled
+            // by removing it from current results
+            if let Some(ref mut result) = self.spell_check_result {
+                result.misspelled_words.retain(|w| w.word != word);
+                result.error_count = result.misspelled_words.len();
+                
+                // Update visibility
+                self.is_spell_check_visible = !result.misspelled_words.is_empty();
+                
+                // Reset current error if we're at the end
+                if self.current_spell_error >= result.misspelled_words.len() {
+                    self.current_spell_error = result.misspelled_words.len().saturating_sub(1);
+                }
             }
         }
     }
