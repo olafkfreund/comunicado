@@ -533,6 +533,12 @@ impl App {
                         EventResult::RemoveAccount(account_id) => {
                             self.handle_remove_account(&account_id).await?;
                         }
+                        EventResult::RefreshAccount(account_id) => {
+                            self.handle_refresh_account(&account_id).await?;
+                        }
+                        EventResult::SyncAccount(account_id) => {
+                            self.handle_sync_account(&account_id).await?;
+                        }
                     }
                     
                     // Check for quit command
@@ -1108,6 +1114,83 @@ impl App {
                 self.extract_attachments_recursive(part, attachments, part_index * 10 + index + 1);
             }
         }
+    }
+    
+    /// Handle account refresh (Ctrl+R) - reconnect and update status
+    async fn handle_refresh_account(&mut self, account_id: &str) -> Result<()> {
+        tracing::info!("Refreshing account connection: {}", account_id);
+        
+        // Update status to show we're refreshing
+        self.ui.update_account_status(account_id, crate::ui::AccountSyncStatus::Syncing, None);
+        
+        // Force reconnection by clearing any cached connections
+        if let Some(ref mut imap_manager) = self.imap_manager {
+            // Disconnect all connections to force fresh connection (no per-account disconnect available)
+            if let Err(e) = imap_manager.disconnect_all().await {
+                tracing::warn!("Error disconnecting connections: {}", e);
+            }
+        }
+        
+        // Try to sync account to test connection
+        match self.sync_account_from_imap(account_id).await {
+            Ok(()) => {
+                tracing::info!("Successfully refreshed account: {}", account_id);
+                self.ui.update_account_status(account_id, crate::ui::AccountSyncStatus::Online, None);
+                
+                // Reload messages for current folder if this is the active account
+                if let Some(current_id) = self.ui.get_current_account_id() {
+                    if current_id == account_id {
+                        let _ = self.ui.load_messages(account_id.to_string(), "INBOX".to_string()).await;
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::error!("Failed to refresh account {}: {}", account_id, e);
+                self.ui.update_account_status(account_id, crate::ui::AccountSyncStatus::Error, None);
+                return Err(anyhow::anyhow!("Failed to refresh account: {}", e));
+            }
+        }
+        
+        Ok(())
+    }
+    
+    /// Handle manual IMAP sync (F5) - sync folders and messages
+    async fn handle_sync_account(&mut self, account_id: &str) -> Result<()> {
+        tracing::info!("Manual IMAP sync requested for account: {}", account_id);
+        
+        // Update status to show we're syncing
+        self.ui.update_account_status(account_id, crate::ui::AccountSyncStatus::Syncing, None);
+        
+        // Perform full sync
+        match self.sync_account_from_imap(account_id).await {
+            Ok(()) => {
+                tracing::info!("Successfully synced account: {}", account_id);
+                self.ui.update_account_status(account_id, crate::ui::AccountSyncStatus::Online, None);
+                
+                // If this is the current account, reload the message list
+                if let Some(current_id) = self.ui.get_current_account_id() {
+                    if current_id == account_id {
+                        // Get current folder
+                        let current_folder = self.ui.folder_tree()
+                            .selected_folder()
+                            .map(|f| f.name.clone())
+                            .unwrap_or_else(|| "INBOX".to_string());
+                        
+                        // Reload messages
+                        if let Err(e) = self.ui.load_messages(account_id.to_string(), current_folder).await {
+                            tracing::error!("Failed to reload messages after sync: {}", e);
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::error!("Failed to sync account {}: {}", account_id, e);
+                self.ui.update_account_status(account_id, crate::ui::AccountSyncStatus::Error, None);
+                return Err(anyhow::anyhow!("Failed to sync account: {}", e));
+            }
+        }
+        
+        Ok(())
     }
 }
 

@@ -13,6 +13,8 @@ pub enum EventResult {
     AccountSwitch(String), // Account ID to switch to
     AddAccount, // Launch account setup wizard
     RemoveAccount(String), // Account ID to remove
+    RefreshAccount(String), // Account ID to refresh connection
+    SyncAccount(String), // Account ID to manually sync
 }
 
 impl EventHandler {
@@ -231,8 +233,8 @@ impl EventHandler {
                     _ => {}
                 }
             }
-            KeyCode::Char('r') => {
-                // Sort by sender
+            KeyCode::Char('r') if !key.modifiers.contains(KeyModifiers::CONTROL) => {
+                // Sort by sender (only when Ctrl is not pressed)
                 if let FocusedPane::MessageList = ui.focused_pane() {
                     use crate::email::{SortCriteria, SortOrder};
                     ui.message_list_mut().set_sort_criteria(SortCriteria::Sender(SortOrder::Ascending));
@@ -352,6 +354,26 @@ impl EventHandler {
                     if let Some(account_id) = ui.account_switcher().get_current_account_id() {
                         return EventResult::RemoveAccount(account_id.clone());
                     }
+                }
+            }
+            
+            // Refresh account connection shortcut
+            KeyCode::Char('r') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                // Ctrl+R to refresh account connection and sync folders/emails
+                if matches!(ui.focused_pane(), FocusedPane::AccountSwitcher) {
+                    if let Some(account_id) = ui.account_switcher().get_current_account_id() {
+                        tracing::info!("Refreshing account connection: {}", account_id);
+                        return EventResult::RefreshAccount(account_id.clone());
+                    }
+                }
+            }
+            
+            // Manual IMAP sync shortcut
+            KeyCode::F(5) => {
+                // F5 to manually trigger IMAP sync for current account
+                if let Some(account_id) = ui.account_switcher().get_current_account_id() {
+                    tracing::info!("Manual IMAP sync requested: {}", account_id);
+                    return EventResult::SyncAccount(account_id.clone());
                 }
             }
             

@@ -265,9 +265,9 @@ impl StartPage {
         let middle_chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Percentage(30),  // Date/Time
-                Constraint::Percentage(40),  // Calendar
-                Constraint::Percentage(30),  // Quick Actions
+                Constraint::Percentage(50),  // Date/Time (larger for peaclock style)
+                Constraint::Percentage(30),  // Calendar
+                Constraint::Percentage(20),  // Quick Actions
             ])
             .split(dashboard_chunks[1]);
 
@@ -323,15 +323,36 @@ impl StartPage {
         f.render_widget(header, area);
     }
 
-    fn render_weather(&self, f: &mut Frame, area: Rect, theme: &Theme, is_selected: bool) {
-        let block = create_border_block("Weather", theme, is_selected);
-        
+    fn render_weather(&self, f: &mut Frame, area: Rect, theme: &Theme, _is_selected: bool) {
         if let Some(ref weather) = self.weather {
-            let weather_text = vec![
+            // Split area for location, temperature, and details
+            let chunks = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([
+                    Constraint::Length(2),   // Location
+                    Constraint::Length(3),   // Large temperature
+                    Constraint::Min(0),      // Details
+                ])
+                .split(area);
+
+            // Location
+            let location_text = vec![
                 Line::from(vec![
                     Span::styled("📍 ", Style::default().fg(Color::Blue)),
-                    Span::raw(&weather.location),
+                    Span::styled(
+                        &weather.location,
+                        Style::default()
+                            .fg(theme.colors.palette.text_primary)
+                            .add_modifier(Modifier::BOLD),
+                    ),
                 ]),
+            ];
+            let location_widget = Paragraph::new(location_text)
+                .alignment(Alignment::Center);
+            f.render_widget(location_widget, chunks[0]);
+
+            // Large temperature display
+            let temp_text = vec![
                 Line::from(""),
                 Line::from(vec![
                     Span::styled(
@@ -340,27 +361,40 @@ impl StartPage {
                             .fg(theme.colors.palette.accent)
                             .add_modifier(Modifier::BOLD),
                     ),
-                    Span::raw(format!(" {}", weather.condition)),
+                    Span::styled(
+                        format!(" {}", weather.condition),
+                        Style::default()
+                            .fg(theme.colors.palette.text_primary),
+                    ),
                 ]),
-                Line::from(""),
-                Line::from(format!("💧 Humidity: {}%", weather.humidity)),
-                Line::from(format!("💨 Wind: {:.1} km/h", weather.wind_speed)),
             ];
+            let temp_widget = Paragraph::new(temp_text)
+                .alignment(Alignment::Center);
+            f.render_widget(temp_widget, chunks[1]);
 
-            let weather_widget = Paragraph::new(weather_text)
-                .block(block)
-                .wrap(Wrap { trim: true });
-
-            f.render_widget(weather_widget, area);
+            // Weather details
+            let details_text = vec![
+                Line::from(""),
+                Line::from(vec![
+                    Span::styled("💧 ", Style::default().fg(Color::Blue)),
+                    Span::raw(format!("{}%", weather.humidity)),
+                ]),
+                Line::from(vec![
+                    Span::styled("💨 ", Style::default().fg(Color::Cyan)),
+                    Span::raw(format!("{:.1} km/h", weather.wind_speed)),
+                ]),
+            ];
+            let details_widget = Paragraph::new(details_text)
+                .alignment(Alignment::Center);
+            f.render_widget(details_widget, chunks[2]);
         } else {
             let loading_text = vec![
-                Line::from("Loading weather..."),
                 Line::from(""),
-                Line::from("🌤️ Fetching data"),
+                Line::from("🌤️ Loading weather..."),
+                Line::from(""),
             ];
 
             let weather_widget = Paragraph::new(loading_text)
-                .block(block)
                 .alignment(Alignment::Center);
 
             f.render_widget(weather_widget, area);
@@ -416,37 +450,71 @@ impl StartPage {
         }
     }
 
-    fn render_datetime(&self, f: &mut Frame, area: Rect, theme: &Theme, is_selected: bool) {
-        let block = create_border_block("Date & Time", theme, is_selected);
+    fn render_datetime(&self, f: &mut Frame, area: Rect, theme: &Theme, _is_selected: bool) {
         let now = Local::now();
+        
+        // Create peaclock-style large time display
+        let time_str = now.format("%H:%M").to_string();
+        let date_str = now.format("%A, %B %d, %Y").to_string();
+        
+        // Split area for large time and date
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Percentage(60),  // Large time
+                Constraint::Percentage(25),  // Date
+                Constraint::Percentage(15),  // Timezone
+            ])
+            .split(area);
 
-        let datetime_text = vec![
-            Line::from(vec![
-                Span::styled(
-                    now.format("%A").to_string(),
-                    Style::default()
-                        .fg(theme.colors.palette.accent)
-                        .add_modifier(Modifier::BOLD),
-                ),
-            ]),
-            Line::from(now.format("%B %d, %Y").to_string()),
+        // Large time display (peaclock style)
+        let time_text = vec![
             Line::from(""),
             Line::from(vec![
                 Span::styled(
-                    now.format("%H:%M").to_string(),
+                    time_str,
                     Style::default()
                         .fg(theme.colors.palette.accent)
                         .add_modifier(Modifier::BOLD),
                 ),
             ]),
-            Line::from(now.format("%Z").to_string()),
+            Line::from(""),
         ];
 
-        let datetime_widget = Paragraph::new(datetime_text)
-            .block(block)
+        let time_widget = Paragraph::new(time_text)
             .alignment(Alignment::Center);
+        f.render_widget(time_widget, chunks[0]);
 
-        f.render_widget(datetime_widget, area);
+        // Date display
+        let date_text = vec![
+            Line::from(vec![
+                Span::styled(
+                    date_str,
+                    Style::default()
+                        .fg(theme.colors.palette.text_primary)
+                        .add_modifier(Modifier::BOLD),
+                ),
+            ]),
+        ];
+
+        let date_widget = Paragraph::new(date_text)
+            .alignment(Alignment::Center);
+        f.render_widget(date_widget, chunks[1]);
+
+        // Timezone
+        let tz_text = vec![
+            Line::from(vec![
+                Span::styled(
+                    now.format("%Z").to_string(),
+                    Style::default()
+                        .fg(theme.colors.palette.text_secondary),
+                ),
+            ]),
+        ];
+
+        let tz_widget = Paragraph::new(tz_text)
+            .alignment(Alignment::Center);
+        f.render_widget(tz_widget, chunks[2]);
     }
 
     fn render_calendar(&self, f: &mut Frame, area: Rect, theme: &Theme, is_selected: bool) {

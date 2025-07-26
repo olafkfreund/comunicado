@@ -337,6 +337,8 @@ impl UI {
                     ("Enter".to_string(), "Select".to_string()),
                     ("Space".to_string(), "Expand".to_string()),
                     ("c".to_string(), "Compose".to_string()),
+                    ("Ctrl+R".to_string(), "Refresh".to_string()),
+                    ("F5".to_string(), "Sync".to_string()),
                 ],
                 FocusedPane::FolderTree => vec![
                     ("Tab".to_string(), "Switch".to_string()),
