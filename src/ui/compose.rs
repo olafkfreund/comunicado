@@ -1,4 +1,5 @@
 use crate::contacts::{Contact, ContactsManager};
+use crate::spell::{SpellChecker, SpellCheckResult};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
@@ -11,9 +12,10 @@ use ratatui::{
 use crate::theme::Theme;
 use std::sync::Arc;
 
-/// Email composition UI with contact autocomplete
+/// Email composition UI with contact autocomplete and spell checking
 pub struct ComposeUI {
     contacts_manager: Arc<ContactsManager>,
+    spell_checker: SpellChecker,
     
     // Form fields
     to_field: String,
@@ -28,6 +30,13 @@ pub struct ComposeUI {
     autocomplete_suggestions: Vec<Contact>,
     autocomplete_selected: usize,
     
+    // Spell check state
+    is_spell_check_visible: bool,
+    spell_check_result: Option<SpellCheckResult>,
+    current_spell_error: usize,
+    spell_suggestions: Vec<String>,
+    spell_suggestion_selected: usize,
+    
     // Cursor positions for each field
     to_cursor: usize,
     cc_cursor: usize,
@@ -41,6 +50,7 @@ pub struct ComposeUI {
     
     // Form state
     is_modified: bool,
+    spell_check_enabled: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -55,8 +65,11 @@ pub enum ComposeField {
 impl ComposeUI {
     /// Create a new compose UI
     pub fn new(contacts_manager: Arc<ContactsManager>) -> Self {
+        let spell_checker = SpellChecker::new().unwrap_or_default();
+        
         Self {
             contacts_manager,
+            spell_checker,
             to_field: String::new(),
             cc_field: String::new(),
             bcc_field: String::new(),
@@ -66,6 +79,11 @@ impl ComposeUI {
             is_autocomplete_visible: false,
             autocomplete_suggestions: Vec::new(),
             autocomplete_selected: 0,
+            is_spell_check_visible: false,
+            spell_check_result: None,
+            current_spell_error: 0,
+            spell_suggestions: Vec::new(),
+            spell_suggestion_selected: 0,
             to_cursor: 0,
             cc_cursor: 0,
             bcc_cursor: 0,
@@ -74,6 +92,7 @@ impl ComposeUI {
             body_lines: vec![String::new()],
             body_line_index: 0,
             is_modified: false,
+            spell_check_enabled: true,
         }
     }
     
@@ -316,8 +335,10 @@ impl ComposeUI {
         
         let status_text = if self.is_autocomplete_visible {
             "↑↓ Navigate suggestions | Tab Complete | Esc Cancel | Enter Select"
+        } else if self.spell_check_enabled && self.is_spell_check_visible {
+            "F7 Toggle spell check | ↑↓ Navigate errors | Tab Apply suggestion | Esc Cancel"
         } else {
-            "Tab Next field | F1 Send | F2 Save draft | Esc Cancel | @ Contact lookup"
+            "Tab Next field | F1 Send | F2 Save draft | F7 Spell check | Esc Cancel | @ Contact lookup"
         };
         
         let modified_indicator = if self.is_modified { " [Modified]" } else { "" };
@@ -341,6 +362,11 @@ impl ComposeUI {
             KeyCode::Esc => ComposeAction::Cancel,
             KeyCode::F(1) => ComposeAction::Send,
             KeyCode::F(2) => ComposeAction::SaveDraft,
+            KeyCode::F(7) => {
+                // Toggle spell checking
+                self.toggle_spell_check().await;
+                ComposeAction::Continue
+            }
             KeyCode::Tab => {
                 self.next_field();
                 ComposeAction::Continue
@@ -809,6 +835,113 @@ impl ComposeUI {
     /// Clear the modified flag (e.g., after saving)
     pub fn clear_modified(&mut self) {
         self.is_modified = false;
+    }
+    
+    /// Toggle spell checking on/off
+    async fn toggle_spell_check(&mut self) {
+        self.spell_check_enabled = !self.spell_check_enabled;
+        
+        if self.spell_check_enabled {
+            // Perform spell check on current content
+            self.run_spell_check().await;
+        } else {
+            // Clear spell check results
+            self.spell_check_result = None;
+            self.is_spell_check_visible = false;
+        }
+    }
+    
+    /// Run spell check on current field content
+    async fn run_spell_check(&mut self) {
+        let text_to_check = match self.current_field {
+            ComposeField::Subject => &self.subject_field,
+            ComposeField::Body => &self.body_lines.join("\n"),
+            _ => return, // Don't spell check email addresses
+        };
+        
+        if !text_to_check.trim().is_empty() {
+            let result = self.spell_checker.check_text(text_to_check);
+            self.spell_check_result = Some(result);
+            self.current_spell_error = 0;
+            self.is_spell_check_visible = self.spell_check_result.as_ref()
+                .map(|r| !r.misspelled_words.is_empty())
+                .unwrap_or(false);
+        }
+    }
+    
+    /// Move to next spell check error
+    pub fn next_spell_error(&mut self) {
+        if let Some(ref result) = self.spell_check_result {
+            if !result.misspelled_words.is_empty() {
+                self.current_spell_error = (self.current_spell_error + 1) % result.misspelled_words.len();
+                self.update_spell_suggestions();
+            }
+        }
+    }
+    
+    /// Move to previous spell check error
+    pub fn previous_spell_error(&mut self) {
+        if let Some(ref result) = self.spell_check_result {
+            if !result.misspelled_words.is_empty() {
+                if self.current_spell_error == 0 {
+                    self.current_spell_error = result.misspelled_words.len() - 1;
+                } else {
+                    self.current_spell_error -= 1;
+                }
+                self.update_spell_suggestions();
+            }
+        }
+    }
+    
+    /// Update suggestions for current spell error
+    fn update_spell_suggestions(&mut self) {
+        if let Some(ref result) = self.spell_check_result {
+            if let Some(error) = result.misspelled_words.get(self.current_spell_error) {
+                self.spell_suggestions = error.suggestions.clone();
+                self.spell_suggestion_selected = 0;
+            }
+        }
+    }
+    
+    /// Apply selected spell suggestion
+    pub fn apply_spell_suggestion(&mut self) {
+        if self.spell_suggestions.is_empty() || self.spell_suggestion_selected >= self.spell_suggestions.len() {
+            return;
+        }
+        
+        if let Some(ref result) = self.spell_check_result {
+            if let Some(error) = result.misspelled_words.get(self.current_spell_error) {
+                let replacement = &self.spell_suggestions[self.spell_suggestion_selected];
+                
+                match self.current_field {
+                    ComposeField::Subject => {
+                        let start = error.position;
+                        let end = start + error.length;
+                        if end <= self.subject_field.len() {
+                            self.subject_field.replace_range(start..end, replacement);
+                            self.subject_cursor = start + replacement.len();
+                        }
+                    }
+                    ComposeField::Body => {
+                        // Replace in body text - more complex due to line structure
+                        let full_text = self.body_lines.join("\n");
+                        let start = error.position;
+                        let end = start + error.length;
+                        if end <= full_text.len() {
+                            let mut new_text = full_text;
+                            new_text.replace_range(start..end, replacement);
+                            self.body_lines = new_text.lines().map(|s| s.to_string()).collect();
+                            if self.body_lines.is_empty() {
+                                self.body_lines.push(String::new());
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+                
+                self.is_modified = true;
+            }
+        }
     }
 }
 

@@ -72,6 +72,8 @@ dirs = "5.0"
 # System monitoring
 sysinfo = "0.30"
 
+# Spell checking dependencies removed - implementing custom solution
+
 # Full-text search and indexing  
 # tantivy = "0.20"  # Temporarily disabled due to dependency conflicts
 

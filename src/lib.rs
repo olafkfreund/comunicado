@@ -10,5 +10,6 @@ pub mod smtp;
 pub mod html;
 pub mod images;
 pub mod services;
+pub mod spell;
 
 pub use app::App;
