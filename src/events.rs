@@ -86,7 +86,16 @@ impl EventHandler {
                         ui.message_list_mut().handle_down();
                     }
                     FocusedPane::ContentPreview => {
-                        ui.content_preview_mut().handle_down();
+                        // Check if there are attachments and if any are selected
+                        if ui.content_preview().has_attachments() && 
+                           ui.content_preview().get_selected_attachment().is_some() &&
+                           key.modifiers.contains(KeyModifiers::CONTROL) {
+                            // Ctrl+J: Navigate to next attachment
+                            ui.content_preview_mut().next_attachment();
+                        } else {
+                            // Regular scroll down
+                            ui.content_preview_mut().handle_down();
+                        }
                     }
                     FocusedPane::Compose => {
                         // Handled separately in compose mode
@@ -106,7 +115,16 @@ impl EventHandler {
                         ui.message_list_mut().handle_up();
                     }
                     FocusedPane::ContentPreview => {
-                        ui.content_preview_mut().handle_up();
+                        // Check if there are attachments and if any are selected
+                        if ui.content_preview().has_attachments() && 
+                           ui.content_preview().get_selected_attachment().is_some() &&
+                           key.modifiers.contains(KeyModifiers::CONTROL) {
+                            // Ctrl+K: Navigate to previous attachment
+                            ui.content_preview_mut().previous_attachment();
+                        } else {
+                            // Regular scroll up
+                            ui.content_preview_mut().handle_up();
+                        }
                     }
                     FocusedPane::Compose => {
                         // Handled separately in compose mode
@@ -171,13 +189,27 @@ impl EventHandler {
                 }
             }
             
-            // Sorting controls
+            // Sorting controls / Attachment save
             KeyCode::Char('s') => {
-                // Cycle through sort modes (date, sender, subject)
-                if let FocusedPane::MessageList = ui.focused_pane() {
-                    // For now, just demonstrate different sort criteria
-                    use crate::email::{SortCriteria, SortOrder};
-                    ui.message_list_mut().set_sort_criteria(SortCriteria::Date(SortOrder::Descending));
+                match ui.focused_pane() {
+                    FocusedPane::MessageList => {
+                        // Cycle through sort modes (date, sender, subject)
+                        use crate::email::{SortCriteria, SortOrder};
+                        ui.message_list_mut().set_sort_criteria(SortCriteria::Date(SortOrder::Descending));
+                    }
+                    FocusedPane::ContentPreview => {
+                        // Save selected attachment
+                        if ui.content_preview().has_attachments() {
+                            if let Some(_attachment) = ui.content_preview().get_selected_attachment() {
+                                // In a full implementation, this would trigger an async save operation
+                                // For now, we'll just indicate that save was attempted
+                                tracing::info!("Attachment save requested");
+                                // TODO: Implement async save operation
+                                // This would require adding a save operation to EventResult
+                            }
+                        }
+                    }
+                    _ => {}
                 }
             }
             KeyCode::Char('r') => {
@@ -248,6 +280,15 @@ impl EventHandler {
                 // Toggle view mode (Raw, Formatted, Headers)
                 if let FocusedPane::ContentPreview = ui.focused_pane() {
                     ui.content_preview_mut().toggle_view_mode();
+                }
+            }
+            KeyCode::Char('a') if !key.modifiers.contains(KeyModifiers::CONTROL) => {
+                // Select first attachment (when content preview is focused and has attachments)
+                if let FocusedPane::ContentPreview = ui.focused_pane() {
+                    if ui.content_preview().has_attachments() {
+                        ui.content_preview_mut().select_first_attachment();
+                        tracing::info!("First attachment selected");
+                    }
                 }
             }
             KeyCode::Char('H') => {

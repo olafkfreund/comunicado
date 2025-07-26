@@ -263,6 +263,10 @@ impl UI {
         &mut self.content_preview
     }
     
+    pub fn content_preview(&self) -> &ContentPreview {
+        &self.content_preview
+    }
+    
     pub fn account_switcher(&self) -> &AccountSwitcher {
         &self.account_switcher
     }
@@ -339,6 +343,9 @@ impl UI {
                     ("j/k".to_string(), "Scroll".to_string()),
                     ("v".to_string(), "View Mode".to_string()),
                     ("H".to_string(), "Headers".to_string()),
+                    ("a".to_string(), "Select Attachment".to_string()),
+                    ("Ctrl+j/k".to_string(), "Navigate Attachments".to_string()),
+                    ("s".to_string(), "Save Attachment".to_string()),
                     ("Home/End".to_string(), "Jump".to_string()),
                     ("r".to_string(), "Reply".to_string()),
                     ("f".to_string(), "Forward".to_string()),

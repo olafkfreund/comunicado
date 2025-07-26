@@ -96,6 +96,7 @@ pub struct ContentPreview {
     html_renderer: crate::html::HtmlRenderer,
     image_manager: ImageManager,
     processed_images: HashMap<String, String>, // URL -> rendered content
+    selected_attachment: Option<usize>, // Index of selected attachment
 }
 
 impl ContentPreview {
@@ -117,6 +118,7 @@ impl ContentPreview {
             html_renderer: crate::html::HtmlRenderer::new(80),
             image_manager: ImageManager::new().unwrap_or_default(),
             processed_images: HashMap::new(),
+            selected_attachment: None,
         };
         
         // Initialize with sample content
@@ -320,11 +322,24 @@ impl ContentPreview {
                         String::new()
                     };
                     
+                    let is_selected = self.selected_attachment == Some(index);
+                    let selection_prefix = if is_selected { "► " } else { "  " };
+                    
+                    let number_style = if is_selected {
+                        Style::default().fg(theme.colors.palette.accent).add_modifier(Modifier::BOLD)
+                    } else {
+                        Style::default().fg(theme.colors.content_preview.quote)
+                    };
+                    
+                    let filename_style = if is_selected {
+                        Style::default().fg(theme.colors.palette.accent).add_modifier(Modifier::BOLD | Modifier::UNDERLINED)
+                    } else {
+                        Style::default().fg(theme.colors.content_preview.body).add_modifier(Modifier::UNDERLINED)
+                    };
+                    
                     let attachment_line = Line::from(vec![
-                        Span::styled(format!("  {}. ", index + 1), 
-                            Style::default().fg(theme.colors.content_preview.quote)),
-                        Span::styled(&attachment.filename, 
-                            Style::default().fg(theme.colors.content_preview.body).add_modifier(Modifier::UNDERLINED)),
+                        Span::styled(format!("{}{}. ", selection_prefix, index + 1), number_style),
+                        Span::styled(&attachment.filename, filename_style),
                         Span::styled(size_display, 
                             Style::default().fg(theme.colors.content_preview.quote)),
                         Span::styled(format!(" [{}]", attachment.content_type), 
@@ -1066,6 +1081,177 @@ impl ContentPreview {
         let char_height = area.height.saturating_sub(6); // Account for headers and borders
         
         self.image_manager.set_max_dimensions(char_width as u32, char_height as u32);
+    }
+    
+    /// Navigate to the next attachment
+    pub fn next_attachment(&mut self) {
+        if let Some(ref email) = self.email_content {
+            if !email.attachments.is_empty() {
+                self.selected_attachment = Some(match self.selected_attachment {
+                    Some(current) => {
+                        if current + 1 < email.attachments.len() {
+                            current + 1
+                        } else {
+                            0 // Wrap to first attachment
+                        }
+                    }
+                    None => 0, // Select first attachment
+                });
+            }
+        }
+    }
+    
+    /// Navigate to the previous attachment
+    pub fn previous_attachment(&mut self) {
+        if let Some(ref email) = self.email_content {
+            if !email.attachments.is_empty() {
+                self.selected_attachment = Some(match self.selected_attachment {
+                    Some(current) => {
+                        if current > 0 {
+                            current - 1
+                        } else {
+                            email.attachments.len() - 1 // Wrap to last attachment
+                        }
+                    }
+                    None => email.attachments.len() - 1, // Select last attachment
+                });
+            }
+        }
+    }
+    
+    /// Select the first attachment
+    pub fn select_first_attachment(&mut self) {
+        if let Some(ref email) = self.email_content {
+            if !email.attachments.is_empty() {
+                self.selected_attachment = Some(0);
+            }
+        }
+    }
+    
+    /// Clear attachment selection
+    pub fn clear_attachment_selection(&mut self) {
+        self.selected_attachment = None;
+    }
+    
+    /// Get information about the currently selected attachment
+    pub fn get_selected_attachment(&self) -> Option<&Attachment> {
+        if let (Some(ref email), Some(index)) = (&self.email_content, self.selected_attachment) {
+            email.attachments.get(index)
+        } else {
+            None
+        }
+    }
+    
+    /// Check if any attachments are available
+    pub fn has_attachments(&self) -> bool {
+        if let Some(ref email) = self.email_content {
+            !email.attachments.is_empty()
+        } else {
+            false
+        }
+    }
+    
+    /// Get the count of attachments
+    pub fn attachment_count(&self) -> usize {
+        if let Some(ref email) = self.email_content {
+            email.attachments.len()
+        } else {
+            0
+        }
+    }
+    
+    /// Save the currently selected attachment
+    pub async fn save_selected_attachment(&self, save_path: Option<std::path::PathBuf>) -> Result<std::path::PathBuf, Box<dyn std::error::Error>> {
+        if let Some(attachment) = self.get_selected_attachment() {
+            self.save_attachment(attachment, save_path).await
+        } else {
+            Err("No attachment selected".into())
+        }
+    }
+    
+    /// Save a specific attachment to the specified path or default downloads location
+    pub async fn save_attachment(&self, attachment: &Attachment, save_path: Option<std::path::PathBuf>) -> Result<std::path::PathBuf, Box<dyn std::error::Error>> {
+        let target_path = if let Some(path) = save_path {
+            // Use provided path
+            if path.is_dir() {
+                path.join(&attachment.filename)
+            } else {
+                path
+            }
+        } else {
+            // Use default downloads directory
+            let downloads_dir = self.get_downloads_directory()?;
+            std::fs::create_dir_all(&downloads_dir)?;
+            downloads_dir.join(&attachment.filename)
+        };
+        
+        // Check if we need to download the attachment data
+        let attachment_data = self.get_attachment_data(attachment).await?;
+        
+        // Write the data to file
+        std::fs::write(&target_path, attachment_data)?;
+        
+        Ok(target_path)
+    }
+    
+    /// Get the default downloads directory
+    fn get_downloads_directory(&self) -> Result<std::path::PathBuf, Box<dyn std::error::Error>> {
+        // Try to find standard downloads directory
+        if let Some(home_dir) = dirs::home_dir() {
+            let downloads = home_dir.join("Downloads");
+            if downloads.exists() {
+                return Ok(downloads);
+            }
+            
+            // Fallback to creating a comunicado downloads folder in home
+            let comunicado_downloads = home_dir.join("comunicado-downloads");
+            return Ok(comunicado_downloads);
+        }
+        
+        // Ultimate fallback to current directory
+        Ok(std::path::PathBuf::from("./downloads"))
+    }
+    
+    /// Get attachment data (either from memory or by downloading from IMAP server)
+    async fn get_attachment_data(&self, attachment: &Attachment) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+        // First, try to find the attachment in the current message's stored attachments
+        if let (Some(ref database), Some(message_id)) = (&self.database, self.current_message_id) {
+            if let Some(stored_message) = self.find_message_by_id(database, message_id).await? {
+                // Find the matching stored attachment
+                for stored_attachment in &stored_message.attachments {
+                    if stored_attachment.filename == attachment.filename {
+                        if let Some(ref data) = stored_attachment.data {
+                            // Attachment data is already stored
+                            return Ok(data.clone());
+                        } else if let Some(ref file_path) = stored_attachment.file_path {
+                            // Attachment is stored as a file
+                            return Ok(std::fs::read(file_path)?);
+                        }
+                        
+                        // If we get here, we need to download the attachment from IMAP
+                        return self.download_attachment_from_imap(&stored_message, stored_attachment).await;
+                    }
+                }
+            }
+        }
+        
+        Err("Attachment data not found and cannot download from IMAP".into())
+    }
+    
+    /// Download attachment data from IMAP server
+    async fn download_attachment_from_imap(&self, message: &StoredMessage, attachment: &crate::email::StoredAttachment) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+        // This would require access to the IMAP client
+        // For now, we'll return an error since we don't have the IMAP client here
+        // In a full implementation, we'd need to:
+        // 1. Get the IMAP client from the app state
+        // 2. Connect to the account
+        // 3. Select the appropriate folder
+        // 4. Fetch the attachment part using BODYSTRUCTURE information
+        
+        // TODO: Implement IMAP attachment downloading
+        // This requires integrating with the IMAP client and is beyond the current scope
+        
+        Err(format!("IMAP attachment downloading not yet implemented for attachment: {}", attachment.filename).into())
     }
 }
 
