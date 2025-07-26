@@ -40,6 +40,10 @@ regex = "1.10"
 scraper = "0.19"
 html2text = "0.6"
 
+# Image processing and terminal graphics
+image = { version = "0.24", features = ["jpeg", "png", "gif", "webp"] }
+imageproc = "0.23"
+
 # Email and networking
 base64 = "0.22"
 oauth2 = { version = "4.4", default-features = false, features = ["rustls-tls"] }

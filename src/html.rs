@@ -279,7 +279,7 @@ impl HtmlRenderer {
         }
     }
     
-    /// Process images
+    /// Process images (placeholder - actual rendering happens in content preview)
     fn process_image(&mut self, element: &scraper::ElementRef, lines: &mut Vec<Line<'static>>) {
         let src = element.value().attr("src").unwrap_or("");
         let alt = element.value().attr("alt").unwrap_or("Image");
@@ -288,8 +288,9 @@ impl HtmlRenderer {
             .fg(Color::Magenta)
             .add_modifier(Modifier::ITALIC);
         
+        // Create a marker that the content preview can recognize and replace with actual image
         lines.push(Line::styled(
-            format!("[Image: {} ({})]", alt, src),
+            format!("IMG_PLACEHOLDER:{}:{}", src, alt),
             image_style
         ));
         lines.push(Line::from(""));

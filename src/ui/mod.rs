@@ -193,7 +193,7 @@ impl UI {
         self.message_list.render(frame, area, block, is_focused, theme);
     }
 
-    fn render_content_preview(&self, frame: &mut Frame, area: Rect) {
+    fn render_content_preview(&mut self, frame: &mut Frame, area: Rect) {
         let is_focused = matches!(self.focused_pane, FocusedPane::ContentPreview);
         let theme = self.theme_manager.current_theme();
         

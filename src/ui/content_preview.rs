@@ -7,6 +7,7 @@ use ratatui::{
 };
 use crate::theme::Theme;
 use crate::email::{EmailDatabase, StoredMessage};
+use crate::images::{ImageManager, extract_images_from_html, ImageReference};
 use regex::Regex;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -93,6 +94,8 @@ pub struct ContentPreview {
     current_message_id: Option<Uuid>,
     loading: bool,
     html_renderer: crate::html::HtmlRenderer,
+    image_manager: ImageManager,
+    processed_images: HashMap<String, String>, // URL -> rendered content
 }
 
 impl ContentPreview {
@@ -112,6 +115,8 @@ impl ContentPreview {
             current_message_id: None,
             loading: false,
             html_renderer: crate::html::HtmlRenderer::new(80),
+            image_manager: ImageManager::new().unwrap_or_default(),
+            processed_images: HashMap::new(),
         };
         
         // Initialize with sample content
@@ -185,7 +190,10 @@ impl ContentPreview {
         ];
     }
 
-    pub fn render(&self, frame: &mut Frame, area: Rect, block: Block, is_focused: bool, theme: &Theme) {
+    pub fn render(&mut self, frame: &mut Frame, area: Rect, block: Block, is_focused: bool, theme: &Theme) {
+        // Update image dimensions based on current area
+        self.update_image_dimensions(area);
+        
         let content_height = area.height.saturating_sub(2) as usize; // Account for block borders
         
         let lines = match self.view_mode {
@@ -322,7 +330,10 @@ impl ContentPreview {
                     // Render HTML content using our HTML renderer
                     let mut html_renderer = crate::html::HtmlRenderer::new(80);
                     let rendered_text = html_renderer.render_html(&email.body);
-                    all_lines.extend(rendered_text.lines);
+                    
+                    // Process lines and replace image placeholders
+                    let processed_lines = self.process_image_placeholders(rendered_text.lines);
+                    all_lines.extend(processed_lines);
                 } else {
                     // Fall back to plain text rendering
                     for line in email.body.lines() {
@@ -729,6 +740,13 @@ impl ContentPreview {
         // Convert StoredMessage to EmailContent
         let email_content = self.convert_stored_message_to_email_content(message);
         
+        // Check if we have HTML content and load images
+        if email_content.content_type == ContentType::Html && !email_content.body.is_empty() {
+            if crate::html::is_html_content(&email_content.body) {
+                self.load_images_from_html(&email_content.body).await;
+            }
+        }
+        
         // Set the content
         self.set_email_content(email_content);
         
@@ -863,6 +881,147 @@ impl ContentPreview {
     /// Check if there is content to display
     pub fn has_content(&self) -> bool {
         self.email_content.is_some() || !self.raw_content.is_empty()
+    }
+    
+    /// Process image placeholders in rendered HTML lines
+    fn process_image_placeholders(&self, lines: Vec<Line<'static>>) -> Vec<Line<'static>> {
+        let mut processed_lines = Vec::new();
+        
+        for line in lines {
+            // Check if this line contains an image placeholder
+            if line.spans.len() == 1 {
+                let span_text = &line.spans[0].content;
+                if span_text.starts_with("IMG_PLACEHOLDER:") {
+                    // Parse the placeholder: IMG_PLACEHOLDER:src:alt
+                    let parts: Vec<&str> = span_text.splitn(3, ':').collect();
+                    if parts.len() >= 3 {
+                        let src = parts[1];
+                        let alt = parts[2];
+                        
+                        // Try to get rendered image content
+                        if let Some(rendered) = self.processed_images.get(src) {
+                            // Split rendered content into lines and add them
+                            for img_line in rendered.lines() {
+                                processed_lines.push(Line::raw(img_line.to_string()));
+                            }
+                        } else {
+                            // Use fallback placeholder
+                            let placeholder = self.image_manager.generate_placeholder(
+                                Some(alt), 
+                                Some(60), 
+                                Some(8)
+                            );
+                            for placeholder_line in placeholder.lines() {
+                                processed_lines.push(Line::styled(
+                                    placeholder_line.to_string(),
+                                    Style::default().fg(Color::Cyan)
+                                ));
+                            }
+                        }
+                    } else {
+                        // Malformed placeholder, keep as is
+                        processed_lines.push(line);
+                    }
+                } else {
+                    // Regular line, keep as is
+                    processed_lines.push(line);
+                }
+            } else {
+                // Multi-span line, keep as is
+                processed_lines.push(line);
+            }
+        }
+        
+        processed_lines
+    }
+    
+    /// Asynchronously load images from HTML content
+    pub async fn load_images_from_html(&mut self, html_content: &str) {
+        if !self.image_manager.supports_images() {
+            // No point in loading images if terminal doesn't support them
+            return;
+        }
+        
+        let image_refs = extract_images_from_html(html_content);
+        
+        for img_ref in image_refs {
+            // Skip if already processed
+            if self.processed_images.contains_key(&img_ref.src) {
+                continue;
+            }
+            
+            let rendered_content = if img_ref.is_data_url() {
+                // Handle base64 embedded images
+                if let Some((data, mime_type)) = img_ref.parse_data_url() {
+                    match self.image_manager.load_image_from_base64(&data, mime_type.as_deref()).await {
+                        Ok(content) => content,
+                        Err(e) => {
+                            tracing::warn!("Failed to load embedded image: {}", e);
+                            self.image_manager.generate_placeholder(
+                                img_ref.alt.as_deref(),
+                                img_ref.width,
+                                img_ref.height
+                            )
+                        }
+                    }
+                } else {
+                    self.image_manager.generate_placeholder(
+                        img_ref.alt.as_deref(),
+                        img_ref.width,
+                        img_ref.height
+                    )
+                }
+            } else if img_ref.is_http_url() {
+                // Handle remote images
+                match self.image_manager.load_image_from_url(&img_ref.src).await {
+                    Ok(content) => content,
+                    Err(e) => {
+                        tracing::warn!("Failed to load remote image {}: {}", img_ref.src, e);
+                        self.image_manager.generate_placeholder(
+                            img_ref.alt.as_deref(),
+                            img_ref.width,
+                            img_ref.height
+                        )
+                    }
+                }
+            } else {
+                // Relative URLs or other unsupported formats
+                self.image_manager.generate_placeholder(
+                    img_ref.alt.as_deref(),
+                    img_ref.width,
+                    img_ref.height
+                )
+            };
+            
+            // Cache the rendered content
+            self.processed_images.insert(img_ref.src.clone(), rendered_content);
+        }
+    }
+    
+    /// Clear image cache
+    pub async fn clear_image_cache(&mut self) {
+        self.processed_images.clear();
+        self.image_manager.clear_cache().await;
+    }
+    
+    /// Get image display capability information
+    pub fn get_image_capabilities(&self) -> (bool, String) {
+        let supports = self.image_manager.supports_images();
+        let protocol = match self.image_manager.protocol() {
+            crate::images::TerminalProtocol::Kitty => "Kitty Graphics",
+            crate::images::TerminalProtocol::Sixel => "Sixel Graphics", 
+            crate::images::TerminalProtocol::None => "None (ASCII placeholders only)",
+        };
+        (supports, protocol.to_string())
+    }
+    
+    /// Update image manager dimensions based on current area
+    pub fn update_image_dimensions(&mut self, area: Rect) {
+        // Convert terminal area to approximate character dimensions
+        let char_width = area.width.saturating_sub(4); // Account for borders and padding
+        let char_height = area.height.saturating_sub(6); // Account for headers and borders
+        
+        self.image_manager.set_max_dimensions(char_width as u32, char_height as u32);
     }
 }
 

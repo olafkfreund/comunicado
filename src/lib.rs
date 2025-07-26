@@ -8,5 +8,6 @@ pub mod oauth2;
 pub mod contacts;
 pub mod smtp;
 pub mod html;
+pub mod images;
 
 pub use app::App;
