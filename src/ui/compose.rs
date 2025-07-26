@@ -819,6 +819,7 @@ pub enum ComposeAction {
     Send,
     SaveDraft,
     Cancel,
+    StartCompose,
 }
 
 /// Email composition data

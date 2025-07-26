@@ -12,11 +12,13 @@ use std::io;
 use std::sync::Arc;
 use tokio::time::{Duration, Instant};
 
-use crate::events::EventHandler;
-use crate::ui::UI;
+use crate::events::{EventHandler, EventResult};
+use crate::ui::{UI, ComposeAction};
 use crate::email::{EmailDatabase, EmailNotificationManager};
 use crate::oauth2::{SetupWizard, SecureStorage, AccountConfig, TokenManager};
 use crate::imap::ImapAccountManager;
+use crate::smtp::{SmtpService, SmtpServiceBuilder};
+use crate::contacts::ContactsManager;
 
 pub struct App {
     should_quit: bool,
@@ -27,6 +29,8 @@ pub struct App {
     storage: SecureStorage,
     imap_manager: Option<ImapAccountManager>,
     token_manager: Option<TokenManager>,
+    smtp_service: Option<SmtpService>,
+    contacts_manager: Option<Arc<ContactsManager>>,
 }
 
 impl App {
@@ -41,6 +45,8 @@ impl App {
                 .map_err(|e| anyhow::anyhow!("Failed to initialize secure storage: {}", e))?,
             imap_manager: None,
             token_manager: None,
+            smtp_service: None,
+            contacts_manager: None,
         })
     }
     
@@ -371,7 +377,15 @@ impl App {
 
             if event::poll(timeout)? {
                 if let Event::Key(key) = event::read()? {
-                    self.event_handler.handle_key_event(key, &mut self.ui);
+                    let event_result = self.event_handler.handle_key_event(key, &mut self.ui).await;
+                    
+                    // Handle the event result
+                    match event_result {
+                        EventResult::Continue => {},
+                        EventResult::ComposeAction(action) => {
+                            self.handle_compose_action(action).await?;
+                        }
+                    }
                     
                     // Check for quit command
                     if self.event_handler.should_quit() {
@@ -390,6 +404,189 @@ impl App {
         }
 
         Ok(())
+    }
+    
+    /// Initialize SMTP service and contacts manager
+    pub async fn initialize_services(&mut self) -> Result<()> {
+        // Initialize token manager if not already done
+        if self.token_manager.is_none() {
+            let token_manager = TokenManager::new();
+            self.token_manager = Some(token_manager);
+        }
+        
+        // Initialize SMTP service
+        if let Some(ref token_manager) = self.token_manager {
+            let smtp_service = SmtpServiceBuilder::new()
+                .with_token_manager(Arc::new(token_manager.clone()))
+                .build()
+                .map_err(|e| anyhow::anyhow!("Failed to initialize SMTP service: {}", e))?;
+            
+            self.smtp_service = Some(smtp_service);
+        }
+        
+        // Initialize contacts manager
+        if let (Some(ref database), Some(ref token_manager)) = (&self.database, &self.token_manager) {
+            // Create contacts database from email database path  
+            let data_dir = dirs::data_dir()
+                .ok_or_else(|| anyhow::anyhow!("Failed to get data directory"))?;
+            let contacts_db_path = data_dir.join("comunicado").join("contacts.db");
+            
+            let contacts_database = crate::contacts::ContactsDatabase::new(
+                &format!("sqlite:{}", contacts_db_path.display())
+            ).await
+            .map_err(|e| anyhow::anyhow!("Failed to initialize contacts database: {}", e))?;
+            
+            let contacts_manager = ContactsManager::new(contacts_database, token_manager.clone())
+                .await
+                .map_err(|e| anyhow::anyhow!("Failed to initialize contacts manager: {}", e))?;
+            
+            self.contacts_manager = Some(Arc::new(contacts_manager));
+        }
+        
+        tracing::info!("Services initialized successfully");
+        Ok(())
+    }
+    
+    /// Handle compose actions (send, save draft, cancel)
+    async fn handle_compose_action(&mut self, action: ComposeAction) -> Result<()> {
+        match action {
+            ComposeAction::Send => {
+                self.send_email().await?;
+            }
+            ComposeAction::SaveDraft => {
+                self.save_draft().await?;
+            }
+            ComposeAction::Cancel => {
+                // Check if there are unsaved changes and potentially warn the user
+                if self.ui.is_compose_modified() {
+                    tracing::info!("Compose cancelled with unsaved changes");
+                }
+                self.ui.exit_compose();
+            }
+            ComposeAction::Continue => {
+                // Nothing to do, continue composing
+            }
+            ComposeAction::StartCompose => {
+                // Start compose mode
+                self.start_compose_mode();
+            }
+        }
+        Ok(())
+    }
+    
+    /// Send the current composed email
+    async fn send_email(&mut self) -> Result<()> {
+        let compose_data = self.ui.get_compose_data()
+            .ok_or_else(|| anyhow::anyhow!("No compose data available"))?;
+        
+        let smtp_service = self.smtp_service.as_ref()
+            .ok_or_else(|| anyhow::anyhow!("SMTP service not initialized"))?;
+        
+        // For now, use the first available account
+        // In a real implementation, this should come from the active account
+        let configs = self.storage.load_all_accounts()
+            .map_err(|e| anyhow::anyhow!("Failed to load account configs: {}", e))?;
+        
+        if let Some(config) = configs.first() {
+            let account_id = &config.account_id;
+            let from_address = &config.email_address;
+            
+            // Initialize SMTP for this account if not already done
+            if !smtp_service.is_account_configured(account_id).await {
+                self.initialize_smtp_for_account(account_id, config).await?;
+            }
+            
+            // Send the email
+            match smtp_service.send_email(account_id, from_address, &compose_data).await {
+                Ok(result) => {
+                    tracing::info!("Email sent successfully: {}", result.message_id);
+                    self.ui.exit_compose();
+                    self.ui.clear_compose_modified();
+                    
+                    // TODO: Add a success notification to the UI
+                    tracing::info!("Email sent to {} recipients", result.accepted_recipients.len());
+                }
+                Err(e) => {
+                    tracing::error!("Failed to send email: {}", e);
+                    // TODO: Show error message in UI
+                    return Err(anyhow::anyhow!("Failed to send email: {}", e));
+                }
+            }
+        } else {
+            return Err(anyhow::anyhow!("No email accounts configured"));
+        }
+        
+        Ok(())
+    }
+    
+    /// Save the current compose as a draft
+    async fn save_draft(&mut self) -> Result<()> {
+        let compose_data = self.ui.get_compose_data()
+            .ok_or_else(|| anyhow::anyhow!("No compose data available"))?;
+        
+        let smtp_service = self.smtp_service.as_ref()
+            .ok_or_else(|| anyhow::anyhow!("SMTP service not initialized"))?;
+        
+        // For now, use the first available account
+        let configs = self.storage.load_all_accounts()
+            .map_err(|e| anyhow::anyhow!("Failed to load account configs: {}", e))?;
+        
+        if let Some(config) = configs.first() {
+            let account_id = &config.account_id;
+            
+            match smtp_service.save_draft(account_id, &compose_data).await {
+                Ok(draft_id) => {
+                    tracing::info!("Draft saved with ID: {}", draft_id);
+                    self.ui.clear_compose_modified();
+                    // TODO: Add a success notification to the UI
+                }
+                Err(e) => {
+                    tracing::error!("Failed to save draft: {}", e);
+                    // TODO: Show error message in UI
+                    return Err(anyhow::anyhow!("Failed to save draft: {}", e));
+                }
+            }
+        } else {
+            return Err(anyhow::anyhow!("No email accounts configured"));
+        }
+        
+        Ok(())
+    }
+    
+    /// Initialize SMTP for a specific account
+    async fn initialize_smtp_for_account(&self, account_id: &str, config: &AccountConfig) -> Result<()> {
+        let smtp_service = self.smtp_service.as_ref()
+            .ok_or_else(|| anyhow::anyhow!("SMTP service not initialized"))?;
+        
+        let token_manager = self.token_manager.as_ref()
+            .ok_or_else(|| anyhow::anyhow!("Token manager not initialized"))?;
+        
+        // Get current access token
+        let token = token_manager.get_access_token(account_id)
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to get access token: {}", e))?;
+        
+        // Initialize SMTP for this account
+        smtp_service.initialize_account(
+            account_id,
+            &config.provider,
+            &config.email_address,
+            &token.unwrap().token,
+        ).await
+        .map_err(|e| anyhow::anyhow!("Failed to initialize SMTP for account {}: {}", account_id, e))?;
+        
+        tracing::info!("SMTP initialized for account: {}", account_id);
+        Ok(())
+    }
+    
+    /// Start compose mode with contacts support
+    pub fn start_compose_mode(&mut self) {
+        if let Some(ref contacts_manager) = self.contacts_manager {
+            self.ui.start_compose(contacts_manager.clone());
+            tracing::info!("Started compose mode");
+        } else {
+            tracing::warn!("Cannot start compose mode: contacts manager not initialized");
+        }
     }
 }
 

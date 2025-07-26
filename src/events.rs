@@ -1,8 +1,15 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-use crate::ui::{FocusedPane, UI};
+use crate::ui::{FocusedPane, UI, UIMode, ComposeAction};
 
 pub struct EventHandler {
     should_quit: bool,
+}
+
+/// Result of handling a key event
+#[derive(Debug, Clone)]
+pub enum EventResult {
+    Continue,
+    ComposeAction(ComposeAction),
 }
 
 impl EventHandler {
@@ -12,7 +19,15 @@ impl EventHandler {
         }
     }
 
-    pub fn handle_key_event(&mut self, key: KeyEvent, ui: &mut UI) {
+    pub async fn handle_key_event(&mut self, key: KeyEvent, ui: &mut UI) -> EventResult {
+        // Handle compose mode separately
+        if ui.mode() == &UIMode::Compose {
+            if let Some(action) = ui.handle_compose_key(key.code).await {
+                return EventResult::ComposeAction(action);
+            }
+            return EventResult::Continue;
+        }
+        
         match key.code {
             // Global quit commands
             KeyCode::Char('q') => {
@@ -127,8 +142,8 @@ impl EventHandler {
                     ui.message_list_mut().expand_selected_thread();
                 }
             }
-            KeyCode::Char('c') if !key.modifiers.contains(KeyModifiers::CONTROL) => {
-                // Close/collapse thread (c without Ctrl)
+            KeyCode::Char('C') => {
+                // Close/collapse thread (capital C)
                 if let FocusedPane::MessageList = ui.focused_pane() {
                     ui.message_list_mut().collapse_selected_thread();
                 }
@@ -232,8 +247,20 @@ impl EventHandler {
                 }
             }
             
+            
+            // Compose email shortcut
+            KeyCode::Char('c') if !key.modifiers.contains(KeyModifiers::CONTROL) => {
+                // Start compose mode only if we're not already in compose mode
+                if !ui.is_composing() {
+                    // Return a special compose action to signal the app to start compose mode
+                    return EventResult::ComposeAction(ComposeAction::StartCompose);
+                }
+            }
+            
             _ => {}
         }
+        
+        EventResult::Continue
     }
 
     pub fn should_quit(&self) -> bool {
