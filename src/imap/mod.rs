@@ -90,7 +90,7 @@ impl ImapConfig {
             auth_method: ImapAuthMethod::Password(password),
             use_tls: port == 993, // Default to TLS for port 993
             use_starttls: port == 143, // Default to STARTTLS for port 143
-            timeout_seconds: 30,
+            timeout_seconds: 60, // Increased timeout for better reliability
             validate_certificates: true,
         }
     }
@@ -104,7 +104,7 @@ impl ImapConfig {
             auth_method: ImapAuthMethod::OAuth2 { account_id },
             use_tls: port == 993,
             use_starttls: port == 143,
-            timeout_seconds: 30,
+            timeout_seconds: 60, // Increased timeout for better reliability
             validate_certificates: true,
         }
     }

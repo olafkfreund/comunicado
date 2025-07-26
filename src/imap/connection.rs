@@ -74,13 +74,24 @@ impl ImapConnection {
         
         // Connect with timeout
         let timeout_duration = Duration::from_secs(self.config.timeout_seconds);
+        tracing::info!("Attempting TCP connection to {} (timeout: {}s)", addr, self.config.timeout_seconds);
+        
         let tcp_stream = timeout(timeout_duration, AsyncTcpStream::connect(&socket_addrs[0]))
             .await
-            .map_err(|_| ImapError::Timeout)?
-            .map_err(|e| ImapError::connection(format!("Failed to connect to {}: {}", addr, e)))?;
+            .map_err(|_| {
+                tracing::error!("TCP connection to {} timed out after {}s", addr, self.config.timeout_seconds);
+                ImapError::Timeout
+            })?
+            .map_err(|e| {
+                tracing::error!("TCP connection to {} failed: {}", addr, e);
+                ImapError::connection(format!("Failed to connect to {}: {}", addr, e))
+            })?;
+        
+        tracing::info!("TCP connection to {} established successfully", addr);
         
         let split_stream = if self.config.use_tls {
             // Set up TLS connection
+            tracing::info!("Starting TLS handshake with {}", addr);
             let mut root_store = RootCertStore::empty();
             root_store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
             
@@ -95,7 +106,12 @@ impl ImapConnection {
                 .to_owned(); // Convert to owned to avoid lifetime issues
             
             let tls_stream = connector.connect(domain, tcp_stream).await
-                .map_err(|e| ImapError::connection(format!("TLS handshake failed: {}", e)))?;
+                .map_err(|e| {
+                    tracing::error!("TLS handshake failed with {}: {}", addr, e);
+                    ImapError::connection(format!("TLS handshake failed: {}", e))
+                })?;
+            
+            tracing::info!("TLS handshake with {} completed successfully", addr);
             
             // Split TLS stream
             let (read_half, write_half) = tokio::io::split(tls_stream);

@@ -1,0 +1,191 @@
+warning: unused import: `Serialize`
+ --> src/oauth2/file_import.rs:2:26
+  |
+2 | use serde::{Deserialize, Serialize};
+  |                          ^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` on by default
+
+warning: field `selected_for_operation` is never read
+   --> src/ui/folder_tree.rs:198:5
+    |
+192 | pub struct FolderTree {
+    |            ---------- field in this struct
+...
+198 |     selected_for_operation: Option<(usize, FolderOperation)>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: fields `threads` and `threading_engine` are never read
+   --> src/ui/message_list.rs:104:5
+    |
+102 | pub struct MessageList {
+    |            ----------- fields in this struct
+103 |     messages: Vec<MessageItem>,
+104 |     threads: Vec<EmailThread>,
+    |     ^^^^^^^
+...
+108 |     threading_engine: ThreadingEngine,
+    |     ^^^^^^^^^^^^^^^^
+
+warning: fields `email_regex` and `html_renderer` are never read
+  --> src/ui/content_preview.rs:92:5
+   |
+85 | pub struct ContentPreview {
+   |            -------------- fields in this struct
+...
+92 |     email_regex: Regex,
+   |     ^^^^^^^^^^^
+...
+96 |     html_renderer: crate::html::HtmlRenderer,
+   |     ^^^^^^^^^^^^^
+
+warning: field `max_display_accounts` is never read
+  --> src/ui/account_switcher.rs:72:5
+   |
+67 | pub struct AccountSwitcher {
+   |            --------------- field in this struct
+...
+72 |     max_display_accounts: usize,
+   |     ^^^^^^^^^^^^^^^^^^^^
+
+warning: methods `create_account_list_item` and `create_current_account_item` are never used
+   --> src/ui/account_switcher.rs:336:8
+    |
+75  | impl AccountSwitcher {
+    | -------------------- methods in this implementation
+...
+336 |     fn create_account_list_item(&self, account: &AccountItem, is_selected: bool, theme: &Theme) -> ListItem {
+    |        ^^^^^^^^^^^^^^^^^^^^^^^^
+...
+370 |     fn create_current_account_item(&self, account: &AccountItem, theme: &Theme) -> ListItem {
+    |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: field `message_id` is never read
+   --> src/email/threading_engine.rs:197:5
+    |
+196 | struct MessageContainer {
+    |        ---------------- field in this struct
+197 |     message_id: Option<MessageId>,
+    |     ^^^^^^^^^^
+    |
+    = note: `MessageContainer` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+
+warning: field `max_concurrent_syncs` is never read
+  --> src/email/sync_engine.rs:93:5
+   |
+87 | pub struct SyncEngine {
+   |            ---------- field in this struct
+...
+93 |     max_concurrent_syncs: usize,
+   |     ^^^^^^^^^^^^^^^^^^^^
+
+warning: field `database` is never read
+  --> src/email/notifications.rs:84:5
+   |
+76 | pub struct EmailNotificationManager {
+   |            ------------------------ field in this struct
+...
+84 |     database: Arc<EmailDatabase>,
+   |     ^^^^^^^^
+
+warning: enum `ConnectionStream` is never used
+  --> src/imap/connection.rs:12:6
+   |
+12 | enum ConnectionStream {
+   |      ^^^^^^^^^^^^^^^^
+
+warning: associated function `new` is never used
+   --> src/oauth2/client.rs:430:8
+    |
+429 | impl CallbackServer {
+    | ------------------- associated function in this implementation
+430 |     fn new(port: u16) -> OAuth2Result<Self> {
+    |        ^^^
+
+warning: fields `project_id`, `auth_uri`, `token_uri`, `auth_provider_x509_cert_url`, and `redirect_uris` are never read
+  --> src/oauth2/file_import.rs:15:5
+   |
+13 | struct GoogleInstalledApp {
+   |        ------------------ fields in this struct
+14 |     client_id: String,
+15 |     project_id: String,
+   |     ^^^^^^^^^^
+16 |     auth_uri: String,
+   |     ^^^^^^^^
+17 |     token_uri: String,
+   |     ^^^^^^^^^
+18 |     auth_provider_x509_cert_url: String,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+19 |     client_secret: String,
+20 |     redirect_uris: Vec<String>,
+   |     ^^^^^^^^^^^^^
+   |
+   = note: `GoogleInstalledApp` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+
+warning: field `current_search` is never read
+  --> src/contacts/ui.rs:33:5
+   |
+15 | pub struct AddressBookUI {
+   |            ------------- field in this struct
+...
+33 |     current_search: ContactSearchCriteria,
+   |     ^^^^^^^^^^^^^^
+
+warning: field `base_color` is never read
+  --> src/html.rs:14:5
+   |
+8  | pub struct HtmlRenderer {
+   |            ------------ field in this struct
+...
+14 |     base_color: Color,
+   |     ^^^^^^^^^^
+
+warning: associated function `strip_html_tags` is never used
+  --> src/html.rs:46:8
+   |
+17 | impl HtmlRenderer {
+   | ----------------- associated function in this implementation
+...
+46 |     fn strip_html_tags(html: &str) -> String {
+   |        ^^^^^^^^^^^^^^^
+
+warning: fields `format`, `width`, and `height` are never read
+  --> src/images.rs:25:5
+   |
+23 | struct CachedImage {
+   |        ----------- fields in this struct
+24 |     data: Vec<u8>,
+25 |     format: ImageFormat,
+   |     ^^^^^^
+26 |     width: u32,
+   |     ^^^^^
+27 |     height: u32,
+   |     ^^^^^^
+   |
+   = note: `CachedImage` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: field `cache_dir` is never read
+  --> src/images.rs:37:5
+   |
+32 | pub struct ImageManager {
+   |            ------------ field in this struct
+...
+37 |     cache_dir: PathBuf,
+   |     ^^^^^^^^^
+
+warning: field `description` is never read
+  --> src/services/weather.rs:33:5
+   |
+31 | struct OpenWeatherCondition {
+   |        -------------------- field in this struct
+32 |     main: String,
+33 |     description: String,
+   |     ^^^^^^^^^^^
+   |
+   = note: `OpenWeatherCondition` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+
+warning: `comunicado` (lib) generated 18 warnings (run `cargo fix --lib -p comunicado` to apply 1 suggestion)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.30s
+     Running `target/debug/comunicado`
