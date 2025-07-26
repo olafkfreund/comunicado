@@ -47,6 +47,13 @@ cargo run
 - `q` - Quit application
 - `Ctrl+C` - Force quit
 
+### Account Management
+- `Ctrl+A` - Add new account
+- `Ctrl+X` - Remove account (when account switcher focused)
+
+### Email Composition
+- `c` - Compose new email
+
 ## Development
 
 This project uses:
@@ -64,6 +71,16 @@ just lint          # Run clippy
 just fmt           # Format code
 just check         # Run all checks
 ```
+
+## Documentation
+
+### User Guides
+- [Account Management](docs/account-management.md) - Adding, switching, and removing email accounts
+- [Terminal Compatibility](docs/terminal-compatibility.md) - Image display support across terminal emulators
+
+### Development
+- [Product Roadmap](.agent-os/product/roadmap.md) - Current development progress and planned features
+- [Technical Architecture](.agent-os/product/tech-stack.md) - Technology choices and architecture decisions
 
 ## Project Status
 

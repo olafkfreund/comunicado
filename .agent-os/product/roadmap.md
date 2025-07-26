@@ -39,6 +39,7 @@
 - [x] OAuth2 Authentication - Support Gmail, Outlook OAuth2 login flows `L`
 - [x] Multi-Account Support - Manage multiple email accounts simultaneously `M`
 - [x] Image Display Support - Show images in emails using terminal graphics protocols `L`
+- [x] Account Management - Add and remove accounts with Ctrl+A/Ctrl+X shortcuts `M`
 
 ### Should-Have Features
 
