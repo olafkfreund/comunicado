@@ -6,5 +6,6 @@ pub mod email;
 pub mod imap;
 pub mod oauth2;
 pub mod contacts;
+pub mod smtp;
 
 pub use app::App;

@@ -48,6 +48,9 @@ rand = "0.8"
 async-trait = "0.1"
 percent-encoding = "2.3"
 
+# SMTP email sending
+lettre = { version = "0.11", features = ["tokio1-rustls-tls", "smtp-transport", "builder", "pool"], default-features = false }
+
 # Secure storage
 keyring = "2.3"
 
