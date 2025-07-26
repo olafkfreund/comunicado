@@ -246,6 +246,20 @@ impl EmailDatabase {
             )
         "#).execute(&self.pool).await?;
         
+        sqlx::query(r#"
+            CREATE TABLE IF NOT EXISTS email_filters (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                description TEXT NOT NULL,
+                enabled BOOLEAN NOT NULL DEFAULT TRUE,
+                priority INTEGER NOT NULL DEFAULT 100,
+                conditions TEXT NOT NULL, -- JSON array of FilterCondition
+                actions TEXT NOT NULL, -- JSON array of FilterAction
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+        "#).execute(&self.pool).await?;
+        
         // Create indexes for performance
         sqlx::query("CREATE INDEX IF NOT EXISTS idx_messages_account_folder ON messages(account_id, folder_name)").execute(&self.pool).await?;
         sqlx::query("CREATE INDEX IF NOT EXISTS idx_messages_uid ON messages(account_id, folder_name, imap_uid)").execute(&self.pool).await?;
@@ -255,6 +269,7 @@ impl EmailDatabase {
         sqlx::query("CREATE INDEX IF NOT EXISTS idx_messages_subject ON messages(subject)").execute(&self.pool).await?;
         sqlx::query("CREATE INDEX IF NOT EXISTS idx_messages_from ON messages(from_addr)").execute(&self.pool).await?;
         sqlx::query("CREATE INDEX IF NOT EXISTS idx_messages_sync ON messages(last_synced)").execute(&self.pool).await?;
+        sqlx::query("CREATE INDEX IF NOT EXISTS idx_email_filters_priority ON email_filters(priority, enabled)").execute(&self.pool).await?;
         
         // Full-text search virtual table
         sqlx::query(r#"
@@ -614,6 +629,134 @@ impl EmailDatabase {
             is_draft: row.get("is_draft"),
             is_deleted: row.get("is_deleted"),
         })
+    }
+    
+    /// Store an email filter
+    pub async fn store_filter(&self, filter: &crate::email::EmailFilter) -> DatabaseResult<()> {
+        let conditions_json = serde_json::to_string(&filter.conditions)?;
+        let actions_json = serde_json::to_string(&filter.actions)?;
+        
+        sqlx::query(r#"
+            INSERT OR REPLACE INTO email_filters (
+                id, name, description, enabled, priority,
+                conditions, actions, created_at, updated_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+        "#)
+        .bind(filter.id.to_string())
+        .bind(&filter.name)
+        .bind(&filter.description)
+        .bind(filter.enabled)
+        .bind(filter.priority)
+        .bind(conditions_json)
+        .bind(actions_json)
+        .bind(filter.created_at.to_rfc3339())
+        .bind(filter.updated_at.to_rfc3339())
+        .execute(&self.pool)
+        .await?;
+        
+        Ok(())
+    }
+    
+    /// Get all email filters
+    pub async fn get_filters(&self) -> DatabaseResult<Vec<crate::email::EmailFilter>> {
+        let rows = sqlx::query(r#"
+            SELECT id, name, description, enabled, priority,
+                   conditions, actions, created_at, updated_at
+            FROM email_filters
+            ORDER BY priority ASC, created_at ASC
+        "#)
+        .fetch_all(&self.pool)
+        .await?;
+        
+        let mut filters = Vec::new();
+        for row in rows {
+            let id = uuid::Uuid::parse_str(row.get("id"))?;
+            let conditions_json: String = row.get("conditions");
+            let actions_json: String = row.get("actions");
+            let conditions = serde_json::from_str(&conditions_json)?;
+            let actions = serde_json::from_str(&actions_json)?;
+            
+            let created_at: DateTime<Utc> = DateTime::parse_from_rfc3339(row.get("created_at"))?.into();
+            let updated_at: DateTime<Utc> = DateTime::parse_from_rfc3339(row.get("updated_at"))?.into();
+            
+            filters.push(crate::email::EmailFilter {
+                id,
+                name: row.get("name"),
+                description: row.get("description"),
+                enabled: row.get("enabled"),
+                priority: row.get("priority"),
+                conditions,
+                actions,
+                created_at,
+                updated_at,
+            });
+        }
+        
+        Ok(filters)
+    }
+    
+    /// Get a specific filter by ID
+    pub async fn get_filter(&self, filter_id: uuid::Uuid) -> DatabaseResult<Option<crate::email::EmailFilter>> {
+        let row = sqlx::query(r#"
+            SELECT id, name, description, enabled, priority,
+                   conditions, actions, created_at, updated_at
+            FROM email_filters
+            WHERE id = ?1
+        "#)
+        .bind(filter_id.to_string())
+        .fetch_optional(&self.pool)
+        .await?;
+        
+        if let Some(row) = row {
+            let id = uuid::Uuid::parse_str(row.get("id"))?;
+            let conditions_json: String = row.get("conditions");
+            let actions_json: String = row.get("actions");
+            let conditions = serde_json::from_str(&conditions_json)?;
+            let actions = serde_json::from_str(&actions_json)?;
+            
+            let created_at: DateTime<Utc> = DateTime::parse_from_rfc3339(row.get("created_at"))?.into();
+            let updated_at: DateTime<Utc> = DateTime::parse_from_rfc3339(row.get("updated_at"))?.into();
+            
+            Ok(Some(crate::email::EmailFilter {
+                id,
+                name: row.get("name"),
+                description: row.get("description"),
+                enabled: row.get("enabled"),
+                priority: row.get("priority"),
+                conditions,
+                actions,
+                created_at,
+                updated_at,
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+    
+    /// Delete a filter by ID
+    pub async fn delete_filter(&self, filter_id: uuid::Uuid) -> DatabaseResult<()> {
+        sqlx::query("DELETE FROM email_filters WHERE id = ?1")
+            .bind(filter_id.to_string())
+            .execute(&self.pool)
+            .await?;
+        
+        Ok(())
+    }
+    
+    /// Update filter enabled status
+    pub async fn set_filter_enabled(&self, filter_id: uuid::Uuid, enabled: bool) -> DatabaseResult<()> {
+        sqlx::query(r#"
+            UPDATE email_filters 
+            SET enabled = ?1, updated_at = ?2
+            WHERE id = ?3
+        "#)
+        .bind(enabled)
+        .bind(chrono::Utc::now().to_rfc3339())
+        .bind(filter_id.to_string())
+        .execute(&self.pool)
+        .await?;
+        
+        Ok(())
     }
 }
 
