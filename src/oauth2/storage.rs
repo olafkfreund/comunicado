@@ -418,6 +418,25 @@ impl SecureStorage {
         
         Ok(total_size)
     }
+    
+    /// Remove an account and all its associated data
+    pub fn remove_account(&self, account_id: &str) -> OAuth2Result<()> {
+        // Remove config file
+        let config_path = self.get_account_config_path(account_id);
+        if config_path.exists() {
+            fs::remove_file(&config_path)
+                .map_err(|e| OAuth2Error::StorageError(
+                    format!("Failed to remove account config file: {}", e)
+                ))?;
+        }
+        
+        // Remove tokens from keyring
+        self.delete_access_token(account_id)?;
+        self.delete_refresh_token(account_id)?;
+        
+        tracing::info!("Account {} removed from secure storage", account_id);
+        Ok(())
+    }
 }
 
 #[cfg(test)]

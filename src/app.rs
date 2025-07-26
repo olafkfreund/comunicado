@@ -413,6 +413,9 @@ impl App {
                         EventResult::AddAccount => {
                             self.handle_add_account().await?;
                         }
+                        EventResult::RemoveAccount(account_id) => {
+                            self.handle_remove_account(&account_id).await?;
+                        }
                     }
                     
                     // Check for quit command
@@ -692,6 +695,58 @@ impl App {
         } else {
             tracing::info!("Account setup was cancelled by user");
         }
+        
+        Ok(())
+    }
+    
+    /// Handle removing an account
+    async fn handle_remove_account(&mut self, account_id: &str) -> Result<()> {
+        tracing::info!("Removing account: {}", account_id);
+        
+        // Check if this is the last account - don't allow removal if it is
+        if self.ui.account_switcher().accounts().len() <= 1 {
+            tracing::warn!("Cannot remove the last remaining account");
+            return Ok(());
+        }
+        
+        // Remove from secure storage first
+        if let Err(e) = self.storage.remove_account(account_id) {
+            tracing::error!("Failed to remove account from secure storage: {}", e);
+            return Err(anyhow::anyhow!("Failed to remove account from storage: {}", e));
+        }
+        
+        // Remove from database
+        if let Some(ref database) = self.database {
+            // Remove all messages for this account
+            if let Err(e) = sqlx::query("DELETE FROM messages WHERE account_id = ?")
+                .bind(account_id)
+                .execute(&database.pool)
+                .await {
+                tracing::error!("Failed to remove messages for account {}: {}", account_id, e);
+            }
+            
+            // Remove folders for this account
+            if let Err(e) = sqlx::query("DELETE FROM folders WHERE account_id = ?")
+                .bind(account_id)
+                .execute(&database.pool)
+                .await {
+                tracing::error!("Failed to remove folders for account {}: {}", account_id, e);
+            }
+            
+            // Remove the account itself
+            if let Err(e) = sqlx::query("DELETE FROM accounts WHERE id = ?")
+                .bind(account_id)
+                .execute(&database.pool)
+                .await {
+                tracing::error!("Failed to remove account from database: {}", e);
+                return Err(anyhow::anyhow!("Failed to remove account from database: {}", e));
+            }
+        }
+        
+        // Remove from UI
+        self.ui.remove_account(account_id);
+        
+        tracing::info!("Account {} removed successfully", account_id);
         
         Ok(())
     }

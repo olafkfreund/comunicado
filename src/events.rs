@@ -12,6 +12,7 @@ pub enum EventResult {
     ComposeAction(ComposeAction),
     AccountSwitch(String), // Account ID to switch to
     AddAccount, // Launch account setup wizard
+    RemoveAccount(String), // Account ID to remove
 }
 
 impl EventHandler {
@@ -282,6 +283,16 @@ impl EventHandler {
             KeyCode::Char('a') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 // Ctrl+A to add a new account
                 return EventResult::AddAccount;
+            }
+            
+            // Remove account shortcut (when account switcher is focused)
+            KeyCode::Char('x') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                // Ctrl+X to remove the currently selected account (only when account switcher is focused)
+                if matches!(ui.focused_pane(), FocusedPane::AccountSwitcher) {
+                    if let Some(account_id) = ui.account_switcher().get_current_account_id() {
+                        return EventResult::RemoveAccount(account_id.clone());
+                    }
+                }
             }
             
             _ => {}

@@ -413,6 +413,11 @@ impl UI {
         self.account_switcher.update_account(account);
     }
     
+    /// Remove an account from the account switcher
+    pub fn remove_account(&mut self, account_id: &str) {
+        self.account_switcher.remove_account(account_id);
+    }
+    
     /// Get the currently selected account
     pub fn get_current_account(&self) -> Option<&AccountItem> {
         self.account_switcher.get_current_account()
