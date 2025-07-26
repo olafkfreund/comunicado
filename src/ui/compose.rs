@@ -37,6 +37,11 @@ pub struct ComposeUI {
     spell_suggestions: Vec<String>,
     spell_suggestion_selected: usize,
     
+    // Spell check configuration state
+    is_spell_config_visible: bool,
+    available_languages: Vec<String>,
+    language_selected: usize,
+    
     // Cursor positions for each field
     to_cursor: usize,
     cc_cursor: usize,
@@ -66,6 +71,7 @@ impl ComposeUI {
     /// Create a new compose UI
     pub fn new(contacts_manager: Arc<ContactsManager>) -> Self {
         let spell_checker = SpellChecker::new().unwrap_or_default();
+        let available_languages = spell_checker.available_languages();
         
         Self {
             contacts_manager,
@@ -84,6 +90,9 @@ impl ComposeUI {
             current_spell_error: 0,
             spell_suggestions: Vec::new(),
             spell_suggestion_selected: 0,
+            is_spell_config_visible: false,
+            available_languages,
+            language_selected: 0,
             to_cursor: 0,
             cc_cursor: 0,
             bcc_cursor: 0,
@@ -175,6 +184,11 @@ impl ComposeUI {
         // Render spell check suggestions if visible
         if self.is_spell_check_visible && self.spell_check_enabled {
             self.render_spell_check_popup(f, area, theme);
+        }
+        
+        // Render spell check configuration if visible
+        if self.is_spell_config_visible {
+            self.render_spell_config_popup(f, area, theme);
         }
         
         // Status line at bottom
@@ -347,10 +361,12 @@ impl ComposeUI {
         
         let status_text = if self.is_autocomplete_visible {
             "↑↓ Navigate suggestions | Tab Complete | Esc Cancel | Enter Select"
+        } else if self.is_spell_config_visible {
+            "↑↓ Select language | Enter Apply | Esc/F10 Close"
         } else if self.spell_check_enabled && self.is_spell_check_visible {
-            "F7 Toggle | F8/F9 Next/Prev error | ↑↓ Navigate suggestions | Tab Apply | Esc Cancel"
+            "F7 Toggle | F8/F9 Next/Prev error | F10 Config | ↑↓ Navigate suggestions | Tab Apply | Esc Cancel"
         } else {
-            "Tab Next field | F1 Send | F2 Save | F7 Spell check | F8/F9 Errors | Esc Cancel | @ Contact"
+            "Tab Next field | F1 Send | F2 Save | F7 Spell check | F8/F9 Errors | F10 Config | Esc Cancel | @ Contact"
         };
         
         let modified_indicator = if self.is_modified { " [Modified]" } else { "" };
@@ -425,6 +441,70 @@ impl ComposeUI {
                 f.render_widget(popup, popup_area);
             }
         }
+    }
+    
+    /// Render spell check configuration popup
+    fn render_spell_config_popup(&self, f: &mut Frame, compose_area: Rect, theme: &Theme) {
+        // Calculate position for configuration popup
+        let popup_width = 50;
+        let popup_height = (self.available_languages.len() + 6).min(15) as u16;
+        
+        let popup_area = Rect {
+            x: compose_area.x + (compose_area.width.saturating_sub(popup_width)) / 2,
+            y: compose_area.y + (compose_area.height.saturating_sub(popup_height)) / 2,
+            width: popup_width,
+            height: popup_height,
+        };
+        
+        // Clear the background
+        f.render_widget(Clear, popup_area);
+        
+        // Create configuration content
+        let mut lines = vec![
+            Line::from("Spell Check Configuration"),
+            Line::from(""),
+            Line::from(format!("Current Language: {}", self.spell_checker.current_language())),
+            Line::from(""),
+            Line::from("Available Languages:"),
+            Line::from(""),
+        ];
+        
+        for (i, language) in self.available_languages.iter().enumerate() {
+            let marker = if i == self.language_selected { "▶ " } else { "  " };
+            let style = if i == self.language_selected {
+                Style::default().bg(Color::Blue).fg(Color::White).add_modifier(Modifier::BOLD)
+            } else {
+                Style::default()
+            };
+            
+            // Format language display name
+            let display_name = match language.as_str() {
+                "en_US" => "English (US)",
+                "es_ES" => "Spanish (ES)",  
+                "fr_FR" => "French (FR)",
+                "de_DE" => "German (DE)",
+                _ => language,
+            };
+            
+            lines.push(Line::from(vec![
+                ratatui::text::Span::styled(marker, style),
+                ratatui::text::Span::styled(display_name, style),
+            ]));
+        }
+        
+        lines.push(Line::from(""));
+        lines.push(Line::from("Use ↑/↓ to select, Enter to apply, Esc/F10 to close"));
+        
+        let content = Text::from(lines);
+        
+        let popup = Paragraph::new(content)
+            .block(Block::default()
+                .title("Spell Check Settings")
+                .borders(Borders::ALL)
+                .border_style(theme.get_component_style("popup", true)))
+            .wrap(Wrap { trim: true });
+        
+        f.render_widget(popup, popup_area);
     }
     
     /// Create highlighted line with misspelled words marked
@@ -515,6 +595,10 @@ impl ComposeUI {
             return self.handle_autocomplete_key(key).await;
         }
         
+        if self.is_spell_config_visible {
+            return self.handle_spell_config_key(key).await;
+        }
+        
         match key {
             KeyCode::Esc => ComposeAction::Cancel,
             KeyCode::F(1) => ComposeAction::Send,
@@ -536,6 +620,11 @@ impl ComposeUI {
                 if self.spell_check_enabled {
                     self.previous_spell_error();
                 }
+                ComposeAction::Continue
+            }
+            KeyCode::F(10) => {
+                // Open spell check configuration
+                self.toggle_spell_config();
                 ComposeAction::Continue
             }
             KeyCode::Tab => {
@@ -1159,6 +1248,60 @@ impl ComposeUI {
                     self.current_spell_error = result.misspelled_words.len().saturating_sub(1);
                 }
             }
+        }
+    }
+    
+    /// Toggle spell check configuration popup
+    fn toggle_spell_config(&mut self) {
+        self.is_spell_config_visible = !self.is_spell_config_visible;
+        if self.is_spell_config_visible {
+            // Find current language index
+            let current_lang = self.spell_checker.current_language();
+            if let Some(index) = self.available_languages.iter().position(|lang| lang == current_lang) {
+                self.language_selected = index;
+            }
+        }
+    }
+    
+    /// Handle spell configuration popup key input
+    async fn handle_spell_config_key(&mut self, key: crossterm::event::KeyCode) -> ComposeAction {
+        use crossterm::event::KeyCode;
+        
+        match key {
+            KeyCode::Esc | KeyCode::F(10) => {
+                self.is_spell_config_visible = false;
+                ComposeAction::Continue
+            }
+            KeyCode::Up => {
+                if self.language_selected > 0 {
+                    self.language_selected -= 1;
+                }
+                ComposeAction::Continue
+            }
+            KeyCode::Down => {
+                if self.language_selected + 1 < self.available_languages.len() {
+                    self.language_selected += 1;
+                }
+                ComposeAction::Continue
+            }
+            KeyCode::Enter => {
+                // Apply selected language
+                if self.language_selected < self.available_languages.len() {
+                    let selected_lang = self.available_languages[self.language_selected].clone();
+                    if let Err(e) = self.spell_checker.set_language(&selected_lang).await {
+                        tracing::error!("Failed to set language to {}: {}", selected_lang, e);
+                    } else {
+                        tracing::info!("Spell check language changed to: {}", selected_lang);
+                        // Re-run spell check if enabled
+                        if self.spell_check_enabled {
+                            self.run_spell_check().await;
+                        }
+                    }
+                }
+                self.is_spell_config_visible = false;
+                ComposeAction::Continue
+            }
+            _ => ComposeAction::Continue,
         }
     }
 }

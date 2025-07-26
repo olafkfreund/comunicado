@@ -74,8 +74,7 @@ impl ProviderConfig {
                 OAuth2Scope::OpenId, // Required for user info access
                 OAuth2Scope::Email, // Required to get user email address
                 OAuth2Scope::Profile, // Required to get user name
-                OAuth2Scope::GmailModify, // Less restrictive than GmailFull for development
-                OAuth2Scope::GmailReadonly, // Ensures we can read emails
+                OAuth2Scope::GmailFull, // Full Gmail access required for IMAP
                 OAuth2Scope::GoogleContacts, // Access to Google Contacts
             ],
             additional_params: {

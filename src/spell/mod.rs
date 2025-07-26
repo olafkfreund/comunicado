@@ -44,13 +44,27 @@ impl SpellChecker {
         let mut all_custom_words = config.custom_words.clone();
         all_custom_words.extend(config.technical_terms.clone());
         
-        Ok(Self {
+        let mut spell_checker = Self {
             dictionaries: HashMap::new(),
             dictionary_manager,
             config,
             current_language: "en_US".to_string(),
             custom_words: all_custom_words,
-        })
+        };
+        
+        // Load technical terms from file if it exists
+        let technical_terms_path = "dictionaries/technical-terms.txt";
+        if std::path::Path::new(technical_terms_path).exists() {
+            if let Err(e) = tokio::task::block_in_place(|| {
+                tokio::runtime::Handle::current().block_on(
+                    spell_checker.import_technical_terms(technical_terms_path)
+                )
+            }) {
+                tracing::warn!("Failed to load technical terms file: {}", e);
+            }
+        }
+        
+        Ok(spell_checker)
     }
 
     /// Create spell checker with custom configuration

@@ -196,10 +196,22 @@ impl TokenManager {
     
     /// Create XOAUTH2 SASL string for IMAP authentication
     pub async fn create_xoauth2_string(&self, account_id: &str, username: &str) -> OAuth2Result<String> {
+        tracing::debug!("Creating XOAUTH2 string for account '{}' and username '{}'", account_id, username);
+        
+        // First check if we have any tokens at all
+        let account_ids = self.get_account_ids().await;
+        tracing::debug!("TokenManager has tokens for {} accounts: {:?}", account_ids.len(), account_ids);
+        
         let access_token = self.get_valid_access_token(account_id).await?
-            .ok_or_else(|| OAuth2Error::InvalidToken(
-                format!("No valid access token for account {}", account_id)
-            ))?;
+            .ok_or_else(|| {
+                tracing::error!("No valid access token found for account '{}'. Available accounts: {:?}", account_id, account_ids);
+                OAuth2Error::InvalidToken(
+                    format!("No valid access token for account {}", account_id)
+                )
+            })?;
+        
+        tracing::debug!("Found access token for account '{}': token type '{}', expires at {:?}", 
+                       account_id, access_token.token_type, access_token.expires_at);
         
         // XOAUTH2 format: user=username\x01auth=Bearer token\x01\x01
         let auth_string = format!(
@@ -210,7 +222,9 @@ impl TokenManager {
         
         // Base64 encode the auth string
         use base64::{Engine as _, engine::general_purpose};
-        Ok(general_purpose::STANDARD.encode(auth_string))
+        let encoded = general_purpose::STANDARD.encode(auth_string);
+        tracing::debug!("Generated XOAUTH2 string length: {} characters", encoded.len());
+        Ok(encoded)
     }
     
     /// Validate token format and expiration

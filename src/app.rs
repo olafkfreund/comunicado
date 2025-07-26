@@ -172,20 +172,142 @@ impl App {
     
     /// Run the OAuth2 setup wizard
     async fn run_setup_wizard(&mut self) -> Result<()> {
-        let mut wizard = SetupWizard::new()
-            .map_err(|e| anyhow::anyhow!("Failed to create setup wizard: {}", e))?;
+        tracing::info!("Starting OAuth2 setup wizard");
         
-        if let Some(account_config) = wizard.run().await
-            .map_err(|e| anyhow::anyhow!("Setup wizard failed: {}", e))? {
-            
-            // Store the account configuration in database
-            self.create_account_from_config(&account_config).await?;
-            
-            tracing::info!("Account setup completed successfully!");
-            tracing::info!("Account: {} ({})", account_config.display_name, account_config.email_address);
-        } else {
-            return Err(anyhow::anyhow!("Account setup was cancelled"));
+        // Try TUI wizard first, fallback to file-based setup
+        match self.try_tui_setup_wizard().await {
+            Ok(Some(account_config)) => {
+                self.setup_oauth2_account(&account_config).await?;
+                tracing::info!("Account setup completed successfully!");
+                tracing::info!("Account: {} ({})", account_config.display_name, account_config.email_address);
+                Ok(())
+            }
+            Ok(None) => {
+                Err(anyhow::anyhow!("Account setup was cancelled"))
+            }
+            Err(e) => {
+                tracing::warn!("TUI setup wizard failed: {}", e);
+                tracing::info!("Falling back to file-based setup...");
+                self.try_file_based_setup().await
+            }
         }
+    }
+    
+    /// Try to run the TUI-based setup wizard
+    async fn try_tui_setup_wizard(&mut self) -> Result<Option<crate::oauth2::AccountConfig>> {
+        let mut wizard = crate::oauth2::SetupWizard::new()
+            .map_err(|e| anyhow::anyhow!("Failed to create setup wizard: {}", e))?;
+        tracing::info!("Setup wizard created successfully");
+        
+        let account_config = wizard.run().await
+            .map_err(|e| anyhow::anyhow!("Setup wizard failed: {}", e))?;
+        
+        Ok(account_config)
+    }
+    
+    /// Try file-based OAuth2 setup when TUI fails
+    async fn try_file_based_setup(&mut self) -> Result<()> {
+        use crate::oauth2::OAuth2FileImporter;
+        
+        println!("\n🔧 OAuth2 Setup Required");
+        println!("═══════════════════════════════════════════════════════════════");
+        println!("The interactive setup wizard is not available in this environment.");
+        println!("Please use file-based setup instead:");
+        println!();
+        println!("📁 Step 1: Download OAuth2 credentials from Google Cloud Console");
+        println!("   • Go to: https://console.cloud.google.com/apis/credentials");
+        println!("   • Create OAuth2 Client ID (Desktop Application)");
+        println!("   • Download the JSON file");
+        println!();
+        println!("✉️  Step 2: Enter your email address and credentials file path");
+        println!();
+        
+        // Get email address
+        print!("📧 Email address: ");
+        std::io::Write::flush(&mut std::io::stdout()).unwrap();
+        let mut email = String::new();
+        std::io::stdin().read_line(&mut email)?;
+        let email = email.trim();
+        
+        if !OAuth2FileImporter::validate_email(email) {
+            return Err(anyhow::anyhow!("Invalid email address format"));
+        }
+        
+        // Get display name
+        print!("👤 Display name (optional): ");
+        std::io::Write::flush(&mut std::io::stdout()).unwrap();
+        let mut display_name = String::new();
+        std::io::stdin().read_line(&mut display_name)?;
+        let display_name = display_name.trim();
+        let display_name = if display_name.is_empty() { None } else { Some(display_name.to_string()) };
+        
+        // Get credentials file path
+        print!("📄 Path to credentials JSON file: ");
+        std::io::Write::flush(&mut std::io::stdout()).unwrap();
+        let mut file_path = String::new();
+        std::io::stdin().read_line(&mut file_path)?;
+        let file_path = file_path.trim();
+        
+        // Import credentials and set up account
+        tracing::info!("Starting file-based OAuth2 setup for {}", email);
+        let account_config = OAuth2FileImporter::import_google_credentials(
+            file_path,
+            email,
+            display_name,
+        ).await.map_err(|e| anyhow::anyhow!("Failed to import credentials: {}", e))?;
+        
+        // Setup account using the OAuth2 account setup method
+        self.setup_oauth2_account(&account_config).await?;
+        
+        println!();
+        println!("✅ Account setup completed successfully!");
+        println!("   Account: {} ({})", account_config.display_name, account_config.email_address);
+        println!();
+        
+        Ok(())
+    }
+    
+    /// Setup OAuth2 account (shared between TUI and file setup)
+    async fn setup_oauth2_account(&mut self, account_config: &crate::oauth2::AccountConfig) -> Result<()> {
+        // Store the account configuration in secure storage
+        self.storage.store_account(account_config)
+            .map_err(|e| anyhow::anyhow!("Failed to store account: {}", e))?;
+        
+        // Store OAuth2 tokens in TokenManager for IMAP/SMTP authentication
+        if let Some(ref token_manager) = self.token_manager {
+            // Create TokenResponse from AccountConfig for TokenManager storage
+            let token_response = crate::oauth2::TokenResponse {
+                access_token: account_config.access_token.clone(),
+                refresh_token: account_config.refresh_token.clone(),
+                token_type: "Bearer".to_string(),
+                expires_in: account_config.token_expires_at.map(|expires_at| {
+                    let now = chrono::Utc::now();
+                    let duration = expires_at.signed_duration_since(now);
+                    duration.num_seconds().max(0) as u64
+                }),
+                scope: Some(account_config.scopes.join(" ")),
+            };
+            
+            token_manager.store_tokens(
+                account_config.account_id.clone(),
+                account_config.provider.clone(),
+                &token_response,
+            ).await.map_err(|e| anyhow::anyhow!("Failed to store tokens in TokenManager: {}", e))?;
+            
+            tracing::info!("OAuth2 tokens stored in TokenManager for account: {}", account_config.account_id);
+        } else {
+            tracing::warn!("TokenManager not initialized, OAuth2 tokens not stored for IMAP/SMTP");
+        }
+        
+        // Create account in database using existing method
+        self.create_account_from_config(account_config).await?;
+        
+        // Convert AccountConfig to AccountItem for the UI
+        let account_item = crate::ui::AccountItem::from_config(account_config);
+        
+        // Add account to the UI
+        let accounts = vec![account_item];
+        self.ui.set_accounts(accounts);
         
         Ok(())
     }
@@ -197,6 +319,38 @@ impl App {
         
         if accounts.is_empty() {
             return self.load_sample_data().await;
+        }
+        
+        // Load OAuth2 tokens into TokenManager for existing accounts
+        if let Some(ref token_manager) = self.token_manager {
+            for account in &accounts {
+                if !account.access_token.is_empty() {
+                    // Create TokenResponse from AccountConfig for TokenManager storage
+                    let token_response = crate::oauth2::TokenResponse {
+                        access_token: account.access_token.clone(),
+                        refresh_token: account.refresh_token.clone(),
+                        token_type: "Bearer".to_string(),
+                        expires_in: account.token_expires_at.map(|expires_at| {
+                            let now = chrono::Utc::now();
+                            let duration = expires_at.signed_duration_since(now);
+                            duration.num_seconds().max(0) as u64
+                        }),
+                        scope: Some(account.scopes.join(" ")),
+                    };
+                    
+                    if let Err(e) = token_manager.store_tokens(
+                        account.account_id.clone(),
+                        account.provider.clone(),
+                        &token_response,
+                    ).await {
+                        tracing::warn!("Failed to load tokens for account {}: {}", account.account_id, e);
+                    } else {
+                        tracing::info!("Loaded OAuth2 tokens for existing account: {}", account.account_id);
+                    }
+                }
+            }
+        } else {
+            tracing::warn!("TokenManager not initialized, OAuth2 tokens not loaded for existing accounts");
         }
         
         // Convert AccountConfig to AccountItem for the UI
@@ -222,9 +376,10 @@ impl App {
                         let _ = self.ui.load_messages(current_account_id.clone(), "INBOX".to_string()).await;
                     }
                     Err(e) => {
-                        tracing::warn!("Failed to sync from IMAP: {}, falling back to sample data", e);
-                        // Fall back to sample data if IMAP fails
-                        let _ = self.load_sample_data().await;
+                        tracing::error!("IMAP sync failed for account {}: {}", current_account_id, e);
+                        // Show the actual error instead of falling back to sample data
+                        // This helps debug OAuth2 authentication issues
+                        return Err(anyhow::anyhow!("Failed to sync IMAP data: {}", e));
                     }
                 }
             } else {

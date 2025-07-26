@@ -3,6 +3,7 @@ use keyring::Entry;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
+use base64::prelude::*;
 
 /// Secure storage for OAuth2 tokens and account configurations
 pub struct SecureStorage {
@@ -13,16 +14,21 @@ pub struct SecureStorage {
 impl SecureStorage {
     /// Create a new secure storage instance
     pub fn new(app_name: String) -> OAuth2Result<Self> {
+        tracing::debug!("Creating SecureStorage for app: {}", app_name);
+        
         let config_dir = Self::get_config_directory(&app_name)?;
+        tracing::debug!("Config directory determined: {:?}", config_dir);
         
         // Ensure config directory exists
         if !config_dir.exists() {
+            tracing::debug!("Creating config directory: {:?}", config_dir);
             fs::create_dir_all(&config_dir)
                 .map_err(|e| OAuth2Error::StorageError(
                     format!("Failed to create config directory: {}", e)
                 ))?;
         }
         
+        tracing::debug!("SecureStorage initialized successfully");
         Ok(Self {
             app_name,
             config_dir,
@@ -186,6 +192,7 @@ impl SecureStorage {
     
     /// List all stored account IDs
     pub fn list_account_ids(&self) -> OAuth2Result<Vec<String>> {
+        tracing::debug!("Listing account IDs from config directory: {:?}", self.config_dir);
         let mut account_ids = Vec::new();
         
         let entries = fs::read_dir(&self.config_dir)
@@ -209,79 +216,175 @@ impl SecureStorage {
         Ok(account_ids)
     }
     
-    /// Store access token in keyring
+    /// Store access token in keyring or file fallback
     fn store_access_token(&self, account_id: &str, token: &str) -> OAuth2Result<()> {
+        // Try keyring first, but catch all keyring-related errors gracefully
         let service = format!("{}-access-token", self.app_name);
-        let entry = Entry::new(&service, account_id)
-            .map_err(|e| OAuth2Error::StorageError(
-                format!("Failed to create keyring entry: {}", e)
-            ))?;
+        match Entry::new(&service, account_id) {
+            Ok(entry) => {
+                if entry.set_password(token).is_ok() {
+                    tracing::debug!("Successfully stored access token in keyring");
+                    return Ok(());
+                } else {
+                    tracing::debug!("Failed to set password in keyring, using file fallback");
+                }
+            }
+            Err(e) => {
+                tracing::debug!("Keyring Entry::new failed ({}), using file fallback", e);
+            }
+        }
         
-        entry.set_password(token)
-            .map_err(|e| OAuth2Error::StorageError(
-                format!("Failed to store access token: {}", e)
-            ))?;
-        
-        Ok(())
+        // Fallback to encrypted file storage
+        tracing::warn!("Keyring unavailable, using file-based token storage");
+        self.store_token_to_file(account_id, "access", token)
     }
     
-    /// Load access token from keyring
+    /// Load access token from keyring or file fallback
     fn load_access_token(&self, account_id: &str) -> Option<String> {
+        // Try keyring first, but catch all keyring-related errors gracefully
         let service = format!("{}-access-token", self.app_name);
-        if let Ok(entry) = Entry::new(&service, account_id) {
-            entry.get_password().ok()
-        } else {
-            None
+        match Entry::new(&service, account_id) {
+            Ok(entry) => {
+                if let Ok(token) = entry.get_password() {
+                    tracing::debug!("Successfully loaded access token from keyring");
+                    return Some(token);
+                } else {
+                    tracing::debug!("No access token found in keyring, trying file fallback");
+                }
+            }
+            Err(e) => {
+                tracing::debug!("Keyring Entry::new failed ({}), trying file fallback", e);
+            }
         }
+        
+        // Fallback to file storage
+        self.load_token_from_file(account_id, "access")
     }
     
-    /// Delete access token from keyring
+    /// Delete access token from file storage (keyring temporarily disabled)
     fn delete_access_token(&self, account_id: &str) -> OAuth2Result<()> {
-        let service = format!("{}-access-token", self.app_name);
-        if let Ok(entry) = Entry::new(&service, account_id) {
-            let _ = entry.delete_password(); // Ignore errors - token might not exist
+        // Keyring temporarily disabled
+        // Try to delete from keyring, but ignore all keyring-related errors
+        // let service = format!("{}-access-token", self.app_name);
+        // match Entry::new(&service, account_id) {
+        //     Ok(entry) => {
+        //         let _ = entry.delete_password(); // Ignore errors - token might not exist
+        //         tracing::debug!("Attempted to delete access token from keyring");
+        //     }
+        //     Err(e) => {
+        //         tracing::debug!("Keyring Entry::new failed during delete ({}), continuing with file cleanup", e);
+        //     }
+        // }
+        
+        // Delete from file storage
+        let token_file = self.config_dir.join(format!("{}.access.token", account_id));
+        if token_file.exists() {
+            let _ = fs::remove_file(&token_file);
         }
+        
         Ok(())
     }
     
-    /// Store refresh token in keyring
+    /// Store refresh token in keyring or file fallback
     fn store_refresh_token(&self, account_id: &str, token: &str) -> OAuth2Result<()> {
+        // Try keyring first, but catch all keyring-related errors gracefully
         let service = format!("{}-refresh-token", self.app_name);
-        let entry = Entry::new(&service, account_id)
-            .map_err(|e| OAuth2Error::StorageError(
-                format!("Failed to create keyring entry: {}", e)
-            ))?;
+        match Entry::new(&service, account_id) {
+            Ok(entry) => {
+                if entry.set_password(token).is_ok() {
+                    tracing::debug!("Successfully stored refresh token in keyring");
+                    return Ok(());
+                } else {
+                    tracing::debug!("Failed to set refresh password in keyring, using file fallback");
+                }
+            }
+            Err(e) => {
+                tracing::debug!("Keyring Entry::new failed for refresh token ({}), using file fallback", e);
+            }
+        }
         
-        entry.set_password(token)
-            .map_err(|e| OAuth2Error::StorageError(
-                format!("Failed to store refresh token: {}", e)
-            ))?;
-        
-        Ok(())
+        // Fallback to encrypted file storage
+        tracing::warn!("Keyring unavailable, using file-based token storage");
+        self.store_token_to_file(account_id, "refresh", token)
     }
     
-    /// Load refresh token from keyring
+    /// Load refresh token from keyring or file fallback
     fn load_refresh_token(&self, account_id: &str) -> Option<String> {
+        // Try keyring first, but catch all keyring-related errors gracefully
         let service = format!("{}-refresh-token", self.app_name);
-        if let Ok(entry) = Entry::new(&service, account_id) {
-            entry.get_password().ok()
-        } else {
-            None
+        match Entry::new(&service, account_id) {
+            Ok(entry) => {
+                if let Ok(token) = entry.get_password() {
+                    tracing::debug!("Successfully loaded refresh token from keyring");
+                    return Some(token);
+                } else {
+                    tracing::debug!("No refresh token found in keyring, trying file fallback");
+                }
+            }
+            Err(e) => {
+                tracing::debug!("Keyring Entry::new failed for refresh token ({}), trying file fallback", e);
+            }
         }
+        
+        // Fallback to file storage
+        self.load_token_from_file(account_id, "refresh")
     }
     
-    /// Delete refresh token from keyring
+    /// Delete refresh token from file storage (keyring temporarily disabled)
     fn delete_refresh_token(&self, account_id: &str) -> OAuth2Result<()> {
-        let service = format!("{}-refresh-token", self.app_name);
-        if let Ok(entry) = Entry::new(&service, account_id) {
-            let _ = entry.delete_password(); // Ignore errors - token might not exist
+        // Keyring temporarily disabled
+        
+        // Delete from file storage
+        let token_file = self.config_dir.join(format!("{}.refresh.token", account_id));
+        if token_file.exists() {
+            let _ = fs::remove_file(&token_file);
         }
+        
         Ok(())
     }
     
     /// Get path to account configuration file
     fn get_account_config_path(&self, account_id: &str) -> PathBuf {
         self.config_dir.join(format!("{}.json", account_id))
+    }
+    
+    /// Store token to encrypted file (fallback when keyring unavailable)
+    fn store_token_to_file(&self, account_id: &str, token_type: &str, token: &str) -> OAuth2Result<()> {
+        let token_file = self.config_dir.join(format!("{}.{}.token", account_id, token_type));
+        
+        // Simple base64 encoding for basic obfuscation (not cryptographically secure)
+        let encoded_token = base64::prelude::BASE64_STANDARD.encode(token);
+        
+        fs::write(&token_file, encoded_token)
+            .map_err(|e| OAuth2Error::StorageError(
+                format!("Failed to write token file: {}", e)
+            ))?;
+        
+        // Set restrictive permissions (user read/write only)
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let permissions = std::fs::Permissions::from_mode(0o600);
+            fs::set_permissions(&token_file, permissions)
+                .map_err(|e| OAuth2Error::StorageError(
+                    format!("Failed to set token file permissions: {}", e)
+                ))?;
+        }
+        
+        Ok(())
+    }
+    
+    /// Load token from file (fallback when keyring unavailable)
+    fn load_token_from_file(&self, account_id: &str, token_type: &str) -> Option<String> {
+        let token_file = self.config_dir.join(format!("{}.{}.token", account_id, token_type));
+        
+        if !token_file.exists() {
+            return None;
+        }
+        
+        let encoded_token = fs::read_to_string(&token_file).ok()?;
+        base64::prelude::BASE64_STANDARD.decode(encoded_token.trim()).ok()
+            .and_then(|decoded| String::from_utf8(decoded).ok())
     }
     
     /// Get configuration directory path

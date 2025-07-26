@@ -268,9 +268,16 @@ impl ImapAccountManager {
     
     /// Get IMAP client for account
     pub async fn get_client(&self, account_id: &str) -> ImapResult<Arc<Mutex<ImapClient>>> {
+        tracing::debug!("Getting IMAP client for account: '{}'", account_id);
+        
         let accounts = self.accounts.read().await;
+        tracing::debug!("IMAP AccountManager has {} accounts: {:?}", accounts.len(), accounts.keys().collect::<Vec<_>>());
+        
         let account = accounts.get(account_id)
-            .ok_or_else(|| ImapError::not_found(&format!("Account {} not found", account_id)))?;
+            .ok_or_else(|| {
+                tracing::error!("Account '{}' not found in IMAP manager. Available accounts: {:?}", account_id, accounts.keys().collect::<Vec<_>>());
+                ImapError::not_found(&format!("Account {} not found", account_id))
+            })?;
         
         let mut pool = self.connection_pool.write().await;
         let client_arc = pool.get_or_create_client(account, self.token_manager.as_ref()).await?;
@@ -279,11 +286,19 @@ impl ImapAccountManager {
         {
             let mut client = client_arc.lock().await;
             if !client.is_connected() {
+                tracing::info!("Connecting to IMAP server for account: {}", account_id);
                 client.connect().await?;
+                tracing::info!("Successfully connected to IMAP server for account: {}", account_id);
             }
             
             if !client.is_authenticated() {
-                client.authenticate().await?;
+                tracing::info!("Authenticating IMAP connection for account: {}", account_id);
+                client.authenticate().await
+                    .map_err(|e| {
+                        tracing::error!("IMAP authentication failed for account {}: {}", account_id, e);
+                        e
+                    })?;
+                tracing::info!("Successfully authenticated IMAP connection for account: {}", account_id);
             }
         }
         

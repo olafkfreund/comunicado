@@ -74,7 +74,12 @@ enum InputMode {
 impl SetupWizard {
     /// Create a new setup wizard
     pub fn new() -> OAuth2Result<Self> {
+        tracing::debug!("Creating OAuth2 setup wizard");
+        
+        tracing::debug!("Initializing SecureStorage for wizard");
         let storage = SecureStorage::new("comunicado".to_string())?;
+        tracing::debug!("SecureStorage created successfully for wizard");
+        
         let mut provider_list_state = ListState::default();
         provider_list_state.select(Some(0));
         
@@ -100,12 +105,21 @@ impl SetupWizard {
     
     /// Run the setup wizard
     pub async fn run(&mut self) -> OAuth2Result<Option<AccountConfig>> {
+        tracing::debug!("Starting wizard run() method");
+        
         // Setup terminal
-        enable_raw_mode().map_err(|e| OAuth2Error::StorageError(e.to_string()))?;
+        tracing::debug!("Enabling raw mode");
+        enable_raw_mode().map_err(|e| OAuth2Error::StorageError(format!("Failed to enable raw mode: {}", e)))?;
+        tracing::debug!("Raw mode enabled successfully");
+        
+        tracing::debug!("Setting up terminal backend");
         let mut stdout = io::stdout();
-        execute!(stdout, EnterAlternateScreen).map_err(|e| OAuth2Error::StorageError(e.to_string()))?;
+        execute!(stdout, EnterAlternateScreen).map_err(|e| OAuth2Error::StorageError(format!("Failed to enter alternate screen: {}", e)))?;
+        tracing::debug!("Alternate screen entered successfully");
+        
         let backend = CrosstermBackend::new(stdout);
-        let mut terminal = Terminal::new(backend).map_err(|e| OAuth2Error::StorageError(e.to_string()))?;
+        let mut terminal = Terminal::new(backend).map_err(|e| OAuth2Error::StorageError(format!("Failed to create terminal: {}", e)))?;
+        tracing::debug!("Terminal setup complete");
         
         let result = self.run_wizard_loop(&mut terminal).await;
         
@@ -118,7 +132,9 @@ impl SetupWizard {
     }
     
     async fn run_wizard_loop(&mut self, terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> OAuth2Result<Option<AccountConfig>> {
+        tracing::debug!("Starting wizard main loop");
         loop {
+            tracing::debug!("Drawing wizard UI, current state: {:?}", self.state);
             terminal.draw(|f| self.draw(f)).map_err(|e| OAuth2Error::StorageError(e.to_string()))?;
             
             match self.state {

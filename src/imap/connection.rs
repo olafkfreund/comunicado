@@ -1,10 +1,30 @@
 use crate::imap::{ImapConfig, ImapError, ImapResult};
-// Removed unused std::io imports
 use std::net::ToSocketAddrs;
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader as AsyncBufReader, BufWriter as AsyncBufWriter};
 use tokio::net::TcpStream as AsyncTcpStream;
 use tokio::time::timeout;
+use tokio_rustls::{TlsConnector, client::TlsStream};
+use rustls::{ClientConfig, RootCertStore};
+
+/// Connection stream that can be either plain TCP or TLS
+enum ConnectionStream {
+    Plain(AsyncTcpStream),
+    Tls(TlsStream<AsyncTcpStream>),
+}
+
+/// Split connection stream for reading/writing
+enum SplitStream {
+    Plain {
+        reader: AsyncBufReader<tokio::net::tcp::OwnedReadHalf>,
+        writer: AsyncBufWriter<tokio::net::tcp::OwnedWriteHalf>,
+    },
+    Tls {
+        reader: AsyncBufReader<tokio::io::ReadHalf<TlsStream<AsyncTcpStream>>>,
+        writer: AsyncBufWriter<tokio::io::WriteHalf<TlsStream<AsyncTcpStream>>>,
+    },
+}
 
 /// IMAP connection state
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -19,9 +39,7 @@ pub enum ConnectionState {
 pub struct ImapConnection {
     config: ImapConfig,
     state: ConnectionState,
-    stream: Option<AsyncTcpStream>,
-    reader: Option<AsyncBufReader<tokio::net::tcp::OwnedReadHalf>>,
-    writer: Option<AsyncBufWriter<tokio::net::tcp::OwnedWriteHalf>>,
+    stream: Option<SplitStream>,
     tag_counter: u32,
     greeting: Option<String>,
 }
@@ -33,8 +51,6 @@ impl ImapConnection {
             config,
             state: ConnectionState::Disconnected,
             stream: None,
-            reader: None,
-            writer: None,
             tag_counter: 0,
             greeting: None,
         }
@@ -58,25 +74,45 @@ impl ImapConnection {
         
         // Connect with timeout
         let timeout_duration = Duration::from_secs(self.config.timeout_seconds);
-        let stream = timeout(timeout_duration, AsyncTcpStream::connect(&socket_addrs[0]))
+        let tcp_stream = timeout(timeout_duration, AsyncTcpStream::connect(&socket_addrs[0]))
             .await
             .map_err(|_| ImapError::Timeout)?
             .map_err(|e| ImapError::connection(format!("Failed to connect to {}: {}", addr, e)))?;
+        
+        let split_stream = if self.config.use_tls {
+            // Set up TLS connection
+            let mut root_store = RootCertStore::empty();
+            root_store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
             
-        // TODO: Add TLS support here when needed
-        if self.config.use_tls {
-            return Err(ImapError::not_supported("TLS support not yet implemented"));
-        }
+            let config = ClientConfig::builder()
+                .with_root_certificates(root_store)
+                .with_no_client_auth();
+            
+            let connector = TlsConnector::from(Arc::new(config));
+            let hostname = self.config.hostname.clone(); // Clone to avoid lifetime issues
+            let domain = rustls::pki_types::ServerName::try_from(hostname.as_str())
+                .map_err(|e| ImapError::connection(format!("Invalid hostname for TLS: {}", e)))?
+                .to_owned(); // Convert to owned to avoid lifetime issues
+            
+            let tls_stream = connector.connect(domain, tcp_stream).await
+                .map_err(|e| ImapError::connection(format!("TLS handshake failed: {}", e)))?;
+            
+            // Split TLS stream
+            let (read_half, write_half) = tokio::io::split(tls_stream);
+            let reader = AsyncBufReader::new(read_half);
+            let writer = AsyncBufWriter::new(write_half);
+            
+            SplitStream::Tls { reader, writer }
+        } else {
+            // Plain TCP connection
+            let (read_half, write_half) = tcp_stream.into_split();
+            let reader = AsyncBufReader::new(read_half);
+            let writer = AsyncBufWriter::new(write_half);
+            
+            SplitStream::Plain { reader, writer }
+        };
         
-        // Split stream for reading and writing
-        let (read_half, write_half) = stream.into_split();
-        let reader = AsyncBufReader::new(read_half);
-        let writer = AsyncBufWriter::new(write_half);
-        
-        // For now, store a reference to be used later
-        // This is a simplified approach - in production we'd handle this differently
-        self.reader = Some(reader);
-        self.writer = Some(writer);
+        self.stream = Some(split_stream);
         
         // Read greeting
         let greeting = self.read_response().await?;
@@ -109,8 +145,6 @@ impl ImapConnection {
         }
         
         // Clean up connection
-        self.reader = None;
-        self.writer = None;
         self.stream = None;
         self.state = ConnectionState::Disconnected;
         self.tag_counter = 0;
@@ -125,19 +159,27 @@ impl ImapConnection {
             return Err(ImapError::invalid_state("Not connected"));
         }
         
-        let writer = self.writer.as_mut()
-            .ok_or_else(|| ImapError::invalid_state("No writer available"))?;
-        
         // Generate unique tag
         self.tag_counter += 1;
         let tag = format!("A{:04}", self.tag_counter);
         
         // Send command
         let full_command = format!("{} {}\r\n", tag, command);
-        writer.write_all(full_command.as_bytes()).await
-            .map_err(|e| ImapError::connection(format!("Failed to send command: {}", e)))?;
-        writer.flush().await
-            .map_err(|e| ImapError::connection(format!("Failed to flush command: {}", e)))?;
+        match self.stream.as_mut() {
+            Some(SplitStream::Plain { writer, .. }) => {
+                writer.write_all(full_command.as_bytes()).await
+                    .map_err(|e| ImapError::connection(format!("Failed to send command: {}", e)))?;
+                writer.flush().await
+                    .map_err(|e| ImapError::connection(format!("Failed to flush command: {}", e)))?;
+            }
+            Some(SplitStream::Tls { writer, .. }) => {
+                writer.write_all(full_command.as_bytes()).await
+                    .map_err(|e| ImapError::connection(format!("Failed to send command: {}", e)))?;
+                writer.flush().await
+                    .map_err(|e| ImapError::connection(format!("Failed to flush command: {}", e)))?;
+            }
+            None => return Err(ImapError::invalid_state("No connection available")),
+        }
         
         // Read response until we get the tagged response
         let mut responses = Vec::new();
@@ -162,14 +204,20 @@ impl ImapConnection {
     
     /// Read a single response line from the server (public for IDLE)
     pub async fn read_response(&mut self) -> ImapResult<String> {
-        let reader = self.reader.as_mut()
-            .ok_or_else(|| ImapError::invalid_state("No reader available"))?;
-        
         let mut line = String::new();
         let timeout_duration = Duration::from_secs(self.config.timeout_seconds);
         
-        timeout(timeout_duration, reader.read_line(&mut line))
-            .await
+        let read_result = match self.stream.as_mut() {
+            Some(SplitStream::Plain { reader, .. }) => {
+                timeout(timeout_duration, reader.read_line(&mut line)).await
+            }
+            Some(SplitStream::Tls { reader, .. }) => {
+                timeout(timeout_duration, reader.read_line(&mut line)).await
+            }
+            None => return Err(ImapError::invalid_state("No connection available")),
+        };
+        
+        read_result
             .map_err(|_| ImapError::Timeout)?
             .map_err(|e| ImapError::connection(format!("Failed to read response: {}", e)))?;
         
@@ -226,8 +274,6 @@ impl Drop for ImapConnection {
     fn drop(&mut self) {
         // Clean up connection in destructor
         // Note: This is synchronous cleanup - in async context we'd need explicit disconnect
-        self.reader = None;
-        self.writer = None;
         self.stream = None;
         self.state = ConnectionState::Disconnected;
     }
