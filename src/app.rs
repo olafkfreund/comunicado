@@ -407,6 +407,12 @@ impl App {
                         EventResult::ComposeAction(action) => {
                             self.handle_compose_action(action).await?;
                         }
+                        EventResult::AccountSwitch(account_id) => {
+                            self.handle_account_switch(&account_id).await;
+                        }
+                        EventResult::AddAccount => {
+                            self.handle_add_account().await?;
+                        }
                     }
                     
                     // Check for quit command
@@ -630,6 +636,64 @@ impl App {
             // TODO: Implement a basic compose mode without contacts
             tracing::warn!("Compose mode requires contacts manager - skipping for now");
         }
+    }
+    
+    /// Handle account switching with proper error handling
+    async fn handle_account_switch(&mut self, account_id: &str) {
+        tracing::info!("Switching to account: {}", account_id);
+        
+        // Update account status to show we're attempting to connect
+        self.ui.update_account_status(account_id, crate::ui::AccountSyncStatus::Syncing, None);
+        
+        // Try to switch account - catch any errors gracefully
+        match self.ui.switch_to_account(account_id).await {
+            Ok(()) => {
+                tracing::info!("Successfully switched to account: {}", account_id);
+                // Update status to online if successful
+                self.ui.update_account_status(account_id, crate::ui::AccountSyncStatus::Online, None);
+            }
+            Err(e) => {
+                tracing::error!("Failed to switch to account {}: {}", account_id, e);
+                // Update status to error if failed
+                self.ui.update_account_status(account_id, crate::ui::AccountSyncStatus::Error, None);
+                
+                // Don't crash the app - just log the error and continue
+                // The user can try again or switch to a different account
+            }
+        }
+    }
+    
+    /// Handle adding a new account by launching the setup wizard
+    async fn handle_add_account(&mut self) -> Result<()> {
+        tracing::info!("Launching account setup wizard");
+        
+        // Create and run the setup wizard
+        let mut wizard = SetupWizard::new()
+            .map_err(|e| anyhow::anyhow!("Failed to create setup wizard: {}", e))?;
+        
+        if let Some(account_config) = wizard.run().await
+            .map_err(|e| anyhow::anyhow!("Setup wizard failed: {}", e))? {
+            
+            // Create the account in the database
+            self.create_account_from_config(&account_config).await?;
+            
+            // Convert to AccountItem for the UI
+            let account_item = crate::ui::AccountItem::from_config(&account_config);
+            
+            // Add the account to the UI
+            self.ui.add_account(account_item);
+            
+            tracing::info!("New account added successfully: {} ({})", 
+                          account_config.display_name, account_config.email_address);
+            
+            // Optionally switch to the new account immediately
+            self.handle_account_switch(&account_config.account_id).await;
+            
+        } else {
+            tracing::info!("Account setup was cancelled by user");
+        }
+        
+        Ok(())
     }
     
     /// Convert IMAP message to StoredMessage format for database storage

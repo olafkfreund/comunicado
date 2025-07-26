@@ -10,6 +10,8 @@ pub struct EventHandler {
 pub enum EventResult {
     Continue,
     ComposeAction(ComposeAction),
+    AccountSwitch(String), // Account ID to switch to
+    AddAccount, // Launch account setup wizard
 }
 
 impl EventHandler {
@@ -116,9 +118,9 @@ impl EventHandler {
                 match ui.focused_pane() {
                     FocusedPane::AccountSwitcher => {
                         if let Some(account_id) = ui.account_switcher_mut().select_current() {
-                            // Switch to the selected account asynchronously
-                            // For now, we'll set the account and let the main loop handle loading
+                            // Return account switch event to be handled by main loop
                             tracing::info!("Account selected: {}", account_id);
+                            return EventResult::AccountSwitch(account_id);
                         }
                     }
                     FocusedPane::FolderTree => {
@@ -274,6 +276,12 @@ impl EventHandler {
                     // Return a special compose action to signal the app to start compose mode
                     return EventResult::ComposeAction(ComposeAction::StartCompose);
                 }
+            }
+            
+            // Add account shortcut
+            KeyCode::Char('a') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                // Ctrl+A to add a new account
+                return EventResult::AddAccount;
             }
             
             _ => {}

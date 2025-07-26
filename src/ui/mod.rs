@@ -408,6 +408,11 @@ impl UI {
         self.account_switcher.set_accounts(accounts);
     }
     
+    /// Add a new account to the account switcher
+    pub fn add_account(&mut self, account: AccountItem) {
+        self.account_switcher.update_account(account);
+    }
+    
     /// Get the currently selected account
     pub fn get_current_account(&self) -> Option<&AccountItem> {
         self.account_switcher.get_current_account()
