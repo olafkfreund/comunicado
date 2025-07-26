@@ -449,20 +449,32 @@ impl MessageList {
     }
     
     fn build_flat_view(&mut self) {
-        // For now, use the existing sample messages
-        // In a real implementation, this would sort the actual email messages
-        self.initialize_sample_messages();
-        
-        // Apply sorting to messages
-        // Note: This would use actual EmailMessage objects in production
+        // Only initialize sample messages if we don't have real messages loaded
+        if self.current_account.is_none() && self.current_folder.is_none() {
+            tracing::info!("No real messages loaded, using sample messages");
+            self.initialize_sample_messages();
+        } else {
+            tracing::info!("Using real messages for flat view, {} messages available", self.messages.len());
+            // Apply sorting to existing real messages
+            // Sort by date (newest first) as default
+            self.messages.sort_by(|a, b| b.date.cmp(&a.date));
+        }
     }
     
     fn build_threaded_view(&mut self) {
-        // Clear current view
-        self.messages.clear();
-        
-        // Generate sample threaded messages for demonstration
-        self.initialize_sample_threaded_messages();
+        // Only use sample threaded messages if we don't have real messages loaded
+        if self.current_account.is_none() && self.current_folder.is_none() {
+            tracing::info!("No real messages loaded, using sample threaded messages");
+            // Clear current view
+            self.messages.clear();
+            // Generate sample threaded messages for demonstration
+            self.initialize_sample_threaded_messages();
+        } else {
+            tracing::info!("Using real messages for threaded view, {} messages available", self.messages.len());
+            // TODO: Implement proper threading for real messages
+            // For now, just keep the real messages as-is
+            // In the future, this would group messages by thread and build the hierarchy
+        }
     }
     
     fn initialize_sample_threaded_messages(&mut self) {
@@ -583,17 +595,23 @@ impl MessageList {
     
     /// Load messages from database for a specific account and folder
     pub async fn load_messages(&mut self, account_id: String, folder_name: String) -> Result<(), Box<dyn std::error::Error>> {
+        tracing::info!("MessageList::load_messages called with account_id: {}, folder_name: {}", account_id, folder_name);
+        
         if let Some(ref database) = self.database {
             self.current_account = Some(account_id.clone());
             self.current_folder = Some(folder_name.clone());
             
             // Load messages from database
+            tracing::info!("Loading messages from database...");
             let stored_messages = database.get_messages(&account_id, &folder_name, Some(100), None).await?;
+            tracing::info!("Loaded {} messages from database", stored_messages.len());
             
             // Convert stored messages to MessageItems
             self.messages = stored_messages.into_iter().map(|msg| {
                 MessageItem::from_stored_message(&msg)
             }).collect();
+            
+            tracing::info!("Converted to {} MessageItems", self.messages.len());
             
             // Sort messages by date (newest first)
             self.messages.sort_by(|a, b| b.date.cmp(&a.date));
@@ -601,9 +619,14 @@ impl MessageList {
             // Reset selection
             if !self.messages.is_empty() {
                 self.state.select(Some(0));
+                tracing::info!("Selected first message, total messages: {}", self.messages.len());
             } else {
                 self.state.select(None);
+                tracing::warn!("No messages loaded, selection cleared");
             }
+        } else {
+            tracing::error!("Database not available in MessageList");
+            return Err("Database not available".into());
         }
         
         Ok(())

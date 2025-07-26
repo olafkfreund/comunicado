@@ -93,11 +93,11 @@ impl UI {
     }
     
     fn initialize_status_bar(&mut self) {
-        // Add email status segment
+        // Add email status segment (will be updated with real data when messages are loaded)
         let email_segment = EmailStatusSegment {
-            unread_count: 5, // Sample data
-            total_count: 127,
-            sync_status: SyncStatus::Online,
+            unread_count: 0,
+            total_count: 0,
+            sync_status: SyncStatus::Offline,
         };
         self.status_bar.add_segment("email".to_string(), email_segment);
         
@@ -109,9 +109,16 @@ impl UI {
         self.status_bar.add_segment("calendar".to_string(), calendar_segment);
         
         // Add system info segment
+        let current_time = chrono::Local::now().format("%H:%M").to_string();
+        let active_account = if let Some(account) = self.account_switcher.get_current_account() {
+            account.email_address.clone()
+        } else {
+            "No account selected".to_string()
+        };
+        
         let system_segment = SystemInfoSegment {
-            current_time: "14:30".to_string(),
-            active_account: "work@example.com".to_string(),
+            current_time,
+            active_account,
         };
         self.status_bar.add_segment("system".to_string(), system_segment);
         
@@ -398,9 +405,31 @@ impl UI {
     
     pub fn update_system_time(&mut self, time: String) {
         // Get the current system segment and update only the time
+        let active_account = if let Some(account) = self.account_switcher.get_current_account() {
+            account.email_address.clone()
+        } else {
+            "No account selected".to_string()
+        };
+        
         let system_segment = SystemInfoSegment {
             current_time: time,
-            active_account: "work@example.com".to_string(), // TODO: Get from actual account
+            active_account,
+        };
+        self.status_bar.add_segment("system".to_string(), system_segment);
+    }
+    
+    /// Update status bar with current account information
+    pub fn update_status_bar_account_info(&mut self) {
+        let current_time = chrono::Local::now().format("%H:%M").to_string();
+        let active_account = if let Some(account) = self.account_switcher.get_current_account() {
+            account.email_address.clone()
+        } else {
+            "No account selected".to_string()
+        };
+        
+        let system_segment = SystemInfoSegment {
+            current_time,
+            active_account,
         };
         self.status_bar.add_segment("system".to_string(), system_segment);
     }
@@ -445,6 +474,9 @@ impl UI {
     /// Set available accounts in the account switcher
     pub fn set_accounts(&mut self, accounts: Vec<AccountItem>) {
         self.account_switcher.set_accounts(accounts);
+        
+        // Update status bar with current account after setting accounts
+        self.update_status_bar_account_info();
     }
     
     /// Add a new account to the account switcher
