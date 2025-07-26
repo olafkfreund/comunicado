@@ -297,6 +297,50 @@ impl ContentPreview {
                 all_lines.push(self.render_content_line(content_line, theme));
             }
             
+            // Add attachments section if there are any
+            if !email.attachments.is_empty() {
+                all_lines.push(Line::from("")); // Empty line separator
+                all_lines.push(Line::from(vec![
+                    Span::styled("📎 Attachments:", Style::default()
+                        .fg(theme.colors.content_preview.header)
+                        .add_modifier(Modifier::BOLD)
+                    )
+                ]));
+                
+                for (index, attachment) in email.attachments.iter().enumerate() {
+                    let size_display = if attachment.size > 0 {
+                        if attachment.size < 1024 {
+                            format!(" ({}B)", attachment.size)
+                        } else if attachment.size < 1024 * 1024 {
+                            format!(" ({:.1}KB)", attachment.size as f64 / 1024.0)
+                        } else {
+                            format!(" ({:.1}MB)", attachment.size as f64 / (1024.0 * 1024.0))
+                        }
+                    } else {
+                        String::new()
+                    };
+                    
+                    let attachment_line = Line::from(vec![
+                        Span::styled(format!("  {}. ", index + 1), 
+                            Style::default().fg(theme.colors.content_preview.quote)),
+                        Span::styled(&attachment.filename, 
+                            Style::default().fg(theme.colors.content_preview.body).add_modifier(Modifier::UNDERLINED)),
+                        Span::styled(size_display, 
+                            Style::default().fg(theme.colors.content_preview.quote)),
+                        Span::styled(format!(" [{}]", attachment.content_type), 
+                            Style::default().fg(theme.colors.content_preview.quote)),
+                    ]);
+                    
+                    all_lines.push(attachment_line);
+                }
+                
+                // Add instruction line
+                all_lines.push(Line::from(vec![
+                    Span::styled("  Press 's' to save selected attachment", 
+                        Style::default().fg(theme.colors.content_preview.quote).add_modifier(Modifier::ITALIC))
+                ]));
+            }
+            
             // Apply scrolling
             let start_line = self.scroll;
             let end_line = (start_line + content_height).min(all_lines.len());

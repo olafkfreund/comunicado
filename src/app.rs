@@ -861,6 +861,9 @@ impl App {
         // Extract and parse email body content
         let (body_text, body_html) = self.parse_email_body(imap_message);
         
+        // Parse attachments from body structure
+        let attachments = self.parse_attachments_from_body_structure(imap_message);
+        
         // Create StoredMessage
         let stored_message = crate::email::StoredMessage {
             id: Uuid::new_v4(),
@@ -885,7 +888,7 @@ impl App {
             // Content
             body_text,
             body_html,
-            attachments: Vec::new(), // TODO: Parse attachments
+            attachments,
             
             // Metadata
             flags,
@@ -927,6 +930,52 @@ impl App {
         } else {
             // This is plain text content
             (Some(raw_body.clone()), None)
+        }
+    }
+    
+    /// Parse attachments from IMAP message body structure
+    fn parse_attachments_from_body_structure(&self, imap_message: &crate::imap::ImapMessage) -> Vec<crate::email::StoredAttachment> {
+        let mut attachments = Vec::new();
+        
+        if let Some(ref body_structure) = imap_message.body_structure {
+            self.extract_attachments_recursive(body_structure, &mut attachments, 0);
+        }
+        
+        attachments
+    }
+    
+    /// Recursively extract attachments from body structure
+    fn extract_attachments_recursive(&self, body_structure: &crate::imap::BodyStructure, attachments: &mut Vec<crate::email::StoredAttachment>, part_index: usize) {
+        // Check if this part is an attachment
+        if body_structure.is_attachment() {
+            let filename = body_structure.parameters.get("name")
+                .or_else(|| body_structure.parameters.get("filename"))
+                .cloned()
+                .unwrap_or_else(|| format!("attachment_{}", part_index));
+            
+            let content_type = format!("{}/{}", body_structure.media_type, body_structure.media_subtype);
+            
+            let attachment = crate::email::StoredAttachment {
+                id: format!("att_{}_{}", part_index, chrono::Utc::now().timestamp_millis()),
+                filename,
+                content_type,
+                size: body_structure.size.unwrap_or(0),
+                content_id: body_structure.content_id.clone(),
+                is_inline: body_structure.content_id.is_some(),
+                data: None, // Will be fetched separately when needed
+                file_path: None, // Will be set when saved to disk
+            };
+            
+            tracing::debug!("Found attachment: {} ({})", attachment.filename, attachment.content_type);
+            
+            attachments.push(attachment);
+        }
+        
+        // Process multipart structures recursively
+        if body_structure.is_multipart() {
+            for (index, part) in body_structure.parts.iter().enumerate() {
+                self.extract_attachments_recursive(part, attachments, part_index * 10 + index + 1);
+            }
         }
     }
 }
