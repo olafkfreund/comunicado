@@ -463,7 +463,7 @@ impl ComposeUI {
                         self.is_autocomplete_visible = !self.autocomplete_suggestions.is_empty();
                     }
                     Err(e) => {
-                        eprintln!("Failed to search contacts: {}", e);
+                        tracing::error!("Failed to search contacts: {}", e);
                     }
                 }
             }

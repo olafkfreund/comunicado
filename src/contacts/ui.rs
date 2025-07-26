@@ -720,7 +720,7 @@ impl AddressBookUI {
         if let Some(contact) = self.get_selected_contact() {
             if let Some(id) = contact.id {
                 if let Err(e) = self.manager.delete_contact(id).await {
-                    eprintln!("Failed to delete contact: {}", e);
+                    tracing::error!("Failed to delete contact: {}", e);
                 } else {
                     // Refresh the contact list
                     self.refresh_contacts().await;
@@ -731,7 +731,7 @@ impl AddressBookUI {
     
     async fn sync_contacts(&mut self) {
         if let Err(e) = self.manager.sync_all_contacts().await {
-            eprintln!("Failed to sync contacts: {}", e);
+            tracing::error!("Failed to sync contacts: {}", e);
         } else {
             self.refresh_contacts().await;
         }
@@ -751,7 +751,7 @@ impl AddressBookUI {
                     self.contact_list_state.select(Some(0));
                 },
                 Err(e) => {
-                    eprintln!("Search failed: {}", e);
+                    tracing::error!("Search failed: {}", e);
                 }
             }
         }
@@ -777,7 +777,7 @@ impl AddressBookUI {
                 // Load stats instead
                 match self.manager.get_stats().await {
                     Ok(stats) => self.stats = Some(stats),
-                    Err(e) => eprintln!("Failed to load stats: {}", e),
+                    Err(e) => tracing::error!("Failed to load stats: {}", e),
                 }
                 return;
             }
@@ -789,7 +789,7 @@ impl AddressBookUI {
                 self.contact_list_state.select(if self.contacts.is_empty() { None } else { Some(0) });
             },
             Err(e) => {
-                eprintln!("Failed to load contacts: {}", e);
+                tracing::error!("Failed to load contacts: {}", e);
             }
         }
     }

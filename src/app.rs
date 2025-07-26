@@ -132,8 +132,8 @@ impl App {
             // Store the account configuration in database
             self.create_account_from_config(&account_config).await?;
             
-            println!("Account setup completed successfully!");
-            println!("Account: {} ({})", account_config.display_name, account_config.email_address);
+            tracing::info!("Account setup completed successfully!");
+            tracing::info!("Account: {} ({})", account_config.display_name, account_config.email_address);
         } else {
             return Err(anyhow::anyhow!("Account setup was cancelled"));
         }

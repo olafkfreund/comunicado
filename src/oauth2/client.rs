@@ -433,7 +433,7 @@ impl CallbackServer {
         // Start the async server in the background
         tokio::spawn(async move {
             if let Err(e) = Self::run_callback_server(port, sender).await {
-                eprintln!("Callback server error: {}", e);
+                tracing::error!("Callback server error: {}", e);
             }
         });
         
@@ -456,7 +456,7 @@ impl CallbackServer {
                 let server_port = port;
                 tokio::spawn(async move {
                     if let Err(e) = Self::run_callback_server(server_port, sender).await {
-                        eprintln!("Callback server error: {}", e);
+                        tracing::error!("Callback server error: {}", e);
                     }
                 });
                 
@@ -481,7 +481,7 @@ impl CallbackServer {
         // Start the async server in the background
         tokio::spawn(async move {
             if let Err(e) = Self::run_callback_server(port, sender).await {
-                eprintln!("Callback server error: {}", e);
+                tracing::error!("Callback server error: {}", e);
             }
         });
         

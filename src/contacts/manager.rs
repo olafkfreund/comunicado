@@ -65,7 +65,7 @@ impl ContactsManager {
                         return Ok(updated_contact);
                     }
                     Err(e) => {
-                        eprintln!("Failed to sync contact to remote provider: {}", e);
+                        tracing::error!("Failed to sync contact to remote provider: {}", e);
                         // Continue with local contact
                     }
                 }
@@ -94,7 +94,7 @@ impl ContactsManager {
                         return Ok(updated_contact);
                     }
                     Err(e) => {
-                        eprintln!("Failed to sync contact update to remote provider: {}", e);
+                        tracing::error!("Failed to sync contact update to remote provider: {}", e);
                         // Continue with local contact
                     }
                 }
@@ -114,7 +114,7 @@ impl ContactsManager {
             if let Some(account_id) = contact.source.account_id() {
                 if let Some(provider) = self.get_provider_for_source(&contact.source) {
                     if let Err(e) = provider.delete_contact(account_id, &contact.external_id).await {
-                        eprintln!("Failed to delete contact from remote provider: {}", e);
+                        tracing::error!("Failed to delete contact from remote provider: {}", e);
                         // Continue with local deletion
                     }
                 }
@@ -152,7 +152,7 @@ impl ContactsManager {
                     summary.merge(account_summary);
                 }
                 Err(e) => {
-                    eprintln!("Failed to sync contacts for account {}: {}", account_id, e);
+                    tracing::error!("Failed to sync contacts for account {}: {}", account_id, e);
                     summary.errors.push(format!("Account {}: {}", account_id, e));
                 }
             }
