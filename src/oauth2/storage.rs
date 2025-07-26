@@ -344,7 +344,7 @@ impl SecureStorage {
 
 /// Account configuration for storage (without sensitive tokens)
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct AccountConfigForStorage {
+pub struct AccountConfigForStorage {
     pub account_id: String,
     pub display_name: String,
     pub email_address: String,

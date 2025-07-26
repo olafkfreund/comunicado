@@ -1,5 +1,5 @@
 use crate::imap::{ImapConfig, ImapError, ImapResult};
-use std::io::{BufRead, Write};
+// Removed unused std::io imports
 use std::net::ToSocketAddrs;
 use std::time::Duration;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader as AsyncBufReader, BufWriter as AsyncBufWriter};

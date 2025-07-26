@@ -77,7 +77,7 @@ impl ThreadingEngine {
             // Process References header - simplified for now
             // Note: Full JWZ implementation is complex and requires careful container management
             if let Some(in_reply_to) = message.in_reply_to() {
-                let parent_container = id_table.entry(in_reply_to.clone())
+                let _parent_container = id_table.entry(in_reply_to.clone())
                     .or_insert_with(|| MessageContainer::new(Some(in_reply_to.clone())));
                 
                 // Create a new container for this message and link it

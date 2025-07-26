@@ -394,7 +394,7 @@ impl ImapClient {
         }
         
         let command = ImapProtocol::format_status(folder_name, items);
-        let response = self.connection.send_command(&command).await?;
+        let _response = self.connection.send_command(&command).await?;
         
         // Parse STATUS response (simplified)
         let folder = ImapFolder::new(folder_name.to_string(), folder_name.to_string());

@@ -157,7 +157,7 @@ impl SmtpClient {
         let result = self.transport.send(message).await;
         
         match result {
-            Ok(response) => {
+            Ok(_response) => {
                 let send_result = SendResult {
                     message_id,
                     accepted_recipients: to_addresses,

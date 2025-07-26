@@ -206,7 +206,7 @@ impl ImapProtocol {
         if line.contains("INTERNALDATE \"") {
             if let Some(start) = line.find("INTERNALDATE \"") {
                 if let Some(end) = line[start + 14..].find('"') {
-                    let date_str = &line[start + 14..start + 14 + end];
+                    let _date_str = &line[start + 14..start + 14 + end];
                     // TODO: Parse IMAP date format properly
                     // For now, just store as string in envelope if exists
                 }

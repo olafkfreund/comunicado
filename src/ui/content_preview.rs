@@ -224,7 +224,7 @@ impl ContentPreview {
                 }
             }
             ViewMode::Headers => {
-                if let Some(ref email) = self.email_content {
+                if let Some(ref _email) = self.email_content {
                     8 // Typical header count
                 } else {
                     0
@@ -367,7 +367,7 @@ impl ContentPreview {
         }
     }
     
-    fn render_html_content(&self, content_height: usize, theme: &Theme) -> Vec<Line> {
+    fn render_html_content(&self, content_height: usize, _theme: &Theme) -> Vec<Line> {
         if let Some(ref email) = self.email_content {
             let mut all_lines = Vec::new();
             
@@ -1239,7 +1239,7 @@ impl ContentPreview {
     }
     
     /// Download attachment data from IMAP server
-    async fn download_attachment_from_imap(&self, message: &StoredMessage, attachment: &crate::email::StoredAttachment) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    async fn download_attachment_from_imap(&self, _message: &StoredMessage, attachment: &crate::email::StoredAttachment) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
         // This would require access to the IMAP client
         // For now, we'll return an error since we don't have the IMAP client here
         // In a full implementation, we'd need to:
