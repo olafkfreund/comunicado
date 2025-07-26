@@ -89,12 +89,17 @@ impl ImapClient {
         match &config.auth_method {
             ImapAuthMethod::OAuth2 { account_id } => {
                 // Use OAuth2 XOAUTH2 authentication
+                println!("DEBUG: Using OAuth2 XOAUTH2 authentication for account: {}", account_id);
                 tracing::info!("Using OAuth2 XOAUTH2 authentication for account: {}", account_id);
                 
+                println!("DEBUG: Server capabilities: {:?}", self.capabilities);
                 if !self.capabilities.contains(&ImapCapability::AuthXOAuth2) {
+                    println!("DEBUG: Server does not support XOAUTH2!");
                     tracing::error!("Server does not support XOAUTH2. Available capabilities: {:?}", self.capabilities);
                     return Err(ImapError::authentication("Server does not support XOAUTH2"));
                 }
+                
+                println!("DEBUG: XOAUTH2 capability confirmed");
                 
                 let token_manager = self.token_manager.as_ref()
                     .ok_or_else(|| {
@@ -102,22 +107,31 @@ impl ImapClient {
                         ImapError::authentication("Token manager not configured for OAuth2")
                     })?;
                 
+                println!("DEBUG: Creating XOAUTH2 string for user: {}", config.username);
                 tracing::debug!("Creating XOAUTH2 string for user: {}", config.username);
                 let xoauth2_string = token_manager
                     .create_xoauth2_string(account_id, &config.username)
                     .await
                     .map_err(|e| {
+                        println!("DEBUG: Failed to create XOAUTH2 string: {}", e);
                         tracing::error!("Failed to create XOAUTH2 string for account {}: {}", account_id, e);
                         ImapError::authentication(&format!("Failed to create XOAUTH2 string: {}", e))
                     })?;
                 
-                let command = ImapProtocol::format_authenticate_xoauth2(&xoauth2_string);
-                tracing::debug!("Sending XOAUTH2 authentication command");
-                let response = self.connection.send_command(&command).await
+                println!("DEBUG: XOAUTH2 string created successfully");
+                
+                // Use the proper AUTHENTICATE command with continuation handling
+                println!("DEBUG: Sending AUTHENTICATE XOAUTH2 with continuation handling");
+                tracing::debug!("Sending AUTHENTICATE XOAUTH2 with continuation handling");
+                
+                let response = self.connection.send_authenticate("XOAUTH2", &xoauth2_string).await
                     .map_err(|e| {
-                        tracing::error!("XOAUTH2 authentication command failed: {}", e);
+                        println!("DEBUG: XOAUTH2 authentication failed: {}", e);
+                        tracing::error!("XOAUTH2 authentication failed: {}", e);
                         e
                     })?;
+                
+                println!("DEBUG: XOAUTH2 authentication successful. Response: {}", response);
                 tracing::info!("XOAUTH2 authentication successful. Response: {}", response.lines().next().unwrap_or(""));
             }
             ImapAuthMethod::Password(password) => {

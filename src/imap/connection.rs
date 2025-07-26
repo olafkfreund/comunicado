@@ -58,6 +58,7 @@ impl ImapConnection {
     
     /// Connect to the IMAP server
     pub async fn connect(&mut self) -> ImapResult<()> {
+        println!("DEBUG: ImapConnection::connect() called");
         if self.state != ConnectionState::Disconnected {
             return Err(ImapError::invalid_state("Already connected"));
         }
@@ -91,6 +92,7 @@ impl ImapConnection {
         
         let split_stream = if self.config.use_tls {
             // Set up TLS connection
+            println!("DEBUG: Starting TLS handshake with {}", addr);
             tracing::info!("Starting TLS handshake with {}", addr);
             let mut root_store = RootCertStore::empty();
             root_store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
@@ -283,6 +285,102 @@ impl ImapConnection {
     /// Get configuration
     pub fn config(&self) -> &ImapConfig {
         &self.config
+    }
+    
+    /// Send raw data to the server (for continuation responses)
+    pub async fn send_raw(&mut self, data: &str) -> ImapResult<()> {
+        if self.state == ConnectionState::Disconnected {
+            return Err(ImapError::invalid_state("Not connected"));
+        }
+        
+        match self.stream.as_mut() {
+            Some(SplitStream::Plain { writer, .. }) => {
+                writer.write_all(data.as_bytes()).await
+                    .map_err(|e| ImapError::connection(format!("Failed to send raw data: {}", e)))?;
+                writer.flush().await
+                    .map_err(|e| ImapError::connection(format!("Failed to flush raw data: {}", e)))?;
+            }
+            Some(SplitStream::Tls { writer, .. }) => {
+                writer.write_all(data.as_bytes()).await
+                    .map_err(|e| ImapError::connection(format!("Failed to send raw data: {}", e)))?;
+                writer.flush().await
+                    .map_err(|e| ImapError::connection(format!("Failed to flush raw data: {}", e)))?;
+            }
+            None => return Err(ImapError::invalid_state("No connection available")),
+        }
+        
+        Ok(())
+    }
+    
+    /// Send AUTHENTICATE command with continuation handling
+    pub async fn send_authenticate(&mut self, mechanism: &str, auth_data: &str) -> ImapResult<String> {
+        if self.state == ConnectionState::Disconnected {
+            return Err(ImapError::invalid_state("Not connected"));
+        }
+        
+        // Generate unique tag
+        self.tag_counter += 1;
+        let tag = format!("A{:04}", self.tag_counter);
+        
+        println!("DEBUG: send_authenticate - Starting AUTHENTICATE {} with tag {}", mechanism, tag);
+        
+        // Step 1: Send AUTHENTICATE command
+        let auth_command = format!("{} AUTHENTICATE {}\r\n", tag, mechanism);
+        println!("DEBUG: send_authenticate - Sending command: {}", auth_command.trim());
+        match self.stream.as_mut() {
+            Some(SplitStream::Plain { writer, .. }) => {
+                writer.write_all(auth_command.as_bytes()).await
+                    .map_err(|e| ImapError::connection(format!("Failed to send authenticate command: {}", e)))?;
+                writer.flush().await
+                    .map_err(|e| ImapError::connection(format!("Failed to flush authenticate command: {}", e)))?;
+            }
+            Some(SplitStream::Tls { writer, .. }) => {
+                writer.write_all(auth_command.as_bytes()).await
+                    .map_err(|e| ImapError::connection(format!("Failed to send authenticate command: {}", e)))?;
+                writer.flush().await
+                    .map_err(|e| ImapError::connection(format!("Failed to flush authenticate command: {}", e)))?;
+            }
+            None => return Err(ImapError::invalid_state("No connection available")),
+        }
+        
+        let mut responses = Vec::new();
+        
+        // Step 2: Read continuation response
+        println!("DEBUG: send_authenticate - Waiting for continuation response...");
+        let continuation = self.read_response().await?;
+        println!("DEBUG: send_authenticate - Got continuation: {}", continuation);
+        responses.push(continuation.clone());
+        
+        if !continuation.starts_with("+ ") {
+            return Err(ImapError::protocol(format!("Expected continuation response, got: {}", continuation)));
+        }
+        
+        // Step 3: Send authentication data
+        println!("DEBUG: send_authenticate - Sending auth data (length: {})", auth_data.len());
+        let data_command = format!("{}\r\n", auth_data);
+        self.send_raw(&data_command).await?;
+        
+        // Step 4: Read final tagged response
+        println!("DEBUG: send_authenticate - Reading final response...");
+        loop {
+            let line = self.read_response().await?;
+            println!("DEBUG: send_authenticate - Got response line: {}", line);
+            responses.push(line.clone());
+            
+            if line.starts_with(&tag) {
+                // This is our tagged response
+                if line.starts_with(&format!("{} OK", tag)) {
+                    println!("DEBUG: send_authenticate - Authentication successful!");
+                    break;
+                } else if line.starts_with(&format!("{} NO", tag)) {
+                    return Err(ImapError::server(format!("Authentication failed: {}", line)));
+                } else if line.starts_with(&format!("{} BAD", tag)) {
+                    return Err(ImapError::protocol(format!("Bad authenticate command: {}", line)));
+                }
+            }
+        }
+        
+        Ok(responses.join("\n"))
     }
 }
 

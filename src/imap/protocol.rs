@@ -251,9 +251,9 @@ impl ImapProtocol {
         Ok(format!("AUTHENTICATE PLAIN {}", encoded))
     }
     
-    /// Format AUTHENTICATE XOAUTH2 command
-    pub fn format_authenticate_xoauth2(xoauth2_string: &str) -> String {
-        format!("AUTHENTICATE XOAUTH2 {}", xoauth2_string)
+    /// Format AUTHENTICATE XOAUTH2 command (first step)
+    pub fn format_authenticate_xoauth2_start() -> String {
+        "AUTHENTICATE XOAUTH2".to_string()
     }
     
     /// Format SELECT command
