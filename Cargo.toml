@@ -36,6 +36,10 @@ chrono = { version = "0.4", features = ["serde"] }
 # Text processing
 regex = "1.10"
 
+# HTML parsing and rendering
+scraper = "0.19"
+html2text = "0.6"
+
 # Email and networking
 base64 = "0.22"
 oauth2 = { version = "4.4", default-features = false, features = ["rustls-tls"] }

@@ -27,20 +27,33 @@ impl AppLayout {
 
         let main_area = vertical_chunks[0];
         
-        // Then create horizontal layout in the main area: [Folders | Messages | Content]
+        // Split the main area horizontally: [Left Panel | Messages | Content]
         let horizontal_chunks = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([
-                Constraint::Length(self.folder_width),           // Fixed width for folders
+                Constraint::Length(self.folder_width),           // Fixed width for left panel
                 Constraint::Percentage(self.message_width_ratio), // Percentage for messages
                 Constraint::Min(30),                             // Remaining space for content
             ])
             .split(main_area);
 
-        // Return all chunks: [folder, message, content, status_bar]
-        let mut all_chunks = horizontal_chunks.to_vec();
-        all_chunks.push(vertical_chunks[1]); // Add status bar area
-        all_chunks
+        // Split the left panel vertically: [Account Switcher | Folders]
+        let left_panel_chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(4),   // Fixed height for account switcher
+                Constraint::Min(5),      // Remaining space for folders
+            ])
+            .split(horizontal_chunks[0]);
+
+        // Return all chunks: [account_switcher, folder, message, content, status_bar]
+        vec![
+            left_panel_chunks[0],  // Account switcher
+            left_panel_chunks[1],  // Folder tree
+            horizontal_chunks[1],  // Message list
+            horizontal_chunks[2],  // Content preview
+            vertical_chunks[1],    // Status bar
+        ]
     }
 
     pub fn set_folder_width(&mut self, width: u16) {

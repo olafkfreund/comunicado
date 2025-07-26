@@ -35,9 +35,9 @@
 
 ### Must-Have Features
 
-- [ ] HTML Email Rendering - Parse and display HTML emails in terminal-friendly format `L`
-- [ ] OAuth2 Authentication - Support Gmail, Outlook OAuth2 login flows `L`
-- [ ] Multi-Account Support - Manage multiple email accounts simultaneously `M`
+- [x] HTML Email Rendering - Parse and display HTML emails in terminal-friendly format `L`
+- [x] OAuth2 Authentication - Support Gmail, Outlook OAuth2 login flows `L`
+- [x] Multi-Account Support - Manage multiple email accounts simultaneously `M`
 - [ ] Image Display Support - Show images in emails using terminal graphics protocols `L`
 
 ### Should-Have Features

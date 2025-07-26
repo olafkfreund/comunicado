@@ -5,6 +5,7 @@ pub mod layout;
 pub mod status_bar;
 pub mod sync_progress;
 pub mod compose;
+pub mod account_switcher;
 
 use ratatui::{
     layout::Rect,
@@ -24,13 +25,18 @@ use self::{
     status_bar::{StatusBar, EmailStatusSegment, CalendarStatusSegment, SystemInfoSegment, NavigationHintsSegment, SyncStatus},
     sync_progress::SyncProgressOverlay,
     compose::ComposeUI,
+    account_switcher::AccountSwitcher,
 };
 
 // Re-export compose types for external use
 pub use compose::{ComposeAction, EmailComposeData};
 
+// Re-export account switcher types for external use
+pub use account_switcher::{AccountItem, AccountSyncStatus};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FocusedPane {
+    AccountSwitcher,
     FolderTree,
     MessageList,
     ContentPreview,
@@ -45,6 +51,7 @@ pub enum UIMode {
 
 pub struct UI {
     focused_pane: FocusedPane,
+    account_switcher: AccountSwitcher,
     folder_tree: FolderTree,
     message_list: MessageList,
     content_preview: ContentPreview,
@@ -60,7 +67,8 @@ pub struct UI {
 impl UI {
     pub fn new() -> Self {
         let mut ui = Self {
-            focused_pane: FocusedPane::FolderTree,
+            focused_pane: FocusedPane::AccountSwitcher,
+            account_switcher: AccountSwitcher::new(),
             folder_tree: FolderTree::new(),
             message_list: MessageList::new(),
             content_preview: ContentPreview::new(),
@@ -121,13 +129,14 @@ impl UI {
                 let chunks = self.layout.calculate_layout(size);
 
                 // Render each pane with focus styling
-                self.render_folder_tree(frame, chunks[0]);
-                self.render_message_list(frame, chunks[1]);
-                self.render_content_preview(frame, chunks[2]);
+                self.render_account_switcher(frame, chunks[0]);
+                self.render_folder_tree(frame, chunks[1]);
+                self.render_message_list(frame, chunks[2]);
+                self.render_content_preview(frame, chunks[3]);
                 
                 // Render the status bar
-                if chunks.len() > 3 {
-                    self.render_status_bar(frame, chunks[3]);
+                if chunks.len() > 4 {
+                    self.render_status_bar(frame, chunks[4]);
                 }
                 
                 // Render sync progress overlay (on top of everything)
@@ -144,6 +153,18 @@ impl UI {
                 }
             }
         }
+    }
+
+    fn render_account_switcher(&mut self, frame: &mut Frame, area: Rect) {
+        let is_focused = matches!(self.focused_pane, FocusedPane::AccountSwitcher);
+        let theme = self.theme_manager.current_theme();
+        
+        let border_style = theme.get_component_style("border", is_focused);
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .border_style(border_style);
+
+        self.account_switcher.render(frame, area, block, is_focused, theme);
     }
 
     fn render_folder_tree(&self, frame: &mut Frame, area: Rect) {
@@ -197,9 +218,10 @@ impl UI {
         }
         
         self.focused_pane = match self.focused_pane {
+            FocusedPane::AccountSwitcher => FocusedPane::FolderTree,
             FocusedPane::FolderTree => FocusedPane::MessageList,
             FocusedPane::MessageList => FocusedPane::ContentPreview,
-            FocusedPane::ContentPreview => FocusedPane::FolderTree,
+            FocusedPane::ContentPreview => FocusedPane::AccountSwitcher,
             FocusedPane::Compose => FocusedPane::Compose, // Stay in compose
         };
         self.update_navigation_hints();
@@ -211,7 +233,8 @@ impl UI {
         }
         
         self.focused_pane = match self.focused_pane {
-            FocusedPane::FolderTree => FocusedPane::ContentPreview,
+            FocusedPane::AccountSwitcher => FocusedPane::ContentPreview,
+            FocusedPane::FolderTree => FocusedPane::AccountSwitcher,
             FocusedPane::MessageList => FocusedPane::FolderTree,
             FocusedPane::ContentPreview => FocusedPane::MessageList,
             FocusedPane::Compose => FocusedPane::Compose, // Stay in compose
@@ -239,6 +262,14 @@ impl UI {
     pub fn content_preview_mut(&mut self) -> &mut ContentPreview {
         &mut self.content_preview
     }
+    
+    pub fn account_switcher(&self) -> &AccountSwitcher {
+        &self.account_switcher
+    }
+    
+    pub fn account_switcher_mut(&mut self) -> &mut AccountSwitcher {
+        &mut self.account_switcher
+    }
 
     // Theme management methods
     pub fn theme_manager(&self) -> &ThemeManager {
@@ -261,6 +292,7 @@ impl UI {
     pub fn update_navigation_hints(&mut self) {
         let current_pane_name = match self.mode {
             UIMode::Normal => match self.focused_pane {
+                FocusedPane::AccountSwitcher => "Accounts",
                 FocusedPane::FolderTree => "Folders",
                 FocusedPane::MessageList => "Messages", 
                 FocusedPane::ContentPreview => "Content",
@@ -280,6 +312,13 @@ impl UI {
     fn get_current_shortcuts(&self) -> Vec<(String, String)> {
         match self.mode {
             UIMode::Normal => match self.focused_pane {
+                FocusedPane::AccountSwitcher => vec![
+                    ("Tab".to_string(), "Switch".to_string()),
+                    ("j/k".to_string(), "Navigate".to_string()),
+                    ("Enter".to_string(), "Select".to_string()),
+                    ("Space".to_string(), "Expand".to_string()),
+                    ("c".to_string(), "Compose".to_string()),
+                ],
                 FocusedPane::FolderTree => vec![
                     ("Tab".to_string(), "Switch".to_string()),
                     ("j/k".to_string(), "Navigate".to_string()),
@@ -362,6 +401,45 @@ impl UI {
             
         self.update_email_status(unread_count, message_count, SyncStatus::Online);
         Ok(())
+    }
+    
+    /// Set available accounts in the account switcher
+    pub fn set_accounts(&mut self, accounts: Vec<AccountItem>) {
+        self.account_switcher.set_accounts(accounts);
+    }
+    
+    /// Get the currently selected account
+    pub fn get_current_account(&self) -> Option<&AccountItem> {
+        self.account_switcher.get_current_account()
+    }
+    
+    /// Get the current account ID
+    pub fn get_current_account_id(&self) -> Option<&String> {
+        self.account_switcher.get_current_account_id()
+    }
+    
+    /// Switch to a specific account
+    pub async fn switch_to_account(&mut self, account_id: &str) -> Result<(), Box<dyn std::error::Error>> {
+        if self.account_switcher.set_current_account(account_id) {
+            // Load messages for the new account's INBOX
+            self.load_messages(account_id.to_string(), "INBOX".to_string()).await?;
+            
+            // Update the system status to show the new account
+            let current_time = chrono::Local::now().format("%H:%M").to_string();
+            if let Some(account) = self.account_switcher.get_current_account() {
+                let system_segment = SystemInfoSegment {
+                    current_time,
+                    active_account: account.email_address.clone(),
+                };
+                self.status_bar.add_segment("system".to_string(), system_segment);
+            }
+        }
+        Ok(())
+    }
+    
+    /// Update account status and unread count
+    pub fn update_account_status(&mut self, account_id: &str, status: AccountSyncStatus, unread_count: Option<usize>) {
+        self.account_switcher.update_account_status(account_id, status, unread_count);
     }
     
     /// Refresh current folder's messages

@@ -1,6 +1,6 @@
 use ratatui::{
     layout::Rect,
-    style::{Modifier, Style},
+    style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Paragraph, Wrap},
     Frame,
@@ -77,6 +77,7 @@ pub enum LineType {
 pub enum ViewMode {
     Raw,        // Show raw email content
     Formatted,  // Show formatted/processed content
+    Html,       // Show HTML content rendered for terminal
     Headers,    // Show headers only
 }
 
@@ -91,6 +92,7 @@ pub struct ContentPreview {
     database: Option<Arc<EmailDatabase>>,
     current_message_id: Option<Uuid>,
     loading: bool,
+    html_renderer: crate::html::HtmlRenderer,
 }
 
 impl ContentPreview {
@@ -109,6 +111,7 @@ impl ContentPreview {
             database: None,
             current_message_id: None,
             loading: false,
+            html_renderer: crate::html::HtmlRenderer::new(80),
         };
         
         // Initialize with sample content
@@ -188,6 +191,7 @@ impl ContentPreview {
         let lines = match self.view_mode {
             ViewMode::Raw => self.render_raw_content(content_height, theme),
             ViewMode::Formatted => self.render_formatted_content(content_height, theme),
+            ViewMode::Html => self.render_html_content(content_height, theme),
             ViewMode::Headers => self.render_headers_only(content_height, theme),
         };
 
@@ -197,6 +201,14 @@ impl ContentPreview {
             ViewMode::Formatted => {
                 if let Some(ref email) = self.email_content {
                     email.parsed_content.len() + 10 // Headers + content
+                } else {
+                    self.raw_content.len()
+                }
+            }
+            ViewMode::Html => {
+                if let Some(ref email) = self.email_content {
+                    // Estimate HTML rendered line count
+                    email.body.lines().count() + 10
                 } else {
                     self.raw_content.len()
                 }
@@ -220,6 +232,7 @@ impl ContentPreview {
         let view_mode_indicator = match self.view_mode {
             ViewMode::Raw => " [Raw]",
             ViewMode::Formatted => " [Formatted]", 
+            ViewMode::Html => " [HTML]",
             ViewMode::Headers => " [Headers]",
         };
 
@@ -284,6 +297,54 @@ impl ContentPreview {
         } else {
             // Fallback to raw content with basic styling
             self.render_raw_content_with_styling(content_height, theme)
+        }
+    }
+    
+    fn render_html_content(&self, content_height: usize, theme: &Theme) -> Vec<Line> {
+        if let Some(ref email) = self.email_content {
+            let mut all_lines = Vec::new();
+            
+            // Add compact headers first
+            all_lines.push(Line::from(vec![
+                Span::styled("From: ", Style::default().fg(Color::Yellow)),
+                Span::raw(format!("{}", email.headers.from)),
+            ]));
+            all_lines.push(Line::from(vec![
+                Span::styled("Subject: ", Style::default().fg(Color::Yellow)),
+                Span::raw(format!("{}", email.headers.subject)),
+            ]));
+            all_lines.push(Line::from("")); // Separator
+            
+            // Check if we have HTML content to render
+            if !email.body.is_empty() {
+                // Try to detect if this is HTML content
+                if crate::html::is_html_content(&email.body) {
+                    // Render HTML content using our HTML renderer
+                    let mut html_renderer = crate::html::HtmlRenderer::new(80);
+                    let rendered_text = html_renderer.render_html(&email.body);
+                    all_lines.extend(rendered_text.lines);
+                } else {
+                    // Fall back to plain text rendering
+                    for line in email.body.lines() {
+                        all_lines.push(Line::raw(line.to_string()));
+                    }
+                }
+            } else {
+                all_lines.push(Line::styled("(No HTML content available)", 
+                    Style::default().fg(Color::Gray)));
+            }
+            
+            // Apply scrolling
+            let start_line = self.scroll;
+            let end_line = (start_line + content_height).min(all_lines.len());
+            
+            if end_line > start_line {
+                all_lines[start_line..end_line].to_vec()
+            } else {
+                vec![Line::from("(End of content)")]
+            }
+        } else {
+            vec![Line::styled("No HTML content loaded", Style::default().fg(Color::Gray))]
         }
     }
     
@@ -625,7 +686,8 @@ impl ContentPreview {
     pub fn toggle_view_mode(&mut self) {
         self.view_mode = match self.view_mode {
             ViewMode::Raw => ViewMode::Formatted,
-            ViewMode::Formatted => ViewMode::Headers,
+            ViewMode::Formatted => ViewMode::Html,
+            ViewMode::Html => ViewMode::Headers,
             ViewMode::Headers => ViewMode::Raw,
         };
         self.scroll = 0; // Reset scroll when changing view mode

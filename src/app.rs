@@ -150,16 +150,27 @@ impl App {
             return self.load_sample_data().await;
         }
         
-        // For now, load the first account
-        if let Some(account) = accounts.first() {
+        // Convert AccountConfig to AccountItem for the UI
+        let account_items: Vec<crate::ui::AccountItem> = accounts.iter()
+            .map(|config| crate::ui::AccountItem::from_config(config))
+            .collect();
+        
+        // Set accounts in the UI
+        self.ui.set_accounts(account_items);
+        
+        // Create all accounts in the database
+        for account in &accounts {
             self.create_account_from_config(account).await?;
-            
+        }
+        
+        // Load messages for the first account (or current account)
+        if let Some(current_account_id) = self.ui.get_current_account_id().cloned() {
             // Try to fetch real messages from IMAP
             if let Some(ref mut _imap_manager) = self.imap_manager {
-                match self.fetch_messages_from_imap(&account.account_id, "INBOX").await {
+                match self.fetch_messages_from_imap(&current_account_id, "INBOX").await {
                     Ok(_) => {
                         // Successfully fetched messages via IMAP
-                        let _ = self.ui.load_messages(account.account_id.clone(), "INBOX".to_string()).await;
+                        let _ = self.ui.load_messages(current_account_id.clone(), "INBOX".to_string()).await;
                     }
                     Err(e) => {
                         tracing::warn!("Failed to fetch messages via IMAP: {}, falling back to sample data", e);
@@ -304,7 +315,7 @@ impl App {
             let message_count = std::cmp::min(folder.exists.unwrap_or(0) as usize, 50);
             if message_count > 0 {
                 let sequence_set = format!("1:{}", message_count);
-                let fetch_items = vec!["UID", "FLAGS", "ENVELOPE", "BODY.PEEK[TEXT]", "BODYSTRUCTURE"];
+                let fetch_items = vec!["UID", "FLAGS", "ENVELOPE", "BODY.PEEK[]", "BODYSTRUCTURE"];
                 
                 let messages = client.fetch_messages(&sequence_set, &fetch_items).await
                     .map_err(|e| anyhow::anyhow!("Failed to fetch messages: {}", e))?;
@@ -707,8 +718,8 @@ impl App {
             })
             .collect();
         
-        // Extract email body (text content for now)
-        let body_text = imap_message.body.clone();
+        // Extract and parse email body content
+        let (body_text, body_html) = self.parse_email_body(imap_message);
         
         // Create StoredMessage
         let stored_message = crate::email::StoredMessage {
@@ -733,7 +744,7 @@ impl App {
             
             // Content
             body_text,
-            body_html: None, // TODO: Extract HTML body if present
+            body_html,
             attachments: Vec::new(), // TODO: Parse attachments
             
             // Metadata
@@ -752,6 +763,31 @@ impl App {
         };
         
         Ok(stored_message)
+    }
+    
+    /// Parse email body content to extract both text and HTML parts
+    fn parse_email_body(&self, imap_message: &crate::imap::ImapMessage) -> (Option<String>, Option<String>) {
+        use crate::html::is_html_content;
+        
+        let raw_body = match &imap_message.body {
+            Some(body) => body,
+            None => return (None, None),
+        };
+        
+        // Check if the content appears to be HTML
+        if is_html_content(raw_body) {
+            // This is HTML content
+            let html_body = Some(raw_body.clone());
+            
+            // Convert HTML to plain text for the text body
+            let mut html_renderer = crate::html::HtmlRenderer::new(80);
+            let text_body = Some(html_renderer.html_to_plain_text(raw_body));
+            
+            (text_body, html_body)
+        } else {
+            // This is plain text content
+            (Some(raw_body.clone()), None)
+        }
     }
 }
 

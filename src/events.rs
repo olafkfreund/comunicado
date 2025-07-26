@@ -73,6 +73,9 @@ impl EventHandler {
             KeyCode::Char('j') | KeyCode::Down => {
                 // Move down in current pane
                 match ui.focused_pane() {
+                    FocusedPane::AccountSwitcher => {
+                        ui.account_switcher_mut().next_account();
+                    }
                     FocusedPane::FolderTree => {
                         ui.folder_tree_mut().handle_down();
                     }
@@ -90,6 +93,9 @@ impl EventHandler {
             KeyCode::Char('k') | KeyCode::Up => {
                 // Move up in current pane
                 match ui.focused_pane() {
+                    FocusedPane::AccountSwitcher => {
+                        ui.account_switcher_mut().previous_account();
+                    }
                     FocusedPane::FolderTree => {
                         ui.folder_tree_mut().handle_up();
                     }
@@ -108,6 +114,13 @@ impl EventHandler {
             // Enter key for selection
             KeyCode::Enter => {
                 match ui.focused_pane() {
+                    FocusedPane::AccountSwitcher => {
+                        if let Some(account_id) = ui.account_switcher_mut().select_current() {
+                            // Switch to the selected account asynchronously
+                            // For now, we'll set the account and let the main loop handle loading
+                            tracing::info!("Account selected: {}", account_id);
+                        }
+                    }
                     FocusedPane::FolderTree => {
                         ui.folder_tree_mut().handle_enter();
                     }
@@ -131,9 +144,15 @@ impl EventHandler {
                 }
             }
             KeyCode::Char(' ') => {
-                // Toggle thread expansion/collapse (Space key)
-                if let FocusedPane::MessageList = ui.focused_pane() {
-                    ui.message_list_mut().toggle_selected_thread();
+                // Toggle expansion/collapse (Space key)
+                match ui.focused_pane() {
+                    FocusedPane::AccountSwitcher => {
+                        ui.account_switcher_mut().toggle_expanded();
+                    }
+                    FocusedPane::MessageList => {
+                        ui.message_list_mut().toggle_selected_thread();
+                    }
+                    _ => {}
                 }
             }
             KeyCode::Char('o') => {
