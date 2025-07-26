@@ -206,15 +206,35 @@ impl ImapProtocol {
         if line.contains("INTERNALDATE \"") {
             if let Some(start) = line.find("INTERNALDATE \"") {
                 if let Some(end) = line[start + 14..].find('"') {
-                    let _date_str = &line[start + 14..start + 14 + end];
-                    // TODO: Parse IMAP date format properly
-                    // For now, just store as string in envelope if exists
+                    let date_str = &line[start + 14..start + 14 + end];
+                    // Parse IMAP date format: "17-Jul-1996 02:44:25 -0700"
+                    // For now, store as string - can be parsed to DateTime later
+                    if message.envelope.is_none() {
+                        message.envelope = Some(crate::imap::MessageEnvelope::new());
+                    }
+                    if let Some(ref mut envelope) = message.envelope {
+                        envelope.date = Some(date_str.to_string());
+                    }
                 }
             }
         }
         
-        // TODO: Parse ENVELOPE, BODYSTRUCTURE, and other FETCH items
-        // This is a simplified implementation
+        // Parse ENVELOPE
+        if line.contains("ENVELOPE ") {
+            tracing::debug!("Found ENVELOPE in line: {}", line);
+            if let Some(start) = line.find("ENVELOPE ") {
+                let envelope_start = start + 9; // Skip "ENVELOPE "
+                if let Some(envelope) = Self::parse_envelope(&line[envelope_start..])? {
+                    tracing::debug!("Successfully parsed envelope: subject={:?}, from_count={}", 
+                                   envelope.subject, envelope.from.len());
+                    message.envelope = Some(envelope);
+                } else {
+                    tracing::warn!("Failed to parse envelope from line: {}", line);
+                }
+            }
+        }
+        
+        // TODO: Parse BODYSTRUCTURE and other FETCH items
         
         Ok(())
     }
@@ -361,6 +381,255 @@ impl ImapProtocol {
     /// Format DONE command (to exit IDLE)
     pub fn format_done() -> String {
         "DONE".to_string()
+    }
+    
+    /// Parse ENVELOPE from FETCH response
+    /// ENVELOPE format: (date subject from sender reply-to to cc bcc in-reply-to message-id)
+    /// Each address field is a list: ((name route mailbox host)...)
+    fn parse_envelope(data: &str) -> ImapResult<Option<crate::imap::MessageEnvelope>> {
+        tracing::debug!("Parsing envelope from data: {}", data);
+        
+        // Find the opening parenthesis for the envelope
+        let data = data.trim();
+        if !data.starts_with('(') {
+            tracing::warn!("Envelope data doesn't start with '(': {}", data);
+            return Ok(None);
+        }
+        
+        // Find the matching closing parenthesis
+        let envelope_end = Self::find_matching_paren(data, 0)?;
+        let envelope_content = &data[1..envelope_end]; // Remove outer parentheses
+        
+        tracing::debug!("Envelope content: {}", envelope_content);
+        
+        // Parse the 10 fields of the envelope
+        let fields = Self::parse_envelope_fields(envelope_content)?;
+        if fields.len() != 10 {
+            tracing::warn!("Expected 10 envelope fields, got {}", fields.len());
+            return Ok(None);
+        }
+        
+        let mut envelope = crate::imap::MessageEnvelope::new();
+        
+        // Field 0: date
+        envelope.date = Self::parse_string_or_nil(&fields[0]);
+        
+        // Field 1: subject  
+        envelope.subject = Self::parse_string_or_nil(&fields[1]);
+        
+        // Field 2: from
+        envelope.from = Self::parse_address_list(&fields[2])?;
+        
+        // Field 3: sender
+        envelope.sender = Self::parse_address_list(&fields[3])?;
+        
+        // Field 4: reply-to
+        envelope.reply_to = Self::parse_address_list(&fields[4])?;
+        
+        // Field 5: to
+        envelope.to = Self::parse_address_list(&fields[5])?;
+        
+        // Field 6: cc
+        envelope.cc = Self::parse_address_list(&fields[6])?;
+        
+        // Field 7: bcc
+        envelope.bcc = Self::parse_address_list(&fields[7])?;
+        
+        // Field 8: in-reply-to
+        envelope.in_reply_to = Self::parse_string_or_nil(&fields[8]);
+        
+        // Field 9: message-id
+        envelope.message_id = Self::parse_string_or_nil(&fields[9]);
+        
+        tracing::debug!("Parsed envelope: subject={:?}, from_count={}", envelope.subject, envelope.from.len());
+        Ok(Some(envelope))
+    }
+    
+    /// Find matching closing parenthesis
+    fn find_matching_paren(data: &str, start: usize) -> ImapResult<usize> {
+        let chars: Vec<char> = data.chars().collect();
+        let mut depth = 0;
+        let mut in_quote = false;
+        let mut escape_next = false;
+        
+        for i in start..chars.len() {
+            let ch = chars[i];
+            
+            if escape_next {
+                escape_next = false;
+                continue;
+            }
+            
+            if ch == '\\' {
+                escape_next = true;
+                continue;
+            }
+            
+            if ch == '"' {
+                in_quote = !in_quote;
+                continue;
+            }
+            
+            if !in_quote {
+                if ch == '(' {
+                    depth += 1;
+                } else if ch == ')' {
+                    depth -= 1;
+                    if depth == 0 {
+                        return Ok(i);
+                    }
+                }
+            }
+        }
+        
+        Err(ImapError::parse("Unmatched parentheses in envelope"))
+    }
+    
+    /// Parse envelope fields (split by spaces, respecting parentheses and quotes)
+    fn parse_envelope_fields(content: &str) -> ImapResult<Vec<String>> {
+        let mut fields = Vec::new();
+        let mut current_field = String::new();
+        let chars: Vec<char> = content.chars().collect();
+        let mut i = 0;
+        
+        while i < chars.len() {
+            let ch = chars[i];
+            
+            if ch.is_whitespace() && current_field.is_empty() {
+                // Skip leading whitespace
+                i += 1;
+                continue;
+            }
+            
+            if ch == '(' {
+                // Parse parenthesized content
+                let start = i;
+                let end = Self::find_matching_paren(content, start)?;
+                current_field.push_str(&content[start..=end]);
+                i = end + 1;
+            } else if ch == '"' {
+                // Parse quoted string
+                let start = i;
+                i += 1; // Skip opening quote
+                while i < chars.len() && chars[i] != '"' {
+                    if chars[i] == '\\' {
+                        i += 1; // Skip escape character
+                    }
+                    i += 1;
+                }
+                if i < chars.len() {
+                    i += 1; // Skip closing quote
+                }
+                current_field.push_str(&content[start..i]);
+            } else if ch.is_whitespace() {
+                // End of field
+                if !current_field.is_empty() {
+                    fields.push(current_field.trim().to_string());
+                    current_field.clear();
+                }
+                i += 1;
+            } else if ch.is_alphabetic() && current_field.is_empty() {
+                // Handle NIL
+                let start = i;
+                while i < chars.len() && chars[i].is_alphabetic() {
+                    i += 1;
+                }
+                current_field.push_str(&content[start..i]);
+            } else {
+                current_field.push(ch);
+                i += 1;
+            }
+        }
+        
+        // Don't forget the last field
+        if !current_field.is_empty() {
+            fields.push(current_field.trim().to_string());
+        }
+        
+        Ok(fields)
+    }
+    
+    /// Parse string or NIL value
+    fn parse_string_or_nil(field: &str) -> Option<String> {
+        let field = field.trim();
+        if field.eq_ignore_ascii_case("NIL") {
+            None
+        } else if field.starts_with('"') && field.ends_with('"') {
+            Some(field[1..field.len()-1].to_string())
+        } else {
+            Some(field.to_string())
+        }
+    }
+    
+    /// Parse address list from IMAP format
+    /// Format: ((name route mailbox host)(name route mailbox host)...) or NIL
+    fn parse_address_list(field: &str) -> ImapResult<Vec<crate::imap::Address>> {
+        let field = field.trim();
+        if field.eq_ignore_ascii_case("NIL") {
+            return Ok(Vec::new());
+        }
+        
+        if !field.starts_with('(') || !field.ends_with(')') {
+            return Ok(Vec::new());
+        }
+        
+        let content = &field[1..field.len()-1]; // Remove outer parentheses
+        let mut addresses = Vec::new();
+        let mut i = 0;
+        let chars: Vec<char> = content.chars().collect();
+        
+        while i < chars.len() {
+            // Skip whitespace
+            while i < chars.len() && chars[i].is_whitespace() {
+                i += 1;
+            }
+            
+            if i >= chars.len() {
+                break;
+            }
+            
+            if chars[i] == '(' {
+                // Parse single address
+                let start = i;
+                let end = Self::find_matching_paren(content, start)?;
+                let address_content = &content[start+1..end]; // Remove parentheses
+                
+                if let Some(address) = Self::parse_single_address(address_content)? {
+                    addresses.push(address);
+                }
+                
+                i = end + 1;
+            } else {
+                i += 1;
+            }
+        }
+        
+        Ok(addresses)
+    }
+    
+    /// Parse a single address from IMAP format
+    /// Format: (name route mailbox host)
+    fn parse_single_address(content: &str) -> ImapResult<Option<crate::imap::Address>> {
+        let fields = Self::parse_envelope_fields(content)?;
+        if fields.len() != 4 {
+            tracing::warn!("Expected 4 address fields, got {}: {:?}", fields.len(), fields);
+            return Ok(None);
+        }
+        
+        let name = Self::parse_string_or_nil(&fields[0]);
+        let route = Self::parse_string_or_nil(&fields[1]);
+        let mailbox = Self::parse_string_or_nil(&fields[2]);
+        let host = Self::parse_string_or_nil(&fields[3]);
+        
+        // Mailbox and host are required for a valid address
+        if let (Some(mailbox), Some(host)) = (mailbox, host) {
+            let mut address = crate::imap::Address::new(mailbox, host);
+            address.name = name;
+            address.route = route;
+            Ok(Some(address))
+        } else {
+            Ok(None)
+        }
     }
 }
 

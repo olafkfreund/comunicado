@@ -546,7 +546,7 @@ impl App {
                 
                 // Store messages in database
                 for message in messages {
-                    tracing::debug!("Processing message UID: {:?}, Subject: {:?}", 
+                    tracing::info!("Processing message UID: {:?}, Subject: {:?}", 
                                   message.uid, message.envelope.as_ref().map(|e| &e.subject));
                     
                     // Convert IMAP message to StoredMessage format
@@ -557,7 +557,7 @@ impl App {
                                 tracing::error!("Failed to store message UID {}: {}", 
                                               message.uid.unwrap_or(0), e);
                             } else {
-                                tracing::debug!("Stored message: {}", stored_message.subject);
+                                tracing::info!("Stored message: {}", stored_message.subject);
                             }
                         }
                         Err(e) => {
@@ -1102,6 +1102,11 @@ impl App {
         
         // Extract envelope data
         let envelope = imap_message.envelope.as_ref();
+        tracing::info!("Converting IMAP message, envelope present: {}", envelope.is_some());
+        
+        if let Some(env) = envelope {
+            tracing::info!("Envelope - subject: {:?}, from count: {}", env.subject, env.from.len());
+        }
         
         // Extract subject
         let subject = envelope
@@ -1109,21 +1114,29 @@ impl App {
             .map(|s| s.clone())
             .unwrap_or_else(|| "(No Subject)".to_string());
         
+        tracing::info!("Extracted subject: {}", subject);
+        
         // Extract sender information
         let (from_addr, from_name) = if let Some(env) = envelope {
             if let Some(from) = env.from.first() {
+                tracing::info!("From address - mailbox: {:?}, host: {:?}, name: {:?}", from.mailbox, from.host, from.name);
                 let addr = format!("{}@{}", 
                     from.mailbox.as_deref().unwrap_or("unknown"),
                     from.host.as_deref().unwrap_or("unknown.com")
                 );
                 let name = from.name.clone();
+                tracing::info!("Extracted from_addr: {}, from_name: {:?}", addr, name);
                 (addr, name)
             } else {
+                tracing::info!("No from address in envelope");
                 ("unknown@unknown.com".to_string(), None)
             }
         } else {
+            tracing::info!("No envelope available");
             ("unknown@unknown.com".to_string(), None)
         };
+        
+        tracing::info!("Final extracted - subject: {}, from_addr: {}, from_name: {:?}", subject, from_addr, from_name);
         
         // Extract recipient addresses
         let to_addrs = envelope

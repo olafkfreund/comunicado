@@ -125,9 +125,9 @@ impl MessageList {
             current_folder: None,
         };
         
-        // Initialize with sample messages
-        list.initialize_sample_messages();
-        list.state.select(Some(0));
+        // Don't initialize with sample messages initially - they will be loaded from database
+        // or initialized later if no database is available
+        list.state.select(None);
         
         list
     }
@@ -197,6 +197,8 @@ impl MessageList {
     }
 
     pub fn render(&self, frame: &mut Frame, area: Rect, block: Block, _is_focused: bool, theme: &Theme) {
+        tracing::debug!("MessageList::render called with {} messages, current_account: {:?}, current_folder: {:?}", 
+                       self.messages.len(), self.current_account, self.current_folder);
         let items: Vec<ListItem> = self.messages
             .iter()
             .enumerate()
@@ -442,10 +444,13 @@ impl MessageList {
     }
     
     fn rebuild_view(&mut self) {
+        tracing::info!("rebuild_view called, current view_mode: {:?}, current_account: {:?}, current_folder: {:?}, messages count: {}", 
+                      self.view_mode, self.current_account, self.current_folder, self.messages.len());
         match self.view_mode {
             ViewMode::List => self.build_flat_view(),
             ViewMode::Threaded => self.build_threaded_view(),
         }
+        tracing::info!("rebuild_view completed, messages count after rebuild: {}", self.messages.len());
     }
     
     fn build_flat_view(&mut self) {
@@ -591,6 +596,15 @@ impl MessageList {
     /// Set the database for loading real messages
     pub fn set_database(&mut self, database: Arc<EmailDatabase>) {
         self.database = Some(database);
+    }
+    
+    /// Initialize with sample messages if no database is available (for demo purposes)
+    pub fn ensure_sample_messages_if_no_database(&mut self) {
+        if self.database.is_none() && self.messages.is_empty() {
+            tracing::info!("No database available and no messages loaded, initializing sample messages");
+            self.initialize_sample_messages();
+            self.state.select(Some(0));
+        }
     }
     
     /// Load messages from database for a specific account and folder
