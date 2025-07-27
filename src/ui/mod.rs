@@ -916,6 +916,92 @@ impl UI {
         self.mode = UIMode::Compose;
         self.focused_pane = FocusedPane::Compose;
     }
+
+    /// Enter compose mode for replying to a specific message
+    pub fn start_reply_from_message(&mut self, message: crate::email::StoredMessage, contacts_manager: Arc<crate::contacts::ContactsManager>) {
+        // Extract sender information for reply
+        let reply_to = message.reply_to.unwrap_or(message.from_addr.clone());
+        
+        // Add "Re: " prefix to subject if not already present
+        let subject = if message.subject.starts_with("Re: ") {
+            message.subject
+        } else {
+            format!("Re: {}", message.subject)
+        };
+        
+        self.start_reply(contacts_manager, &reply_to, &subject);
+    }
+
+    /// Enter compose mode for replying to all recipients of a specific message
+    pub fn start_reply_all_from_message(&mut self, message: crate::email::StoredMessage, contacts_manager: Arc<crate::contacts::ContactsManager>) {
+        // Extract sender information for reply
+        let reply_to = message.reply_to.unwrap_or(message.from_addr.clone());
+        
+        // Add "Re: " prefix to subject if not already present
+        let subject = if message.subject.starts_with("Re: ") {
+            message.subject
+        } else {
+            format!("Re: {}", message.subject)
+        };
+        
+        // For reply-all, we would need to include all original recipients
+        // For now, just reply to sender (this needs to be enhanced)
+        self.start_reply(contacts_manager, &reply_to, &subject);
+    }
+
+    /// Enter compose mode for forwarding a specific message
+    pub fn start_forward_from_message(&mut self, message: crate::email::StoredMessage, contacts_manager: Arc<crate::contacts::ContactsManager>) {
+        // Store original subject for use in the forwarded message body
+        let original_subject = message.subject.clone();
+        
+        // Add "Fwd: " prefix to subject if not already present
+        let subject = if original_subject.starts_with("Fwd: ") {
+            original_subject.clone()
+        } else {
+            format!("Fwd: {}", original_subject)
+        };
+
+        // Create forwarded message body with original content
+        let body = match message.body_text {
+            Some(ref text) => format!(
+                "\n\n---------- Forwarded message ----------\n\
+                From: {}\n\
+                Date: {}\n\
+                Subject: {}\n\
+                To: {}\n\n{}",
+                message.from_addr,
+                message.date.format("%Y-%m-%d %H:%M:%S"),
+                original_subject,
+                message.to_addrs.join(", "),
+                text
+            ),
+            None => format!(
+                "\n\n---------- Forwarded message ----------\n\
+                From: {}\n\
+                Date: {}\n\
+                Subject: {}\n\
+                To: {}\n\n(No message content)",
+                message.from_addr,
+                message.date.format("%Y-%m-%d %H:%M:%S"),
+                original_subject,
+                message.to_addrs.join(", ")
+            ),
+        };
+        
+        self.start_forward(contacts_manager, &subject, &body);
+    }
+
+    /// Enter compose mode for editing a specific message (draft)
+    pub fn start_edit_from_message(&mut self, message: crate::email::StoredMessage, contacts_manager: Arc<crate::contacts::ContactsManager>) {
+        // For now, treat edit as a simple compose with the message body
+        // TODO: Implement proper draft editing with pre-filled recipients and subject
+        let body = message.body_text.unwrap_or_else(|| String::new());
+        
+        // Use the forward constructor as a base and customize it for editing
+        self.compose_ui = Some(ComposeUI::new_forward(contacts_manager, &message.subject, &body));
+        self.mode = UIMode::Compose;
+        self.focused_pane = FocusedPane::Compose;
+    }
     
     /// Exit compose mode and return to normal view
     pub fn exit_compose(&mut self) {

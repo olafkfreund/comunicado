@@ -32,7 +32,7 @@ pub enum DatabaseError {
 pub type DatabaseResult<T> = Result<T, DatabaseError>;
 
 /// Stored email message in the database
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct StoredMessage {
     pub id: Uuid,
     pub account_id: String,
@@ -74,7 +74,7 @@ pub struct StoredMessage {
 }
 
 /// Stored email attachment
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct StoredAttachment {
     pub id: String,
     pub filename: String,

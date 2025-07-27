@@ -239,48 +239,42 @@ This is a sample email showcasing the modern email display format.".to_string();
         
         let content_height = area.height.saturating_sub(2) as usize; // Account for block borders
         
-        let lines = match self.view_mode {
+        // Extract values needed to avoid borrowing conflicts
+        let view_mode = self.view_mode;
+        let current_scroll = self.scroll;
+        let raw_content_len = self.raw_content.len();
+        let email_lines_estimate = if let Some(ref email) = self.email_content {
+            match view_mode {
+                ViewMode::Formatted => email.parsed_content.len() + 10, // Headers + content
+                ViewMode::Html => email.body.lines().count() + 10, // Estimate HTML rendered line count
+                ViewMode::Headers => 8, // Typical header count
+                ViewMode::Raw => raw_content_len,
+            }
+        } else {
+            raw_content_len
+        };
+        
+        let lines = match view_mode {
             ViewMode::Raw => self.render_raw_content(content_height, theme),
             ViewMode::Formatted => self.render_formatted_content(content_height, theme),
             ViewMode::Html => self.render_html_content(content_height, theme),
             ViewMode::Headers => self.render_headers_only(content_height, theme),
         };
 
-        // Create scroll indicator if content is scrollable
-        let total_lines = match self.view_mode {
-            ViewMode::Raw => self.raw_content.len(),
-            ViewMode::Formatted => {
-                if let Some(ref email) = self.email_content {
-                    email.parsed_content.len() + 10 // Headers + content
-                } else {
-                    self.raw_content.len()
-                }
-            }
-            ViewMode::Html => {
-                if let Some(ref email) = self.email_content {
-                    // Estimate HTML rendered line count
-                    email.body.lines().count() + 10
-                } else {
-                    self.raw_content.len()
-                }
-            }
-            ViewMode::Headers => {
-                if let Some(ref _email) = self.email_content {
-                    8 // Typical header count
-                } else {
-                    0
-                }
-            }
+        // Create scroll indicator if content is scrollable  
+        let total_lines = match view_mode {
+            ViewMode::Raw => raw_content_len,
+            _ => email_lines_estimate,
         };
 
         let scroll_indicator = if total_lines > content_height {
-            let position = (self.scroll as f32 / (total_lines - content_height) as f32 * 100.0) as u16;
+            let position = (current_scroll as f32 / (total_lines - content_height) as f32 * 100.0) as u16;
             format!(" ({}%)", position)
         } else {
             String::new()
         };
 
-        let view_mode_indicator = match self.view_mode {
+        let view_mode_indicator = match view_mode {
             ViewMode::Raw => " [Raw]",
             ViewMode::Formatted => " [Formatted]", 
             ViewMode::Html => " [HTML]",
@@ -300,7 +294,7 @@ This is a sample email showcasing the modern email display format.".to_string();
         frame.render_widget(paragraph, area);
     }
     
-    fn render_raw_content(&self, content_height: usize, theme: &Theme) -> Vec<Line> {
+    fn render_raw_content(&mut self, content_height: usize, theme: &Theme) -> Vec<Line> {
         let start_line = self.scroll;
         let end_line = (start_line + content_height).min(self.raw_content.len());
         
@@ -314,7 +308,7 @@ This is a sample email showcasing the modern email display format.".to_string();
             .collect()
     }
     
-    fn render_formatted_content(&self, content_height: usize, theme: &Theme) -> Vec<Line> {
+    fn render_formatted_content(&mut self, content_height: usize, theme: &Theme) -> Vec<Line> {
         if let Some(ref email) = self.email_content {
             let mut all_lines = Vec::new();
             
@@ -426,7 +420,7 @@ This is a sample email showcasing the modern email display format.".to_string();
         }
     }
     
-    fn render_html_content(&self, content_height: usize, _theme: &Theme) -> Vec<Line> {
+    fn render_html_content(&mut self, content_height: usize, _theme: &Theme) -> Vec<Line> {
         if let Some(ref email) = self.email_content {
             let mut all_lines = Vec::new();
             
@@ -445,12 +439,12 @@ This is a sample email showcasing the modern email display format.".to_string();
             if !email.body.is_empty() {
                 // Try to detect if this is HTML content
                 if crate::html::is_html_content(&email.body) {
-                    // Render HTML content using our HTML renderer
-                    let mut html_renderer = crate::html::HtmlRenderer::new(80);
-                    let rendered_text = html_renderer.render_html(&email.body);
+                    // Use the HTML renderer instance to render HTML content
+                    let rendered_text = self.html_renderer.render_html(&email.body);
                     
-                    // Process lines and replace image placeholders
-                    let processed_lines = self.process_image_placeholders(rendered_text.lines);
+                    // Process lines and replace image placeholders with enhanced rendering
+                    let terminal_width = self.html_renderer.max_width as u16;
+                    let processed_lines = self.process_image_placeholders_enhanced(rendered_text.lines, terminal_width);
                     all_lines.extend(processed_lines);
                 } else {
                     // Fall back to plain text rendering
@@ -477,7 +471,7 @@ This is a sample email showcasing the modern email display format.".to_string();
         }
     }
     
-    fn render_headers_only(&self, content_height: usize, theme: &Theme) -> Vec<Line> {
+    fn render_headers_only(&mut self, content_height: usize, theme: &Theme) -> Vec<Line> {
         if let Some(ref email) = self.email_content {
             let header_lines = self.render_email_headers(&email.headers, theme);
             let start_line = self.scroll;
@@ -777,7 +771,7 @@ This is a sample email showcasing the modern email display format.".to_string();
         }
     }
     
-    fn render_raw_content_with_styling(&self, content_height: usize, theme: &Theme) -> Vec<Line> {
+    fn render_raw_content_with_styling(&mut self, content_height: usize, theme: &Theme) -> Vec<Line> {
         let start_line = self.scroll;
         let end_line = (start_line + content_height).min(self.raw_content.len());
         
@@ -831,19 +825,49 @@ This is a sample email showcasing the modern email display format.".to_string();
         self.scroll = 0;
     }
 
-    pub fn scroll_to_bottom(&mut self) {
-        self.scroll = self.raw_content.len().saturating_sub(1);
-    }
     
     /// Scroll content up by specified lines
     pub fn scroll_up(&mut self, lines: usize) {
         self.scroll = self.scroll.saturating_sub(lines);
     }
     
-    /// Scroll content down by specified lines
+    /// Scroll content down by specified lines  
     pub fn scroll_down(&mut self, lines: usize) {
         let max_scroll = self.get_max_scroll(20); // Approximate content height
         self.scroll = (self.scroll.saturating_add(lines)).min(max_scroll);
+    }
+
+    /// Scroll content down by specified lines with proper viewport height
+    pub fn scroll_down_with_height(&mut self, lines: usize, visible_height: usize) {
+        let max_scroll = self.get_max_scroll(visible_height);
+        self.scroll = (self.scroll.saturating_add(lines)).min(max_scroll);
+    }
+
+    /// Scroll by a full page up
+    pub fn page_up(&mut self, visible_height: usize) {
+        let page_size = visible_height.saturating_sub(2); // Leave some overlap
+        self.scroll_up(page_size);
+    }
+
+    /// Scroll by a full page down  
+    pub fn page_down(&mut self, visible_height: usize) {
+        let page_size = visible_height.saturating_sub(2); // Leave some overlap
+        self.scroll_down_with_height(page_size, visible_height);
+    }
+
+
+    /// Scroll to the bottom
+    pub fn scroll_to_bottom(&mut self, visible_height: usize) {
+        let max_scroll = self.get_max_scroll(visible_height);
+        self.scroll = max_scroll;
+    }
+
+    /// Get scroll information for indicators
+    pub fn get_scroll_info(&self, visible_height: usize) -> (usize, usize, bool, bool) {
+        let max_scroll = self.get_max_scroll(visible_height);
+        let can_scroll_up = self.scroll > 0;
+        let can_scroll_down = self.scroll < max_scroll;
+        (self.scroll, max_scroll, can_scroll_up, can_scroll_down)
     }
     
     /// Get current scroll position
@@ -1279,6 +1303,79 @@ This is a sample email showcasing the modern email display format.".to_string();
         processed_lines
     }
     
+    /// Enhanced image placeholder processing with dynamic sizing
+    fn process_image_placeholders_enhanced(&self, lines: Vec<Line<'static>>, terminal_width: u16) -> Vec<Line<'static>> {
+        let mut processed_lines = Vec::new();
+        
+        for line in lines {
+            // Check if this line contains an image placeholder
+            if line.spans.len() == 1 {
+                let span_text = &line.spans[0].content;
+                if span_text.starts_with("IMG_PLACEHOLDER:") {
+                    // Parse the placeholder: IMG_PLACEHOLDER:src:alt
+                    let parts: Vec<&str> = span_text.splitn(3, ':').collect();
+                    if parts.len() >= 3 {
+                        let src = parts[1];
+                        let alt = parts[2];
+                        
+                        // Try to get rendered image content
+                        if let Some(rendered) = self.processed_images.get(src) {
+                            // Split rendered content into lines and add them
+                            for img_line in rendered.lines() {
+                                processed_lines.push(Line::raw(img_line.to_string()));
+                            }
+                        } else {
+                            // Create enhanced placeholder based on terminal width
+                            let image_width = ((terminal_width as usize).saturating_sub(4)).min(60);
+                            let image_height = (image_width / 8).max(3).min(12); // Reasonable aspect ratio
+                            
+                            let placeholder = self.image_manager.generate_placeholder(
+                                Some(alt), 
+                                Some(image_width as u32), 
+                                Some(image_height as u32)
+                            );
+                            
+                            // Add enhanced styling for image placeholders
+                            for (i, placeholder_line) in placeholder.lines().enumerate() {
+                                let style = if i == 0 || i == placeholder.lines().count().saturating_sub(1) {
+                                    // Border lines
+                                    Style::default().fg(Color::Blue)
+                                } else {
+                                    // Content lines
+                                    Style::default().fg(Color::Cyan)
+                                };
+                                
+                                processed_lines.push(Line::styled(
+                                    placeholder_line.to_string(),
+                                    style
+                                ));
+                            }
+                            
+                            // Add a note about image loading if we support images
+                            if self.image_manager.supports_images() {
+                                processed_lines.push(Line::styled(
+                                    format!("🖼️  Loading image: {}", src),
+                                    Style::default().fg(Color::Yellow).add_modifier(Modifier::ITALIC)
+                                ));
+                            }
+                        }
+                    } else {
+                        // Malformed placeholder, keep as is
+                        processed_lines.push(line);
+                    }
+                } else {
+                    // Regular line, keep as is
+                    processed_lines.push(line);
+                }
+            } else {
+                // Multi-span line, keep as is
+                processed_lines.push(line);
+            }
+        }
+        
+        processed_lines
+    }
+    
     /// Asynchronously load images from HTML content
     pub async fn load_images_from_html(&mut self, html_content: &str) {
         if !self.image_manager.supports_images() {
@@ -1366,6 +1463,9 @@ This is a sample email showcasing the modern email display format.".to_string();
         let char_height = area.height.saturating_sub(6); // Account for headers and borders
         
         self.image_manager.set_max_dimensions(char_width as u32, char_height as u32);
+        
+        // Also update HTML renderer max width for proper text wrapping
+        self.html_renderer.max_width = char_width as usize;
     }
     
     /// Navigate to the next attachment

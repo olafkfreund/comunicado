@@ -28,7 +28,7 @@ pub enum EmailViewerAction {
 /// Full-screen email viewer with action buttons
 pub struct EmailViewer {
     email_content: Option<EmailContent>,
-    current_message: Option<StoredMessage>,
+    pub current_message: Option<StoredMessage>,
     view_mode: ViewMode,
     scroll_position: usize,
     show_raw_headers: bool,
@@ -89,14 +89,33 @@ impl EmailViewer {
         self.show_actions = !self.show_actions;
     }
 
-    /// Scroll up
+    /// Scroll up with bounds checking
     pub fn scroll_up(&mut self, lines: usize) {
         self.scroll_position = self.scroll_position.saturating_sub(lines);
     }
 
-    /// Scroll down
+    /// Scroll down with bounds checking (bounds will be applied in render)
     pub fn scroll_down(&mut self, lines: usize) {
         self.scroll_position = self.scroll_position.saturating_add(lines);
+    }
+
+    /// Scroll to top of content
+    pub fn scroll_to_top(&mut self) {
+        self.scroll_position = 0;
+    }
+
+    /// Scroll to bottom of content (will be clamped in render)
+    pub fn scroll_to_bottom(&mut self) {
+        self.scroll_position = usize::MAX;
+    }
+
+    /// Get current scroll information for display
+    pub fn get_scroll_info(&self, total_lines: usize, visible_height: usize) -> (usize, usize, bool, bool) {
+        let max_scroll = total_lines.saturating_sub(visible_height);
+        let current_scroll = self.scroll_position.min(max_scroll);
+        let can_scroll_up = current_scroll > 0;
+        let can_scroll_down = current_scroll < max_scroll;
+        (current_scroll, max_scroll, can_scroll_up, can_scroll_down)
     }
 
     /// Select next action
@@ -126,8 +145,19 @@ impl EmailViewer {
         }
     }
 
+    /// Set the viewport height for proper page scrolling
+    pub fn set_viewport_height(&mut self, height: usize) {
+        // Store viewport height for page scrolling calculations
+        // This will be called from the render method
+    }
+
     /// Handle key input
     pub fn handle_key(&mut self, key: crossterm::event::KeyCode) -> Option<EmailViewerAction> {
+        self.handle_key_with_viewport(key, 20) // Default viewport height
+    }
+
+    /// Handle key input with viewport height for proper page scrolling
+    pub fn handle_key_with_viewport(&mut self, key: crossterm::event::KeyCode, viewport_height: usize) -> Option<EmailViewerAction> {
         use crossterm::event::KeyCode;
 
         match key {
@@ -181,19 +211,23 @@ impl EmailViewer {
                 None
             }
             KeyCode::PageUp => {
-                self.scroll_up(10);
+                // Scroll by a full page based on viewport height
+                let page_size = viewport_height.saturating_sub(2); // Leave some overlap
+                self.scroll_up(page_size);
                 None
             }
             KeyCode::PageDown => {
-                self.scroll_down(10);
+                // Scroll by a full page based on viewport height
+                let page_size = viewport_height.saturating_sub(2); // Leave some overlap
+                self.scroll_down(page_size);
                 None
             }
             KeyCode::Home => {
-                self.scroll_position = 0;
+                self.scroll_to_top();
                 None
             }
             KeyCode::End => {
-                self.scroll_position = usize::MAX; // Will be clamped in render
+                self.scroll_to_bottom();
                 None
             }
             _ => None,
@@ -280,28 +314,51 @@ impl EmailViewer {
             vec![Line::from("No email content available")]
         };
 
-        // Calculate scroll position
-        let scroll_position = if lines.len() > content_height {
-            let max_scroll = lines.len().saturating_sub(content_height);
-            self.scroll_position.min(max_scroll)
+        // Calculate proper scroll bounds
+        let max_scroll = if lines.len() > content_height {
+            lines.len().saturating_sub(content_height)
         } else {
             0
         };
 
+        // Clamp scroll position to valid bounds
+        self.scroll_position = self.scroll_position.min(max_scroll);
+
         // Apply scrolling
-        let start_line = scroll_position;
+        let start_line = self.scroll_position;
         let end_line = (start_line + content_height).min(lines.len());
         let visible_lines = if end_line > start_line {
             lines[start_line..end_line].to_vec()
+        } else if lines.is_empty() {
+            vec![Line::from("No content")]
         } else {
-            vec![Line::from("(End of content)")]
+            // Show the last available content
+            let adjusted_start = lines.len().saturating_sub(content_height);
+            let adjusted_end = lines.len();
+            lines[adjusted_start..adjusted_end].to_vec()
         };
 
-        // Update scroll position after calculation
-        self.scroll_position = scroll_position;
+        // Create scroll indicator in the title
+        let scroll_info = if lines.len() > content_height {
+            let (current, max, can_up, can_down) = self.get_scroll_info(lines.len(), content_height);
+            let percentage = if max > 0 {
+                ((current as f64 / max as f64) * 100.0).round() as usize
+            } else {
+                0
+            };
+            
+            let up_arrow = if can_up { "↑" } else { " " };
+            let down_arrow = if can_down { "↓" } else { " " };
+            format!(" [{}{} {}%]", up_arrow, down_arrow, percentage)
+        } else {
+            String::new()
+        };
 
+        let title = format!("Email Content{}", scroll_info);
+        
         let content_paragraph = Paragraph::new(visible_lines)
             .block(Block::default()
+                .title(title)
                 .borders(Borders::ALL)
                 .border_style(Style::default().fg(theme.colors.palette.border)))
             .wrap(Wrap { trim: true });
@@ -361,7 +418,7 @@ impl EmailViewer {
         let instructions = if self.show_actions {
             "↑↓: Select Action | Enter: Execute | Esc: Hide Actions | r: Reply | f: Forward | q: Quit"
         } else {
-            "j/k: Scroll | Space: Actions | r: Reply | f: Forward | v: View Mode | h: Headers | q: Quit"
+            "j/k/↑↓: Scroll | PgUp/PgDn: Page | Home/End: Top/Bottom | Space: Actions | v: View | q: Quit"
         };
 
         let footer = Paragraph::new(instructions)

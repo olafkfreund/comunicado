@@ -1397,6 +1397,10 @@ pub enum ComposeAction {
     AutoSave,
     Cancel,
     StartCompose,
+    StartReplyFromMessage(crate::email::StoredMessage),
+    StartReplyAllFromMessage(crate::email::StoredMessage),
+    StartForwardFromMessage(crate::email::StoredMessage),
+    StartEditFromMessage(crate::email::StoredMessage),
 }
 
 /// Email composition data

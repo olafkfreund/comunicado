@@ -49,6 +49,11 @@ impl EventHandler {
             return self.handle_start_page_keys(key, ui).await;
         }
         
+        // Handle email viewer mode
+        if ui.mode() == &UIMode::EmailViewer {
+            return self.handle_email_viewer_keys(key, ui).await;
+        }
+        
         // Handle attachment viewer mode when it's active in content preview
         if ui.focused_pane() == FocusedPane::ContentPreview && ui.content_preview().is_viewing_attachment() {
             // Route key handling to attachment viewer
@@ -78,7 +83,7 @@ impl EventHandler {
                     return EventResult::Continue;
                 }
                 KeyCode::End => {
-                    ui.content_preview_mut().scroll_to_bottom();
+                    ui.content_preview_mut().scroll_to_bottom(20); // Default height
                     return EventResult::Continue;
                 }
                 KeyCode::Char(c) => {
@@ -513,7 +518,7 @@ impl EventHandler {
             KeyCode::End => {
                 // Jump to bottom of content
                 if let FocusedPane::ContentPreview = ui.focused_pane() {
-                    ui.content_preview_mut().scroll_to_bottom();
+                    ui.content_preview_mut().scroll_to_bottom(20); // Default height
                 }
             }
             
@@ -677,6 +682,149 @@ impl EventHandler {
         }
         
         EventResult::Continue
+    }
+
+    /// Handle email viewer mode key events
+    async fn handle_email_viewer_keys(&mut self, key: KeyEvent, ui: &mut UI) -> EventResult {
+        if let Some(action) = ui.handle_email_viewer_key(key.code) {
+            match action {
+                crate::ui::email_viewer::EmailViewerAction::Reply => {
+                    // Start reply composition
+                    self.handle_email_reply(ui).await
+                }
+                crate::ui::email_viewer::EmailViewerAction::ReplyAll => {
+                    // Start reply all composition  
+                    self.handle_email_reply_all(ui).await
+                }
+                crate::ui::email_viewer::EmailViewerAction::Forward => {
+                    // Start forward composition
+                    self.handle_email_forward(ui).await
+                }
+                crate::ui::email_viewer::EmailViewerAction::Edit => {
+                    // Edit email as draft (if it's a draft)
+                    self.handle_email_edit(ui).await
+                }
+                crate::ui::email_viewer::EmailViewerAction::Delete => {
+                    // Delete email
+                    self.handle_email_delete(ui).await
+                }
+                crate::ui::email_viewer::EmailViewerAction::Archive => {
+                    // Archive email
+                    self.handle_email_archive(ui).await
+                }
+                crate::ui::email_viewer::EmailViewerAction::MarkAsRead => {
+                    // Mark email as read
+                    self.handle_email_mark_read(ui).await
+                }
+                crate::ui::email_viewer::EmailViewerAction::MarkAsUnread => {
+                    // Mark email as unread
+                    self.handle_email_mark_unread(ui).await
+                }
+                crate::ui::email_viewer::EmailViewerAction::Close => {
+                    // Exit email viewer
+                    ui.exit_email_viewer();
+                    EventResult::Continue
+                }
+            }
+        } else {
+            EventResult::Continue
+        }
+    }
+
+    /// Handle reply action from email viewer
+    async fn handle_email_reply(&mut self, ui: &mut UI) -> EventResult {
+        // Get current email data from email viewer
+        if let Some(message) = ui.email_viewer_mut().current_message.clone() {
+            // For now, return a specific action that the main loop can handle with contacts_manager
+            // TODO: This should be handled by the main app with proper contacts_manager access
+            return EventResult::ComposeAction(crate::ui::ComposeAction::StartReplyFromMessage(message));
+        }
+        EventResult::Continue
+    }
+
+    /// Handle reply all action from email viewer
+    async fn handle_email_reply_all(&mut self, ui: &mut UI) -> EventResult {
+        // Get current email data from email viewer
+        if let Some(message) = ui.email_viewer_mut().current_message.clone() {
+            // For now, return a specific action that the main loop can handle with contacts_manager
+            // TODO: This should be handled by the main app with proper contacts_manager access
+            return EventResult::ComposeAction(crate::ui::ComposeAction::StartReplyAllFromMessage(message));
+        }
+        EventResult::Continue
+    }
+
+    /// Handle forward action from email viewer
+    async fn handle_email_forward(&mut self, ui: &mut UI) -> EventResult {
+        // Get current email data from email viewer
+        if let Some(message) = ui.email_viewer_mut().current_message.clone() {
+            // For now, return a specific action that the main loop can handle with contacts_manager
+            // TODO: This should be handled by the main app with proper contacts_manager access
+            return EventResult::ComposeAction(crate::ui::ComposeAction::StartForwardFromMessage(message));
+        }
+        EventResult::Continue
+    }
+
+    /// Handle edit action from email viewer (for drafts)
+    async fn handle_email_edit(&mut self, ui: &mut UI) -> EventResult {
+        // Get current email data from email viewer
+        if let Some(message) = ui.email_viewer_mut().current_message.clone() {
+            // For now, return a specific action that the main loop can handle with contacts_manager
+            // TODO: This should be handled by the main app with proper contacts_manager access
+            return EventResult::ComposeAction(crate::ui::ComposeAction::StartEditFromMessage(message));
+        }
+        EventResult::Continue
+    }
+
+    /// Handle delete action from email viewer
+    async fn handle_email_delete(&mut self, ui: &mut UI) -> EventResult {
+        // Get current email data from email viewer
+        if let Some(message) = ui.email_viewer_mut().current_message.clone() {
+            // TODO: Implement actual email deletion
+            tracing::info!("Delete email action requested for message: {}", message.subject);
+            // For now, just exit the viewer
+            ui.exit_email_viewer();
+            EventResult::Continue
+        } else {
+            EventResult::Continue
+        }
+    }
+
+    /// Handle archive action from email viewer
+    async fn handle_email_archive(&mut self, ui: &mut UI) -> EventResult {
+        // Get current email data from email viewer
+        if let Some(message) = ui.email_viewer_mut().current_message.clone() {
+            // TODO: Implement actual email archiving
+            tracing::info!("Archive email action requested for message: {}", message.subject);
+            // For now, just exit the viewer
+            ui.exit_email_viewer();
+            EventResult::Continue
+        } else {
+            EventResult::Continue
+        }
+    }
+
+    /// Handle mark as read action from email viewer
+    async fn handle_email_mark_read(&mut self, ui: &mut UI) -> EventResult {
+        // Get current email data from email viewer
+        if let Some(message) = ui.email_viewer_mut().current_message.clone() {
+            // TODO: Implement actual mark as read
+            tracing::info!("Mark as read action requested for message: {}", message.subject);
+            EventResult::Continue
+        } else {
+            EventResult::Continue
+        }
+    }
+
+    /// Handle mark as unread action from email viewer
+    async fn handle_email_mark_unread(&mut self, ui: &mut UI) -> EventResult {
+        // Get current email data from email viewer
+        if let Some(message) = ui.email_viewer_mut().current_message.clone() {
+            // TODO: Implement actual mark as unread
+            tracing::info!("Mark as unread action requested for message: {}", message.subject);
+            EventResult::Continue
+        } else {
+            EventResult::Continue
+        }
     }
 
     pub fn should_quit(&self) -> bool {

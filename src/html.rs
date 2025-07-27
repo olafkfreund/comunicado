@@ -7,7 +7,7 @@ use ratatui::{
 /// HTML to terminal text converter for email content
 pub struct HtmlRenderer {
     /// Maximum width for text wrapping
-    max_width: usize,
+    pub max_width: usize,
     /// Current text style stack
     style_stack: Vec<Style>,
     /// Base text color
@@ -73,60 +73,69 @@ impl HtmlRenderer {
             match node.value() {
                 Node::Element(elem) => {
                     let tag_name = elem.name();
+                    let element_ref = scraper::ElementRef::wrap(node).unwrap();
+                    
+                    // Apply inline styles if present
+                    self.apply_inline_styles(&element_ref);
                     
                     // Handle different HTML tags
                     match tag_name {
                         "p" => {
-                            self.process_paragraph(&scraper::ElementRef::wrap(node).unwrap(), lines);
+                            self.process_paragraph(&element_ref, lines);
                             lines.push(Line::from(""));  // Add blank line after paragraph
                         }
                         "br" => {
                             lines.push(Line::from(""));
                         }
                         "h1" | "h2" | "h3" | "h4" | "h5" | "h6" => {
-                            self.process_heading(&scraper::ElementRef::wrap(node).unwrap(), lines, tag_name);
+                            self.process_heading(&element_ref, lines, tag_name);
                         }
                         "strong" | "b" => {
                             self.push_style(Style::default().add_modifier(Modifier::BOLD));
-                            self.process_element(&scraper::ElementRef::wrap(node).unwrap(), lines);
+                            self.process_element(&element_ref, lines);
                             self.pop_style();
                         }
                         "em" | "i" => {
                             self.push_style(Style::default().add_modifier(Modifier::ITALIC));
-                            self.process_element(&scraper::ElementRef::wrap(node).unwrap(), lines);
+                            self.process_element(&element_ref, lines);
                             self.pop_style();
                         }
                         "u" => {
                             self.push_style(Style::default().add_modifier(Modifier::UNDERLINED));
-                            self.process_element(&scraper::ElementRef::wrap(node).unwrap(), lines);
+                            self.process_element(&element_ref, lines);
                             self.pop_style();
                         }
                         "a" => {
-                            self.process_link(&scraper::ElementRef::wrap(node).unwrap(), lines);
+                            self.process_link(&element_ref, lines);
                         }
                         "blockquote" => {
-                            self.process_blockquote(&scraper::ElementRef::wrap(node).unwrap(), lines);
+                            self.process_blockquote(&element_ref, lines);
                         }
                         "ul" | "ol" => {
-                            self.process_list(&scraper::ElementRef::wrap(node).unwrap(), lines, tag_name);
+                            self.process_list(&element_ref, lines, tag_name);
                         }
                         "pre" | "code" => {
-                            self.process_code(&scraper::ElementRef::wrap(node).unwrap(), lines);
+                            self.process_code(&element_ref, lines);
                         }
                         "img" => {
-                            self.process_image(&scraper::ElementRef::wrap(node).unwrap(), lines);
+                            self.process_image(&element_ref, lines);
                         }
                         "table" => {
-                            self.process_table(&scraper::ElementRef::wrap(node).unwrap(), lines);
+                            self.process_table(&element_ref, lines);
                         }
                         "div" | "span" | "body" | "html" => {
                             // Container elements - just process children
-                            self.process_element(&scraper::ElementRef::wrap(node).unwrap(), lines);
+                            self.process_element(&element_ref, lines);
                         }
                         _ => {
                             // Unknown elements - process children
-                            self.process_element(&scraper::ElementRef::wrap(node).unwrap(), lines);
+                            self.process_element(&element_ref, lines);
                         }
+                    }
+                    
+                    // Pop inline styles if they were applied
+                    if element_ref.value().attr("style").is_some() {
+                        self.pop_style();
                     }
                 }
                 Node::Text(text) => {
@@ -363,6 +372,107 @@ impl HtmlRenderer {
     /// Get the current style (combination of all stacked styles)
     fn current_style(&self) -> Style {
         self.style_stack.last().copied().unwrap_or_default()
+    }
+    
+    /// Parse CSS color values (basic implementation)
+    fn parse_css_color(&self, color_str: &str) -> Option<Color> {
+        let color = color_str.trim().to_lowercase();
+        
+        // Named colors
+        match color.as_str() {
+            "red" => Some(Color::Red),
+            "green" => Some(Color::Green),
+            "blue" => Some(Color::Blue),
+            "yellow" => Some(Color::Yellow),
+            "cyan" => Some(Color::Cyan),
+            "magenta" => Some(Color::Magenta),
+            "white" => Some(Color::White),
+            "black" => Some(Color::Black),
+            "gray" | "grey" => Some(Color::Gray),
+            "darkgray" | "darkgrey" => Some(Color::DarkGray),
+            "lightred" => Some(Color::LightRed),
+            "lightgreen" => Some(Color::LightGreen),
+            "lightblue" => Some(Color::LightBlue),
+            "lightyellow" => Some(Color::LightYellow),
+            "lightcyan" => Some(Color::LightCyan),
+            "lightmagenta" => Some(Color::LightMagenta),
+            _ => {
+                // Try to parse hex colors
+                if color.starts_with('#') && color.len() == 7 {
+                    if let (Ok(r), Ok(g), Ok(b)) = (
+                        u8::from_str_radix(&color[1..3], 16),
+                        u8::from_str_radix(&color[3..5], 16),
+                        u8::from_str_radix(&color[5..7], 16),
+                    ) {
+                        return Some(Color::Rgb(r, g, b));
+                    }
+                }
+                
+                // Try to parse rgb() colors
+                if color.starts_with("rgb(") && color.ends_with(')') {
+                    let rgb_part = &color[4..color.len()-1];
+                    let parts: Vec<&str> = rgb_part.split(',').collect();
+                    if parts.len() == 3 {
+                        if let (Ok(r), Ok(g), Ok(b)) = (
+                            parts[0].trim().parse::<u8>(),
+                            parts[1].trim().parse::<u8>(),
+                            parts[2].trim().parse::<u8>(),
+                        ) {
+                            return Some(Color::Rgb(r, g, b));
+                        }
+                    }
+                }
+                
+                None
+            }
+        }
+    }
+    
+    /// Apply inline styles from style attribute
+    fn apply_inline_styles(&mut self, element: &scraper::ElementRef) {
+        if let Some(style_attr) = element.value().attr("style") {
+            let mut style = self.current_style();
+            
+            // Parse CSS properties
+            for declaration in style_attr.split(';') {
+                let parts: Vec<&str> = declaration.splitn(2, ':').collect();
+                if parts.len() == 2 {
+                    let property = parts[0].trim().to_lowercase();
+                    let value = parts[1].trim();
+                    
+                    match property.as_str() {
+                        "color" => {
+                            if let Some(color) = self.parse_css_color(value) {
+                                style = style.fg(color);
+                            }
+                        }
+                        "background-color" => {
+                            if let Some(bg_color) = self.parse_css_color(value) {
+                                style = style.bg(bg_color);
+                            }
+                        }
+                        "font-weight" => {
+                            if value == "bold" || value == "bolder" || value.parse::<i32>().unwrap_or(400) >= 600 {
+                                style = style.add_modifier(Modifier::BOLD);
+                            }
+                        }
+                        "font-style" => {
+                            if value == "italic" || value == "oblique" {
+                                style = style.add_modifier(Modifier::ITALIC);
+                            }
+                        }
+                        "text-decoration" => {
+                            if value.contains("underline") {
+                                style = style.add_modifier(Modifier::UNDERLINED);
+                            }
+                        }
+                        _ => {} // Ignore unknown properties
+                    }
+                }
+            }
+            
+            self.push_style(style);
+        }
     }
 }
 

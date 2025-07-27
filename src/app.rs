@@ -860,6 +860,46 @@ impl App {
                 // Start compose mode
                 self.start_compose_mode();
             }
+            ComposeAction::StartReplyFromMessage(message) => {
+                // Start reply compose mode with the message
+                if let Some(ref contacts_manager) = self.contacts_manager {
+                    self.ui.start_reply_from_message(message, contacts_manager.clone());
+                    self.ui.exit_email_viewer(); // Exit email viewer after starting compose
+                    tracing::info!("Started reply compose mode from email viewer");
+                } else {
+                    tracing::warn!("Cannot start reply: contacts manager not initialized");
+                }
+            }
+            ComposeAction::StartReplyAllFromMessage(message) => {
+                // Start reply all compose mode with the message
+                if let Some(ref contacts_manager) = self.contacts_manager {
+                    self.ui.start_reply_all_from_message(message, contacts_manager.clone());
+                    self.ui.exit_email_viewer(); // Exit email viewer after starting compose
+                    tracing::info!("Started reply all compose mode from email viewer");
+                } else {
+                    tracing::warn!("Cannot start reply all: contacts manager not initialized");
+                }
+            }
+            ComposeAction::StartForwardFromMessage(message) => {
+                // Start forward compose mode with the message
+                if let Some(ref contacts_manager) = self.contacts_manager {
+                    self.ui.start_forward_from_message(message, contacts_manager.clone());
+                    self.ui.exit_email_viewer(); // Exit email viewer after starting compose
+                    tracing::info!("Started forward compose mode from email viewer");
+                } else {
+                    tracing::warn!("Cannot start forward: contacts manager not initialized");
+                }
+            }
+            ComposeAction::StartEditFromMessage(message) => {
+                // Start edit compose mode with the message
+                if let Some(ref contacts_manager) = self.contacts_manager {
+                    self.ui.start_edit_from_message(message, contacts_manager.clone());
+                    self.ui.exit_email_viewer(); // Exit email viewer after starting compose
+                    tracing::info!("Started edit compose mode from email viewer");
+                } else {
+                    tracing::warn!("Cannot start edit: contacts manager not initialized");
+                }
+            }
         }
         Ok(())
     }
