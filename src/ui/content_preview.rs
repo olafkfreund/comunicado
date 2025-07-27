@@ -701,73 +701,260 @@ This is a sample email showcasing the modern email display format.".to_string();
     
     fn render_content_line(&self, content_line: &ContentLine, theme: &Theme) -> Line {
         match content_line.line_type {
-            LineType::Header => Line::from(vec![
-                Span::styled(content_line.text.clone(), 
-                    Style::default().fg(theme.colors.content_preview.header).add_modifier(Modifier::BOLD))
-            ]),
+            LineType::Header => self.render_header_line(content_line, theme),
             LineType::Subject => Line::from(vec![
                 Span::styled(content_line.text.clone(), 
                     Style::default().fg(theme.colors.palette.accent).add_modifier(Modifier::BOLD))
             ]),
-            LineType::Quote => {
-                let depth = content_line.metadata.get("depth")
-                    .and_then(|d| d.parse::<usize>().ok())
-                    .unwrap_or(1);
-                let quote_color = if depth > 1 { 
-                    theme.colors.palette.text_muted 
-                } else { 
-                    theme.colors.palette.info 
-                };
-                Line::from(vec![
-                    Span::styled(content_line.text.clone(), Style::default().fg(quote_color))
-                ])
-            },
-            LineType::Code => Line::from(vec![
-                Span::styled(content_line.text.clone(), 
-                    Style::default().fg(theme.colors.palette.accent).add_modifier(Modifier::DIM))
-            ]),
-            LineType::Link => Line::from(vec![
-                Span::styled(content_line.text.clone(), 
-                    Style::default().fg(theme.colors.content_preview.link).add_modifier(Modifier::UNDERLINED))
-            ]),
-            LineType::Bullet => {
-                // Enhanced bullet point formatting with better icons
-                let text = &content_line.text;
-                if text.trim_start().starts_with("•") || text.trim_start().starts_with("-") || text.trim_start().starts_with("*") {
-                    // Replace basic bullets with styled ones
-                    let indent = text.len() - text.trim_start().len();
-                    let content = text.trim_start().chars().skip(1).collect::<String>().trim_start().to_string();
-                    
-                    Line::from(vec![
-                        Span::styled(" ".repeat(indent), Style::default()),
-                        Span::styled("▸ ", Style::default().fg(theme.colors.palette.accent).add_modifier(Modifier::BOLD)),
-                        Span::styled(content, Style::default().fg(theme.colors.content_preview.body)),
-                    ])
-                } else {
-                    Line::from(vec![
-                        Span::styled(content_line.text.clone(), 
-                            Style::default().fg(theme.colors.palette.success))
-                    ])
-                }
-            },
-            LineType::Separator => Line::from(vec![
-                Span::styled(content_line.text.clone(), 
-                    Style::default().fg(theme.colors.palette.border))
-            ]),
+            LineType::Quote => self.render_quote_line(content_line, theme),
+            LineType::Code => self.render_code_line(content_line, theme),
+            LineType::Link => self.render_link_line(content_line, theme),
+            LineType::Bullet => self.render_bullet_line(content_line, theme),
+            LineType::Separator => self.render_separator_line(content_line, theme),
             LineType::Attachment => Line::from(vec![
                 Span::styled("📎 ", Style::default().fg(theme.colors.palette.warning)),
                 Span::styled(content_line.text.clone(), 
                     Style::default().fg(theme.colors.palette.warning).add_modifier(Modifier::BOLD))
             ]),
-            LineType::Signature => Line::from(vec![
-                Span::styled(content_line.text.clone(), 
-                    Style::default().fg(theme.colors.palette.text_muted).add_modifier(Modifier::DIM))
-            ]),
+            LineType::Signature => self.render_signature_line(content_line, theme),
             LineType::Empty => Line::from(""),
-            LineType::Body => Line::from(vec![
+            LineType::Body => self.render_body_line(content_line, theme),
+        }
+    }
+    
+    /// Enhanced header line rendering
+    fn render_header_line(&self, content_line: &ContentLine, theme: &Theme) -> Line<'static> {
+        let text = &content_line.text;
+        
+        // Split header into label and value
+        if let Some(colon_pos) = text.find(':') {
+            let label = text[..colon_pos + 1].to_string();
+            let value = text[colon_pos + 1..].trim().to_string();
+            
+            Line::from(vec![
+                Span::styled(label, Style::default()
+                    .fg(theme.colors.content_preview.header)
+                    .add_modifier(Modifier::BOLD)),
+                Span::styled(" ".to_string(), Style::default()),
+                Span::styled(value, Style::default()
+                    .fg(theme.colors.content_preview.body)),
+            ])
+        } else {
+            Line::from(vec![
                 Span::styled(content_line.text.clone(), 
-                    Style::default().fg(theme.colors.content_preview.body))
-            ]),
+                    Style::default().fg(theme.colors.content_preview.header).add_modifier(Modifier::BOLD))
+            ])
+        }
+    }
+    
+    /// Enhanced quote line rendering with depth indicators
+    fn render_quote_line(&self, content_line: &ContentLine, theme: &Theme) -> Line<'static> {
+        let depth = content_line.metadata.get("depth")
+            .and_then(|d| d.parse::<usize>().ok())
+            .unwrap_or(1);
+            
+        let (quote_color, quote_char) = match depth {
+            1 => (theme.colors.palette.info, "▌"),
+            2 => (theme.colors.palette.warning, "▐"),
+            _ => (theme.colors.palette.text_muted, "│"),
+        };
+        
+        // Remove the original '>' characters and clean up the text
+        let clean_text = content_line.text.trim_start_matches('>').trim_start().to_string();
+        
+        Line::from(vec![
+            Span::styled(quote_char.to_string(), Style::default().fg(quote_color).add_modifier(Modifier::BOLD)),
+            Span::styled(" ".to_string(), Style::default()),
+            Span::styled(clean_text, Style::default().fg(quote_color).add_modifier(Modifier::ITALIC)),
+        ])
+    }
+    
+    /// Enhanced code line rendering
+    fn render_code_line(&self, content_line: &ContentLine, theme: &Theme) -> Line<'static> {
+        let text = &content_line.text;
+        
+        // Handle code blocks vs inline code
+        if text.trim().starts_with("```") {
+            Line::from(vec![
+                Span::styled("┌─ Code ─", Style::default()
+                    .fg(theme.colors.palette.accent)
+                    .add_modifier(Modifier::BOLD)),
+            ])
+        } else {
+            Line::from(vec![
+                Span::styled("│ ", Style::default().fg(theme.colors.palette.border)),
+                Span::styled(text.trim().to_string(), Style::default()
+                    .fg(theme.colors.palette.accent)
+                    .add_modifier(Modifier::DIM)),
+            ])
+        }
+    }
+    
+    /// Enhanced link line rendering with better detection
+    fn render_link_line(&self, content_line: &ContentLine, theme: &Theme) -> Line<'static> {
+        let text = &content_line.text;
+        let mut spans = Vec::new();
+        
+        // Try to find and highlight URLs within the text
+        let mut last_end = 0;
+        
+        for url_match in self.url_regex.find_iter(text) {
+            // Add text before the URL
+            if url_match.start() > last_end {
+                spans.push(Span::styled(
+                    text[last_end..url_match.start()].to_string(),
+                    Style::default().fg(theme.colors.content_preview.body)
+                ));
+            }
+            
+            // Add the URL with special styling
+            spans.push(Span::styled(
+                "🔗 ".to_string(),
+                Style::default().fg(theme.colors.content_preview.link)
+            ));
+            spans.push(Span::styled(
+                url_match.as_str().to_string(),
+                Style::default()
+                    .fg(theme.colors.content_preview.link)
+                    .add_modifier(Modifier::UNDERLINED | Modifier::BOLD)
+            ));
+            
+            last_end = url_match.end();
+        }
+        
+        // Add remaining text
+        if last_end < text.len() {
+            spans.push(Span::styled(
+                text[last_end..].to_string(),
+                Style::default().fg(theme.colors.content_preview.body)
+            ));
+        }
+        
+        // If no URLs found, treat as regular link
+        if spans.is_empty() {
+            spans.push(Span::styled(
+                text.clone(),
+                Style::default()
+                    .fg(theme.colors.content_preview.link)
+                    .add_modifier(Modifier::UNDERLINED)
+            ));
+        }
+        
+        Line::from(spans)
+    }
+    
+    /// Enhanced bullet point rendering
+    fn render_bullet_line(&self, content_line: &ContentLine, theme: &Theme) -> Line<'static> {
+        let text = &content_line.text;
+        let trimmed = text.trim_start();
+        let indent = text.len() - trimmed.len();
+        
+        // Different bullet styles based on the original character
+        let (bullet_char, bullet_style) = if trimmed.starts_with("- ") {
+            ("▸", Style::default().fg(theme.colors.palette.accent).add_modifier(Modifier::BOLD))
+        } else if trimmed.starts_with("* ") {
+            ("•", Style::default().fg(theme.colors.palette.success).add_modifier(Modifier::BOLD))
+        } else if trimmed.starts_with("• ") {
+            ("◦", Style::default().fg(theme.colors.palette.info).add_modifier(Modifier::BOLD))
+        } else if let Some(num_end) = trimmed.find(". ") {
+            // Numbered list
+            let number = &trimmed[..num_end];
+            return Line::from(vec![
+                Span::styled(" ".repeat(indent), Style::default()),
+                Span::styled(format!("{}.", number), Style::default()
+                    .fg(theme.colors.palette.accent)
+                    .add_modifier(Modifier::BOLD)),
+                Span::styled(" ".to_string(), Style::default()),
+                Span::styled(trimmed[num_end + 2..].to_string(), Style::default()
+                    .fg(theme.colors.content_preview.body)),
+            ]);
+        } else {
+            ("▪", Style::default().fg(theme.colors.palette.accent))
+        };
+        
+        // Extract content after bullet
+        let content = if let Some(space_pos) = trimmed.find(' ') {
+            &trimmed[space_pos + 1..]
+        } else {
+            trimmed
+        };
+        
+        Line::from(vec![
+            Span::styled(" ".repeat(indent), Style::default()),
+            Span::styled(format!("{} ", bullet_char), bullet_style),
+            Span::styled(content.to_string(), Style::default().fg(theme.colors.content_preview.body)),
+        ])
+    }
+    
+    /// Enhanced separator line rendering
+    fn render_separator_line(&self, content_line: &ContentLine, theme: &Theme) -> Line<'static> {
+        let text = &content_line.text.trim();
+        
+        // Create a stylized separator based on the original characters
+        let separator_char = if text.starts_with("---") {
+            "─"
+        } else if text.starts_with("===") {
+            "═"
+        } else if text.starts_with("***") {
+            "*"
+        } else if text.starts_with("...") {
+            "·"
+        } else {
+            "─"
+        };
+        
+        let separator_width = 40.min(text.len().max(20));
+        let separator_line = separator_char.repeat(separator_width);
+        
+        Line::from(vec![
+            Span::styled(separator_line, Style::default()
+                .fg(theme.colors.palette.border)
+                .add_modifier(Modifier::DIM))
+        ])
+    }
+    
+    /// Enhanced signature line rendering
+    fn render_signature_line(&self, content_line: &ContentLine, theme: &Theme) -> Line<'static> {
+        let text = &content_line.text;
+        
+        // Special handling for classic "--" signature separator
+        if text.trim() == "--" || text.trim().starts_with("-- ") {
+            Line::from(vec![
+                Span::styled("─── ", Style::default().fg(theme.colors.palette.border)),
+                Span::styled("Signature", Style::default()
+                    .fg(theme.colors.palette.text_muted)
+                    .add_modifier(Modifier::ITALIC)),
+                Span::styled(" ───", Style::default().fg(theme.colors.palette.border)),
+            ])
+        } else {
+            Line::from(vec![
+                Span::styled("✍ ", Style::default().fg(theme.colors.palette.text_muted)),
+                Span::styled(text.clone(), Style::default()
+                    .fg(theme.colors.palette.text_muted)
+                    .add_modifier(Modifier::ITALIC | Modifier::DIM))
+            ])
+        }
+    }
+    
+    /// Enhanced body line rendering with smart text flow
+    fn render_body_line(&self, content_line: &ContentLine, theme: &Theme) -> Line<'static> {
+        let text = &content_line.text;
+        
+        // Add subtle paragraph indicators for better readability
+        if text.trim().is_empty() {
+            Line::from("")
+        } else if text.len() > 80 {
+            // Long lines get a subtle indicator that they continue
+            Line::from(vec![
+                Span::styled(text.clone(), Style::default().fg(theme.colors.content_preview.body)),
+                Span::styled(" ↩", Style::default()
+                    .fg(theme.colors.palette.border)
+                    .add_modifier(Modifier::DIM))
+            ])
+        } else {
+            Line::from(vec![
+                Span::styled(text.clone(), Style::default().fg(theme.colors.content_preview.body))
+            ])
         }
     }
     
@@ -1037,7 +1224,7 @@ This is a sample email showcasing the modern email display format.".to_string();
         parsed_lines
     }
     
-    /// Classify a line of content based on its characteristics
+    /// Classify a line of content based on its characteristics with enhanced detection
     fn classify_line(&self, line: &str) -> LineType {
         let trimmed = line.trim();
         
@@ -1045,19 +1232,163 @@ This is a sample email showcasing the modern email display format.".to_string();
             LineType::Empty
         } else if trimmed.starts_with('>') {
             LineType::Quote
-        } else if trimmed.starts_with("```") || trimmed.starts_with("    ") {
+        } else if trimmed.starts_with("```") || trimmed.starts_with("    ") || trimmed.starts_with("\t") {
             LineType::Code
-        } else if self.url_regex.is_match(trimmed) {
+        } else if self.is_enhanced_link_line(trimmed) {
             LineType::Link
-        } else if trimmed.starts_with("- ") || trimmed.starts_with("* ") || trimmed.starts_with("• ") {
+        } else if self.is_bullet_point(trimmed) {
             LineType::Bullet
-        } else if trimmed.starts_with("---") || trimmed.starts_with("___") {
+        } else if self.is_separator_line(trimmed) {
             LineType::Separator
-        } else if trimmed.starts_with("--") && (trimmed.contains("signature") || line.len() < 50) {
+        } else if self.is_signature_line(line) {
             LineType::Signature
+        } else if self.is_header_line(trimmed) {
+            LineType::Header
         } else {
             LineType::Body
         }
+    }
+    
+    /// Enhanced link detection
+    fn is_enhanced_link_line(&self, text: &str) -> bool {
+        // Check for URLs
+        if self.url_regex.is_match(text) {
+            return true;
+        }
+        
+        // Check for email addresses
+        if self.email_regex.is_match(text) {
+            return true;
+        }
+        
+        // Check for common link patterns
+        let lower = text.to_lowercase();
+        lower.starts_with("http") || 
+        lower.starts_with("www.") || 
+        lower.starts_with("ftp://") ||
+        (text.contains("://") && text.len() < 200) // Reasonable URL length
+    }
+    
+    /// Enhanced bullet point detection
+    fn is_bullet_point(&self, text: &str) -> bool {
+        let patterns = ["- ", "* ", "• ", "◦ ", "‣ ", "▸ ", "▪ ", "▫ "];
+        for pattern in &patterns {
+            if text.starts_with(pattern) {
+                return true;
+            }
+        }
+        
+        // Check for numbered lists
+        if text.len() > 3 {
+            let chars: Vec<char> = text.chars().take(5).collect();
+            if chars.len() >= 3 {
+                // Pattern: "1. ", "12. ", "(1) ", etc.
+                if chars[0].is_ascii_digit() {
+                    if chars[1] == '.' && chars[2] == ' ' {
+                        return true;
+                    }
+                    if chars.len() >= 4 && chars[1].is_ascii_digit() && chars[2] == '.' && chars[3] == ' ' {
+                        return true;
+                    }
+                }
+                // Pattern: "(1) ", "(a) "
+                if chars[0] == '(' && chars.len() >= 4 && chars[2] == ')' && chars[3] == ' ' {
+                    return true;
+                }
+            }
+        }
+        
+        false
+    }
+    
+    /// Enhanced separator line detection
+    fn is_separator_line(&self, text: &str) -> bool {
+        if text.len() < 3 {
+            return false;
+        }
+        
+        // Common separator patterns
+        let separators = ["---", "___", "===", "***", "...", "~~~"];
+        for sep in &separators {
+            if text.starts_with(sep) && text.chars().all(|c| c == sep.chars().next().unwrap() || c.is_whitespace()) {
+                return true;
+            }
+        }
+        
+        // Lines with mostly repeating characters
+        if text.len() > 5 {
+            let first_char = text.chars().next().unwrap();
+            let non_space_chars: Vec<char> = text.chars().filter(|c| !c.is_whitespace()).collect();
+            if non_space_chars.len() > 3 && non_space_chars.iter().all(|&c| c == first_char) {
+                return true;
+            }
+        }
+        
+        false
+    }
+    
+    /// Enhanced signature detection
+    fn is_signature_line(&self, line: &str) -> bool {
+        let trimmed = line.trim();
+        
+        // Classic email signature indicators
+        if trimmed == "--" || trimmed.starts_with("-- ") {
+            return true;
+        }
+        
+        // Common signature patterns
+        let signature_patterns = [
+            "best regards", "kind regards", "sincerely", "yours truly",
+            "best", "cheers", "thanks", "thank you", "sent from", "get outlook",
+            "confidential", "disclaimer", "unsubscribe", "privacy policy"
+        ];
+        
+        let lower = trimmed.to_lowercase();
+        for pattern in &signature_patterns {
+            if lower.contains(pattern) {
+                return true;
+            }
+        }
+        
+        // Lines that look like contact info
+        if trimmed.len() < 100 && (
+            trimmed.contains('@') || 
+            trimmed.contains("phone:") ||
+            trimmed.contains("tel:") ||
+            trimmed.contains("mobile:") ||
+            (trimmed.matches(char::is_numeric).count() > 6 && trimmed.contains('-'))
+        ) {
+            return true;
+        }
+        
+        false
+    }
+    
+    /// Enhanced header detection for plain text emails
+    fn is_header_line(&self, text: &str) -> bool {
+        if text.len() > 100 {
+            return false; // Headers are usually short
+        }
+        
+        // Common header patterns in plain text
+        let header_patterns = [
+            "subject:", "from:", "to:", "cc:", "bcc:", "date:", "reply-to:",
+            "message-id:", "in-reply-to:", "references:", "sender:"
+        ];
+        
+        let lower = text.to_lowercase();
+        for pattern in &header_patterns {
+            if lower.starts_with(pattern) {
+                return true;
+            }
+        }
+        
+        // Lines that end with colon and look like headers
+        if text.ends_with(':') && text.len() < 50 && !text.contains(' ') {
+            return true;
+        }
+        
+        false
     }
     
     /// Toggle between view modes
