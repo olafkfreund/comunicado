@@ -135,6 +135,7 @@ impl ImapProtocol {
         let mut messages = Vec::new();
         let mut current_message: Option<ImapMessage> = None;
         let mut expecting_literal_content = false;
+        let mut expected_literal_size = 0;
         
         let lines: Vec<&str> = response.lines().collect();
         let mut i = 0;
@@ -154,30 +155,64 @@ impl ImapProtocol {
                 
                 current_message = Some(ImapMessage::new(seq_num));
                 expecting_literal_content = false;
+                expected_literal_size = 0;
                 
                 // Parse FETCH data in the same line
                 if let Some(msg) = &mut current_message {
                     Self::parse_fetch_data(line, msg)?;
                     
                     // Check if this line indicates a literal follows
-                    if line.contains("BODY[] {") && Self::extract_literal_size_from_line(line).is_some() {
-                        expecting_literal_content = true;
+                    if line.contains("BODY[] {") {
+                        if let Some(size) = Self::extract_literal_size_from_line(line) {
+                            expecting_literal_content = true;
+                            expected_literal_size = size;
+                            tracing::debug!("Expecting literal content of {} bytes", size);
+                        }
                     }
                 }
             } else if expecting_literal_content && current_message.is_some() {
-                // This line should be the literal content
-                if let Some(msg) = &mut current_message {
-                    msg.body = Some(line.to_string());
-                    tracing::debug!("Set message body from literal, length: {} chars", line.len());
+                // Read literal content - may span multiple lines
+                let mut body_content = String::new();
+                let mut bytes_read = 0;
+                
+                while bytes_read < expected_literal_size && i < lines.len() {
+                    let current_line = lines[i];
+                    let line_bytes = current_line.as_bytes();
+                    let bytes_to_take = std::cmp::min(expected_literal_size - bytes_read, line_bytes.len());
+                    
+                    if bytes_to_take > 0 {
+                        body_content.push_str(&current_line[..bytes_to_take]);
+                        bytes_read += bytes_to_take;
+                    }
+                    
+                    // Add newline if we're not at the end and there are more bytes to read
+                    if bytes_read < expected_literal_size && i + 1 < lines.len() {
+                        body_content.push('\n');
+                        bytes_read += 1; // Account for the newline character
+                    }
+                    
+                    i += 1;
                 }
+                
+                if let Some(msg) = &mut current_message {
+                    msg.body = Some(body_content);
+                    tracing::debug!("Set message body from literal, expected: {} bytes, actual: {} chars", expected_literal_size, msg.body.as_ref().unwrap().len());
+                }
+                
                 expecting_literal_content = false;
+                expected_literal_size = 0;
+                continue; // Skip the normal increment since we already advanced i
             } else if let Some(msg) = &mut current_message {
                 // Continue parsing multi-line FETCH response
                 Self::parse_fetch_data(line, msg)?;
                 
                 // Check if this line indicates a literal follows
-                if line.contains("BODY[] {") && Self::extract_literal_size_from_line(line).is_some() {
-                    expecting_literal_content = true;
+                if line.contains("BODY[] {") {
+                    if let Some(size) = Self::extract_literal_size_from_line(line) {
+                        expecting_literal_content = true;
+                        expected_literal_size = size;
+                        tracing::debug!("Expecting literal content of {} bytes", size);
+                    }
                 }
             }
             
