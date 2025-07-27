@@ -14,7 +14,7 @@ use std::sync::Arc;
 use tokio::time::{Duration, Instant};
 
 use crate::events::{EventHandler, EventResult};
-use crate::ui::{UI, ComposeAction};
+use crate::ui::{UI, ComposeAction, DraftAction};
 use crate::email::{EmailDatabase, EmailNotificationManager};
 use crate::oauth2::{SetupWizard, SecureStorage, AccountConfig, TokenManager};
 use crate::imap::ImapAccountManager;
@@ -704,6 +704,13 @@ impl App {
                 self.ui.handle_message_selection().await;
                 previous_selection = current_selection;
             }
+            
+            // Check for auto-save if in compose mode
+            if let Some(auto_save_action) = self.ui.check_compose_auto_save() {
+                if let Err(e) = self.handle_compose_action(auto_save_action).await {
+                    tracing::warn!("Auto-save failed: {}", e);
+                }
+            }
 
             // Draw UI
             terminal.draw(|f| self.ui.render(f))?;
@@ -722,6 +729,9 @@ impl App {
                         EventResult::Continue => {},
                         EventResult::ComposeAction(action) => {
                             self.handle_compose_action(action).await?;
+                        }
+                        EventResult::DraftAction(action) => {
+                            self.handle_draft_action(action).await?;
                         }
                         EventResult::AccountSwitch(account_id) => {
                             self.handle_account_switch(&account_id).await;
@@ -774,9 +784,10 @@ impl App {
         }
         
         // Initialize SMTP service
-        if let Some(ref token_manager) = self.token_manager {
+        if let (Some(ref token_manager), Some(ref database)) = (&self.token_manager, &self.database) {
             let smtp_service = SmtpServiceBuilder::new()
                 .with_token_manager(Arc::new(token_manager.clone()))
+                .with_database(database.clone())
                 .build()
                 .map_err(|e| anyhow::anyhow!("Failed to initialize SMTP service: {}", e))?;
             
@@ -831,6 +842,9 @@ impl App {
             }
             ComposeAction::SaveDraft => {
                 self.save_draft().await?;
+            }
+            ComposeAction::AutoSave => {
+                self.auto_save_draft().await?;
             }
             ComposeAction::Cancel => {
                 // Check if there are unsaved changes and potentially warn the user
@@ -914,12 +928,177 @@ impl App {
                 Ok(draft_id) => {
                     tracing::info!("Draft saved with ID: {}", draft_id);
                     self.ui.clear_compose_modified();
+                    self.ui.set_compose_draft_id(Some(draft_id));
                     // TODO: Add a success notification to the UI
                 }
                 Err(e) => {
                     tracing::error!("Failed to save draft: {}", e);
                     // TODO: Show error message in UI
                     return Err(anyhow::anyhow!("Failed to save draft: {}", e));
+                }
+            }
+        } else {
+            return Err(anyhow::anyhow!("No email accounts configured"));
+        }
+        
+        Ok(())
+    }
+    
+    /// Auto-save the current composed email as a draft
+    async fn auto_save_draft(&mut self) -> Result<()> {
+        let compose_data = self.ui.get_compose_data()
+            .ok_or_else(|| anyhow::anyhow!("No compose data available"))?;
+        
+        let smtp_service = self.smtp_service.as_ref()
+            .ok_or_else(|| anyhow::anyhow!("SMTP service not initialized"))?;
+        
+        // For now, use the first available account
+        let configs = self.storage.load_all_accounts()
+            .map_err(|e| anyhow::anyhow!("Failed to load account configs: {}", e))?;
+        
+        if let Some(config) = configs.first() {
+            let account_id = &config.account_id;
+            let existing_draft_id = self.ui.get_compose_draft_id();
+            
+            match smtp_service.auto_save_draft(account_id, &compose_data, existing_draft_id.map(|s| s.as_str())).await {
+                Ok(draft_id) => {
+                    tracing::debug!("Draft auto-saved with ID: {}", draft_id);
+                    self.ui.mark_compose_auto_saved();
+                    self.ui.set_compose_draft_id(Some(draft_id));
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to auto-save draft: {}", e);
+                    // Don't fail the entire operation for auto-save failures
+                }
+            }
+        }
+        
+        Ok(())
+    }
+    
+    /// Handle draft actions (show list, load draft, delete draft)
+    async fn handle_draft_action(&mut self, action: DraftAction) -> Result<()> {
+        match action {
+            DraftAction::Continue => {
+                // Nothing to do
+            }
+            DraftAction::RefreshDrafts => {
+                // Show draft list and load drafts
+                self.show_draft_list().await?;
+            }
+            DraftAction::LoadDraft(draft_id) => {
+                self.load_draft_for_editing(&draft_id).await?;
+            }
+            DraftAction::DeleteDraft(draft_id) => {
+                self.delete_draft(&draft_id).await?;
+            }
+            DraftAction::Close => {
+                self.ui.hide_draft_list();
+            }
+            DraftAction::ToggleSort => {
+                // This is handled within the draft list UI
+            }
+            DraftAction::ToggleDetails => {
+                // This is handled within the draft list UI
+            }
+        }
+        Ok(())
+    }
+    
+    /// Show draft list and load all drafts
+    async fn show_draft_list(&mut self) -> Result<()> {
+        // Load drafts from database
+        let drafts = self.load_all_drafts().await?;
+        
+        // Update UI with drafts
+        self.ui.update_draft_list(drafts);
+        self.ui.show_draft_list();
+        
+        Ok(())
+    }
+    
+    /// Load all drafts for the current account
+    async fn load_all_drafts(&self) -> Result<Vec<crate::email::database::StoredDraft>> {
+        let smtp_service = self.smtp_service.as_ref()
+            .ok_or_else(|| anyhow::anyhow!("SMTP service not initialized"))?;
+        
+        // For now, use the first available account
+        let configs = self.storage.load_all_accounts()
+            .map_err(|e| anyhow::anyhow!("Failed to load account configs: {}", e))?;
+        
+        if let Some(config) = configs.first() {
+            let account_id = &config.account_id;
+            
+            match smtp_service.list_drafts(account_id).await {
+                Ok(drafts) => {
+                    tracing::info!("Loaded {} drafts for account {}", drafts.len(), account_id);
+                    Ok(drafts)
+                }
+                Err(e) => {
+                    tracing::error!("Failed to load drafts: {}", e);
+                    Err(anyhow::anyhow!("Failed to load drafts: {}", e))
+                }
+            }
+        } else {
+            Err(anyhow::anyhow!("No email accounts configured"))
+        }
+    }
+    
+    /// Load a draft for editing
+    async fn load_draft_for_editing(&mut self, draft_id: &str) -> Result<()> {
+        let smtp_service = self.smtp_service.as_ref()
+            .ok_or_else(|| anyhow::anyhow!("SMTP service not initialized"))?;
+        
+        // For now, use the first available account
+        let configs = self.storage.load_all_accounts()
+            .map_err(|e| anyhow::anyhow!("Failed to load account configs: {}", e))?;
+        
+        if let Some(config) = configs.first() {
+            let account_id = &config.account_id;
+            
+            match smtp_service.load_draft(account_id, draft_id).await {
+                Ok(compose_data) => {
+                    // Get contacts manager for compose UI
+                    if let Some(ref contacts_manager) = self.contacts_manager {
+                        self.ui.load_draft_for_editing(compose_data, draft_id.to_string(), contacts_manager.clone());
+                        tracing::info!("Loaded draft {} for editing", draft_id);
+                    } else {
+                        return Err(anyhow::anyhow!("Contacts manager not initialized"));
+                    }
+                }
+                Err(e) => {
+                    tracing::error!("Failed to load draft {}: {}", draft_id, e);
+                    return Err(anyhow::anyhow!("Failed to load draft: {}", e));
+                }
+            }
+        } else {
+            return Err(anyhow::anyhow!("No email accounts configured"));
+        }
+        
+        Ok(())
+    }
+    
+    /// Delete a draft
+    async fn delete_draft(&mut self, draft_id: &str) -> Result<()> {
+        let smtp_service = self.smtp_service.as_ref()
+            .ok_or_else(|| anyhow::anyhow!("SMTP service not initialized"))?;
+        
+        // For now, use the first available account
+        let configs = self.storage.load_all_accounts()
+            .map_err(|e| anyhow::anyhow!("Failed to load account configs: {}", e))?;
+        
+        if let Some(config) = configs.first() {
+            let account_id = &config.account_id;
+            
+            match smtp_service.delete_draft(account_id, draft_id).await {
+                Ok(()) => {
+                    // Remove from UI list
+                    self.ui.remove_draft_from_list(draft_id);
+                    tracing::info!("Deleted draft {}", draft_id);
+                }
+                Err(e) => {
+                    tracing::error!("Failed to delete draft {}: {}", draft_id, e);
+                    return Err(anyhow::anyhow!("Failed to delete draft: {}", e));
                 }
             }
         } else {

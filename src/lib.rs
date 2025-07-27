@@ -12,5 +12,6 @@ pub mod images;
 pub mod mime;
 pub mod services;
 pub mod spell;
+pub mod calendar;
 
 pub use app::App;

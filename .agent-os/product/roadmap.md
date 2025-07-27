@@ -20,7 +20,7 @@
 ### Should-Have Features
 
 - [x] Folder Navigation - Browse IMAP folders and manage email organization `S`
-- [ ] Search Functionality - Basic email search across subject and sender `S`
+- [x] Search Functionality - Basic email search across subject and sender `S`
 
 ### Dependencies
 
@@ -45,7 +45,7 @@
 
 - [x] Email Filters - Basic rule-based email filtering and organization `M`
 - [x] Attachment Handling - View and save email attachments `S`
-- [ ] Draft Management - Save and resume email drafts `S`
+- [x] Draft Management - Save and resume email drafts `S`
 
 ### Dependencies
 

@@ -1,5 +1,5 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-use crate::ui::{FocusedPane, UI, UIMode, ComposeAction, StartPageNavigation};
+use crate::ui::{FocusedPane, UI, UIMode, ComposeAction, DraftAction, StartPageNavigation};
 
 pub struct EventHandler {
     should_quit: bool,
@@ -10,6 +10,7 @@ pub struct EventHandler {
 pub enum EventResult {
     Continue,
     ComposeAction(ComposeAction),
+    DraftAction(DraftAction),
     AccountSwitch(String), // Account ID to switch to
     AddAccount, // Launch account setup wizard
     RemoveAccount(String), // Account ID to remove
@@ -31,6 +32,14 @@ impl EventHandler {
         if ui.mode() == &UIMode::Compose {
             if let Some(action) = ui.handle_compose_key(key.code).await {
                 return EventResult::ComposeAction(action);
+            }
+            return EventResult::Continue;
+        }
+        
+        // Handle draft list mode
+        if ui.mode() == &UIMode::DraftList {
+            if let Some(action) = ui.handle_draft_list_key(key.code).await {
+                return EventResult::DraftAction(action);
             }
             return EventResult::Continue;
         }
@@ -186,6 +195,12 @@ impl EventHandler {
                     FocusedPane::StartPage => {
                         // Should not happen in normal mode
                     }
+                    FocusedPane::DraftList => {
+                        // Draft list navigation handled in draft list mode
+                    }
+                    FocusedPane::Calendar => {
+                        // Calendar navigation handled in calendar mode
+                    }
                 }
             }
             KeyCode::Char('k') | KeyCode::Up => {
@@ -217,6 +232,12 @@ impl EventHandler {
                     }
                     FocusedPane::StartPage => {
                         // Should not happen in normal mode
+                    }
+                    FocusedPane::DraftList => {
+                        // Draft list navigation handled in draft list mode
+                    }
+                    FocusedPane::Calendar => {
+                        // Calendar navigation handled in calendar mode
                     }
                 }
             }
@@ -317,6 +338,12 @@ impl EventHandler {
                     }
                     FocusedPane::StartPage => {
                         // Should not happen in normal mode
+                    }
+                    FocusedPane::DraftList => {
+                        // Draft list navigation handled in draft list mode
+                    }
+                    FocusedPane::Calendar => {
+                        // Calendar navigation handled in calendar mode
                     }
                 }
             }
@@ -497,6 +524,14 @@ impl EventHandler {
                 if !ui.is_composing() {
                     // Return a special compose action to signal the app to start compose mode
                     return EventResult::ComposeAction(ComposeAction::StartCompose);
+                }
+            }
+            
+            // Show draft list shortcut
+            KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                // Ctrl+D to show draft list
+                if !ui.is_draft_list_visible() && !ui.is_composing() {
+                    return EventResult::DraftAction(DraftAction::RefreshDrafts);
                 }
             }
             

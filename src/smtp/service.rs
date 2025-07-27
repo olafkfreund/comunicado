@@ -3,6 +3,7 @@ use crate::smtp::{
 };
 use crate::ui::EmailComposeData;
 use crate::oauth2::TokenManager;
+use crate::email::{EmailDatabase, database::StoredDraft};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -13,15 +14,17 @@ pub struct SmtpService {
     provider_registry: SmtpProviderRegistry,
     clients: Arc<RwLock<HashMap<String, SmtpClient>>>,
     token_manager: Arc<TokenManager>,
+    database: Arc<EmailDatabase>,
 }
 
 impl SmtpService {
     /// Create a new SMTP service
-    pub fn new(token_manager: Arc<TokenManager>) -> Self {
+    pub fn new(token_manager: Arc<TokenManager>, database: Arc<EmailDatabase>) -> Self {
         Self {
             provider_registry: SmtpProviderRegistry::new(),
             clients: Arc::new(RwLock::new(HashMap::new())),
             token_manager,
+            database,
         }
     }
     
@@ -242,54 +245,164 @@ impl SmtpService {
             .unwrap_or_default()
     }
     
-    /// Save draft email (placeholder for future implementation)
+    /// Save draft email to database
     pub async fn save_draft(
         &self,
         account_id: &str,
         compose_data: &EmailComposeData,
     ) -> SmtpResult<String> {
-        // TODO: Implement draft saving to local storage
-        // For now, just validate the data and return a draft ID
-        
-        let email_message = EmailMessage::from_compose_data(compose_data, "placeholder@example.com".to_string())?;
-        
         // Basic validation (don't require all fields for drafts)
-        if email_message.subject.is_empty() && email_message.body_text.is_empty() {
+        if compose_data.subject.is_empty() && compose_data.body.is_empty() {
             return Err(SmtpError::MessageFormatError("Draft must have either subject or body".to_string()));
         }
         
-        // Generate a draft ID
-        let draft_id = uuid::Uuid::new_v4().to_string();
+        // Create draft from compose data
+        let draft = StoredDraft::from_compose_data(account_id.to_string(), compose_data, false);
+        let draft_id = draft.id.clone();
+        
+        // Save to database
+        self.database.save_draft(&draft).await
+            .map_err(|e| SmtpError::InvalidConfig(format!("Failed to save draft: {}", e)))?;
         
         tracing::info!("Draft saved for account {}: {}", account_id, draft_id);
         Ok(draft_id)
     }
     
-    /// Load draft email (placeholder for future implementation)  
-    pub async fn load_draft(&self, _account_id: &str, _draft_id: &str) -> SmtpResult<EmailComposeData> {
-        // TODO: Implement draft loading from local storage
-        // For now, return an error
-        Err(SmtpError::InvalidConfig(format!("Draft not found: {}", _draft_id)))
+    /// Load draft email from database
+    pub async fn load_draft(&self, account_id: &str, draft_id: &str) -> SmtpResult<EmailComposeData> {
+        match self.database.load_draft(draft_id).await {
+            Ok(Some(draft)) => {
+                // Verify the draft belongs to the correct account
+                if draft.account_id != account_id {
+                    return Err(SmtpError::InvalidConfig(format!("Draft {} does not belong to account {}", draft_id, account_id)));
+                }
+                Ok(draft.to_compose_data())
+            }
+            Ok(None) => {
+                Err(SmtpError::InvalidConfig(format!("Draft not found: {}", draft_id)))
+            }
+            Err(e) => {
+                Err(SmtpError::InvalidConfig(format!("Failed to load draft: {}", e)))
+            }
+        }
     }
     
-    /// Delete draft email (placeholder for future implementation)
+    /// Delete draft email from database
     pub async fn delete_draft(&self, account_id: &str, draft_id: &str) -> SmtpResult<()> {
-        // TODO: Implement draft deletion from local storage
-        // For now, just log the operation
-        tracing::info!("Draft deleted for account {}: {}", account_id, draft_id);
+        // First verify the draft exists and belongs to the account
+        match self.database.load_draft(draft_id).await {
+            Ok(Some(draft)) => {
+                if draft.account_id != account_id {
+                    return Err(SmtpError::InvalidConfig(format!("Draft {} does not belong to account {}", draft_id, account_id)));
+                }
+            }
+            Ok(None) => {
+                return Err(SmtpError::InvalidConfig(format!("Draft not found: {}", draft_id)));
+            }
+            Err(e) => {
+                return Err(SmtpError::InvalidConfig(format!("Failed to verify draft: {}", e)));
+            }
+        }
+        
+        // Delete the draft
+        match self.database.delete_draft(draft_id).await {
+            Ok(true) => {
+                tracing::info!("Draft deleted for account {}: {}", account_id, draft_id);
+                Ok(())
+            }
+            Ok(false) => {
+                Err(SmtpError::InvalidConfig(format!("Draft {} was not found during deletion", draft_id)))
+            }
+            Err(e) => {
+                Err(SmtpError::InvalidConfig(format!("Failed to delete draft: {}", e)))
+            }
+        }
+    }
+    
+    /// List all drafts for an account
+    pub async fn list_drafts(&self, account_id: &str) -> SmtpResult<Vec<StoredDraft>> {
+        self.database.load_drafts_for_account(account_id).await
+            .map_err(|e| SmtpError::InvalidConfig(format!("Failed to list drafts: {}", e)))
+    }
+    
+    /// Update an existing draft with new compose data
+    pub async fn update_draft(
+        &self,
+        account_id: &str,
+        draft_id: &str,
+        compose_data: &EmailComposeData,
+        auto_saved: bool,
+    ) -> SmtpResult<()> {
+        // Load existing draft to verify ownership
+        let mut draft = match self.database.load_draft(draft_id).await {
+            Ok(Some(draft)) => {
+                if draft.account_id != account_id {
+                    return Err(SmtpError::InvalidConfig(format!("Draft {} does not belong to account {}", draft_id, account_id)));
+                }
+                draft
+            }
+            Ok(None) => {
+                return Err(SmtpError::InvalidConfig(format!("Draft not found: {}", draft_id)));
+            }
+            Err(e) => {
+                return Err(SmtpError::InvalidConfig(format!("Failed to load draft: {}", e)));
+            }
+        };
+        
+        // Update with new data
+        draft.update_from_compose_data(compose_data, auto_saved);
+        
+        // Save updated draft
+        self.database.save_draft(&draft).await
+            .map_err(|e| SmtpError::InvalidConfig(format!("Failed to update draft: {}", e)))?;
+        
+        tracing::info!("Draft updated for account {}: {} (auto_saved: {})", account_id, draft_id, auto_saved);
         Ok(())
+    }
+    
+    /// Auto-save draft with compose data
+    pub async fn auto_save_draft(
+        &self,
+        account_id: &str,
+        compose_data: &EmailComposeData,
+        existing_draft_id: Option<&str>,
+    ) -> SmtpResult<String> {
+        if let Some(draft_id) = existing_draft_id {
+            // Update existing draft
+            self.update_draft(account_id, draft_id, compose_data, true).await?;
+            Ok(draft_id.to_string())
+        } else {
+            // Create new auto-saved draft
+            let mut draft = StoredDraft::from_compose_data(account_id.to_string(), compose_data, true);
+            draft.auto_saved = true;
+            let draft_id = draft.id.clone();
+            
+            self.database.save_draft(&draft).await
+                .map_err(|e| SmtpError::InvalidConfig(format!("Failed to auto-save draft: {}", e)))?;
+            
+            tracing::debug!("Auto-saved draft for account {}: {}", account_id, draft_id);
+            Ok(draft_id)
+        }
+    }
+    
+    /// Clean up old auto-saved drafts (call periodically)
+    pub async fn cleanup_old_auto_saved_drafts(&self, older_than_hours: i64) -> SmtpResult<u64> {
+        self.database.cleanup_old_auto_saved_drafts(older_than_hours).await
+            .map_err(|e| SmtpError::InvalidConfig(format!("Failed to cleanup drafts: {}", e)))
     }
 }
 
 /// Builder for creating SMTP service configurations
 pub struct SmtpServiceBuilder {
     token_manager: Option<Arc<TokenManager>>,
+    database: Option<Arc<EmailDatabase>>,
 }
 
 impl SmtpServiceBuilder {
     pub fn new() -> Self {
         Self {
             token_manager: None,
+            database: None,
         }
     }
     
@@ -298,11 +411,18 @@ impl SmtpServiceBuilder {
         self
     }
     
+    pub fn with_database(mut self, database: Arc<EmailDatabase>) -> Self {
+        self.database = Some(database);
+        self
+    }
+    
     pub fn build(self) -> SmtpResult<SmtpService> {
         let token_manager = self.token_manager
             .ok_or_else(|| SmtpError::InvalidConfig("Token manager is required".to_string()))?;
+        let database = self.database
+            .ok_or_else(|| SmtpError::InvalidConfig("Database is required".to_string()))?;
         
-        Ok(SmtpService::new(token_manager))
+        Ok(SmtpService::new(token_manager, database))
     }
 }
 
@@ -318,18 +438,20 @@ mod tests {
     
     #[tokio::test]
     async fn test_smtp_service_creation() {
-        let token_manager = Arc::new(TokenManager::new("test_client_id", "test_client_secret"));
-        let service = SmtpService::new(token_manager);
+        let token_manager = Arc::new(TokenManager::new());
+        let database = Arc::new(EmailDatabase::new_in_memory().await.unwrap());
+        let service = SmtpService::new(token_manager, database);
         
         // Check that service starts with no configured accounts
         assert_eq!(service.get_configured_accounts().await.len(), 0);
         assert!(!service.is_account_configured("test_account").await);
     }
     
-    #[test]
-    fn test_provider_detection() {
-        let token_manager = Arc::new(TokenManager::new("test_client_id", "test_client_secret"));
-        let service = SmtpService::new(token_manager);
+    #[tokio::test]
+    async fn test_provider_detection() {
+        let token_manager = Arc::new(TokenManager::new());
+        let database = Arc::new(EmailDatabase::new_in_memory().await.unwrap());
+        let service = SmtpService::new(token_manager, database);
         
         assert_eq!(service.detect_provider_from_email("user@gmail.com"), Some("gmail".to_string()));
         assert_eq!(service.detect_provider_from_email("user@outlook.com"), Some("outlook".to_string()));
@@ -338,8 +460,9 @@ mod tests {
     
     #[tokio::test]
     async fn test_draft_operations() {
-        let token_manager = Arc::new(TokenManager::new("test_client_id", "test_client_secret"));
-        let service = SmtpService::new(token_manager);
+        let token_manager = Arc::new(TokenManager::new());
+        let database = Arc::new(EmailDatabase::new_in_memory().await.unwrap());
+        let service = SmtpService::new(token_manager, database);
         
         let compose_data = EmailComposeData {
             to: "recipient@example.com".to_string(),

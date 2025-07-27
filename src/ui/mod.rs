@@ -7,6 +7,8 @@ pub mod sync_progress;
 pub mod compose;
 pub mod account_switcher;
 pub mod start_page;
+pub mod draft_list;
+pub mod calendar;
 
 use ratatui::{
     layout::Rect,
@@ -28,13 +30,18 @@ use self::{
     compose::ComposeUI,
     account_switcher::AccountSwitcher,
     start_page::StartPage,
+    draft_list::DraftListUI,
 };
 
-// Re-export compose types for external use
+// Re-export compose and draft types for external use
 pub use compose::{ComposeAction, EmailComposeData};
+pub use draft_list::{DraftListUI as DraftList, DraftAction};
 
 // Re-export account switcher types for external use
 pub use account_switcher::{AccountItem, AccountSyncStatus};
+
+// Re-export calendar types for external use
+pub use crate::calendar::{CalendarUI, CalendarAction, CalendarViewMode};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FocusedPane {
@@ -44,6 +51,8 @@ pub enum FocusedPane {
     ContentPreview,
     Compose,
     StartPage,
+    DraftList,
+    Calendar,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -51,6 +60,8 @@ pub enum UIMode {
     StartPage,
     Normal,
     Compose,
+    DraftList,
+    Calendar,
 }
 
 pub struct UI {
@@ -66,7 +77,9 @@ pub struct UI {
     sync_progress_overlay: SyncProgressOverlay,
     mode: UIMode,
     compose_ui: Option<ComposeUI>,
+    draft_list: DraftListUI,
     start_page: StartPage,
+    calendar_ui: CalendarUI,
 }
 
 impl UI {
@@ -84,7 +97,9 @@ impl UI {
             sync_progress_overlay: SyncProgressOverlay::new(),
             mode: UIMode::StartPage,
             compose_ui: None,
+            draft_list: DraftListUI::new(),
             start_page: StartPage::new(),
+            calendar_ui: CalendarUI::new(),
         };
         
         // Initialize status bar with default segments
@@ -170,6 +185,16 @@ impl UI {
                     compose_ui.render(frame, size, theme);
                 }
             }
+            UIMode::DraftList => {
+                // Render draft list UI in full screen
+                let theme = self.theme_manager.current_theme();
+                self.draft_list.render(frame, size, theme);
+            }
+            UIMode::Calendar => {
+                // Render calendar UI in full screen
+                let theme = self.theme_manager.current_theme();
+                self.calendar_ui.render(frame, size, theme);
+            }
         }
     }
 
@@ -231,8 +256,8 @@ impl UI {
 
     // Navigation methods
     pub fn next_pane(&mut self) {
-        if matches!(self.mode, UIMode::Compose) {
-            return; // No pane switching in compose mode
+        if matches!(self.mode, UIMode::Compose | UIMode::Calendar) {
+            return; // No pane switching in compose or calendar mode
         }
         
         self.focused_pane = match self.focused_pane {
@@ -242,13 +267,15 @@ impl UI {
             FocusedPane::ContentPreview => FocusedPane::AccountSwitcher,
             FocusedPane::Compose => FocusedPane::Compose, // Stay in compose
             FocusedPane::StartPage => FocusedPane::StartPage, // Stay in start page
+            FocusedPane::DraftList => FocusedPane::DraftList, // Stay in draft list
+            FocusedPane::Calendar => FocusedPane::Calendar, // Stay in calendar
         };
         self.update_navigation_hints();
     }
 
     pub fn previous_pane(&mut self) {
-        if matches!(self.mode, UIMode::Compose) {
-            return; // No pane switching in compose mode
+        if matches!(self.mode, UIMode::Compose | UIMode::Calendar) {
+            return; // No pane switching in compose or calendar mode
         }
         
         self.focused_pane = match self.focused_pane {
@@ -258,6 +285,8 @@ impl UI {
             FocusedPane::ContentPreview => FocusedPane::MessageList,
             FocusedPane::Compose => FocusedPane::Compose, // Stay in compose
             FocusedPane::StartPage => FocusedPane::StartPage, // Stay in start page
+            FocusedPane::DraftList => FocusedPane::DraftList, // Stay in draft list
+            FocusedPane::Calendar => FocusedPane::Calendar, // Stay in calendar
         };
         self.update_navigation_hints();
     }
@@ -322,9 +351,13 @@ impl UI {
                 FocusedPane::ContentPreview => "Content",
                 FocusedPane::Compose => "Compose", // Shouldn't happen in normal mode
                 FocusedPane::StartPage => "Start Page", // Shouldn't happen in normal mode
+                FocusedPane::DraftList => "Draft List", // Shouldn't happen in normal mode
+                FocusedPane::Calendar => "Calendar", // Shouldn't happen in normal mode
             },
             UIMode::Compose => "Compose Email",
             UIMode::StartPage => "Dashboard",
+            UIMode::DraftList => "Draft Manager",
+            UIMode::Calendar => "Calendar",
         };
         
         let nav_segment = NavigationHintsSegment {
@@ -390,6 +423,25 @@ impl UI {
                 ("c".to_string(), "Compose".to_string()),
                 ("/".to_string(), "Search".to_string()),
                 ("q".to_string(), "Quit".to_string()),
+            ],
+            UIMode::DraftList => vec![
+                ("↑↓".to_string(), "Navigate".to_string()),
+                ("Enter".to_string(), "Load Draft".to_string()),
+                ("d".to_string(), "Delete".to_string()),
+                ("s".to_string(), "Sort".to_string()),
+                ("Tab".to_string(), "Details".to_string()),
+                ("F5".to_string(), "Refresh".to_string()),
+                ("Esc".to_string(), "Close".to_string()),
+            ],
+            UIMode::Calendar => vec![
+                ("1-4".to_string(), "Views".to_string()),
+                ("h/l".to_string(), "Navigate".to_string()),
+                ("Space".to_string(), "Today".to_string()),
+                ("c".to_string(), "Create Event".to_string()),
+                ("Enter".to_string(), "Event Details".to_string()),
+                ("e".to_string(), "Edit Event".to_string()),
+                ("r".to_string(), "Refresh".to_string()),
+                ("Esc".to_string(), "Close".to_string()),
             ],
         }
     }
@@ -834,6 +886,79 @@ impl UI {
         }
     }
     
+    /// Get the current draft ID for auto-save operations
+    pub fn get_compose_draft_id(&self) -> Option<&String> {
+        self.compose_ui.as_ref().and_then(|ui| ui.current_draft_id())
+    }
+    
+    /// Set the current draft ID
+    pub fn set_compose_draft_id(&mut self, draft_id: Option<String>) {
+        if let Some(ref mut compose_ui) = self.compose_ui {
+            compose_ui.set_current_draft_id(draft_id);
+        }
+    }
+    
+    /// Mark that auto-save has been performed
+    pub fn mark_compose_auto_saved(&mut self) {
+        if let Some(ref mut compose_ui) = self.compose_ui {
+            compose_ui.mark_auto_saved();
+        }
+    }
+    
+    /// Check if auto-save should be triggered
+    pub fn check_compose_auto_save(&self) -> Option<ComposeAction> {
+        self.compose_ui.as_ref().and_then(|ui| ui.check_auto_save())
+    }
+    
+    /// Show draft list UI
+    pub fn show_draft_list(&mut self) {
+        self.draft_list.show();
+        self.mode = UIMode::DraftList;
+        self.focused_pane = FocusedPane::DraftList;
+    }
+    
+    /// Hide draft list UI and return to normal mode
+    pub fn hide_draft_list(&mut self) {
+        self.draft_list.hide();
+        self.mode = UIMode::Normal;
+        self.focused_pane = FocusedPane::MessageList;
+    }
+    
+    /// Update the draft list with new drafts
+    pub fn update_draft_list(&mut self, drafts: Vec<crate::email::database::StoredDraft>) {
+        self.draft_list.update_drafts(drafts);
+    }
+    
+    /// Handle key input for draft list
+    pub async fn handle_draft_list_key(&mut self, key: crossterm::event::KeyCode) -> Option<DraftAction> {
+        if self.mode == UIMode::DraftList {
+            Some(self.draft_list.handle_key(key).await)
+        } else {
+            None
+        }
+    }
+    
+    /// Remove a draft from the list
+    pub fn remove_draft_from_list(&mut self, draft_id: &str) {
+        self.draft_list.remove_draft(draft_id);
+    }
+    
+    /// Check if currently in draft list mode
+    pub fn is_draft_list_visible(&self) -> bool {
+        matches!(self.mode, UIMode::DraftList)
+    }
+    
+    /// Load a draft into compose mode
+    pub fn load_draft_for_editing(&mut self, compose_data: EmailComposeData, draft_id: String, contacts_manager: Arc<crate::contacts::ContactsManager>) {
+        // Create new compose UI and load the draft
+        let mut compose_ui = ComposeUI::new(contacts_manager);
+        compose_ui.load_from_draft(compose_data, draft_id);
+        
+        self.compose_ui = Some(compose_ui);
+        self.mode = UIMode::Compose;
+        self.focused_pane = FocusedPane::Compose;
+    }
+    
     /// Get current UI mode
     pub fn mode(&self) -> &UIMode {
         &self.mode
@@ -882,6 +1007,83 @@ impl UI {
     /// Get selected quick action from start page
     pub fn get_start_page_quick_action(&self, action_id: &str) -> Option<&crate::ui::start_page::QuickAction> {
         self.start_page.get_quick_action(action_id)
+    }
+    
+    // Calendar mode methods
+    
+    /// Show calendar interface
+    pub fn show_calendar(&mut self) {
+        self.mode = UIMode::Calendar;
+        self.focused_pane = FocusedPane::Calendar;
+        self.calendar_ui.set_focus(true);
+        self.update_navigation_hints();
+    }
+    
+    /// Hide calendar interface and return to normal mode
+    pub fn hide_calendar(&mut self) {
+        self.mode = UIMode::Normal;
+        self.focused_pane = FocusedPane::FolderTree;
+        self.calendar_ui.set_focus(false);
+        self.update_navigation_hints();
+    }
+    
+    /// Check if currently in calendar mode
+    pub fn is_calendar_visible(&self) -> bool {
+        matches!(self.mode, UIMode::Calendar)
+    }
+    
+    /// Handle calendar key input
+    pub async fn handle_calendar_key(&mut self, key: crossterm::event::KeyCode) -> Option<CalendarAction> {
+        if self.mode == UIMode::Calendar {
+            self.calendar_ui.handle_key(key).await
+        } else {
+            None
+        }
+    }
+    
+    /// Set calendar events to display
+    pub fn set_calendar_events(&mut self, events: Vec<crate::calendar::Event>) {
+        self.calendar_ui.set_events(events);
+    }
+    
+    /// Set available calendars
+    pub fn set_calendars(&mut self, calendars: Vec<crate::calendar::Calendar>) {
+        self.calendar_ui.set_calendars(calendars);
+    }
+    
+    /// Get calendar UI for direct access
+    pub fn calendar_ui(&self) -> &CalendarUI {
+        &self.calendar_ui
+    }
+    
+    /// Get mutable calendar UI for direct access
+    pub fn calendar_ui_mut(&mut self) -> &mut CalendarUI {
+        &mut self.calendar_ui
+    }
+    
+    /// Get current calendar view mode
+    pub fn calendar_view_mode(&self) -> CalendarViewMode {
+        self.calendar_ui.current_view()
+    }
+    
+    /// Set calendar view mode
+    pub fn set_calendar_view_mode(&mut self, mode: CalendarViewMode) {
+        self.calendar_ui.set_view_mode(mode);
+    }
+    
+    /// Navigate calendar to today
+    pub fn calendar_go_to_today(&mut self) {
+        self.calendar_ui.navigate_to_today();
+    }
+    
+    /// Set calendar enabled state
+    pub fn set_calendar_enabled(&mut self, calendar_id: String, enabled: bool) {
+        self.calendar_ui.set_calendar_enabled(calendar_id, enabled);
+    }
+    
+    /// Show calendar list overlay
+    pub fn show_calendar_list(&mut self) {
+        self.calendar_ui.show_calendar_list();
     }
 }
 

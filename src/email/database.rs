@@ -4,6 +4,7 @@ use chrono::{DateTime, Utc};
 use serde::{Serialize, Deserialize};
 use uuid::Uuid;
 use crate::imap::{ImapMessage, MessageFlag};
+use crate::ui::EmailComposeData;
 use thiserror::Error;
 
 /// Database-related errors
@@ -120,6 +121,26 @@ pub enum SyncStatus {
     Complete,
 }
 
+/// Stored draft email in the database
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StoredDraft {
+    pub id: String,
+    pub account_id: String,
+    pub subject: String,
+    pub to_addrs: Vec<String>,
+    pub cc_addrs: Vec<String>,
+    pub bcc_addrs: Vec<String>,
+    pub reply_to: Option<String>,
+    pub body_text: String,
+    pub body_html: String,
+    pub attachments: Vec<StoredAttachment>,
+    pub in_reply_to: Option<String>,
+    pub references: Vec<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub auto_saved: bool,
+}
+
 /// Email database manager
 pub struct EmailDatabase {
     pub pool: SqlitePool,
@@ -145,6 +166,26 @@ impl EmailDatabase {
         let db = Self {
             pool,
             db_path: db_path.to_string(),
+        };
+        
+        // Run migrations
+        db.migrate().await?;
+        
+        Ok(db)
+    }
+    
+    /// Create a new in-memory email database for testing
+    pub async fn new_in_memory() -> DatabaseResult<Self> {
+        // Create connection pool for in-memory database
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect(":memory:")
+            .await
+            .map_err(DatabaseError::Connection)?;
+        
+        let db = Self {
+            pool,
+            db_path: ":memory:".to_string(),
         };
         
         // Run migrations
@@ -260,6 +301,27 @@ impl EmailDatabase {
             )
         "#).execute(&self.pool).await?;
         
+        // Create drafts table
+        sqlx::query(r#"
+            CREATE TABLE IF NOT EXISTS drafts (
+                id TEXT PRIMARY KEY,
+                account_id TEXT NOT NULL,
+                subject TEXT NOT NULL DEFAULT '',
+                to_addrs TEXT NOT NULL DEFAULT '', -- JSON array
+                cc_addrs TEXT NOT NULL DEFAULT '', -- JSON array  
+                bcc_addrs TEXT NOT NULL DEFAULT '', -- JSON array
+                reply_to TEXT,
+                body_text TEXT NOT NULL DEFAULT '',
+                body_html TEXT NOT NULL DEFAULT '',
+                attachments TEXT NOT NULL DEFAULT '', -- JSON array of attachment info
+                in_reply_to TEXT, -- Message ID if this is a reply
+                references TEXT NOT NULL DEFAULT '', -- JSON array of Message IDs
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                auto_saved BOOLEAN NOT NULL DEFAULT FALSE
+            )
+        "#).execute(&self.pool).await?;
+        
         // Create indexes for performance
         sqlx::query("CREATE INDEX IF NOT EXISTS idx_messages_account_folder ON messages(account_id, folder_name)").execute(&self.pool).await?;
         sqlx::query("CREATE INDEX IF NOT EXISTS idx_messages_uid ON messages(account_id, folder_name, imap_uid)").execute(&self.pool).await?;
@@ -270,6 +332,8 @@ impl EmailDatabase {
         sqlx::query("CREATE INDEX IF NOT EXISTS idx_messages_from ON messages(from_addr)").execute(&self.pool).await?;
         sqlx::query("CREATE INDEX IF NOT EXISTS idx_messages_sync ON messages(last_synced)").execute(&self.pool).await?;
         sqlx::query("CREATE INDEX IF NOT EXISTS idx_email_filters_priority ON email_filters(priority, enabled)").execute(&self.pool).await?;
+        sqlx::query("CREATE INDEX IF NOT EXISTS idx_drafts_account ON drafts(account_id)").execute(&self.pool).await?;
+        sqlx::query("CREATE INDEX IF NOT EXISTS idx_drafts_updated ON drafts(updated_at DESC)").execute(&self.pool).await?;
         
         // Full-text search virtual table
         sqlx::query(r#"
@@ -758,6 +822,175 @@ impl EmailDatabase {
         
         Ok(())
     }
+    
+    /// Save a draft to the database
+    pub async fn save_draft(&self, draft: &StoredDraft) -> DatabaseResult<()> {
+        let to_addrs_json = serde_json::to_string(&draft.to_addrs)?;
+        let cc_addrs_json = serde_json::to_string(&draft.cc_addrs)?;
+        let bcc_addrs_json = serde_json::to_string(&draft.bcc_addrs)?;
+        let attachments_json = serde_json::to_string(&draft.attachments)?;
+        let references_json = serde_json::to_string(&draft.references)?;
+        
+        sqlx::query(r#"
+            INSERT OR REPLACE INTO drafts (
+                id, account_id, subject, to_addrs, cc_addrs, bcc_addrs, reply_to,
+                body_text, body_html, attachments, in_reply_to, references,
+                created_at, updated_at, auto_saved
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        "#)
+        .bind(&draft.id)
+        .bind(&draft.account_id)
+        .bind(&draft.subject)
+        .bind(&to_addrs_json)
+        .bind(&cc_addrs_json)
+        .bind(&bcc_addrs_json)
+        .bind(&draft.reply_to)
+        .bind(&draft.body_text)
+        .bind(&draft.body_html)
+        .bind(&attachments_json)
+        .bind(&draft.in_reply_to)
+        .bind(&references_json)
+        .bind(draft.created_at.to_rfc3339())
+        .bind(draft.updated_at.to_rfc3339())
+        .bind(draft.auto_saved)
+        .execute(&self.pool)
+        .await?;
+        
+        Ok(())
+    }
+    
+    /// Load a draft by ID
+    pub async fn load_draft(&self, draft_id: &str) -> DatabaseResult<Option<StoredDraft>> {
+        let row = sqlx::query(r#"
+            SELECT id, account_id, subject, to_addrs, cc_addrs, bcc_addrs, reply_to,
+                   body_text, body_html, attachments, in_reply_to, references,
+                   created_at, updated_at, auto_saved
+            FROM drafts WHERE id = ?
+        "#)
+        .bind(draft_id)
+        .fetch_optional(&self.pool)
+        .await?;
+        
+        if let Some(row) = row {
+            let to_addrs: Vec<String> = serde_json::from_str(&row.get::<String, _>("to_addrs"))?;
+            let cc_addrs: Vec<String> = serde_json::from_str(&row.get::<String, _>("cc_addrs"))?;
+            let bcc_addrs: Vec<String> = serde_json::from_str(&row.get::<String, _>("bcc_addrs"))?;
+            let attachments: Vec<StoredAttachment> = serde_json::from_str(&row.get::<String, _>("attachments"))?;
+            let references: Vec<String> = serde_json::from_str(&row.get::<String, _>("references"))?;
+            
+            let created_at_str: String = row.get("created_at");
+            let updated_at_str: String = row.get("updated_at");
+            
+            Ok(Some(StoredDraft {
+                id: row.get("id"),
+                account_id: row.get("account_id"),
+                subject: row.get("subject"),
+                to_addrs,
+                cc_addrs,
+                bcc_addrs,
+                reply_to: row.get("reply_to"),
+                body_text: row.get("body_text"),
+                body_html: row.get("body_html"),
+                attachments,
+                in_reply_to: row.get("in_reply_to"),
+                references,
+                created_at: DateTime::parse_from_rfc3339(&created_at_str)?.with_timezone(&Utc),
+                updated_at: DateTime::parse_from_rfc3339(&updated_at_str)?.with_timezone(&Utc),
+                auto_saved: row.get("auto_saved"),
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+    
+    /// Load all drafts for an account
+    pub async fn load_drafts_for_account(&self, account_id: &str) -> DatabaseResult<Vec<StoredDraft>> {
+        let rows = sqlx::query(r#"
+            SELECT id, account_id, subject, to_addrs, cc_addrs, bcc_addrs, reply_to,
+                   body_text, body_html, attachments, in_reply_to, references,
+                   created_at, updated_at, auto_saved
+            FROM drafts WHERE account_id = ?
+            ORDER BY updated_at DESC
+        "#)
+        .bind(account_id)
+        .fetch_all(&self.pool)
+        .await?;
+        
+        let mut drafts = Vec::new();
+        for row in rows {
+            let to_addrs: Vec<String> = serde_json::from_str(&row.get::<String, _>("to_addrs"))?;
+            let cc_addrs: Vec<String> = serde_json::from_str(&row.get::<String, _>("cc_addrs"))?;
+            let bcc_addrs: Vec<String> = serde_json::from_str(&row.get::<String, _>("bcc_addrs"))?;
+            let attachments: Vec<StoredAttachment> = serde_json::from_str(&row.get::<String, _>("attachments"))?;
+            let references: Vec<String> = serde_json::from_str(&row.get::<String, _>("references"))?;
+            
+            let created_at_str: String = row.get("created_at");
+            let updated_at_str: String = row.get("updated_at");
+            
+            drafts.push(StoredDraft {
+                id: row.get("id"),
+                account_id: row.get("account_id"),
+                subject: row.get("subject"),
+                to_addrs,
+                cc_addrs,
+                bcc_addrs,
+                reply_to: row.get("reply_to"),
+                body_text: row.get("body_text"),
+                body_html: row.get("body_html"),
+                attachments,
+                in_reply_to: row.get("in_reply_to"),
+                references,
+                created_at: DateTime::parse_from_rfc3339(&created_at_str)?.with_timezone(&Utc),
+                updated_at: DateTime::parse_from_rfc3339(&updated_at_str)?.with_timezone(&Utc),
+                auto_saved: row.get("auto_saved"),
+            });
+        }
+        
+        Ok(drafts)
+    }
+    
+    /// Delete a draft by ID
+    pub async fn delete_draft(&self, draft_id: &str) -> DatabaseResult<bool> {
+        let result = sqlx::query("DELETE FROM drafts WHERE id = ?")
+            .bind(draft_id)
+            .execute(&self.pool)
+            .await?;
+        
+        Ok(result.rows_affected() > 0)
+    }
+    
+    /// Delete all auto-saved drafts older than the specified duration
+    pub async fn cleanup_old_auto_saved_drafts(&self, older_than_hours: i64) -> DatabaseResult<u64> {
+        let cutoff_time = Utc::now() - chrono::Duration::hours(older_than_hours);
+        
+        let result = sqlx::query(r#"
+            DELETE FROM drafts 
+            WHERE auto_saved = TRUE AND updated_at < ?
+        "#)
+        .bind(cutoff_time.to_rfc3339())
+        .execute(&self.pool)
+        .await?;
+        
+        Ok(result.rows_affected())
+    }
+    
+    /// Get draft statistics for an account
+    pub async fn get_draft_stats(&self, account_id: &str) -> DatabaseResult<(u32, u32)> {
+        let row = sqlx::query(r#"
+            SELECT 
+                COUNT(*) as total_count,
+                SUM(CASE WHEN auto_saved = FALSE THEN 1 ELSE 0 END) as manual_count
+            FROM drafts WHERE account_id = ?
+        "#)
+        .bind(account_id)
+        .fetch_one(&self.pool)
+        .await?;
+        
+        let total_count: i64 = row.get("total_count");
+        let manual_count: i64 = row.get("manual_count");
+        
+        Ok((total_count as u32, manual_count as u32))
+    }
 }
 
 /// Database statistics
@@ -768,6 +1001,58 @@ pub struct DatabaseStats {
     pub account_count: u32,
     pub folder_count: u32,
     pub db_size_bytes: u64,
+}
+
+/// Convert between EmailComposeData and StoredDraft
+impl StoredDraft {
+    /// Create a new draft from compose data
+    pub fn from_compose_data(
+        account_id: String,
+        compose_data: &EmailComposeData,
+        auto_saved: bool,
+    ) -> Self {
+        let now = Utc::now();
+        
+        Self {
+            id: Uuid::new_v4().to_string(),
+            account_id,
+            subject: compose_data.subject.clone(),
+            to_addrs: EmailComposeData::parse_addresses(&compose_data.to),
+            cc_addrs: EmailComposeData::parse_addresses(&compose_data.cc),
+            bcc_addrs: EmailComposeData::parse_addresses(&compose_data.bcc),
+            reply_to: None, // TODO: Extract from compose data if available
+            body_text: compose_data.body.clone(),
+            body_html: String::new(), // TODO: Support HTML composition
+            attachments: Vec::new(), // TODO: Support draft attachments
+            in_reply_to: None, // TODO: Extract from compose data if this is a reply
+            references: Vec::new(), // TODO: Extract references for replies
+            created_at: now,
+            updated_at: now,
+            auto_saved,
+        }
+    }
+    
+    /// Update draft with new compose data
+    pub fn update_from_compose_data(&mut self, compose_data: &EmailComposeData, auto_saved: bool) {
+        self.subject = compose_data.subject.clone();
+        self.to_addrs = EmailComposeData::parse_addresses(&compose_data.to);
+        self.cc_addrs = EmailComposeData::parse_addresses(&compose_data.cc);
+        self.bcc_addrs = EmailComposeData::parse_addresses(&compose_data.bcc);
+        self.body_text = compose_data.body.clone();
+        self.updated_at = Utc::now();
+        self.auto_saved = auto_saved;
+    }
+    
+    /// Convert to EmailComposeData for loading in the UI
+    pub fn to_compose_data(&self) -> EmailComposeData {
+        EmailComposeData {
+            to: self.to_addrs.join(", "),
+            cc: self.cc_addrs.join(", "),
+            bcc: self.bcc_addrs.join(", "),
+            subject: self.subject.clone(),
+            body: self.body_text.clone(),
+        }
+    }
 }
 
 /// Convert IMAP message to stored message

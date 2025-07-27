@@ -56,6 +56,12 @@ pub struct ComposeUI {
     // Form state
     is_modified: bool,
     spell_check_enabled: bool,
+    
+    // Auto-save state
+    current_draft_id: Option<String>,
+    last_auto_save: Option<std::time::Instant>,
+    auto_save_interval: std::time::Duration,
+    has_auto_save_changes: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -102,6 +108,10 @@ impl ComposeUI {
             body_line_index: 0,
             is_modified: false,
             spell_check_enabled: true,
+            current_draft_id: None,
+            last_auto_save: None,
+            auto_save_interval: std::time::Duration::from_secs(30), // Auto-save every 30 seconds
+            has_auto_save_changes: false,
         }
     }
     
@@ -850,7 +860,7 @@ impl ComposeUI {
     
     /// Text editing methods
     fn insert_char(&mut self, c: char) {
-        self.is_modified = true;
+        self.mark_content_modified();
         
         match self.current_field {
             ComposeField::To => {
@@ -883,7 +893,7 @@ impl ComposeUI {
             return;
         }
         
-        self.is_modified = true;
+        self.mark_content_modified();
         
         match self.current_field {
             ComposeField::To => {
@@ -931,7 +941,7 @@ impl ComposeUI {
     
     fn insert_newline(&mut self) {
         if self.current_field == ComposeField::Body {
-            self.is_modified = true;
+            self.mark_content_modified();
             
             // Split current line at cursor
             let current_line = self.body_lines.get(self.body_line_index).cloned().unwrap_or_default();
@@ -1051,7 +1061,7 @@ impl ComposeUI {
     }
     
     fn set_current_field_value(&mut self, value: String) {
-        self.is_modified = true;
+        self.mark_content_modified();
         
         match self.current_field {
             ComposeField::To => {
@@ -1112,6 +1122,78 @@ impl ComposeUI {
     /// Clear the modified flag (e.g., after saving)
     pub fn clear_modified(&mut self) {
         self.is_modified = false;
+        self.has_auto_save_changes = false;
+    }
+    
+    /// Check if auto-save is needed based on time interval and changes
+    pub fn should_auto_save(&self) -> bool {
+        if !self.has_auto_save_changes {
+            return false;
+        }
+        
+        match self.last_auto_save {
+            Some(last_save) => last_save.elapsed() >= self.auto_save_interval,
+            None => true, // First auto-save
+        }
+    }
+    
+    /// Get the current draft ID for auto-save operations
+    pub fn current_draft_id(&self) -> Option<&String> {
+        self.current_draft_id.as_ref()
+    }
+    
+    /// Set the current draft ID (when loading an existing draft)
+    pub fn set_current_draft_id(&mut self, draft_id: Option<String>) {
+        self.current_draft_id = draft_id;
+    }
+    
+    /// Mark that auto-save has been performed
+    pub fn mark_auto_saved(&mut self) {
+        self.last_auto_save = Some(std::time::Instant::now());
+        self.has_auto_save_changes = false;
+    }
+    
+    /// Load compose data from a draft (preserving draft ID)
+    pub fn load_from_draft(&mut self, compose_data: crate::ui::EmailComposeData, draft_id: String) {
+        self.to_field = compose_data.to;
+        self.cc_field = compose_data.cc;
+        self.bcc_field = compose_data.bcc;
+        self.subject_field = compose_data.subject;
+        self.body_text = compose_data.body.clone();
+        self.body_lines = if compose_data.body.is_empty() {
+            vec![String::new()]
+        } else {
+            compose_data.body.lines().map(|s| s.to_string()).collect()
+        };
+        self.current_draft_id = Some(draft_id);
+        self.is_modified = false;
+        self.has_auto_save_changes = false;
+        self.last_auto_save = Some(std::time::Instant::now());
+    }
+    
+    /// Get auto-save interval in seconds
+    pub fn auto_save_interval_secs(&self) -> u64 {
+        self.auto_save_interval.as_secs()
+    }
+    
+    /// Set auto-save interval
+    pub fn set_auto_save_interval(&mut self, seconds: u64) {
+        self.auto_save_interval = std::time::Duration::from_secs(seconds);
+    }
+    
+    /// Mark content as modified (triggers both manual and auto-save flags)
+    fn mark_content_modified(&mut self) {
+        self.is_modified = true;
+        self.has_auto_save_changes = true;
+    }
+    
+    /// Check if auto-save should be triggered and return action if needed
+    pub fn check_auto_save(&self) -> Option<ComposeAction> {
+        if self.should_auto_save() {
+            Some(ComposeAction::AutoSave)
+        } else {
+            None
+        }
     }
     
     /// Toggle spell checking on/off
@@ -1222,7 +1304,7 @@ impl ComposeUI {
                     _ => {}
                 }
                 
-                self.is_modified = true;
+                self.mark_content_modified();
             }
         }
     }
@@ -1312,6 +1394,7 @@ pub enum ComposeAction {
     Continue,
     Send,
     SaveDraft,
+    AutoSave,
     Cancel,
     StartCompose,
 }
