@@ -148,6 +148,10 @@ impl CalendarDatabase {
     
     /// Run database migrations
     async fn migrate(&self) -> CalendarDatabaseResult<()> {
+        // Enable foreign key constraints
+        sqlx::query("PRAGMA foreign_keys = ON")
+            .execute(&self.pool)
+            .await?;
         // Create calendars table
         sqlx::query(r#"
             CREATE TABLE IF NOT EXISTS calendars (
@@ -190,8 +194,7 @@ impl CalendarDatabase {
                 updated_at TEXT NOT NULL,
                 sequence INTEGER NOT NULL DEFAULT 0,
                 etag TEXT,
-                sync_status TEXT NOT NULL DEFAULT 'local',
-                FOREIGN KEY (calendar_id) REFERENCES calendars(id) ON DELETE CASCADE
+                sync_status TEXT NOT NULL DEFAULT 'local'
             )
         "#).execute(&self.pool).await?;
         
@@ -204,8 +207,7 @@ impl CalendarDatabase {
                 ctag TEXT,
                 sync_status TEXT NOT NULL, -- syncing, idle, error
                 error_message TEXT,
-                events_synced INTEGER NOT NULL DEFAULT 0,
-                FOREIGN KEY (calendar_id) REFERENCES calendars(id) ON DELETE CASCADE
+                events_synced INTEGER NOT NULL DEFAULT 0
             )
         "#).execute(&self.pool).await?;
         

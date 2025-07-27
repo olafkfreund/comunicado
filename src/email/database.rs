@@ -196,6 +196,10 @@ impl EmailDatabase {
     
     /// Run database migrations
     async fn migrate(&self) -> DatabaseResult<()> {
+        // Enable foreign key constraints
+        sqlx::query("PRAGMA foreign_keys = ON")
+            .execute(&self.pool)
+            .await?;
         sqlx::query(r#"
             CREATE TABLE IF NOT EXISTS accounts (
                 id TEXT PRIMARY KEY,
@@ -221,8 +225,7 @@ impl EmailDatabase {
                 unseen_count INTEGER,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
-                PRIMARY KEY (account_id, name),
-                FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE
+                PRIMARY KEY (account_id, name)
             )
         "#).execute(&self.pool).await?;
         
@@ -235,7 +238,7 @@ impl EmailDatabase {
                 message_id TEXT,
                 thread_id TEXT,
                 in_reply_to TEXT,
-                "references" TEXT NOT NULL, -- JSON array
+                message_references TEXT NOT NULL, -- JSON array
                 
                 -- Headers
                 subject TEXT NOT NULL,
@@ -264,10 +267,7 @@ impl EmailDatabase {
                 last_synced TEXT NOT NULL,
                 sync_version INTEGER NOT NULL DEFAULT 1,
                 is_draft BOOLEAN NOT NULL DEFAULT FALSE,
-                is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
-                
-                FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE,
-                FOREIGN KEY (account_id, folder_name) REFERENCES folders(account_id, name) ON DELETE CASCADE
+                is_deleted BOOLEAN NOT NULL DEFAULT FALSE
             )
         "#).execute(&self.pool).await?;
         
@@ -282,8 +282,7 @@ impl EmailDatabase {
                 message_count INTEGER NOT NULL DEFAULT 0,
                 unread_count INTEGER NOT NULL DEFAULT 0,
                 sync_status TEXT NOT NULL,
-                PRIMARY KEY (account_id, folder_name),
-                FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE
+                PRIMARY KEY (account_id, folder_name)
             )
         "#).execute(&self.pool).await?;
         
@@ -315,7 +314,7 @@ impl EmailDatabase {
                 body_html TEXT NOT NULL DEFAULT '',
                 attachments TEXT NOT NULL DEFAULT '', -- JSON array of attachment info
                 in_reply_to TEXT, -- Message ID if this is a reply
-                references TEXT NOT NULL DEFAULT '', -- JSON array of Message IDs
+                draft_references TEXT NOT NULL DEFAULT '', -- JSON array of Message IDs
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
                 auto_saved BOOLEAN NOT NULL DEFAULT FALSE
@@ -381,7 +380,7 @@ impl EmailDatabase {
         
         sqlx::query(r#"
             INSERT OR REPLACE INTO messages (
-                id, account_id, folder_name, imap_uid, message_id, thread_id, in_reply_to, "references",
+                id, account_id, folder_name, imap_uid, message_id, thread_id, in_reply_to, message_references,
                 subject, from_addr, from_name, to_addrs, cc_addrs, bcc_addrs, reply_to, date,
                 body_text, body_html, attachments,
                 flags, labels, size, priority,
@@ -435,7 +434,7 @@ impl EmailDatabase {
         let offset = offset.unwrap_or(0) as i64;
         
         let rows = sqlx::query(r#"
-            SELECT id, account_id, folder_name, imap_uid, message_id, thread_id, in_reply_to, "references",
+            SELECT id, account_id, folder_name, imap_uid, message_id, thread_id, in_reply_to, message_references,
                    subject, from_addr, from_name, to_addrs, cc_addrs, bcc_addrs, reply_to, date,
                    body_text, body_html, attachments,
                    flags, labels, size, priority,
@@ -463,7 +462,7 @@ impl EmailDatabase {
     /// Get a message by UID
     pub async fn get_message_by_uid(&self, account_id: &str, folder_name: &str, uid: u32) -> DatabaseResult<Option<StoredMessage>> {
         let row = sqlx::query(r#"
-            SELECT id, account_id, folder_name, imap_uid, message_id, thread_id, in_reply_to, "references",
+            SELECT id, account_id, folder_name, imap_uid, message_id, thread_id, in_reply_to, message_references,
                    subject, from_addr, from_name, to_addrs, cc_addrs, bcc_addrs, reply_to, date,
                    body_text, body_html, attachments,
                    flags, labels, size, priority,
@@ -488,7 +487,7 @@ impl EmailDatabase {
         let limit = limit.unwrap_or(100) as i64;
         
         let rows = sqlx::query(r#"
-            SELECT m.id, m.account_id, m.folder_name, m.imap_uid, m.message_id, m.thread_id, m.in_reply_to, m."references",
+            SELECT m.id, m.account_id, m.folder_name, m.imap_uid, m.message_id, m.thread_id, m.in_reply_to, m.message_references,
                    m.subject, m.from_addr, m.from_name, m.to_addrs, m.cc_addrs, m.bcc_addrs, m.reply_to, m.date,
                    m.body_text, m.body_html, m.attachments,
                    m.flags, m.labels, m.size, m.priority,
@@ -649,7 +648,7 @@ impl EmailDatabase {
     /// Helper to convert database row to StoredMessage
     pub fn row_to_stored_message(&self, row: sqlx::sqlite::SqliteRow) -> DatabaseResult<StoredMessage> {
         let id = Uuid::parse_str(row.get("id"))?;
-        let references: Vec<String> = serde_json::from_str(row.get("references"))?;
+        let references: Vec<String> = serde_json::from_str(row.get("message_references"))?;
         let to_addrs: Vec<String> = serde_json::from_str(row.get("to_addrs"))?;
         let cc_addrs: Vec<String> = serde_json::from_str(row.get("cc_addrs"))?;
         let bcc_addrs: Vec<String> = serde_json::from_str(row.get("bcc_addrs"))?;
@@ -834,7 +833,7 @@ impl EmailDatabase {
         sqlx::query(r#"
             INSERT OR REPLACE INTO drafts (
                 id, account_id, subject, to_addrs, cc_addrs, bcc_addrs, reply_to,
-                body_text, body_html, attachments, in_reply_to, references,
+                body_text, body_html, attachments, in_reply_to, draft_references,
                 created_at, updated_at, auto_saved
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         "#)
@@ -863,7 +862,7 @@ impl EmailDatabase {
     pub async fn load_draft(&self, draft_id: &str) -> DatabaseResult<Option<StoredDraft>> {
         let row = sqlx::query(r#"
             SELECT id, account_id, subject, to_addrs, cc_addrs, bcc_addrs, reply_to,
-                   body_text, body_html, attachments, in_reply_to, references,
+                   body_text, body_html, attachments, in_reply_to, draft_references,
                    created_at, updated_at, auto_saved
             FROM drafts WHERE id = ?
         "#)
@@ -876,7 +875,7 @@ impl EmailDatabase {
             let cc_addrs: Vec<String> = serde_json::from_str(&row.get::<String, _>("cc_addrs"))?;
             let bcc_addrs: Vec<String> = serde_json::from_str(&row.get::<String, _>("bcc_addrs"))?;
             let attachments: Vec<StoredAttachment> = serde_json::from_str(&row.get::<String, _>("attachments"))?;
-            let references: Vec<String> = serde_json::from_str(&row.get::<String, _>("references"))?;
+            let references: Vec<String> = serde_json::from_str(&row.get::<String, _>("draft_references"))?;
             
             let created_at_str: String = row.get("created_at");
             let updated_at_str: String = row.get("updated_at");
@@ -907,7 +906,7 @@ impl EmailDatabase {
     pub async fn load_drafts_for_account(&self, account_id: &str) -> DatabaseResult<Vec<StoredDraft>> {
         let rows = sqlx::query(r#"
             SELECT id, account_id, subject, to_addrs, cc_addrs, bcc_addrs, reply_to,
-                   body_text, body_html, attachments, in_reply_to, references,
+                   body_text, body_html, attachments, in_reply_to, draft_references,
                    created_at, updated_at, auto_saved
             FROM drafts WHERE account_id = ?
             ORDER BY updated_at DESC
@@ -922,7 +921,7 @@ impl EmailDatabase {
             let cc_addrs: Vec<String> = serde_json::from_str(&row.get::<String, _>("cc_addrs"))?;
             let bcc_addrs: Vec<String> = serde_json::from_str(&row.get::<String, _>("bcc_addrs"))?;
             let attachments: Vec<StoredAttachment> = serde_json::from_str(&row.get::<String, _>("attachments"))?;
-            let references: Vec<String> = serde_json::from_str(&row.get::<String, _>("references"))?;
+            let references: Vec<String> = serde_json::from_str(&row.get::<String, _>("draft_references"))?;
             
             let created_at_str: String = row.get("created_at");
             let updated_at_str: String = row.get("updated_at");

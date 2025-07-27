@@ -886,7 +886,7 @@ impl ContentPreview {
     async fn find_message_by_id(&self, database: &EmailDatabase, message_id: Uuid) -> Result<Option<StoredMessage>, Box<dyn std::error::Error>> {
         // Since we don't have a direct "get by ID" method, we'll need to query
         // This is a simplified approach - in practice, we'd want to add an index lookup
-        let query = format!("SELECT id, account_id, folder_name, imap_uid, message_id, thread_id, in_reply_to, \"references\",
+        let query = format!("SELECT id, account_id, folder_name, imap_uid, message_id, thread_id, in_reply_to, message_references,
                            subject, from_addr, from_name, to_addrs, cc_addrs, bcc_addrs, reply_to, date,
                            body_text, body_html, attachments,
                            flags, labels, size, priority,
