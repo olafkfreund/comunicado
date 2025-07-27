@@ -10,6 +10,7 @@ pub mod start_page;
 pub mod draft_list;
 pub mod calendar;
 pub mod date_picker;
+pub mod email_viewer;
 pub mod time_picker;
 
 use ratatui::{
@@ -49,6 +50,9 @@ pub use crate::calendar::{CalendarUI, CalendarAction, CalendarViewMode};
 pub use date_picker::DatePicker;
 pub use time_picker::{TimePicker, TimeField};
 
+// Re-export email viewer types
+pub use email_viewer::{EmailViewer, EmailViewerAction};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FocusedPane {
     AccountSwitcher,
@@ -71,6 +75,7 @@ pub enum UIMode {
     EventCreate,
     EventEdit,
     EventView,
+    EmailViewer,
 }
 
 pub struct UI {
@@ -90,6 +95,7 @@ pub struct UI {
     start_page: StartPage,
     calendar_ui: CalendarUI,
     event_form_ui: Option<crate::calendar::EventFormUI>,
+    email_viewer: EmailViewer,
 }
 
 impl UI {
@@ -111,6 +117,7 @@ impl UI {
             start_page: StartPage::new(),
             calendar_ui: CalendarUI::new(),
             event_form_ui: None,
+            email_viewer: EmailViewer::new(),
         };
         
         // Initialize status bar with default segments
@@ -212,6 +219,11 @@ impl UI {
                     let theme = self.theme_manager.current_theme();
                     event_form.render(frame, size, theme);
                 }
+            }
+            UIMode::EmailViewer => {
+                // Render email viewer in full screen
+                let theme = self.theme_manager.current_theme();
+                self.email_viewer.render(frame, size, theme);
             }
         }
     }
@@ -379,6 +391,7 @@ impl UI {
             UIMode::EventCreate => "Create Event",
             UIMode::EventEdit => "Edit Event",
             UIMode::EventView => "View Event",
+            UIMode::EmailViewer => "Email Viewer",
         };
         
         let nav_segment = NavigationHintsSegment {
@@ -484,6 +497,15 @@ impl UI {
                 ("d".to_string(), "Delete Event".to_string()),
                 ("r".to_string(), "RSVP".to_string()),
                 ("Esc".to_string(), "Close".to_string()),
+            ],
+            UIMode::EmailViewer => vec![
+                ("j/k".to_string(), "Scroll".to_string()),
+                ("r".to_string(), "Reply".to_string()),
+                ("R".to_string(), "Reply All".to_string()),
+                ("f".to_string(), "Forward".to_string()),
+                ("Space".to_string(), "Actions".to_string()),
+                ("v".to_string(), "View Mode".to_string()),
+                ("q/Esc".to_string(), "Close".to_string()),
             ],
         }
     }
@@ -1184,6 +1206,32 @@ impl UI {
     /// Show calendar list overlay
     pub fn show_calendar_list(&mut self) {
         self.calendar_ui.show_calendar_list();
+    }
+    
+    /// Start email viewer mode with current message
+    pub fn start_email_viewer(&mut self, message: crate::email::StoredMessage, email_content: crate::ui::content_preview::EmailContent) {
+        self.email_viewer.set_email(message, email_content);
+        self.mode = UIMode::EmailViewer;
+    }
+    
+    /// Exit email viewer mode
+    pub fn exit_email_viewer(&mut self) {
+        self.mode = UIMode::Normal;
+    }
+    
+    /// Check if email viewer is active
+    pub fn is_email_viewer_active(&self) -> bool {
+        matches!(self.mode, UIMode::EmailViewer)
+    }
+    
+    /// Handle email viewer key input
+    pub fn handle_email_viewer_key(&mut self, key: crossterm::event::KeyCode) -> Option<crate::ui::email_viewer::EmailViewerAction> {
+        self.email_viewer.handle_key(key)
+    }
+    
+    /// Get mutable reference to email viewer
+    pub fn email_viewer_mut(&mut self) -> &mut crate::ui::email_viewer::EmailViewer {
+        &mut self.email_viewer
     }
 }
 

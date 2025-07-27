@@ -498,54 +498,83 @@ This is a sample email showcasing the modern email display format.".to_string();
         
         // Parse sender name and email
         let (sender_name, sender_email) = self.parse_sender_info(&headers.from);
+        let box_width: usize = 60; // Fixed width for consistent appearance
         
         // Create top border of sender box
+        let header_text = " From ";
+        let remaining_width = box_width.saturating_sub(header_text.len() + 3); // 3 for borders
         lines.push(Line::from(vec![
             Span::styled("┌─", Style::default().fg(theme.colors.palette.border)),
-            Span::styled(" From ", Style::default().fg(theme.colors.palette.accent).add_modifier(Modifier::BOLD)),
-            Span::styled("─".repeat(50), Style::default().fg(theme.colors.palette.border)),
+            Span::styled(header_text, Style::default().fg(theme.colors.palette.accent).add_modifier(Modifier::BOLD)),
+            Span::styled("─".repeat(remaining_width), Style::default().fg(theme.colors.palette.border)),
             Span::styled("┐", Style::default().fg(theme.colors.palette.border)),
         ]));
         
         // Sender name line (larger, bold)
         if !sender_name.is_empty() {
+            let content_width = box_width.saturating_sub(4); // 4 for "│ " and " │"
+            let truncated_name = if sender_name.len() > content_width {
+                format!("{}...", &sender_name[..content_width.saturating_sub(3)])
+            } else {
+                sender_name.clone()
+            };
+            let padding = content_width.saturating_sub(truncated_name.len());
+            
             lines.push(Line::from(vec![
                 Span::styled("│ ", Style::default().fg(theme.colors.palette.border)),
-                Span::styled(sender_name.clone(), Style::default()
+                Span::styled(truncated_name, Style::default()
                     .fg(theme.colors.palette.accent)
                     .add_modifier(Modifier::BOLD)),
-                Span::styled(" ".repeat(50usize.saturating_sub(sender_name.len())), Style::default()),
-                Span::styled("│", Style::default().fg(theme.colors.palette.border)),
+                Span::styled(" ".repeat(padding), Style::default()),
+                Span::styled(" │", Style::default().fg(theme.colors.palette.border)),
             ]));
         }
         
         // Sender email line (smaller, muted)
         if !sender_email.is_empty() {
+            let email_display = format!("<{}>", sender_email);
+            let content_width = box_width.saturating_sub(4); // 4 for "│ " and " │"
+            let truncated_email = if email_display.len() > content_width {
+                format!("{}...", &email_display[..content_width.saturating_sub(3)])
+            } else {
+                email_display
+            };
+            let padding = content_width.saturating_sub(truncated_email.len());
+            
             lines.push(Line::from(vec![
                 Span::styled("│ ", Style::default().fg(theme.colors.palette.border)),
-                Span::styled(format!("<{}>", sender_email), Style::default()
+                Span::styled(truncated_email, Style::default()
                     .fg(theme.colors.palette.text_muted)),
-                Span::styled(" ".repeat(50usize.saturating_sub(sender_email.len() + 2)), Style::default()),
-                Span::styled("│", Style::default().fg(theme.colors.palette.border)),
+                Span::styled(" ".repeat(padding), Style::default()),
+                Span::styled(" │", Style::default().fg(theme.colors.palette.border)),
             ]));
         }
         
         // Date line in sender box  
         if !headers.date.is_empty() {
             let formatted_date = self.format_friendly_date(&headers.date);
+            let date_display = format!("📅 {}", formatted_date);
+            let content_width = box_width.saturating_sub(4); // 4 for "│ " and " │"
+            let truncated_date = if date_display.len() > content_width {
+                format!("{}...", &date_display[..content_width.saturating_sub(3)])
+            } else {
+                date_display.clone()
+            };
+            let padding = content_width.saturating_sub(truncated_date.len());
+            
             lines.push(Line::from(vec![
                 Span::styled("│ ", Style::default().fg(theme.colors.palette.border)),
                 Span::styled("📅 ", Style::default().fg(theme.colors.palette.info)),
                 Span::styled(formatted_date.clone(), Style::default().fg(theme.colors.content_preview.body)),
-                Span::styled(" ".repeat(50usize.saturating_sub(formatted_date.len() + 2)), Style::default()),
-                Span::styled("│", Style::default().fg(theme.colors.palette.border)),
+                Span::styled(" ".repeat(padding.saturating_sub(2)), Style::default()), // -2 for emoji
+                Span::styled(" │", Style::default().fg(theme.colors.palette.border)),
             ]));
         }
         
         // Bottom border of sender box
         lines.push(Line::from(vec![
             Span::styled("└", Style::default().fg(theme.colors.palette.border)),
-            Span::styled("─".repeat(53), Style::default().fg(theme.colors.palette.border)),
+            Span::styled("─".repeat(box_width.saturating_sub(2)), Style::default().fg(theme.colors.palette.border)),
             Span::styled("┘", Style::default().fg(theme.colors.palette.border)),
         ]));
         
@@ -780,24 +809,21 @@ This is a sample email showcasing the modern email display format.".to_string();
             .collect()
     }
 
+    /// Handle up key press for scrolling
     pub fn handle_up(&mut self) {
         if self.is_viewing_attachment {
             self.attachment_viewer.scroll_up();
         } else {
-            if self.scroll > 0 {
-                self.scroll -= 1;
-            }
+            self.scroll_up(1);
         }
     }
 
+    /// Handle down key press for scrolling  
     pub fn handle_down(&mut self) {
         if self.is_viewing_attachment {
             self.attachment_viewer.scroll_down();
         } else {
-            let max_scroll = self.raw_content.len().saturating_sub(1);
-            if self.scroll < max_scroll {
-                self.scroll += 1;
-            }
+            self.scroll_down(1);
         }
     }
 
@@ -807,6 +833,52 @@ This is a sample email showcasing the modern email display format.".to_string();
 
     pub fn scroll_to_bottom(&mut self) {
         self.scroll = self.raw_content.len().saturating_sub(1);
+    }
+    
+    /// Scroll content up by specified lines
+    pub fn scroll_up(&mut self, lines: usize) {
+        self.scroll = self.scroll.saturating_sub(lines);
+    }
+    
+    /// Scroll content down by specified lines
+    pub fn scroll_down(&mut self, lines: usize) {
+        let max_scroll = self.get_max_scroll(20); // Approximate content height
+        self.scroll = (self.scroll.saturating_add(lines)).min(max_scroll);
+    }
+    
+    /// Get current scroll position
+    pub fn get_scroll_position(&self) -> usize {
+        self.scroll
+    }
+    
+    /// Get maximum scroll position based on content
+    pub fn get_max_scroll(&self, visible_height: usize) -> usize {
+        let total_lines = match self.view_mode {
+            ViewMode::Raw => self.raw_content.len(),
+            ViewMode::Formatted => {
+                if let Some(ref email) = self.email_content {
+                    email.parsed_content.len() + 15 // Headers + content + spacing
+                } else {
+                    self.raw_content.len()
+                }
+            }
+            ViewMode::Html => {
+                if let Some(ref email) = self.email_content {
+                    email.parsed_content.len() + 15
+                } else {
+                    self.raw_content.len()
+                }
+            }
+            ViewMode::Headers => {
+                if let Some(ref email) = self.email_content {
+                    20 // Estimated header lines
+                } else {
+                    0
+                }
+            }
+        };
+        
+        total_lines.saturating_sub(visible_height)
     }
 
     pub fn set_content(&mut self, content: Vec<String>) {
