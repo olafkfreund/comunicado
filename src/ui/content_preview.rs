@@ -310,6 +310,11 @@ impl ContentPreview {
                 ]));
                 
                 for (index, attachment) in email.attachments.iter().enumerate() {
+                    // Enhanced attachment info with type detection
+                    let attachment_type = crate::email::AttachmentType::from_content_type(&attachment.content_type);
+                    let attachment_icon = attachment_type.icon();
+                    let type_description = attachment_type.description();
+                    
                     let size_display = if attachment.size > 0 {
                         if attachment.size < 1024 {
                             format!(" ({}B)", attachment.size)
@@ -337,13 +342,25 @@ impl ContentPreview {
                         Style::default().fg(theme.colors.content_preview.body).add_modifier(Modifier::UNDERLINED)
                     };
                     
+                    // Color code by safety and type
+                    let type_color = if attachment_type.is_image() {
+                        theme.colors.palette.success
+                    } else if attachment_type.is_document() {
+                        theme.colors.palette.accent
+                    } else if attachment_type.is_archive() {
+                        theme.colors.palette.warning
+                    } else {
+                        theme.colors.content_preview.quote
+                    };
+                    
                     let attachment_line = Line::from(vec![
                         Span::styled(format!("{}{}. ", selection_prefix, index + 1), number_style),
+                        Span::styled(format!("{} ", attachment_icon), Style::default().fg(type_color)),
                         Span::styled(&attachment.filename, filename_style),
                         Span::styled(size_display, 
                             Style::default().fg(theme.colors.content_preview.quote)),
-                        Span::styled(format!(" [{}]", attachment.content_type), 
-                            Style::default().fg(theme.colors.content_preview.quote)),
+                        Span::styled(format!(" [{}]", type_description), 
+                            Style::default().fg(type_color)),
                     ]);
                     
                     all_lines.push(attachment_line);
@@ -900,10 +917,11 @@ impl ContentPreview {
         // Parse content into structured lines
         let parsed_content = self.parse_content_lines(&body);
         
-        // Convert attachments
+        // Convert attachments with enhanced type information
         let attachments = message.attachments.iter().map(|att| {
+            let attachment_info = crate::email::AttachmentInfo::from_stored(att.clone());
             Attachment {
-                filename: att.filename.clone(),
+                filename: attachment_info.display_name.clone(),
                 content_type: att.content_type.clone(),
                 size: att.size as usize,
                 is_inline: att.is_inline,
