@@ -134,8 +134,14 @@ impl ImapProtocol {
     pub fn parse_fetch_response(response: &str) -> ImapResult<Vec<ImapMessage>> {
         let mut messages = Vec::new();
         let mut current_message: Option<ImapMessage> = None;
+        let mut expecting_literal_content = false;
         
-        for line in response.lines() {
+        let lines: Vec<&str> = response.lines().collect();
+        let mut i = 0;
+        
+        while i < lines.len() {
+            let line = lines[i];
+            
             if line.starts_with("* ") && line.contains(" FETCH ") {
                 // Start of new message
                 if let Some(msg) = current_message.take() {
@@ -147,15 +153,35 @@ impl ImapProtocol {
                 let seq_num: u32 = seq_str.parse().unwrap_or(0);
                 
                 current_message = Some(ImapMessage::new(seq_num));
+                expecting_literal_content = false;
                 
                 // Parse FETCH data in the same line
                 if let Some(msg) = &mut current_message {
                     Self::parse_fetch_data(line, msg)?;
+                    
+                    // Check if this line indicates a literal follows
+                    if line.contains("BODY[] {") && Self::extract_literal_size_from_line(line).is_some() {
+                        expecting_literal_content = true;
+                    }
                 }
+            } else if expecting_literal_content && current_message.is_some() {
+                // This line should be the literal content
+                if let Some(msg) = &mut current_message {
+                    msg.body = Some(line.to_string());
+                    tracing::debug!("Set message body from literal, length: {} chars", line.len());
+                }
+                expecting_literal_content = false;
             } else if let Some(msg) = &mut current_message {
                 // Continue parsing multi-line FETCH response
                 Self::parse_fetch_data(line, msg)?;
+                
+                // Check if this line indicates a literal follows
+                if line.contains("BODY[] {") && Self::extract_literal_size_from_line(line).is_some() {
+                    expecting_literal_content = true;
+                }
             }
+            
+            i += 1;
         }
         
         // Don't forget the last message
@@ -409,6 +435,20 @@ impl ImapProtocol {
     /// Format DONE command (to exit IDLE)
     pub fn format_done() -> String {
         "DONE".to_string()
+    }
+    
+    /// Extract literal size from a line containing {size}
+    fn extract_literal_size_from_line(line: &str) -> Option<usize> {
+        // Look for {size} pattern
+        if let Some(start) = line.rfind('{') {
+            if let Some(end) = line[start..].find('}') {
+                let size_str = &line[start + 1..start + end];
+                if let Ok(size) = size_str.parse::<usize>() {
+                    return Some(size);
+                }
+            }
+        }
+        None
     }
     
     /// Parse ENVELOPE from FETCH response

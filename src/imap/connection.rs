@@ -2,7 +2,7 @@ use crate::imap::{ImapConfig, ImapError, ImapResult};
 use std::net::ToSocketAddrs;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader as AsyncBufReader, BufWriter as AsyncBufWriter};
+use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader as AsyncBufReader, BufWriter as AsyncBufWriter};
 use tokio::net::TcpStream as AsyncTcpStream;
 use tokio::time::timeout;
 use tokio_rustls::{TlsConnector, client::TlsStream};
@@ -204,7 +204,25 @@ impl ImapConnection {
         let mut responses = Vec::new();
         loop {
             let line = self.read_response().await?;
-            responses.push(line.clone());
+            
+            // Check if this line contains a literal size indicator {size}
+            if let Some(literal_size) = Self::extract_literal_size(&line) {
+                tracing::debug!("Found literal of size {} in line: {}", literal_size, line);
+                
+                // Add the line with literal indicator
+                responses.push(line.clone());
+                
+                // Read the literal data
+                let literal_data = self.read_literal(literal_size).await?;
+                
+                // Convert literal data to string (assuming UTF-8 for now)
+                let literal_string = String::from_utf8_lossy(&literal_data);
+                responses.push(literal_string.to_string());
+                
+                tracing::debug!("Read literal content, length: {} chars", literal_string.len());
+            } else {
+                responses.push(line.clone());
+            }
             
             if line.starts_with(&tag) {
                 // This is our tagged response
@@ -248,6 +266,42 @@ impl ImapConnection {
         }
         
         Ok(line)
+    }
+    
+    /// Read exact number of bytes from the server (for IMAP literals)
+    pub async fn read_literal(&mut self, byte_count: usize) -> ImapResult<Vec<u8>> {
+        let mut buffer = vec![0u8; byte_count];
+        let timeout_duration = Duration::from_secs(self.config.timeout_seconds);
+        
+        let read_result = match self.stream.as_mut() {
+            Some(SplitStream::Plain { reader, .. }) => {
+                timeout(timeout_duration, reader.read_exact(&mut buffer)).await
+            }
+            Some(SplitStream::Tls { reader, .. }) => {
+                timeout(timeout_duration, reader.read_exact(&mut buffer)).await
+            }
+            None => return Err(ImapError::invalid_state("No connection available")),
+        };
+        
+        read_result
+            .map_err(|_| ImapError::Timeout)?
+            .map_err(|e| ImapError::connection(format!("Failed to read literal: {}", e)))?;
+        
+        Ok(buffer)
+    }
+    
+    /// Extract literal size from a line containing {size}
+    fn extract_literal_size(line: &str) -> Option<usize> {
+        // Look for {size} pattern at the end of the line
+        if let Some(start) = line.rfind('{') {
+            if let Some(end) = line[start..].find('}') {
+                let size_str = &line[start + 1..start + end];
+                if let Ok(size) = size_str.parse::<usize>() {
+                    return Some(size);
+                }
+            }
+        }
+        None
     }
     
     /// Get current connection state
