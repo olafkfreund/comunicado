@@ -4,6 +4,7 @@ pub mod event;
 pub mod manager;
 pub mod sync;
 pub mod ui;
+pub mod event_form;
 
 pub use caldav::{CalDAVClient, CalDAVError, CalDAVResult, CalDAVConfig};
 pub use database::{CalendarDatabase, CalendarEvent, CalendarEventAttendee, CalendarEventRecurrence};
@@ -11,6 +12,7 @@ pub use event::{Event, EventStatus, EventPriority, EventRecurrence, EventReminde
 pub use manager::CalendarManager;
 pub use sync::{CalendarSyncEngine, CalendarSyncProgress};
 pub use ui::{CalendarUI, CalendarAction, CalendarViewMode};
+pub use event_form::{EventFormUI, EventFormAction, EventFormMode, EventFormField};
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;

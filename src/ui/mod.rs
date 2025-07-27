@@ -9,6 +9,8 @@ pub mod account_switcher;
 pub mod start_page;
 pub mod draft_list;
 pub mod calendar;
+pub mod date_picker;
+pub mod time_picker;
 
 use ratatui::{
     layout::Rect,
@@ -43,6 +45,10 @@ pub use account_switcher::{AccountItem, AccountSyncStatus};
 // Re-export calendar types for external use
 pub use crate::calendar::{CalendarUI, CalendarAction, CalendarViewMode};
 
+// Re-export date/time picker types
+pub use date_picker::DatePicker;
+pub use time_picker::{TimePicker, TimeField};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FocusedPane {
     AccountSwitcher,
@@ -62,6 +68,9 @@ pub enum UIMode {
     Compose,
     DraftList,
     Calendar,
+    EventCreate,
+    EventEdit,
+    EventView,
 }
 
 pub struct UI {
@@ -80,6 +89,7 @@ pub struct UI {
     draft_list: DraftListUI,
     start_page: StartPage,
     calendar_ui: CalendarUI,
+    event_form_ui: Option<crate::calendar::EventFormUI>,
 }
 
 impl UI {
@@ -100,6 +110,7 @@ impl UI {
             draft_list: DraftListUI::new(),
             start_page: StartPage::new(),
             calendar_ui: CalendarUI::new(),
+            event_form_ui: None,
         };
         
         // Initialize status bar with default segments
@@ -194,6 +205,18 @@ impl UI {
                 // Render calendar UI in full screen
                 let theme = self.theme_manager.current_theme();
                 self.calendar_ui.render(frame, size, theme);
+            }
+            UIMode::EventCreate | UIMode::EventEdit | UIMode::EventView => {
+                // Render event form UI in full screen
+                if let Some(ref mut event_form) = self.event_form_ui {
+                    let theme = self.theme_manager.current_theme();
+                    // For now, just render a placeholder - we'll implement full rendering later
+                    let block = ratatui::widgets::Block::default()
+                        .title(event_form.get_form_title())
+                        .borders(ratatui::widgets::Borders::ALL)
+;
+                    frame.render_widget(block, size);
+                }
             }
         }
     }
@@ -358,6 +381,9 @@ impl UI {
             UIMode::StartPage => "Dashboard",
             UIMode::DraftList => "Draft Manager",
             UIMode::Calendar => "Calendar",
+            UIMode::EventCreate => "Create Event",
+            UIMode::EventEdit => "Edit Event",
+            UIMode::EventView => "View Event",
         };
         
         let nav_segment = NavigationHintsSegment {
@@ -441,6 +467,27 @@ impl UI {
                 ("Enter".to_string(), "Event Details".to_string()),
                 ("e".to_string(), "Edit Event".to_string()),
                 ("r".to_string(), "Refresh".to_string()),
+                ("Esc".to_string(), "Close".to_string()),
+            ],
+            UIMode::EventCreate => vec![
+                ("Tab".to_string(), "Next Field".to_string()),
+                ("Shift+Tab".to_string(), "Prev Field".to_string()),
+                ("Enter".to_string(), "Edit Field".to_string()),
+                ("F1".to_string(), "Save Event".to_string()),
+                ("Esc".to_string(), "Cancel".to_string()),
+            ],
+            UIMode::EventEdit => vec![
+                ("Tab".to_string(), "Next Field".to_string()),
+                ("Shift+Tab".to_string(), "Prev Field".to_string()),
+                ("Enter".to_string(), "Edit Field".to_string()),
+                ("F1".to_string(), "Save Changes".to_string()),
+                ("F3".to_string(), "Delete Event".to_string()),
+                ("Esc".to_string(), "Cancel".to_string()),
+            ],
+            UIMode::EventView => vec![
+                ("e".to_string(), "Edit Event".to_string()),
+                ("d".to_string(), "Delete Event".to_string()),
+                ("r".to_string(), "RSVP".to_string()),
                 ("Esc".to_string(), "Close".to_string()),
             ],
         }

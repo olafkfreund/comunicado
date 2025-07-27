@@ -210,7 +210,7 @@ impl Event {
 }
 
 /// Event status
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum EventStatus {
     Tentative,
     Confirmed,
@@ -341,7 +341,7 @@ pub enum AttendeeRole {
 }
 
 /// Event recurrence pattern
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EventRecurrence {
     pub frequency: RecurrenceFrequency,
     pub interval: u32,
