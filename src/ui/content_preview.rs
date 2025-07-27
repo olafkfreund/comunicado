@@ -132,68 +132,99 @@ impl ContentPreview {
     }
 
     fn initialize_sample_content(&mut self) {
-        self.raw_content = vec![
-            "From: Comunicado Team <team@comunicado.dev>".to_string(),
-            "To: user@example.com".to_string(),
-            "Date: Today 10:30 AM".to_string(),
-            "Subject: Welcome to Comunicado!".to_string(),
-            "".to_string(),
-            "Welcome to Comunicado - the modern TUI email client!".to_string(),
-            "".to_string(),
-            "We're excited to have you try out our terminal-based email experience.".to_string(),
-            "Comunicado brings modern email features directly to your terminal with:".to_string(),
-            "".to_string(),
-            "Modern TUI Interface".to_string(),
-            "   - Clean, intuitive design with ratatui".to_string(),
-            "   - Vim-style keyboard navigation".to_string(),
-            "   - Responsive three-pane layout".to_string(),
-            "".to_string(),
-            "Rich Email Support".to_string(),
-            "   - HTML email rendering (coming soon)".to_string(),
-            "   - Image and animation display".to_string(),
-            "   - Attachment handling".to_string(),
-            "".to_string(),
-            "Secure Authentication".to_string(),
-            "   - OAuth2 support for major providers".to_string(),
-            "   - Multi-account management".to_string(),
-            "   - Local email storage with Maildir".to_string(),
-            "".to_string(),
-            "Integrated Calendar (upcoming)".to_string(),
-            "   - CalDAV synchronization".to_string(),
-            "   - Meeting invitation handling".to_string(),
-            "   - Desktop environment integration".to_string(),
-            "".to_string(),
-            "Getting Started".to_string(),
-            "".to_string(),
-            "Use these keyboard shortcuts to navigate:".to_string(),
-            "".to_string(),
-            "Navigation:".to_string(),
-            "  Tab / Shift+Tab  - Switch between panes".to_string(),
-            "  h/j/k/l          - Vim-style movement".to_string(),
-            "  ↑/↓              - Move up/down in lists".to_string(),
-            "  Enter            - Select/expand items".to_string(),
-            "".to_string(),
-            "Global:".to_string(),
-            "  q                - Quit application".to_string(),
-            "  Ctrl+C           - Force quit".to_string(),
-            "".to_string(),
-            "This is just the beginning! We're actively developing new features".to_string(),
-            "including HTML email rendering, OAuth2 authentication, and".to_string(),
-            "integrated calendar functionality.".to_string(),
-            "".to_string(),
-            "Thank you for trying Comunicado!".to_string(),
-            "".to_string(),
-            "Best regards,".to_string(),
-            "The Comunicado Development Team".to_string(),
-            "".to_string(),
-            "---".to_string(),
-            "This is a sample email displayed in the content preview pane.".to_string(),
-            "In the full implementation, this area will show:".to_string(),
-            "- Rendered HTML emails with proper formatting".to_string(),
-            "- Images and animations from supported terminals".to_string(),
-            "- Interactive elements like links and attachments".to_string(),
-            "- Scrollable content for long messages".to_string(),
-        ];
+        // Create a sample EmailContent with proper headers and body
+        let headers = EmailHeader {
+            from: "Comunicado Team <team@comunicado.dev>".to_string(),
+            to: vec!["user@example.com".to_string()],
+            cc: vec![],
+            bcc: vec![],
+            subject: "Welcome to Comunicado! 🎉".to_string(),
+            date: "Today 10:30 AM".to_string(),
+            message_id: "<welcome@comunicado.dev>".to_string(),
+            reply_to: None,
+            in_reply_to: None,
+        };
+
+        let body = "Welcome to Comunicado - the modern TUI email client!
+
+We're excited to have you try out our terminal-based email experience.
+Comunicado brings modern email features directly to your terminal with:
+
+• Modern TUI Interface
+  - Clean, intuitive design with ratatui
+  - Vim-style keyboard navigation
+  - Responsive three-pane layout
+
+• Rich Email Support  
+  - HTML email rendering ✨
+  - Image and animation display
+  - Attachment handling
+
+• Secure Authentication
+  - OAuth2 support for major providers
+  - Multi-account management
+  - Local email storage with Maildir
+
+• Integrated Calendar
+  - CalDAV synchronization
+  - Meeting invitation handling
+  - Desktop environment integration
+
+Getting Started
+
+Use these keyboard shortcuts to navigate:
+
+Navigation:
+  Tab / Shift+Tab  - Switch between panes
+  h/j/k/l          - Vim-style movement
+  ↑/↓              - Move up/down in lists
+  Enter            - Select/expand items
+
+Content Controls:
+  H                - Toggle headers view
+  m                - Switch view modes
+  v                - View attachments
+
+This is just the beginning! We're actively developing new features
+including advanced HTML email rendering, OAuth2 authentication, and
+integrated calendar functionality.
+
+Thank you for trying Comunicado!
+
+Best regards,
+The Comunicado Development Team
+
+---
+This is a sample email showcasing the modern email display format.".to_string();
+
+        // Parse the body content
+        let parsed_content = self.parse_content_lines(&body);
+        let parsed_urls = self.extract_urls(&body);
+
+        let email_content = EmailContent {
+            headers,
+            body,
+            content_type: ContentType::PlainText,
+            attachments: vec![
+                Attachment {
+                    filename: "welcome-guide.pdf".to_string(),
+                    content_type: "application/pdf".to_string(),
+                    size: 2048000, // 2MB
+                    is_inline: false,
+                },
+                Attachment {
+                    filename: "logo.png".to_string(),
+                    content_type: "image/png".to_string(),
+                    size: 45000, // 45KB
+                    is_inline: true,
+                }
+            ],
+            parsed_urls,
+            parsed_content,
+        };
+
+        self.email_content = Some(email_content);
+        self.view_mode = ViewMode::Formatted;
     }
 
     pub fn render(&mut self, frame: &mut Frame, area: Rect, block: Block, is_focused: bool, theme: &Theme) {
@@ -287,22 +318,23 @@ impl ContentPreview {
         if let Some(ref email) = self.email_content {
             let mut all_lines = Vec::new();
             
-            // Add headers if requested
+            // Add modern formatted sender box and subject
             if self.show_headers_expanded {
+                // Show full headers when expanded
                 all_lines.extend(self.render_email_headers(&email.headers, theme));
                 all_lines.push(Line::from("")); // Empty line separator
             } else {
-                // Show compact headers
-                all_lines.push(Line::from(vec![
-                    Span::styled("From: ", Style::default().fg(theme.colors.content_preview.header).add_modifier(Modifier::BOLD)),
-                    Span::styled(email.headers.from.clone(), Style::default().fg(theme.colors.content_preview.body)),
-                ]));
-                all_lines.push(Line::from(vec![
-                    Span::styled("Subject: ", Style::default().fg(theme.colors.content_preview.header).add_modifier(Modifier::BOLD)),
-                    Span::styled(email.headers.subject.clone(), Style::default().fg(theme.colors.content_preview.body)),
-                ]));
+                // Modern compact header with sender box
+                all_lines.extend(self.render_modern_sender_box(&email.headers, theme));
                 all_lines.push(Line::from("")); // Empty line separator
             }
+            
+            // Add body content with better visual separation
+            all_lines.push(Line::from("")); // Extra spacing before body
+            all_lines.push(Line::from(vec![
+                Span::styled("─".repeat(60), Style::default().fg(theme.colors.palette.border).add_modifier(Modifier::DIM)),
+            ]));
+            all_lines.push(Line::from("")); // Spacing after separator
             
             // Add formatted content lines
             for content_line in &email.parsed_content {
@@ -460,6 +492,135 @@ impl ContentPreview {
         }
     }
     
+    /// Render modern sender box with attractive formatting
+    fn render_modern_sender_box(&self, headers: &EmailHeader, theme: &Theme) -> Vec<Line> {
+        let mut lines = Vec::new();
+        
+        // Parse sender name and email
+        let (sender_name, sender_email) = self.parse_sender_info(&headers.from);
+        
+        // Create top border of sender box
+        lines.push(Line::from(vec![
+            Span::styled("┌─", Style::default().fg(theme.colors.palette.border)),
+            Span::styled(" From ", Style::default().fg(theme.colors.palette.accent).add_modifier(Modifier::BOLD)),
+            Span::styled("─".repeat(50), Style::default().fg(theme.colors.palette.border)),
+            Span::styled("┐", Style::default().fg(theme.colors.palette.border)),
+        ]));
+        
+        // Sender name line (larger, bold)
+        if !sender_name.is_empty() {
+            lines.push(Line::from(vec![
+                Span::styled("│ ", Style::default().fg(theme.colors.palette.border)),
+                Span::styled(sender_name.clone(), Style::default()
+                    .fg(theme.colors.palette.accent)
+                    .add_modifier(Modifier::BOLD)),
+                Span::styled(" ".repeat(50usize.saturating_sub(sender_name.len())), Style::default()),
+                Span::styled("│", Style::default().fg(theme.colors.palette.border)),
+            ]));
+        }
+        
+        // Sender email line (smaller, muted)
+        if !sender_email.is_empty() {
+            lines.push(Line::from(vec![
+                Span::styled("│ ", Style::default().fg(theme.colors.palette.border)),
+                Span::styled(format!("<{}>", sender_email), Style::default()
+                    .fg(theme.colors.palette.text_muted)),
+                Span::styled(" ".repeat(50usize.saturating_sub(sender_email.len() + 2)), Style::default()),
+                Span::styled("│", Style::default().fg(theme.colors.palette.border)),
+            ]));
+        }
+        
+        // Date line in sender box  
+        if !headers.date.is_empty() {
+            let formatted_date = self.format_friendly_date(&headers.date);
+            lines.push(Line::from(vec![
+                Span::styled("│ ", Style::default().fg(theme.colors.palette.border)),
+                Span::styled("📅 ", Style::default().fg(theme.colors.palette.info)),
+                Span::styled(formatted_date.clone(), Style::default().fg(theme.colors.content_preview.body)),
+                Span::styled(" ".repeat(50usize.saturating_sub(formatted_date.len() + 2)), Style::default()),
+                Span::styled("│", Style::default().fg(theme.colors.palette.border)),
+            ]));
+        }
+        
+        // Bottom border of sender box
+        lines.push(Line::from(vec![
+            Span::styled("└", Style::default().fg(theme.colors.palette.border)),
+            Span::styled("─".repeat(53), Style::default().fg(theme.colors.palette.border)),
+            Span::styled("┘", Style::default().fg(theme.colors.palette.border)),
+        ]));
+        
+        // Subject line (outside box, prominent)
+        if !headers.subject.is_empty() {
+            lines.push(Line::from("")); // Spacing
+            lines.push(Line::from(vec![
+                Span::styled("📧 ", Style::default().fg(theme.colors.palette.accent)),
+                Span::styled(headers.subject.clone(), Style::default()
+                    .fg(theme.colors.palette.accent)
+                    .add_modifier(Modifier::BOLD | Modifier::UNDERLINED)),
+            ]));
+        }
+        
+        // Add "To" info if there are multiple recipients (collapsed by default)
+        if headers.to.len() > 1 || (!headers.cc.is_empty() && self.show_headers_expanded) {
+            lines.push(Line::from("")); // Spacing
+            lines.push(Line::from(vec![
+                Span::styled("👥 To: ", Style::default()
+                    .fg(theme.colors.palette.text_muted)
+                    .add_modifier(Modifier::ITALIC)),
+                Span::styled(
+                    if headers.to.len() > 1 {
+                        format!("{} and {} others", headers.to.first().unwrap_or(&String::new()), headers.to.len() - 1)
+                    } else {
+                        headers.to.join(", ")
+                    },
+                    Style::default().fg(theme.colors.content_preview.body)
+                ),
+            ]));
+        }
+        
+        // Show instruction for expanding headers
+        if !self.show_headers_expanded {
+            lines.push(Line::from("")); // Spacing
+            lines.push(Line::from(vec![
+                Span::styled("Press 'H' to show all headers", Style::default()
+                    .fg(theme.colors.palette.text_muted)
+                    .add_modifier(Modifier::ITALIC)),
+            ]));
+        }
+        
+        lines
+    }
+    
+    /// Parse sender information from "Name <email>" format
+    fn parse_sender_info(&self, from_str: &str) -> (String, String) {
+        if from_str.contains('<') && from_str.contains('>') {
+            // Format: "Display Name <email@domain.com>"
+            if let Some(email_start) = from_str.find('<') {
+                if let Some(email_end) = from_str.find('>') {
+                    let name = from_str[..email_start].trim().trim_matches('"').to_string();
+                    let email = from_str[email_start + 1..email_end].trim().to_string();
+                    return (name, email);
+                }
+            }
+        }
+        
+        // If no angle brackets, assume it's just an email
+        if from_str.contains('@') {
+            (String::new(), from_str.to_string())
+        } else {
+            // If no @ symbol, assume it's just a name
+            (from_str.to_string(), String::new())
+        }
+    }
+    
+    /// Format date in a more user-friendly way
+    fn format_friendly_date(&self, date_str: &str) -> String {
+        // For now, just return the date string as-is
+        // In a full implementation, we'd parse and format it nicely
+        // e.g., "Today 2:30 PM", "Yesterday 4:15 PM", "March 15, 2024"
+        date_str.to_string()
+    }
+    
     fn render_email_headers(&self, headers: &EmailHeader, theme: &Theme) -> Vec<Line> {
         let mut lines = Vec::new();
         
@@ -546,10 +707,26 @@ impl ContentPreview {
                 Span::styled(content_line.text.clone(), 
                     Style::default().fg(theme.colors.content_preview.link).add_modifier(Modifier::UNDERLINED))
             ]),
-            LineType::Bullet => Line::from(vec![
-                Span::styled(content_line.text.clone(), 
-                    Style::default().fg(theme.colors.palette.success))
-            ]),
+            LineType::Bullet => {
+                // Enhanced bullet point formatting with better icons
+                let text = &content_line.text;
+                if text.trim_start().starts_with("•") || text.trim_start().starts_with("-") || text.trim_start().starts_with("*") {
+                    // Replace basic bullets with styled ones
+                    let indent = text.len() - text.trim_start().len();
+                    let content = text.trim_start().chars().skip(1).collect::<String>().trim_start().to_string();
+                    
+                    Line::from(vec![
+                        Span::styled(" ".repeat(indent), Style::default()),
+                        Span::styled("▸ ", Style::default().fg(theme.colors.palette.accent).add_modifier(Modifier::BOLD)),
+                        Span::styled(content, Style::default().fg(theme.colors.content_preview.body)),
+                    ])
+                } else {
+                    Line::from(vec![
+                        Span::styled(content_line.text.clone(), 
+                            Style::default().fg(theme.colors.palette.success))
+                    ])
+                }
+            },
             LineType::Separator => Line::from(vec![
                 Span::styled(content_line.text.clone(), 
                     Style::default().fg(theme.colors.palette.border))

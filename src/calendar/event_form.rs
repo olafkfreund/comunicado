@@ -508,6 +508,394 @@ impl EventFormUI {
     pub fn is_read_only(&self) -> bool {
         matches!(self.mode, EventFormMode::View(_))
     }
+    
+    /// Handle key input for the event form
+    pub async fn handle_key(&mut self, key: crossterm::event::KeyCode) -> Option<EventFormAction> {
+        use crossterm::event::KeyCode;
+        
+        // Handle popup dialogs first
+        if self.show_date_picker {
+            match key {
+                KeyCode::Esc => {
+                    self.show_date_picker = false;
+                }
+                KeyCode::Enter => {
+                    // Apply selected date
+                    match self.current_field {
+                        EventFormField::StartDate => {
+                            self.start_date = self.date_picker.get_selected_date();
+                        }
+                        EventFormField::EndDate => {
+                            self.end_date = self.date_picker.get_selected_date();
+                        }
+                        _ => {}
+                    }
+                    self.show_date_picker = false;
+                    self.is_modified = true;
+                }
+                KeyCode::Left => self.date_picker.previous_month(),
+                KeyCode::Right => self.date_picker.next_month(),
+                KeyCode::Up => {
+                    if let Some(day) = self.date_picker.selected_day {
+                        if day > 7 {
+                            self.date_picker.select_day(day - 7);
+                        }
+                    }
+                }
+                KeyCode::Down => {
+                    if let Some(day) = self.date_picker.selected_day {
+                        if day <= 24 {
+                            self.date_picker.select_day(day + 7);
+                        }
+                    }
+                }
+                _ => {}
+            }
+            return None;
+        }
+        
+        if self.show_time_picker {
+            match key {
+                KeyCode::Esc => {
+                    self.show_time_picker = false;
+                }
+                KeyCode::Enter => {
+                    // Apply selected time
+                    match self.current_field {
+                        EventFormField::StartTime => {
+                            self.start_time = self.time_picker.get_selected_time();
+                        }
+                        EventFormField::EndTime => {
+                            self.end_time = self.time_picker.get_selected_time();
+                        }
+                        _ => {}
+                    }
+                    self.show_time_picker = false;
+                    self.is_modified = true;
+                }
+                KeyCode::Up => {
+                    if matches!(self.time_picker.editing_field, crate::ui::time_picker::TimeField::Hour) {
+                        self.time_picker.increment_hour();
+                    } else {
+                        self.time_picker.increment_minute();
+                    }
+                }
+                KeyCode::Down => {
+                    if matches!(self.time_picker.editing_field, crate::ui::time_picker::TimeField::Hour) {
+                        self.time_picker.decrement_hour();
+                    } else {
+                        self.time_picker.decrement_minute();
+                    }
+                }
+                KeyCode::Tab => {
+                    self.time_picker.toggle_field();
+                }
+                _ => {}
+            }
+            return None;
+        }
+        
+        // Handle main form input
+        match key {
+            KeyCode::Esc => {
+                if self.is_modified {
+                    // TODO: Show confirmation dialog
+                }
+                return Some(EventFormAction::Cancel);
+            }
+            KeyCode::F(1) => {
+                if !self.is_read_only() {
+                    return Some(EventFormAction::Save);
+                }
+            }
+            KeyCode::F(3) => {
+                if matches!(self.mode, EventFormMode::Edit(_)) {
+                    return Some(EventFormAction::Delete);
+                }
+            }
+            KeyCode::Tab => {
+                self.next_field();
+            }
+            KeyCode::BackTab => {
+                self.previous_field();
+            }
+            KeyCode::Enter => {
+                return self.handle_enter();
+            }
+            KeyCode::Backspace => {
+                self.handle_backspace();
+            }
+            KeyCode::Char(c) => {
+                self.handle_char_input(c);
+            }
+            _ => {}
+        }
+        
+        None
+    }
+    
+    /// Render the event form
+    pub fn render(&mut self, frame: &mut Frame, area: Rect, theme: &crate::theme::Theme) {
+        use ratatui::{
+            layout::{Constraint, Direction, Layout, Margin},
+            style::{Modifier, Style},
+            text::{Line, Span},
+            widgets::{Block, Borders, Clear, Paragraph, Wrap},
+        };
+        
+        // Create main layout
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(3),  // Title
+                Constraint::Min(0),     // Form content
+                Constraint::Length(3),  // Instructions
+            ])
+            .split(area);
+        
+        // Render title
+        let title_text = self.get_form_title();
+        let title = Paragraph::new(title_text)
+            .block(Block::default()
+                .title("Event Form")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(theme.colors.palette.border)))
+            .style(Style::default().fg(theme.colors.palette.accent).add_modifier(Modifier::BOLD))
+            .wrap(Wrap { trim: true });
+        frame.render_widget(title, chunks[0]);
+        
+        // Render form content
+        self.render_form_content(frame, chunks[1], theme);
+        
+        // Render instructions
+        let instructions = if self.is_read_only() {
+            "Press 'e' to edit, 'd' to delete, or Esc to close"
+        } else {
+            "F1: Save | F3: Delete | Tab/Shift+Tab: Navigate | Esc: Cancel"
+        };
+        
+        let instruction_paragraph = Paragraph::new(instructions)
+            .block(Block::default().borders(Borders::ALL))
+            .style(Style::default().fg(theme.colors.palette.text_muted))
+            .wrap(Wrap { trim: true });
+        frame.render_widget(instruction_paragraph, chunks[2]);
+        
+        // Render popups
+        if self.show_date_picker {
+            self.render_date_picker_popup(frame, area, theme);
+        }
+        
+        if self.show_time_picker {
+            self.render_time_picker_popup(frame, area, theme);
+        }
+    }
+    
+    /// Render the main form content
+    fn render_form_content(&self, frame: &mut Frame, area: Rect, theme: &crate::theme::Theme) {
+        use ratatui::{
+            layout::{Constraint, Direction, Layout},
+            style::{Modifier, Style},
+            text::{Line, Span},
+            widgets::{Block, Borders, Paragraph, Wrap},
+        };
+        
+        // Create two-column layout
+        let columns = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+            .split(area);
+        
+        // Left column fields
+        let start_date_str = self.start_date.format("%Y-%m-%d").to_string();
+        let start_time_str = self.start_time.format("%H:%M").to_string();
+        
+        let left_fields = vec![
+            ("Title", self.title_input.as_str(), EventFormField::Title),
+            ("Description", self.description_input.as_str(), EventFormField::Description),
+            ("Location", self.location_input.as_str(), EventFormField::Location),
+            ("Start Date", start_date_str.as_str(), EventFormField::StartDate),
+            ("Start Time", start_time_str.as_str(), EventFormField::StartTime),
+        ];
+        
+        // Right column fields
+        let calendar_name = self.calendars.iter()
+            .find(|c| c.id == self.selected_calendar_id)
+            .map(|c| c.name.as_str())
+            .unwrap_or("Unknown");
+        
+        let status_name = format!("{:?}", self.event_status);
+        let all_day_text = if self.is_all_day { "Yes" } else { "No" };
+        let end_date_str = self.end_date.format("%Y-%m-%d").to_string();
+        let end_time_str = self.end_time.format("%H:%M").to_string();
+        
+        let right_fields = vec![
+            ("End Date", end_date_str.as_str(), EventFormField::EndDate),
+            ("End Time", end_time_str.as_str(), EventFormField::EndTime),
+            ("Calendar", calendar_name, EventFormField::Calendar),
+            ("Status", status_name.as_str(), EventFormField::Status),
+            ("All Day", all_day_text, EventFormField::AllDay),
+        ];
+        
+        // Render left column
+        self.render_field_column(frame, columns[0], &left_fields, theme);
+        
+        // Render right column
+        self.render_field_column(frame, columns[1], &right_fields, theme);
+    }
+    
+    /// Render a column of form fields
+    fn render_field_column(&self, frame: &mut Frame, area: Rect, fields: &[(&str, &str, EventFormField)], theme: &crate::theme::Theme) {
+        use ratatui::{
+            layout::{Constraint, Direction, Layout},
+            style::{Modifier, Style},
+            text::{Line, Span},
+            widgets::{Block, Borders, Paragraph},
+        };
+        
+        let field_height = 3;
+        let constraints: Vec<Constraint> = fields.iter()
+            .map(|_| Constraint::Length(field_height))
+            .collect();
+        
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints(constraints)
+            .split(area);
+        
+        for (i, (label, value, field_type)) in fields.iter().enumerate() {
+            if i < chunks.len() {
+                let is_focused = self.current_field == *field_type;
+                let border_style = if is_focused {
+                    Style::default().fg(theme.colors.palette.accent)
+                } else {
+                    Style::default().fg(theme.colors.palette.border)
+                };
+                
+                let content_style = if is_focused {
+                    Style::default().fg(theme.colors.palette.accent).add_modifier(Modifier::BOLD)
+                } else {
+                    Style::default().fg(theme.colors.content_preview.body)
+                };
+                
+                let block = Block::default()
+                    .title(*label)
+                    .borders(Borders::ALL)
+                    .border_style(border_style);
+                
+                let paragraph = Paragraph::new(*value)
+                    .block(block)
+                    .style(content_style);
+                
+                frame.render_widget(paragraph, chunks[i]);
+            }
+        }
+    }
+    
+    /// Render date picker popup
+    fn render_date_picker_popup(&self, frame: &mut Frame, area: Rect, theme: &crate::theme::Theme) {
+        use ratatui::{
+            layout::{Alignment, Constraint, Direction, Layout, Margin},
+            style::{Modifier, Style},
+            text::{Line, Span},
+            widgets::{Block, Borders, Clear, Paragraph},
+        };
+        
+        // Calculate popup area (centered)
+        let popup_area = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Percentage(30),
+                Constraint::Length(10),
+                Constraint::Percentage(30),
+            ])
+            .split(area)[1];
+        
+        let popup_area = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Percentage(25),
+                Constraint::Percentage(50),
+                Constraint::Percentage(25),
+            ])
+            .split(popup_area)[1];
+        
+        // Clear the area
+        frame.render_widget(Clear, popup_area);
+        
+        // Render date picker content
+        let month_year = self.date_picker.viewing_month.format("%B %Y").to_string();
+        let selected_date = self.date_picker.get_selected_date().format("%Y-%m-%d").to_string();
+        
+        let content = format!(
+            "{}\\n\\nSelected: {}\\n\\nUse arrows to navigate\\nEnter to select, Esc to cancel",
+            month_year, selected_date
+        );
+        
+        let block = Block::default()
+            .title("Select Date")
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(theme.colors.palette.accent));
+        
+        let paragraph = Paragraph::new(content)
+            .block(block)
+            .style(Style::default().fg(theme.colors.content_preview.body))
+            .alignment(Alignment::Center);
+        
+        frame.render_widget(paragraph, popup_area);
+    }
+    
+    /// Render time picker popup
+    fn render_time_picker_popup(&self, frame: &mut Frame, area: Rect, theme: &crate::theme::Theme) {
+        use ratatui::{
+            layout::{Alignment, Constraint, Direction, Layout},
+            style::{Modifier, Style},
+            text::{Line, Span},
+            widgets::{Block, Borders, Clear, Paragraph},
+        };
+        
+        // Calculate popup area (centered)
+        let popup_area = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Percentage(35),
+                Constraint::Length(8),
+                Constraint::Percentage(35),
+            ])
+            .split(area)[1];
+        
+        let popup_area = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Percentage(30),
+                Constraint::Percentage(40),
+                Constraint::Percentage(30),
+            ])
+            .split(popup_area)[1];
+        
+        // Clear the area
+        frame.render_widget(Clear, popup_area);
+        
+        // Render time picker content
+        let time_display = self.time_picker.get_selected_time().format("%H:%M").to_string();
+        let editing_field = if matches!(self.time_picker.editing_field, crate::ui::time_picker::TimeField::Hour) { "hour" } else { "minute" };
+        
+        let content = format!(
+            "{}\\n\\nEditing: {}\\n\\nUse ↑↓ to change\\nTab to switch field\\nEnter to select, Esc to cancel",
+            time_display, editing_field
+        );
+        
+        let block = Block::default()
+            .title("Select Time")
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(theme.colors.palette.accent));
+        
+        let paragraph = Paragraph::new(content)
+            .block(block)
+            .style(Style::default().fg(theme.colors.content_preview.body))
+            .alignment(Alignment::Center);
+        
+        frame.render_widget(paragraph, popup_area);
+    }
 }
 
 /// Date picker component for event forms

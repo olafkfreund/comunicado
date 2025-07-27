@@ -210,12 +210,7 @@ impl UI {
                 // Render event form UI in full screen
                 if let Some(ref mut event_form) = self.event_form_ui {
                     let theme = self.theme_manager.current_theme();
-                    // For now, just render a placeholder - we'll implement full rendering later
-                    let block = ratatui::widgets::Block::default()
-                        .title(event_form.get_form_title())
-                        .borders(ratatui::widgets::Borders::ALL)
-;
-                    frame.render_widget(block, size);
+                    event_form.render(frame, size, theme);
                 }
             }
         }
@@ -1086,6 +1081,64 @@ impl UI {
         } else {
             None
         }
+    }
+    
+    /// Start creating a new event
+    pub fn start_event_create(&mut self, calendars: Vec<crate::calendar::Calendar>, default_calendar_id: Option<String>) {
+        self.event_form_ui = Some(crate::calendar::EventFormUI::new_create(calendars, default_calendar_id));
+        self.mode = UIMode::EventCreate;
+        self.focused_pane = FocusedPane::Calendar;
+        self.update_navigation_hints();
+    }
+    
+    /// Start editing an existing event
+    pub fn start_event_edit(&mut self, event: crate::calendar::Event, calendars: Vec<crate::calendar::Calendar>) {
+        self.event_form_ui = Some(crate::calendar::EventFormUI::new_edit(event, calendars));
+        self.mode = UIMode::EventEdit;
+        self.focused_pane = FocusedPane::Calendar;
+        self.update_navigation_hints();
+    }
+    
+    /// Start viewing an existing event (read-only)
+    pub fn start_event_view(&mut self, event: crate::calendar::Event, calendars: Vec<crate::calendar::Calendar>) {
+        self.event_form_ui = Some(crate::calendar::EventFormUI::new_view(event, calendars));
+        self.mode = UIMode::EventView;
+        self.focused_pane = FocusedPane::Calendar;
+        self.update_navigation_hints();
+    }
+    
+    /// Exit event form and return to calendar view
+    pub fn exit_event_form(&mut self) {
+        self.event_form_ui = None;
+        self.mode = UIMode::Calendar;
+        self.focused_pane = FocusedPane::Calendar;
+        self.update_navigation_hints();
+    }
+    
+    /// Check if currently in event form mode
+    pub fn is_event_form_visible(&self) -> bool {
+        matches!(self.mode, UIMode::EventCreate | UIMode::EventEdit | UIMode::EventView)
+    }
+    
+    /// Handle event form key input
+    pub async fn handle_event_form_key(&mut self, key: crossterm::event::KeyCode) -> Option<crate::calendar::EventFormAction> {
+        let is_visible = self.is_event_form_visible();
+        if is_visible {
+            if let Some(ref mut event_form) = self.event_form_ui {
+                return event_form.handle_key(key).await;
+            }
+        }
+        None
+    }
+    
+    /// Get current event form for external access
+    pub fn event_form_ui(&self) -> Option<&crate::calendar::EventFormUI> {
+        self.event_form_ui.as_ref()
+    }
+    
+    /// Get mutable event form for external access
+    pub fn event_form_ui_mut(&mut self) -> Option<&mut crate::calendar::EventFormUI> {
+        self.event_form_ui.as_mut()
     }
     
     /// Set calendar events to display
