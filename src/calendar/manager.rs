@@ -201,6 +201,30 @@ impl CalendarManager {
             .map_err(|e| CalendarError::DatabaseError(e.to_string()))
     }
     
+    /// Cancel an event by changing its status to Cancelled
+    pub async fn cancel_event(&self, event_id: &str) -> CalendarResult<Event> {
+        // Get the event first
+        let event = self.database
+            .get_event(event_id)
+            .await
+            .map_err(|e| CalendarError::DatabaseError(e.to_string()))?
+            .ok_or_else(|| CalendarError::InvalidData(format!("Event {} not found", event_id)))?;
+        
+        // Update event status to Cancelled
+        let mut cancelled_event = event;
+        cancelled_event.status = EventStatus::Cancelled;
+        cancelled_event.updated_at = Utc::now();
+        cancelled_event.sequence += 1;
+        
+        // Store the updated event
+        self.database
+            .store_event(&cancelled_event)
+            .await
+            .map_err(|e| CalendarError::DatabaseError(e.to_string()))?;
+        
+        Ok(cancelled_event)
+    }
+    
     /// Get events from a calendar within a date range
     pub async fn get_events(
         &self,

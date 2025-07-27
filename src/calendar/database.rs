@@ -446,6 +446,27 @@ impl CalendarDatabase {
         Ok(events)
     }
     
+    /// Get a single event by ID
+    pub async fn get_event(&self, event_id: &str) -> CalendarDatabaseResult<Option<Event>> {
+        let row = sqlx::query(r#"
+            SELECT id, uid, calendar_id, title, description, location,
+                   start_time, end_time, all_day, status, priority,
+                   organizer_email, organizer_name, attendees, recurrence_rule,
+                   reminders, categories, url, created_at, updated_at,
+                   sequence, etag
+            FROM calendar_events
+            WHERE id = ?1
+        "#)
+        .bind(event_id)
+        .fetch_optional(&self.pool)
+        .await?;
+        
+        match row {
+            Some(row) => Ok(Some(self.row_to_event(row)?)),
+            None => Ok(None),
+        }
+    }
+    
     /// Search events with full-text search
     pub async fn search_events(&self, query: &str, limit: Option<u32>) -> CalendarDatabaseResult<Vec<Event>> {
         let limit = limit.unwrap_or(50) as i64;

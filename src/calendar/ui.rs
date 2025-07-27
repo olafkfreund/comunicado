@@ -57,6 +57,7 @@ pub enum CalendarAction {
     CreateEvent,
     EditEvent(String),
     DeleteEvent(String),
+    CancelEvent(String),
     ShowEventDetails(String),
     ToggleCalendar(String), // Calendar ID
     Refresh,
@@ -95,6 +96,11 @@ pub struct CalendarUI {
     
     // Event details
     selected_event: Option<Event>,
+    
+    // Deletion confirmation
+    show_delete_confirmation: bool,
+    event_to_delete: Option<String>, // Event ID to delete
+    delete_confirmation_selected: usize, // 0 = Cancel, 1 = Delete
 }
 
 /// Calendar UI panes for focus management
@@ -130,6 +136,9 @@ impl CalendarUI {
             search_query: String::new(),
             search_results: Vec::new(),
             selected_event: None,
+            show_delete_confirmation: false,
+            event_to_delete: None,
+            delete_confirmation_selected: 0,
         }
     }
     
@@ -166,6 +175,10 @@ impl CalendarUI {
         
         if self.show_calendar_list {
             self.render_calendar_list_overlay(frame, area, theme);
+        }
+        
+        if self.show_delete_confirmation {
+            self.render_delete_confirmation_dialog(frame, area, theme);
         }
     }
     
@@ -967,6 +980,73 @@ impl CalendarUI {
         self.render_calendar_filters(frame, popup_area, theme);
     }
     
+    /// Render delete confirmation dialog
+    fn render_delete_confirmation_dialog(&self, frame: &mut Frame, area: Rect, theme: &Theme) {
+        // Calculate popup area (centered, smaller size for confirmation)
+        let popup_area = self.centered_rect(40, 20, area);
+        
+        // Clear background
+        frame.render_widget(Clear, popup_area);
+        
+        // Get event title for confirmation message
+        let event_title = if let Some(event_id) = &self.event_to_delete {
+            self.get_event_by_id(event_id)
+                .map(|e| e.title.as_str())
+                .unwrap_or("this event")
+        } else {
+            "this event"
+        };
+        
+        // Create confirmation text
+        let confirmation_text = format!("Delete \"{}\"?", event_title);
+        
+        // Create button states
+        let cancel_style = if self.delete_confirmation_selected == 0 {
+            Style::default().fg(theme.colors.palette.accent).add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(theme.colors.palette.text_muted)
+        };
+        
+        let delete_style = if self.delete_confirmation_selected == 1 {
+            Style::default().fg(theme.colors.palette.error).add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(theme.colors.palette.text_muted)
+        };
+        
+        // Create dialog content
+        let dialog_content = vec![
+            Line::from(""),
+            Line::from(vec![
+                Span::styled(confirmation_text, Style::default().fg(theme.colors.palette.text_primary))
+            ]),
+            Line::from(""),
+            Line::from(""),
+            Line::from(vec![
+                Span::styled("  [", Style::default().fg(theme.colors.palette.border)),
+                Span::styled("Cancel", cancel_style),
+                Span::styled("]", Style::default().fg(theme.colors.palette.border)),
+                Span::styled("    [", Style::default().fg(theme.colors.palette.border)),
+                Span::styled("Delete", delete_style),
+                Span::styled("]", Style::default().fg(theme.colors.palette.border)),
+            ]),
+            Line::from(""),
+            Line::from(vec![
+                Span::styled("← → Tab: Navigate  Enter: Confirm  Esc: Cancel", 
+                    Style::default().fg(theme.colors.palette.text_muted).add_modifier(Modifier::ITALIC))
+            ]),
+        ];
+        
+        let dialog_paragraph = Paragraph::new(dialog_content)
+            .block(Block::default()
+                .title("Confirm Deletion")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(theme.colors.palette.error)))
+            .style(Style::default().bg(theme.colors.palette.background))
+            .wrap(Wrap { trim: true });
+        
+        frame.render_widget(dialog_paragraph, popup_area);
+    }
+    
     /// Calculate centered rectangle
     fn centered_rect(&self, percent_x: u16, percent_y: u16, r: Rect) -> Rect {
         let popup_layout = Layout::default()
@@ -1009,6 +1089,11 @@ impl CalendarUI {
     /// Handle keyboard input
     pub async fn handle_key(&mut self, key: crossterm::event::KeyCode) -> Option<CalendarAction> {
         use crossterm::event::KeyCode;
+        
+        // Handle delete confirmation dialog first
+        if self.show_delete_confirmation {
+            return self.handle_delete_confirmation_key(key);
+        }
         
         match key {
             // Global navigation
@@ -1128,7 +1213,18 @@ impl CalendarUI {
             }
             KeyCode::Char('d') => {
                 if let Some(selected_event_id) = self.get_selected_event_id() {
-                    Some(CalendarAction::DeleteEvent(selected_event_id))
+                    // Show confirmation dialog instead of immediately deleting
+                    self.show_delete_confirmation = true;
+                    self.event_to_delete = Some(selected_event_id);
+                    self.delete_confirmation_selected = 0; // Default to "Cancel"
+                    None
+                } else {
+                    None
+                }
+            }
+            KeyCode::Char('x') => {
+                if let Some(selected_event_id) = self.get_selected_event_id() {
+                    Some(CalendarAction::CancelEvent(selected_event_id))
                 } else {
                     None
                 }
@@ -1186,6 +1282,49 @@ impl CalendarUI {
     pub fn navigate_to_today(&mut self) {
         self.current_date = Local::now();
         self.selected_date = Local::now().date_naive();
+    }
+    
+    /// Handle key input for delete confirmation dialog
+    fn handle_delete_confirmation_key(&mut self, key: crossterm::event::KeyCode) -> Option<CalendarAction> {
+        use crossterm::event::KeyCode;
+        
+        match key {
+            KeyCode::Left | KeyCode::Char('h') => {
+                self.delete_confirmation_selected = 0; // Cancel
+                None
+            }
+            KeyCode::Right | KeyCode::Char('l') => {
+                self.delete_confirmation_selected = 1; // Delete
+                None
+            }
+            KeyCode::Tab => {
+                self.delete_confirmation_selected = 1 - self.delete_confirmation_selected; // Toggle
+                None
+            }
+            KeyCode::Enter => {
+                if self.delete_confirmation_selected == 1 {
+                    // User confirmed deletion
+                    if let Some(event_id) = self.event_to_delete.take() {
+                        self.show_delete_confirmation = false;
+                        self.delete_confirmation_selected = 0;
+                        return Some(CalendarAction::DeleteEvent(event_id));
+                    }
+                }
+                // User cancelled or no event to delete
+                self.show_delete_confirmation = false;
+                self.event_to_delete = None;
+                self.delete_confirmation_selected = 0;
+                None
+            }
+            KeyCode::Esc | KeyCode::Char('q') => {
+                // Cancel deletion
+                self.show_delete_confirmation = false;
+                self.event_to_delete = None;
+                self.delete_confirmation_selected = 0;
+                None
+            }
+            _ => None,
+        }
     }
     
     /// Event list navigation
