@@ -1111,13 +1111,13 @@ impl App {
             tracing::info!("Envelope - subject: {:?}, from count: {}", env.subject, env.from.len());
         }
         
-        // Extract subject
+        // Extract and decode subject
         let subject = envelope
             .and_then(|e| e.subject.as_ref())
-            .map(|s| s.clone())
+            .map(|s| crate::mime::decode_mime_header(s))
             .unwrap_or_else(|| "(No Subject)".to_string());
         
-        tracing::info!("Extracted subject: {}", subject);
+        tracing::info!("Extracted and decoded subject: {}", subject);
         
         // Extract sender information
         let (from_addr, from_name) = if let Some(env) = envelope {
@@ -1127,8 +1127,8 @@ impl App {
                     from.mailbox.as_deref().unwrap_or("unknown"),
                     from.host.as_deref().unwrap_or("unknown.com")
                 );
-                let name = from.name.clone();
-                tracing::info!("Extracted from_addr: {}, from_name: {:?}", addr, name);
+                let name = from.name.as_ref().map(|n| crate::mime::decode_mime_header(n));
+                tracing::info!("Extracted and decoded from_addr: {}, from_name: {:?}", addr, name);
                 (addr, name)
             } else {
                 tracing::info!("No from address in envelope");

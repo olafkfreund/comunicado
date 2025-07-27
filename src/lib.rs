@@ -9,6 +9,7 @@ pub mod contacts;
 pub mod smtp;
 pub mod html;
 pub mod images;
+pub mod mime;
 pub mod services;
 pub mod spell;
 
