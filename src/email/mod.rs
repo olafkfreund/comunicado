@@ -1,4 +1,5 @@
 pub mod attachments;
+pub mod attachment_viewer;
 pub mod message;
 pub mod thread;
 pub mod threading_engine;
@@ -17,3 +18,4 @@ pub use sync_engine::{SyncEngine, SyncStrategy, SyncProgress, SyncPhase, Conflic
 pub use notifications::{EmailNotification, EmailNotificationManager, UIEmailUpdater, EmailNotificationHandler};
 pub use filters::{EmailFilter, FilterCondition, FilterField, FilterOperator, FilterAction, FilterResult, FilterEngine, FilterTemplates};
 pub use attachments::{AttachmentType, AttachmentInfo, AttachmentManager};
+pub use attachment_viewer::{AttachmentViewer, ViewerMode, ViewResult};

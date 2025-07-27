@@ -165,6 +165,55 @@ impl ImageManager {
         Ok(encoded)
     }
     
+    /// Load an image from raw bytes data
+    pub async fn load_image_from_bytes(&self, data: &[u8], mime_type: Option<&str>) -> Result<String> {
+        // Create cache key from hash of data
+        use sha2::{Sha256, Digest};
+        let mut hasher = Sha256::new();
+        hasher.update(data);
+        let cache_key = format!("bytes_{:x}", hasher.finalize());
+        
+        // Check cache first
+        {
+            let cache = self.cache.read().await;
+            if let Some(cached) = cache.get(&cache_key) {
+                if let Some(ref encoded) = cached.encoded_data {
+                    return Ok(encoded.clone());
+                }
+            }
+        }
+        
+        // Determine format from MIME type or guess from data
+        let format = if let Some(mime) = mime_type {
+            Self::format_from_mime_type(mime)?
+        } else {
+            image::guess_format(data)?
+        };
+        
+        // Load and process image
+        let img = image::load_from_memory(data)?;
+        
+        // Resize image to fit terminal
+        let resized = self.resize_for_terminal(&img);
+        
+        // Encode for terminal display
+        let encoded = self.encode_for_terminal(&resized, format)?;
+        
+        // Cache the result
+        {
+            let mut cache = self.cache.write().await;
+            cache.insert(cache_key, CachedImage {
+                data: data.to_vec(),
+                format,
+                width: resized.width(),
+                height: resized.height(),
+                encoded_data: Some(encoded.clone()),
+            });
+        }
+        
+        Ok(encoded)
+    }
+    
     /// Generate a placeholder for unsupported images
     pub fn generate_placeholder(&self, alt_text: Option<&str>, width: Option<u32>, height: Option<u32>) -> String {
         let text = alt_text.unwrap_or("Image");

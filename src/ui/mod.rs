@@ -23,7 +23,7 @@ use self::{
     message_list::MessageList,
     content_preview::ContentPreview,
     layout::AppLayout,
-    status_bar::{StatusBar, EmailStatusSegment, CalendarStatusSegment, SystemInfoSegment, NavigationHintsSegment, SyncStatus},
+    status_bar::{StatusBar, EmailStatusSegment, CalendarStatusSegment, SystemInfoSegment, NavigationHintsSegment, SearchStatusSegment, SyncStatus},
     sync_progress::SyncProgressOverlay,
     compose::ComposeUI,
     account_switcher::AccountSwitcher,

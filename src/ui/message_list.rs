@@ -101,6 +101,7 @@ pub enum ViewMode {
 
 pub struct MessageList {
     messages: Vec<MessageItem>,
+    filtered_messages: Vec<MessageItem>,
     threads: Vec<EmailThread>,
     state: ListState,
     view_mode: ViewMode,
@@ -109,12 +110,17 @@ pub struct MessageList {
     database: Option<Arc<EmailDatabase>>,
     current_account: Option<String>,
     current_folder: Option<String>,
+    // Search functionality
+    search_query: String,
+    search_active: bool,
+    search_results_count: usize,
 }
 
 impl MessageList {
     pub fn new() -> Self {
         let mut list = Self {
             messages: Vec::new(),
+            filtered_messages: Vec::new(),
             threads: Vec::new(),
             state: ListState::default(),
             view_mode: ViewMode::List,
@@ -123,6 +129,9 @@ impl MessageList {
             database: None,
             current_account: None,
             current_folder: None,
+            search_query: String::new(),
+            search_active: false,
+            search_results_count: 0,
         };
         
         // Don't initialize with sample messages initially - they will be loaded from database
@@ -199,7 +208,15 @@ impl MessageList {
     pub fn render(&self, frame: &mut Frame, area: Rect, block: Block, _is_focused: bool, theme: &Theme) {
         tracing::debug!("MessageList::render called with {} messages, current_account: {:?}, current_folder: {:?}", 
                        self.messages.len(), self.current_account, self.current_folder);
-        let items: Vec<ListItem> = self.messages
+        
+        // Use filtered messages if search is active, otherwise use all messages
+        let messages_to_display = if self.search_active {
+            &self.filtered_messages
+        } else {
+            &self.messages
+        };
+        
+        let items: Vec<ListItem> = messages_to_display
             .iter()
             .enumerate()
             .map(|(i, message)| {
@@ -302,12 +319,22 @@ impl MessageList {
     }
 
     pub fn handle_up(&mut self) {
+        let message_count = if self.search_active {
+            self.filtered_messages.len()
+        } else {
+            self.messages.len()
+        };
+        
+        if message_count == 0 {
+            return;
+        }
+        
         let selected = match self.state.selected() {
             Some(i) => {
                 if i > 0 {
                     Some(i - 1)
                 } else {
-                    Some(self.messages.len() - 1)
+                    Some(message_count - 1)
                 }
             }
             None => Some(0),
@@ -316,9 +343,19 @@ impl MessageList {
     }
 
     pub fn handle_down(&mut self) {
+        let message_count = if self.search_active {
+            self.filtered_messages.len()
+        } else {
+            self.messages.len()
+        };
+        
+        if message_count == 0 {
+            return;
+        }
+        
         let selected = match self.state.selected() {
             Some(i) => {
-                if i < self.messages.len() - 1 {
+                if i < message_count - 1 {
                     Some(i + 1)
                 } else {
                     Some(0)
@@ -331,7 +368,13 @@ impl MessageList {
 
     pub fn handle_enter(&mut self) {
         if let Some(selected) = self.state.selected() {
-            if let Some(message) = self.messages.get_mut(selected) {
+            let messages_to_modify = if self.search_active {
+                &mut self.filtered_messages
+            } else {
+                &mut self.messages
+            };
+            
+            if let Some(message) = messages_to_modify.get_mut(selected) {
                 // Mark message as read when selected
                 message.is_read = true;
                 // In the future, this will also trigger loading the message content
@@ -340,7 +383,13 @@ impl MessageList {
     }
 
     pub fn selected_message(&self) -> Option<&MessageItem> {
-        self.state.selected().and_then(|i| self.messages.get(i))
+        let messages_to_check = if self.search_active {
+            &self.filtered_messages
+        } else {
+            &self.messages
+        };
+        
+        self.state.selected().and_then(|i| messages_to_check.get(i))
     }
 
     pub fn mark_selected_as_read(&mut self) {
@@ -690,6 +739,111 @@ impl MessageList {
     /// Get the current selection state
     pub fn get_selection_state(&self) -> Option<usize> {
         self.state.selected()
+    }
+    
+    // Search functionality methods
+    
+    /// Start search mode
+    pub fn start_search(&mut self) {
+        self.search_active = true;
+        self.search_query.clear();
+        self.filtered_messages.clear();
+        self.search_results_count = 0;
+        self.state.select(None);
+    }
+    
+    /// End search mode and return to normal view
+    pub fn end_search(&mut self) {
+        self.search_active = false;
+        self.search_query.clear();
+        self.filtered_messages.clear();
+        self.search_results_count = 0;
+        // Reset selection to first message if available
+        if !self.messages.is_empty() {
+            self.state.select(Some(0));
+        } else {
+            self.state.select(None);
+        }
+    }
+    
+    /// Update search query and filter messages
+    pub fn update_search(&mut self, query: String) {
+        self.search_query = query.to_lowercase();
+        self.filter_messages();
+    }
+    
+    /// Get current search query
+    pub fn search_query(&self) -> &str {
+        &self.search_query
+    }
+    
+    /// Check if search is active
+    pub fn is_search_active(&self) -> bool {
+        self.search_active
+    }
+    
+    /// Get search results count
+    pub fn search_results_count(&self) -> usize {
+        self.search_results_count
+    }
+    
+    /// Filter messages based on current search query
+    fn filter_messages(&mut self) {
+        if self.search_query.is_empty() {
+            self.filtered_messages = self.messages.clone();
+        } else {
+            self.filtered_messages = self.messages
+                .iter()
+                .filter(|message| self.message_matches_search(message))
+                .cloned()
+                .collect();
+        }
+        
+        self.search_results_count = self.filtered_messages.len();
+        
+        // Reset selection to first result if available
+        if !self.filtered_messages.is_empty() {
+            self.state.select(Some(0));
+        } else {
+            self.state.select(None);
+        }
+    }
+    
+    /// Check if a message matches the current search query
+    fn message_matches_search(&self, message: &MessageItem) -> bool {
+        if self.search_query.is_empty() {
+            return true;
+        }
+        
+        // Search in subject, sender, and date
+        let search_in = format!("{} {} {}", 
+            message.subject.to_lowercase(),
+            message.sender.to_lowercase(),
+            message.date.to_lowercase()
+        );
+        
+        // Support both simple substring search and space-separated terms
+        let query_terms: Vec<&str> = self.search_query.split_whitespace().collect();
+        
+        if query_terms.is_empty() {
+            return true;
+        }
+        
+        // All terms must match (AND logic)
+        query_terms.iter().all(|term| search_in.contains(term))
+    }
+    
+    /// Get status text for search mode
+    pub fn get_search_status(&self) -> String {
+        if self.search_active {
+            if self.search_query.is_empty() {
+                "Search: (type to search)".to_string()
+            } else {
+                format!("Search: {} ({} results)", self.search_query, self.search_results_count)
+            }
+        } else {
+            String::new()
+        }
     }
 }
 

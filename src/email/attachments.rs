@@ -3,6 +3,7 @@ use std::fs;
 use std::io::Write;
 use uuid::Uuid;
 use crate::email::StoredAttachment;
+use crate::mime::decode_mime_header;
 
 /// Supported attachment types and their handling
 #[derive(Debug, Clone, PartialEq)]
@@ -203,11 +204,11 @@ impl AttachmentInfo {
         // Basic safety check (can be enhanced)
         let is_safe = Self::is_safe_type(&attachment_type, &stored.filename);
         
-        // Create display name
+        // Create display name with MIME header decoding
         let display_name = if stored.filename.is_empty() {
             format!("Attachment.{}", Self::default_extension(&attachment_type))
         } else {
-            stored.filename.clone()
+            decode_mime_header(&stored.filename)
         };
         
         Self {
@@ -392,5 +393,40 @@ mod tests {
         assert_eq!(info.attachment_type, AttachmentType::Pdf);
         assert!(info.is_safe);
         assert_eq!(info.display_name, "test.pdf");
+    }
+
+    #[test]
+    fn test_mime_header_decoding_in_attachment_info() {
+        // Test Gmail encoded filename
+        let stored = StoredAttachment {
+            id: "test_id".to_string(),
+            filename: "=?UTF-8?B?UmVwb3J0X1ExXzIwMjQuZG9jeA==?=".to_string(), // "Report_Q1_2024.docx"
+            content_type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document".to_string(),
+            size: 1024,
+            content_id: None,
+            is_inline: false,
+            data: None,
+            file_path: None,
+        };
+
+        let info = AttachmentInfo::from_stored(stored);
+        
+        // Should decode the MIME header properly
+        assert_eq!(info.display_name, "Report_Q1_2024.docx");
+        
+        // Test another case with ISO-8859-1 encoding
+        let stored2 = StoredAttachment {
+            id: "test_id2".to_string(),
+            filename: "=?ISO-8859-1?Q?caf=E9_menu.pdf?=".to_string(), // "café_menu.pdf"
+            content_type: "application/pdf".to_string(),
+            size: 1024,
+            content_id: None,
+            is_inline: false,
+            data: None,
+            file_path: None,
+        };
+
+        let info2 = AttachmentInfo::from_stored(stored2);
+        assert_eq!(info2.display_name, "café_menu.pdf");
     }
 }

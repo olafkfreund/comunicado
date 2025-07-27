@@ -69,6 +69,14 @@ pub struct NavigationHintsSegment {
     pub available_shortcuts: Vec<(String, String)>, // (key, description)
 }
 
+/// Search status segment showing current search query and results
+#[derive(Debug, Clone)]
+pub struct SearchStatusSegment {
+    pub query: String,
+    pub results_count: usize,
+    pub is_active: bool,
+}
+
 impl StatusSegment for EmailStatusSegment {
     fn content(&self) -> String {
         let sync_indicator = match &self.sync_status {
@@ -170,6 +178,42 @@ impl StatusSegment for NavigationHintsSegment {
     
     fn custom_style(&self, theme: &Theme) -> Option<Style> {
         Some(Style::default().fg(theme.colors.palette.text_muted))
+    }
+}
+
+impl StatusSegment for SearchStatusSegment {
+    fn content(&self) -> String {
+        if self.is_active {
+            if self.query.is_empty() {
+                "Search: (type to search)".to_string()
+            } else {
+                format!("Search: {} ({} results)", self.query, self.results_count)
+            }
+        } else {
+            String::new()
+        }
+    }
+    
+    fn min_width(&self) -> u16 {
+        25
+    }
+    
+    fn priority(&self) -> u8 {
+        95 // Very high priority when active
+    }
+    
+    fn is_visible(&self) -> bool {
+        self.is_active
+    }
+    
+    fn custom_style(&self, theme: &Theme) -> Option<Style> {
+        if self.is_active {
+            Some(Style::default()
+                .fg(theme.colors.palette.text_primary)
+                .add_modifier(Modifier::BOLD))
+        } else {
+            None
+        }
     }
 }
 

@@ -26,7 +26,7 @@ pub struct FilterCondition {
 }
 
 /// Fields that can be filtered on
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum FilterField {
     From,
     To,
@@ -461,6 +461,10 @@ mod tests {
             priority: None,
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
+            last_synced: chrono::Utc::now(),
+            sync_version: 1,
+            is_draft: false,
+            is_deleted: false,
         }
     }
 }

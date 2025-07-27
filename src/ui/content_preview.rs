@@ -6,7 +6,7 @@ use ratatui::{
     Frame,
 };
 use crate::theme::Theme;
-use crate::email::{EmailDatabase, StoredMessage};
+use crate::email::{EmailDatabase, StoredMessage, AttachmentViewer, AttachmentInfo};
 use crate::images::{ImageManager, extract_images_from_html};
 use regex::Regex;
 use std::collections::HashMap;
@@ -97,6 +97,8 @@ pub struct ContentPreview {
     image_manager: ImageManager,
     processed_images: HashMap<String, String>, // URL -> rendered content
     selected_attachment: Option<usize>, // Index of selected attachment
+    attachment_viewer: AttachmentViewer,
+    is_viewing_attachment: bool,
 }
 
 impl ContentPreview {
@@ -119,6 +121,8 @@ impl ContentPreview {
             image_manager: ImageManager::new().unwrap_or_default(),
             processed_images: HashMap::new(),
             selected_attachment: None,
+            attachment_viewer: AttachmentViewer::default(),
+            is_viewing_attachment: false,
         };
         
         // Initialize with sample content
@@ -193,6 +197,12 @@ impl ContentPreview {
     }
 
     pub fn render(&mut self, frame: &mut Frame, area: Rect, block: Block, is_focused: bool, theme: &Theme) {
+        // If we're viewing an attachment, delegate to the attachment viewer
+        if self.is_viewing_attachment {
+            self.attachment_viewer.render(frame, area, block, theme);
+            return;
+        }
+        
         // Update image dimensions based on current area
         self.update_image_dimensions(area);
         
@@ -366,9 +376,9 @@ impl ContentPreview {
                     all_lines.push(attachment_line);
                 }
                 
-                // Add instruction line
+                // Add instruction lines
                 all_lines.push(Line::from(vec![
-                    Span::styled("  Press 's' to save selected attachment", 
+                    Span::styled("  Press 'v' to view selected attachment or 's' to save", 
                         Style::default().fg(theme.colors.content_preview.quote).add_modifier(Modifier::ITALIC))
                 ]));
             }
@@ -594,15 +604,23 @@ impl ContentPreview {
     }
 
     pub fn handle_up(&mut self) {
-        if self.scroll > 0 {
-            self.scroll -= 1;
+        if self.is_viewing_attachment {
+            self.attachment_viewer.scroll_up();
+        } else {
+            if self.scroll > 0 {
+                self.scroll -= 1;
+            }
         }
     }
 
     pub fn handle_down(&mut self) {
-        let max_scroll = self.raw_content.len().saturating_sub(1);
-        if self.scroll < max_scroll {
-            self.scroll += 1;
+        if self.is_viewing_attachment {
+            self.attachment_viewer.scroll_down();
+        } else {
+            let max_scroll = self.raw_content.len().saturating_sub(1);
+            if self.scroll < max_scroll {
+                self.scroll += 1;
+            }
         }
     }
 
@@ -1270,6 +1288,94 @@ impl ContentPreview {
         // This requires integrating with the IMAP client and is beyond the current scope
         
         Err(format!("IMAP attachment downloading not yet implemented for attachment: {}", attachment.filename).into())
+    }
+    
+    /// Open the attachment viewer for the selected attachment
+    pub async fn view_selected_attachment(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        if let Some(attachment) = self.get_selected_attachment() {
+            // Get attachment data
+            let attachment_data = self.get_attachment_data(attachment).await?;
+            
+            // Convert to AttachmentInfo
+            let stored_attachment = self.find_stored_attachment_by_filename(&attachment.filename)?;
+            let attachment_info = AttachmentInfo::from_stored(stored_attachment);
+            
+            // View in attachment viewer
+            let _result = self.attachment_viewer.view_attachment(&attachment_info, &attachment_data).await;
+            self.is_viewing_attachment = true;
+            
+            Ok(())
+        } else {
+            Err("No attachment selected".into())
+        }
+    }
+    
+    /// Close the attachment viewer and return to content view
+    pub fn close_attachment_viewer(&mut self) {
+        self.is_viewing_attachment = false;
+        self.attachment_viewer.clear();
+    }
+    
+    /// Check if we're currently viewing an attachment
+    pub fn is_viewing_attachment(&self) -> bool {
+        self.is_viewing_attachment
+    }
+    
+    /// Handle key input for attachment viewer
+    pub async fn handle_attachment_viewer_key(&mut self, key: char) -> Result<bool, Box<dyn std::error::Error>> {
+        match key {
+            'q' => {
+                self.close_attachment_viewer();
+                Ok(true)
+            }
+            't' => {
+                self.attachment_viewer.switch_to_text_mode().await?;
+                Ok(true)
+            }
+            's' => {
+                if let Some(attachment_info) = self.attachment_viewer.current_attachment() {
+                    let path = self.save_attachment_from_viewer(attachment_info, None).await?;
+                    tracing::info!("Attachment saved to: {:?}", path);
+                }
+                Ok(true)
+            }
+            _ => Ok(false), // Key not handled
+        }
+    }
+    
+    /// Save attachment from the viewer
+    async fn save_attachment_from_viewer(&self, attachment_info: &AttachmentInfo, save_path: Option<std::path::PathBuf>) -> Result<std::path::PathBuf, Box<dyn std::error::Error>> {
+        // Convert AttachmentInfo back to the format expected by save_attachment
+        let attachment = Attachment {
+            filename: attachment_info.display_name.clone(),
+            content_type: attachment_info.stored.content_type.clone(),
+            size: attachment_info.stored.size as usize,
+            is_inline: attachment_info.stored.is_inline,
+        };
+        
+        self.save_attachment(&attachment, save_path).await
+    }
+    
+    /// Find stored attachment by filename
+    fn find_stored_attachment_by_filename(&self, filename: &str) -> Result<crate::email::StoredAttachment, Box<dyn std::error::Error>> {
+        if let (Some(ref database), Some(message_id)) = (&self.database, self.current_message_id) {
+            // This is a simplified approach - in practice we'd need async access to the database
+            // For now, we'll create a basic StoredAttachment from the display data
+            let stored = crate::email::StoredAttachment {
+                id: uuid::Uuid::new_v4().to_string(),
+                filename: filename.to_string(),
+                content_type: "application/octet-stream".to_string(), // Default
+                size: 0,
+                content_id: None,
+                is_inline: false,
+                data: None,
+                file_path: None,
+            };
+            
+            Ok(stored)
+        } else {
+            Err("No database connection or message ID available".into())
+        }
     }
 }
 

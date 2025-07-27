@@ -40,6 +40,51 @@ impl EventHandler {
             return self.handle_start_page_keys(key, ui).await;
         }
         
+        // Handle attachment viewer mode when it's active in content preview
+        if ui.focused_pane() == FocusedPane::ContentPreview && ui.content_preview().is_viewing_attachment() {
+            // Route key handling to attachment viewer
+            match key.code {
+                KeyCode::Esc => {
+                    ui.content_preview_mut().close_attachment_viewer();
+                    return EventResult::Continue;
+                }
+                KeyCode::Up => {
+                    ui.content_preview_mut().handle_up();
+                    return EventResult::Continue;
+                }
+                KeyCode::Down => {
+                    ui.content_preview_mut().handle_down();
+                    return EventResult::Continue;
+                }
+                KeyCode::Char('k') => {
+                    ui.content_preview_mut().handle_up();
+                    return EventResult::Continue;
+                }
+                KeyCode::Char('j') => {
+                    ui.content_preview_mut().handle_down();
+                    return EventResult::Continue;
+                }
+                KeyCode::Home => {
+                    ui.content_preview_mut().scroll_to_top();
+                    return EventResult::Continue;
+                }
+                KeyCode::End => {
+                    ui.content_preview_mut().scroll_to_bottom();
+                    return EventResult::Continue;
+                }
+                KeyCode::Char(c) => {
+                    if let Err(e) = ui.content_preview_mut().handle_attachment_viewer_key(c).await {
+                        tracing::error!("Error handling attachment viewer key: {}", e);
+                    }
+                    return EventResult::Continue;
+                }
+                _ => {
+                    // Other keys are ignored in attachment viewer mode
+                    return EventResult::Continue;
+                }
+            }
+        }
+        
         match key.code {
             // Global quit commands
             KeyCode::Char('q') => {
@@ -56,6 +101,20 @@ impl EventHandler {
             }
             KeyCode::Backspace if ui.focused_pane() == FocusedPane::FolderTree && ui.folder_tree().is_in_search_mode() => {
                 ui.folder_tree_mut().handle_search_backspace();
+                return EventResult::Continue;
+            }
+            
+            // Handle search input mode for message list
+            KeyCode::Char(c) if ui.focused_pane() == FocusedPane::MessageList && ui.message_list().is_search_active() => {
+                let mut current_query = ui.message_list().search_query().to_string();
+                current_query.push(c);
+                ui.message_list_mut().update_search(current_query);
+                return EventResult::Continue;
+            }
+            KeyCode::Backspace if ui.focused_pane() == FocusedPane::MessageList && ui.message_list().is_search_active() => {
+                let mut current_query = ui.message_list().search_query().to_string();
+                current_query.pop();
+                ui.message_list_mut().update_search(current_query);
                 return EventResult::Continue;
             }
             
@@ -171,6 +230,18 @@ impl EventHandler {
                             ui.folder_tree_mut().exit_search_mode(false); // Cancel search
                         } else {
                             ui.folder_tree_mut().handle_escape();
+                        }
+                    }
+                    FocusedPane::MessageList => {
+                        // Check if in search mode first
+                        if ui.message_list().is_search_active() {
+                            ui.message_list_mut().end_search(); // Cancel search
+                        }
+                    }
+                    FocusedPane::ContentPreview => {
+                        // Close attachment viewer if open
+                        if ui.content_preview().is_viewing_attachment() {
+                            ui.content_preview_mut().close_attachment_viewer();
                         }
                     }
                     _ => {}
@@ -305,6 +376,19 @@ impl EventHandler {
                     _ => {}
                 }
             }
+            KeyCode::Char('v') => {
+                // View selected attachment
+                if let FocusedPane::ContentPreview = ui.focused_pane() {
+                    if ui.content_preview().has_attachments() {
+                        if let Some(_attachment) = ui.content_preview().get_selected_attachment() {
+                            // Open attachment viewer
+                            if let Err(e) = ui.content_preview_mut().view_selected_attachment().await {
+                                tracing::error!("Failed to view attachment: {}", e);
+                            }
+                        }
+                    }
+                }
+            }
             KeyCode::Char('r') if !key.modifiers.contains(KeyModifiers::CONTROL) => {
                 // Sort by sender (only when Ctrl is not pressed)
                 if let FocusedPane::MessageList = ui.focused_pane() {
@@ -317,6 +401,16 @@ impl EventHandler {
                 if let FocusedPane::MessageList = ui.focused_pane() {
                     use crate::email::{SortCriteria, SortOrder};
                     ui.message_list_mut().set_sort_criteria(SortCriteria::Subject(SortOrder::Ascending));
+                }
+            }
+            
+            // Search functionality
+            KeyCode::Char('/') => {
+                // Enter message search mode
+                if let FocusedPane::MessageList = ui.focused_pane() {
+                    if !ui.message_list().is_search_active() {
+                        ui.message_list_mut().start_search();
+                    }
                 }
             }
             
@@ -360,17 +454,9 @@ impl EventHandler {
                     }
                 }
             }
-            KeyCode::Char('/') => {
-                // Start folder search (alternative key)
-                if let FocusedPane::FolderTree = ui.focused_pane() {
-                    if !ui.folder_tree().is_in_search_mode() {
-                        ui.folder_tree_mut().enter_search_mode();
-                    }
-                }
-            }
             
             // Content preview controls (when content preview is focused)
-            KeyCode::Char('v') => {
+            KeyCode::Char('m') => {
                 // Toggle view mode (Raw, Formatted, Headers)
                 if let FocusedPane::ContentPreview = ui.focused_pane() {
                     ui.content_preview_mut().toggle_view_mode();
