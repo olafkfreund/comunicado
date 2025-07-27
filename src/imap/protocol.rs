@@ -234,6 +234,34 @@ impl ImapProtocol {
             }
         }
         
+        // Parse BODY[] (message body content)
+        if line.contains("BODY[] ") {
+            tracing::debug!("Found BODY[] in line: {}", line);
+            if let Some(start) = line.find("BODY[] ") {
+                let body_start = start + 7; // Skip "BODY[] "
+                // Look for literal size indicator {size}
+                if let Some(brace_start) = line[body_start..].find('{') {
+                    if let Some(brace_end) = line[body_start + brace_start..].find('}') {
+                        let size_str = &line[body_start + brace_start + 1..body_start + brace_start + brace_end];
+                        if let Ok(_size) = size_str.parse::<u32>() {
+                            tracing::debug!("Found body size: {}", _size);
+                            // The body content is expected to follow in subsequent lines
+                            // For now, we'll mark that we found a body indicator
+                            // The actual body content parsing will need to be handled in the calling function
+                            // since it spans multiple lines
+                        }
+                    }
+                } else {
+                    // Handle case where body content is on the same line (for small messages)
+                    let body_content = &line[body_start..];
+                    if !body_content.trim().is_empty() {
+                        message.body = Some(body_content.to_string());
+                        tracing::debug!("Parsed inline body content, length: {}", body_content.len());
+                    }
+                }
+            }
+        }
+        
         // TODO: Parse BODYSTRUCTURE and other FETCH items
         
         Ok(())

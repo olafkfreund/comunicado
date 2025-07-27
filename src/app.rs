@@ -535,6 +535,9 @@ impl App {
             // Fetch recent messages (limit to 50 for now)
             let message_count = std::cmp::min(folder.exists.unwrap_or(0) as usize, 50);
             
+            tracing::info!("Folder {} has {} messages, will fetch {} messages", 
+                         folder_name, folder.exists.unwrap_or(0), message_count);
+            
             if message_count > 0 {
                 let sequence_set = format!("1:{}", message_count);
                 let fetch_items = vec!["UID", "FLAGS", "ENVELOPE", "BODY.PEEK[]", "BODYSTRUCTURE"];

@@ -256,7 +256,10 @@ impl ImapClient {
         }
         
         let command = ImapProtocol::format_uid_fetch(uid_set, items);
+        tracing::debug!("Sending UID FETCH command: {}", command);
         let response = self.connection.send_command(&command).await?;
+        tracing::debug!("UID FETCH response length: {} chars", response.len());
+        tracing::debug!("UID FETCH response first 500 chars: {}", &response[..response.len().min(500)]);
         ImapProtocol::parse_fetch_response(&response)
     }
     
