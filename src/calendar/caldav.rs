@@ -3,6 +3,8 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use url::Url;
 use chrono::{DateTime, Utc};
+use crate::calendar::event::{Event, EventStatus, EventPriority};
+use std::collections::HashMap;
 
 /// CalDAV client errors
 #[derive(Error, Debug)]
@@ -209,6 +211,188 @@ impl CalDAVClient {
             .unwrap_or("");
             
         Ok(dav_header.contains("calendar-access"))
+    }
+    
+    /// Get calendar change tag (CTag) for synchronization
+    pub async fn get_calendar_ctag(&self, calendar_url: &str) -> CalDAVResult<Option<String>> {
+        let propfind_body = r#"<?xml version="1.0" encoding="utf-8" ?>
+<D:propfind xmlns:D="DAV:">
+  <D:prop>
+    <D:getctag />
+  </D:prop>
+</D:propfind>"#;
+
+        let response = self.send_request(
+            Method::from_bytes(b"PROPFIND").map_err(|e| CalDAVError::ServerError { 
+                status: 400, 
+                message: format!("Invalid HTTP method: {}", e) 
+            })?,
+            calendar_url,
+            Some(propfind_body),
+            vec![("Depth", "0"), ("Content-Type", "application/xml; charset=utf-8")],
+        ).await?;
+
+        let text = response.text().await?;
+        
+        // Extract CTag from XML response
+        let ctag = if let Some(start) = text.find("<D:getctag>") {
+            if let Some(end) = text[start..].find("</D:getctag>") {
+                let ctag_value = &text[start + 11..start + end];
+                Some(ctag_value.trim().to_string())
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+        
+        Ok(ctag)
+    }
+    
+    /// Get list of event URLs and ETags for synchronization
+    pub async fn get_event_list(&self, calendar_url: &str) -> CalDAVResult<HashMap<String, String>> {
+        let propfind_body = r#"<?xml version="1.0" encoding="utf-8" ?>
+<D:propfind xmlns:D="DAV:">
+  <D:prop>
+    <D:getetag />
+  </D:prop>
+</D:propfind>"#;
+
+        let response = self.send_request(
+            Method::from_bytes(b"PROPFIND").map_err(|e| CalDAVError::ServerError { 
+                status: 400, 
+                message: format!("Invalid HTTP method: {}", e) 
+            })?,
+            calendar_url,
+            Some(propfind_body),
+            vec![("Depth", "1"), ("Content-Type", "application/xml; charset=utf-8")],
+        ).await?;
+
+        let text = response.text().await?;
+        
+        // Parse response to extract URL/ETag pairs
+        let mut event_list = HashMap::new();
+        
+        // Simple XML parsing - in production, use proper XML parser
+        let responses: Vec<&str> = text.split("<D:response>").collect();
+        for response_text in responses.iter().skip(1) { // Skip first empty element
+            if let Some(href_start) = response_text.find("<D:href>") {
+                if let Some(href_end) = response_text[href_start..].find("</D:href>") {
+                    let href = &response_text[href_start + 8..href_start + href_end];
+                    
+                    if let Some(etag_start) = response_text.find("<D:getetag>") {
+                        if let Some(etag_end) = response_text[etag_start..].find("</D:getetag>") {
+                            let etag = &response_text[etag_start + 11..etag_start + etag_end];
+                            event_list.insert(href.trim().to_string(), etag.trim().to_string());
+                        }
+                    }
+                }
+            }
+        }
+        
+        Ok(event_list)
+    }
+    
+    /// Parse simple iCalendar data into Event structure
+    pub fn parse_icalendar_to_event(&self, icalendar_data: &str, calendar_id: String) -> CalDAVResult<Event> {
+        // Simple iCalendar parser - would use a proper library in production
+        let mut uid = String::new();
+        let mut title = "Untitled Event".to_string();
+        let mut description = None;
+        let mut location = None;
+        let mut start_time = Utc::now();
+        let mut end_time = Utc::now() + chrono::Duration::hours(1);
+        let mut status = EventStatus::Confirmed;
+        
+        let lines: Vec<&str> = icalendar_data.lines().collect();
+        let mut in_vevent = false;
+        
+        for line in lines {
+            let line = line.trim();
+            
+            if line == "BEGIN:VEVENT" {
+                in_vevent = true;
+                continue;
+            }
+            
+            if line == "END:VEVENT" {
+                in_vevent = false;
+                break;
+            }
+            
+            if !in_vevent {
+                continue;
+            }
+            
+            if line.starts_with("UID:") {
+                uid = line.strip_prefix("UID:").unwrap_or("").to_string();
+            } else if line.starts_with("SUMMARY:") {
+                title = line.strip_prefix("SUMMARY:").unwrap_or("Untitled Event").to_string();
+            } else if line.starts_with("DESCRIPTION:") {
+                description = Some(line.strip_prefix("DESCRIPTION:").unwrap_or("").to_string());
+            } else if line.starts_with("LOCATION:") {
+                location = Some(line.strip_prefix("LOCATION:").unwrap_or("").to_string());
+            } else if line.starts_with("DTSTART:") {
+                if let Some(datetime_str) = line.strip_prefix("DTSTART:") {
+                    if let Ok(dt) = DateTime::parse_from_str(datetime_str, "%Y%m%dT%H%M%SZ") {
+                        start_time = dt.with_timezone(&Utc);
+                    }
+                }
+            } else if line.starts_with("DTEND:") {
+                if let Some(datetime_str) = line.strip_prefix("DTEND:") {
+                    if let Ok(dt) = DateTime::parse_from_str(datetime_str, "%Y%m%dT%H%M%SZ") {
+                        end_time = dt.with_timezone(&Utc);
+                    }
+                }
+            } else if line.starts_with("STATUS:") {
+                if let Some(status_str) = line.strip_prefix("STATUS:") {
+                    status = match status_str.to_uppercase().as_str() {
+                        "TENTATIVE" => EventStatus::Tentative,
+                        "CONFIRMED" => EventStatus::Confirmed,
+                        "CANCELLED" => EventStatus::Cancelled,
+                        _ => EventStatus::Confirmed,
+                    };
+                }
+            }
+        }
+        
+        if uid.is_empty() {
+            uid = uuid::Uuid::new_v4().to_string();
+        }
+        
+        let mut event = Event::new(calendar_id, title, start_time, end_time);
+        event.uid = uid;
+        event.description = description;
+        event.location = location;
+        event.status = status;
+        event.priority = EventPriority::Normal;
+        
+        Ok(event)
+    }
+    
+    /// Get a specific event by URL
+    pub async fn get_event(&self, event_url: &str) -> CalDAVResult<CalDAVEvent> {
+        let response = self.send_request(
+            Method::GET,
+            event_url,
+            None,
+            vec![],
+        ).await?;
+
+        let etag = response.headers()
+            .get("etag")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("")
+            .to_string();
+            
+        let icalendar_data = response.text().await?;
+        
+        Ok(CalDAVEvent {
+            url: event_url.to_string(),
+            etag,
+            icalendar_data,
+            last_modified: Some(Utc::now()), // Would parse from response headers
+        })
     }
     
     /// Send HTTP request with authentication

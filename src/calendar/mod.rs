@@ -1,6 +1,7 @@
 pub mod caldav;
 pub mod database;
 pub mod event;
+pub mod google;
 pub mod invitation;
 pub mod invitation_manager;
 pub mod manager;
@@ -11,6 +12,7 @@ pub mod event_form;
 pub use caldav::{CalDAVClient, CalDAVError, CalDAVResult, CalDAVConfig};
 pub use database::{CalendarDatabase, CalendarEvent, CalendarEventAttendee, CalendarEventRecurrence};
 pub use event::{Event, EventStatus, EventPriority, EventRecurrence, EventReminder};
+pub use google::{GoogleCalendarClient, GoogleCalendar, GoogleEvent, GoogleEventList};
 pub use manager::CalendarManager;
 pub use sync::{CalendarSyncEngine, CalendarSyncProgress};
 pub use ui::{CalendarUI, CalendarAction, CalendarViewMode};

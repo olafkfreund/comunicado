@@ -5,7 +5,7 @@ use std::collections::HashMap;
 
 use crate::calendar::{
     CalendarError, CalendarResult, Calendar, CalendarSource, CalendarStats,
-    CalDAVClient, CalDAVConfig,
+    CalDAVClient, CalDAVConfig, GoogleCalendarClient,
 };
 use crate::calendar::database::CalendarDatabase;
 use crate::calendar::event::{Event, EventStatus, EventAttendee, AttendeeStatus};
@@ -14,9 +14,9 @@ use crate::oauth2::token::TokenManager;
 /// Calendar manager for coordinating all calendar operations
 pub struct CalendarManager {
     database: Arc<CalendarDatabase>,
-    #[allow(dead_code)]
     token_manager: Arc<TokenManager>,
     caldav_clients: RwLock<HashMap<String, Arc<CalDAVClient>>>,
+    google_client: Arc<GoogleCalendarClient>,
     calendars: RwLock<HashMap<String, Calendar>>,
 }
 
@@ -26,10 +26,13 @@ impl CalendarManager {
         database: Arc<CalendarDatabase>,
         token_manager: Arc<TokenManager>,
     ) -> CalendarResult<Self> {
+        let google_client = Arc::new(GoogleCalendarClient::new((*token_manager).clone()));
+        
         let manager = Self {
             database,
             token_manager,
             caldav_clients: RwLock::new(HashMap::new()),
+            google_client,
             calendars: RwLock::new(HashMap::new()),
         };
         
@@ -404,9 +407,8 @@ impl CalendarManager {
                 CalendarSource::CalDAV { account_id, calendar_url } => {
                     self.sync_caldav_calendar(account_id, calendar_url, &calendar.id).await?;
                 }
-                CalendarSource::Google { account_id: _, calendar_id } => {
-                    // TODO: Implement Google Calendar sync
-                    tracing::info!("Google Calendar sync not yet implemented for {}", calendar_id);
+                CalendarSource::Google { account_id, calendar_id } => {
+                    self.sync_google_calendar(account_id, calendar_id, &calendar.id).await?;
                 }
                 CalendarSource::Outlook { account_id: _, calendar_id } => {
                     // TODO: Implement Outlook Calendar sync
@@ -421,7 +423,7 @@ impl CalendarManager {
         Ok(())
     }
     
-    /// Sync a specific CalDAV calendar
+    /// Sync a specific CalDAV calendar with bidirectional synchronization
     async fn sync_caldav_calendar(
         &self,
         account_id: &str,
@@ -431,33 +433,146 @@ impl CalendarManager {
         let clients = self.caldav_clients.read().await;
         
         if let Some(client) = clients.get(account_id) {
-            // Get events from CalDAV server
-            let query = crate::calendar::caldav::CalDAVQuery::default();
-            let caldav_events = client.get_events(calendar_url, &query).await?;
+            tracing::debug!("Starting CalDAV sync for account {} calendar {}", account_id, calendar_url);
             
-            let events_count = caldav_events.len();
+            // Step 1: Get remote event list with ETags
+            let remote_events = match client.get_event_list(calendar_url).await {
+                Ok(events) => events,
+                Err(e) => {
+                    tracing::error!("Failed to get CalDAV event list: {}", e);
+                    return Err(CalendarError::SyncError(format!("Failed to get remote events: {}", e)));
+                }
+            };
             
-            // Convert and store events
-            for caldav_event in &caldav_events {
-                // Parse iCalendar data (simplified - would need full iCal parser)
-                let mut event = Event::new(
-                    local_calendar_id.to_string(),
-                    "Synced Event".to_string(), // Would parse from iCal
-                    Utc::now(),
-                    Utc::now() + Duration::hours(1),
-                );
+            // Step 2: Get local events for this calendar
+            let local_events = self.database
+                .get_events(local_calendar_id, None, None)
+                .await
+                .map_err(|e| CalendarError::DatabaseError(e.to_string()))?;
+            
+            let mut events_synced = 0;
+            let mut events_updated = 0;
+            let mut events_created = 0;
+            
+            // Step 3: Download new or modified events from server
+            for (event_url, remote_etag) in &remote_events {
+                // Check if we have this event locally and if it needs updating
+                let needs_update = if let Some(local_event) = local_events.iter().find(|e| {
+                    e.url.as_ref().map(|url| url == event_url).unwrap_or(false)
+                }) {
+                    // Compare ETags to see if event was modified
+                    local_event.etag.as_ref().map(|etag| etag != remote_etag).unwrap_or(true)
+                } else {
+                    // Event doesn't exist locally
+                    true
+                };
                 
-                event.uid = caldav_event.url.clone(); // Use URL as UID for now
-                event.etag = Some(caldav_event.etag.clone());
-                
-                // Store in database
-                self.database
-                    .store_event(&event)
-                    .await
-                    .map_err(|e| CalendarError::DatabaseError(e.to_string()))?;
+                if needs_update {
+                    match client.get_event(event_url).await {
+                        Ok(caldav_event) => {
+                            // Parse iCalendar data into Event structure
+                            match client.parse_icalendar_to_event(&caldav_event.icalendar_data, local_calendar_id.to_string()) {
+                                Ok(mut event) => {
+                                    // Set CalDAV-specific metadata
+                                    event.url = Some(event_url.clone());
+                                    event.etag = Some(caldav_event.etag);
+                                    
+                                    // Check if this is an update or new event
+                                    let is_update = local_events.iter().any(|e| e.uid == event.uid);
+                                    
+                                    // Store in database
+                                    match self.database.store_event(&event).await {
+                                        Ok(_) => {
+                                            if is_update {
+                                                events_updated += 1;
+                                                tracing::debug!("Updated CalDAV event: {}", event.title);
+                                            } else {
+                                                events_created += 1;
+                                                tracing::debug!("Created CalDAV event: {}", event.title);
+                                            }
+                                            events_synced += 1;
+                                        }
+                                        Err(e) => {
+                                            tracing::error!("Failed to store CalDAV event {}: {}", event.title, e);
+                                        }
+                                    }
+                                }
+                                Err(e) => {
+                                    tracing::error!("Failed to parse iCalendar data from {}: {}", event_url, e);
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            tracing::error!("Failed to get CalDAV event from {}: {}", event_url, e);
+                        }
+                    }
+                }
             }
             
-            tracing::info!("Synced {} events from CalDAV calendar {}", events_count, calendar_url);
+            // Step 4: Upload local changes to server (simplified for now)
+            // In a full implementation, we would:
+            // - Track local modifications since last sync
+            // - Upload new local events to server
+            // - Update modified local events on server
+            // - Handle conflict resolution
+            
+            for local_event in &local_events {
+                // Check if this is a local-only event that needs to be uploaded
+                if local_event.url.is_none() && !local_event.uid.is_empty() {
+                    // This is a local event that should be uploaded to the server
+                    let event_url = format!("{}/{}.ics", calendar_url.trim_end_matches('/'), local_event.uid);
+                    let icalendar_data = local_event.to_icalendar();
+                    
+                    match client.put_event(&event_url, &icalendar_data, None).await {
+                        Ok(new_etag) => {
+                            // Update local event with server URL and ETag
+                            let mut updated_event = local_event.clone();
+                            updated_event.url = Some(event_url);
+                            updated_event.etag = Some(new_etag);
+                            
+                            match self.database.store_event(&updated_event).await {
+                                Ok(_) => {
+                                    tracing::debug!("Uploaded local event to CalDAV: {}", local_event.title);
+                                }
+                                Err(e) => {
+                                    tracing::error!("Failed to update local event after upload: {}", e);
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            tracing::error!("Failed to upload local event {}: {}", local_event.title, e);
+                        }
+                    }
+                }
+            }
+            
+            // Step 5: Handle deletions (events that exist locally but not on server)
+            let mut events_deleted = 0;
+            for local_event in &local_events {
+                if let Some(url) = &local_event.url {
+                    if !remote_events.contains_key(url) {
+                        // Event was deleted on server, remove locally
+                        match self.database.delete_event(&local_event.id).await {
+                            Ok(deleted) => {
+                                if deleted {
+                                    events_deleted += 1;
+                                    tracing::debug!("Deleted local event removed from server: {}", local_event.title);
+                                }
+                            }
+                            Err(e) => {
+                                tracing::error!("Failed to delete local event {}: {}", local_event.title, e);
+                            }
+                        }
+                    }
+                }
+            }
+            
+            tracing::info!(
+                "CalDAV sync completed for {}: {} events synced ({} created, {} updated, {} deleted)", 
+                calendar_url, events_synced, events_created, events_updated, events_deleted
+            );
+        } else {
+            return Err(CalendarError::SyncError(format!("CalDAV client not found for account: {}", account_id)));
         }
         
         Ok(())
@@ -522,6 +637,70 @@ impl CalendarManager {
         } else {
             Err(CalendarError::InvalidData("No calendars available".to_string()))
         }
+    }
+    
+    /// Sync a specific Google Calendar
+    async fn sync_google_calendar(
+        &self,
+        account_id: &str,
+        calendar_id: &str,
+        local_calendar_id: &str,
+    ) -> CalendarResult<()> {
+        tracing::debug!("Starting Google Calendar sync for account {} calendar {}", account_id, calendar_id);
+        
+        // Get current time for syncing recent events
+        let now = Utc::now();
+        let time_min = Some(now - Duration::days(30)); // Sync events from 30 days ago
+        let time_max = Some(now + Duration::days(365)); // Sync events up to 1 year ahead
+        
+        // Fetch events from Google Calendar API
+        let google_events_result = self.google_client
+            .list_events(account_id, calendar_id, time_min, time_max, None)
+            .await?;
+        
+        let events_count = google_events_result.items.len();
+        tracing::info!("Fetched {} events from Google Calendar {}", events_count, calendar_id);
+        
+        // Convert Google events to our internal Event structure and store them
+        for google_event in google_events_result.items {
+            // Convert Google event to our internal format
+            let mut event: Event = google_event.into();
+            event.calendar_id = local_calendar_id.to_string();
+            
+            // Check if event already exists in database by ID
+            match self.database.get_event(&event.id).await {
+                Ok(Some(existing_event)) => {
+                    // Update existing event if it has been modified
+                    if existing_event.updated_at < event.updated_at {
+                        match self.database.store_event(&event).await {
+                            Ok(_) => {
+                                tracing::debug!("Updated existing Google Calendar event: {}", event.id);
+                            }
+                            Err(e) => {
+                                tracing::error!("Failed to update Google Calendar event {}: {}", event.id, e);
+                            }
+                        }
+                    }
+                }
+                Ok(None) => {
+                    // Create new event
+                    match self.database.store_event(&event).await {
+                        Ok(_) => {
+                            tracing::debug!("Created new Google Calendar event: {}", event.id);
+                        }
+                        Err(e) => {
+                            tracing::error!("Failed to create Google Calendar event {}: {}", event.id, e);
+                        }
+                    }
+                }
+                Err(e) => {
+                    tracing::error!("Failed to query existing Google Calendar event {}: {}", event.id, e);
+                }
+            }
+        }
+        
+        tracing::info!("Google Calendar sync completed for {} - processed {} events", calendar_id, events_count);
+        Ok(())
     }
 }
 

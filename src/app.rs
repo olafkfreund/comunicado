@@ -39,6 +39,10 @@ pub struct App {
     // Auto-sync functionality
     last_auto_sync: Instant,
     auto_sync_interval: Duration,
+    // Deferred initialization
+    deferred_initialization: bool,
+    initialization_complete: bool,
+    initialization_in_progress: bool,
 }
 
 impl App {
@@ -60,6 +64,10 @@ impl App {
             // Initialize auto-sync with 3 minute interval
             last_auto_sync: Instant::now(),
             auto_sync_interval: Duration::from_secs(3 * 60), // 3 minutes
+            // Deferred initialization
+            deferred_initialization: false,
+            initialization_complete: false,
+            initialization_in_progress: false,
         })
     }
     
@@ -102,6 +110,108 @@ impl App {
     /// Get database reference for maintenance operations
     pub fn get_database(&self) -> Option<&Arc<EmailDatabase>> {
         self.database.as_ref()
+    }
+    
+    /// Set deferred initialization flag
+    pub fn set_deferred_initialization(&mut self, enabled: bool) {
+        self.deferred_initialization = enabled;
+    }
+    
+    /// Check if initialization is complete
+    pub fn is_initialization_complete(&self) -> bool {
+        self.initialization_complete
+    }
+    
+    /// Perform deferred initialization in the background
+    pub async fn perform_deferred_initialization(&mut self) -> Result<()> {
+        if self.initialization_in_progress || self.initialization_complete {
+            return Ok(());
+        }
+        
+        self.initialization_in_progress = true;
+        tracing::info!("Starting deferred initialization...");
+        
+        // Show loading message in logs
+        tracing::info!("Initializing services...");
+        
+        // Initialize IMAP account manager
+        tracing::info!("Initializing IMAP account manager...");
+        match tokio::time::timeout(
+            std::time::Duration::from_secs(30),
+            self.initialize_imap_manager()
+        ).await {
+            Ok(Ok(())) => {
+                tracing::info!("IMAP account manager initialized successfully");
+            }
+            Ok(Err(e)) => {
+                tracing::error!("Failed to initialize IMAP account manager: {}", e);
+                // Continue with other initialization
+            }
+            Err(_) => {
+                tracing::error!("IMAP account manager initialization timed out after 30 seconds");
+                // Continue with other initialization 
+            }
+        }
+        
+        // Check for existing accounts and run setup wizard if needed
+        tracing::info!("Checking accounts and setup...");
+        match tokio::time::timeout(
+            std::time::Duration::from_secs(20),
+            self.check_accounts_and_setup()
+        ).await {
+            Ok(Ok(())) => {
+                tracing::info!("Account check and setup completed");
+            }
+            Ok(Err(e)) => {
+                tracing::error!("Failed to check accounts and setup: {}", e);
+            }
+            Err(_) => {
+                tracing::error!("Account check and setup timed out after 20 seconds");
+            }
+        }
+        
+        // Initialize SMTP service and contacts manager
+        tracing::info!("Initializing services...");
+        match tokio::time::timeout(
+            std::time::Duration::from_secs(15),
+            self.initialize_services()
+        ).await {
+            Ok(Ok(())) => {
+                tracing::info!("Services initialized successfully");
+            }
+            Ok(Err(e)) => {
+                tracing::error!("Failed to initialize services: {}", e);
+            }
+            Err(_) => {
+                tracing::error!("Service initialization timed out after 15 seconds");
+            }
+        }
+        
+        // Initialize dashboard services for start page
+        tracing::info!("Initializing dashboard services...");
+        match tokio::time::timeout(
+            std::time::Duration::from_secs(10),
+            self.initialize_dashboard_services()
+        ).await {
+            Ok(Ok(())) => {
+                tracing::info!("Dashboard services initialized successfully");
+            }
+            Ok(Err(e)) => {
+                tracing::error!("Failed to initialize dashboard services: {}", e);
+            }
+            Err(_) => {
+                tracing::error!("Dashboard service initialization timed out after 10 seconds");
+            }
+        }
+        
+        self.initialization_complete = true;
+        self.initialization_in_progress = false;
+        tracing::info!("Deferred initialization completed");
+        
+        // Log ready state
+        tracing::info!("All services ready");
+        
+        Ok(())
     }
     
     /// Initialize dashboard services for start page
@@ -924,8 +1034,20 @@ impl App {
         let mut last_tick = Instant::now();
         let tick_rate = Duration::from_millis(50);
         let mut previous_selection: Option<usize> = None;
+        let mut initialization_started = false;
 
         loop {
+            // Start deferred initialization on first loop iteration (synchronously but with short timeouts)
+            if self.deferred_initialization && !initialization_started && !self.initialization_in_progress {
+                initialization_started = true;
+                tracing::info!("Starting deferred initialization in main loop...");
+                
+                // Initialize with very short timeouts to prevent hanging
+                if let Err(e) = self.perform_deferred_initialization().await {
+                    tracing::error!("Deferred initialization failed: {}", e);
+                    // Continue running UI even if initialization fails
+                }
+            }
             // Check for auto-sync (every 3 minutes)
             if self.last_auto_sync.elapsed() >= self.auto_sync_interval {
                 self.perform_auto_sync().await;
