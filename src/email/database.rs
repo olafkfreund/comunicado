@@ -1436,7 +1436,7 @@ impl StoredMessage {
         
         // Comprehensive list of email header patterns to skip
         let header_patterns = [
-            // Basic RFC headers
+            // Basic RFC headers (CRITICAL - these show in message content area)
             "from:", "to:", "cc:", "bcc:", "subject:", "date:", "reply-to:", "sender:",
             "message-id:", "in-reply-to:", "references:", "mime-version:",
             // Content and encoding headers
@@ -1483,7 +1483,33 @@ impl StoredMessage {
                 line_lower.contains(&format!(" {}", pattern)) // Headers can be indented
             });
             
-            if is_header {
+            // Additional header detection - lines that look like email headers
+            // Format: "Header Name: Value" at the beginning of content
+            let looks_like_header = if !found_content_start && line_trimmed.contains(':') {
+                let parts: Vec<&str> = line_trimmed.splitn(2, ':').collect();
+                if parts.len() == 2 {
+                    let header_name = parts[0].trim().to_lowercase();
+                    // Check if it looks like a standard email header
+                    header_name == "from" || 
+                    header_name == "to" || 
+                    header_name == "cc" || 
+                    header_name == "bcc" ||
+                    header_name == "subject" || 
+                    header_name == "date" || 
+                    header_name == "reply-to" ||
+                    header_name.starts_with("x-") ||
+                    header_name.contains("received") ||
+                    header_name.contains("delivered") ||
+                    header_name.contains("message-id") ||
+                    header_name.contains("content-")
+                } else {
+                    false
+                }
+            } else {
+                false
+            };
+            
+            if is_header || looks_like_header {
                 tracing::debug!("Skipping header line {}: {}", i, &line[..std::cmp::min(60, line.len())]);
                 continue;
             }
