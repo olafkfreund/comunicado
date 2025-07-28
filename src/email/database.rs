@@ -271,26 +271,30 @@ impl EmailDatabase {
             )
         "#).execute(&self.pool).await?;
         
-        // Add unique constraint to prevent duplicate messages
-        sqlx::query(r#"
-            CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_unique 
-            ON messages (account_id, folder_name, imap_uid)
-        "#).execute(&self.pool).await?;
-        
-        // Clean up any existing duplicates by keeping only the latest one
-        sqlx::query(r#"
+        // First, clean up any existing duplicates by keeping only the latest one
+        // This needs to be done before adding the unique constraint
+        let cleanup_result = sqlx::query(r#"
             DELETE FROM messages 
-            WHERE id NOT IN (
-                SELECT id FROM (
-                    SELECT id, 
-                           ROW_NUMBER() OVER (
-                               PARTITION BY account_id, folder_name, imap_uid 
-                               ORDER BY updated_at DESC
-                           ) as rn
-                    FROM messages
-                ) ranked
-                WHERE rn = 1
+            WHERE rowid NOT IN (
+                SELECT MIN(rowid) 
+                FROM messages 
+                GROUP BY account_id, folder_name, imap_uid
             )
+        "#).execute(&self.pool).await;
+        
+        if let Ok(result) = cleanup_result {
+            if result.rows_affected() > 0 {
+                tracing::info!("Cleaned up {} duplicate messages", result.rows_affected());
+            }
+        }
+        
+        // Now add unique constraint to prevent future duplicates
+        // Drop the index first if it exists to avoid conflicts
+        let _ = sqlx::query("DROP INDEX IF EXISTS idx_messages_unique").execute(&self.pool).await;
+        
+        sqlx::query(r#"
+            CREATE UNIQUE INDEX idx_messages_unique 
+            ON messages (account_id, folder_name, imap_uid)
         "#).execute(&self.pool).await?;
         
         sqlx::query(r#"
@@ -400,8 +404,9 @@ impl EmailDatabase {
     pub async fn store_message(&self, message: &StoredMessage) -> DatabaseResult<()> {
         let now = Utc::now().to_rfc3339();
         
-        sqlx::query(r#"
-            INSERT OR REPLACE INTO messages (
+        // First try to insert, if it fails due to unique constraint, update instead
+        let insert_result = sqlx::query(r#"
+            INSERT INTO messages (
                 id, account_id, folder_name, imap_uid, message_id, thread_id, in_reply_to, message_references,
                 subject, from_addr, from_name, to_addrs, cc_addrs, bcc_addrs, reply_to, date,
                 body_text, body_html, attachments,
@@ -412,7 +417,7 @@ impl EmailDatabase {
                 ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16,
                 ?17, ?18, ?19,
                 ?20, ?21, ?22, ?23,
-                COALESCE((SELECT created_at FROM messages WHERE id = ?1), ?24), ?25, ?26, ?27, ?28, ?29
+                ?24, ?25, ?26, ?27, ?28, ?29
             )
         "#)
         .bind(message.id.to_string())
@@ -438,16 +443,67 @@ impl EmailDatabase {
         .bind(serde_json::to_string(&message.labels)?)
         .bind(message.size.map(|s| s as i64))
         .bind(&message.priority)
-        .bind(now.clone())
+        .bind(message.created_at.to_rfc3339())
         .bind(now.clone())
         .bind(message.last_synced.to_rfc3339())
         .bind(message.sync_version)
         .bind(message.is_draft)
         .bind(message.is_deleted)
         .execute(&self.pool)
-        .await?;
+        .await;
         
-        Ok(())
+        match insert_result {
+            Ok(_) => {
+                tracing::debug!("Successfully inserted message UID {} for account {} in folder {}", 
+                    message.imap_uid, message.account_id, message.folder_name);
+                Ok(())
+            }
+            Err(sqlx::Error::Database(db_err)) if db_err.message().contains("UNIQUE constraint failed") => {
+                tracing::debug!("Message UID {} already exists, updating instead", message.imap_uid);
+                // Update the existing message
+                sqlx::query(r#"
+                    UPDATE messages SET
+                        message_id = ?1, thread_id = ?2, in_reply_to = ?3, message_references = ?4,
+                        subject = ?5, from_addr = ?6, from_name = ?7, to_addrs = ?8, cc_addrs = ?9, 
+                        bcc_addrs = ?10, reply_to = ?11, date = ?12, body_text = ?13, body_html = ?14,
+                        attachments = ?15, flags = ?16, labels = ?17, size = ?18, priority = ?19,
+                        updated_at = ?20, last_synced = ?21, sync_version = ?22, is_draft = ?23, is_deleted = ?24
+                    WHERE account_id = ?25 AND folder_name = ?26 AND imap_uid = ?27
+                "#)
+                .bind(&message.message_id)
+                .bind(&message.thread_id)
+                .bind(&message.in_reply_to)
+                .bind(serde_json::to_string(&message.references)?)
+                .bind(&message.subject)
+                .bind(&message.from_addr)
+                .bind(&message.from_name)
+                .bind(serde_json::to_string(&message.to_addrs)?)
+                .bind(serde_json::to_string(&message.cc_addrs)?)
+                .bind(serde_json::to_string(&message.bcc_addrs)?)
+                .bind(&message.reply_to)
+                .bind(message.date.to_rfc3339())
+                .bind(&message.body_text)
+                .bind(&message.body_html)
+                .bind(serde_json::to_string(&message.attachments)?)
+                .bind(serde_json::to_string(&message.flags)?)
+                .bind(serde_json::to_string(&message.labels)?)
+                .bind(message.size.map(|s| s as i64))
+                .bind(&message.priority)
+                .bind(now)
+                .bind(message.last_synced.to_rfc3339())
+                .bind(message.sync_version)
+                .bind(message.is_draft)
+                .bind(message.is_deleted)
+                .bind(&message.account_id)
+                .bind(&message.folder_name)
+                .bind(message.imap_uid as i64)
+                .execute(&self.pool)
+                .await?;
+                
+                Ok(())
+            }
+            Err(e) => Err(DatabaseError::Connection(e))
+        }
     }
     
     /// Get messages from a folder
