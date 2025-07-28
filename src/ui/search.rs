@@ -105,7 +105,7 @@ pub struct SearchUI {
     
     /// Search statistics
     total_results: usize,
-    search_time_ms: u64,
+    _search_time_ms: u64,
 }
 
 impl SearchUI {
@@ -132,7 +132,7 @@ impl SearchUI {
             last_query: String::new(),
             error_message: None,
             total_results: 0,
-            search_time_ms: 0,
+            _search_time_ms: 0,
         }
     }
     
@@ -258,11 +258,11 @@ impl SearchUI {
     }
     
     /// Update search results
-    pub fn set_results(&mut self, results: Vec<SearchResult>, search_time_ms: u64) {
+    pub fn set_results(&mut self, results: Vec<SearchResult>, _search_time_ms: u64) {
         self.results = results;
         self.total_results = self.results.len();
         self.selected_index = 0;
-        self.search_time_ms = search_time_ms;
+        self._search_time_ms = _search_time_ms;
         self.last_query = self.query.clone();
         self.is_searching = false;
         self.error_message = None;
@@ -470,7 +470,7 @@ impl SearchUI {
         } else if self.results.is_empty() && !self.query.is_empty() {
             "No results found".to_string()
         } else if !self.results.is_empty() {
-            format!("Found {} results in {}ms", self.total_results, self.search_time_ms)
+            format!("Found {} results in {}ms", self.total_results, self._search_time_ms)
         } else {
             "Type to search (minimum 2 characters)".to_string()
         };
@@ -705,7 +705,7 @@ impl SearchEngine {
             results.push(result);
         }
         
-        let search_time = start_time.elapsed().as_millis() as u64;
+        let _search_time = start_time.elapsed().as_millis() as u64;
         
         // Sort by relevance (FTS5 already provides ranking, but we can enhance it)
         results.sort_by(|a, b| b.rank.partial_cmp(&a.rank).unwrap_or(std::cmp::Ordering::Equal));

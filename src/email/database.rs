@@ -1361,7 +1361,11 @@ impl StoredMessage {
                line_lower.contains("boundary=") ||
                line_lower.contains("multipart/") ||
                line_lower.contains("quoted-printable") ||
-               line_lower.contains("base64") {
+               line_lower.contains("base64") ||
+               line_lower.contains("mime-version:") ||
+               line_lower.contains("us-ascii") ||
+               line_lower.contains("utf-8") ||
+               line_lower.contains("iso-8859") {
                 tracing::debug!("Skipping technical line {}: {}", i, &line[..std::cmp::min(40, line.len())]);
                 continue;
             }
@@ -1369,6 +1373,17 @@ impl StoredMessage {
             // Skip encoded strings (=?charset?encoding?data?=)
             if line.contains("=?") && line.contains("?=") {
                 tracing::debug!("Skipping encoded line {}: {}", i, &line[..std::cmp::min(40, line.len())]);
+                continue;
+            }
+            
+            // Skip lines that start with = and look like encoded content
+            if line_trimmed.starts_with("=") && (
+                line_trimmed.contains("ascii") ||
+                line_trimmed.contains("Q?") ||
+                line_trimmed.contains("B?") ||
+                line.len() > 30
+            ) {
+                tracing::debug!("Skipping encoded content line {}: {}", i, &line[..std::cmp::min(40, line.len())]);
                 continue;
             }
             

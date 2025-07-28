@@ -378,7 +378,7 @@ mod tests {
     #[tokio::test]
     async fn test_sync_engine_creation() {
         let database = ContactsDatabase::new(":memory:").await.unwrap();
-        let token_manager = TokenManager::new(":memory:".to_string()).await.unwrap();
+        let token_manager = TokenManager::new();
         let manager = Arc::new(ContactsManager::new(database, token_manager).await.unwrap());
         
         let engine = ContactsSyncEngine::new(manager, 30);

@@ -513,13 +513,12 @@ impl Clone for CalendarSyncEngine {
 mod tests {
     use super::*;
     use crate::calendar::{database::CalendarDatabase, manager::CalendarManager};
-    use crate::oauth2::token::{TokenManager, TokenStorage};
+    use crate::oauth2::token::{TokenManager, TokenStats};
     
     #[tokio::test]
     async fn test_sync_engine_creation() {
         let db = Arc::new(CalendarDatabase::new_in_memory().await.unwrap());
-        let token_storage = Arc::new(TokenStorage::new_in_memory().await.unwrap());
-        let token_manager = Arc::new(TokenManager::new(token_storage).await.unwrap());
+        let token_manager = Arc::new(TokenManager::new());
         let calendar_manager = Arc::new(CalendarManager::new(db, token_manager).await.unwrap());
         
         let sync_engine = CalendarSyncEngine::new(calendar_manager);
@@ -529,8 +528,7 @@ mod tests {
     #[tokio::test]
     async fn test_sync_config_management() {
         let db = Arc::new(CalendarDatabase::new_in_memory().await.unwrap());
-        let token_storage = Arc::new(TokenStorage::new_in_memory().await.unwrap());
-        let token_manager = Arc::new(TokenManager::new(token_storage).await.unwrap());
+        let token_manager = Arc::new(TokenManager::new());
         let calendar_manager = Arc::new(CalendarManager::new(db, token_manager).await.unwrap());
         
         let sync_engine = CalendarSyncEngine::new(calendar_manager);

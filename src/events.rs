@@ -509,6 +509,17 @@ impl EventHandler {
                 }
             }
             
+            // Search interface F-keys (when search is active)
+            // TODO: These are documented but not yet implemented - the current search
+            // is a simple text filter, not the advanced SearchUI with different modes
+            KeyCode::F(1) | KeyCode::F(3) | KeyCode::F(4) => {
+                if ui.focused_pane() == FocusedPane::MessageList && ui.message_list().is_search_active() {
+                    // F1, F3, F4: Search mode switching (not yet implemented)
+                    // Note: F2 is handled above for folder rename operations
+                    tracing::info!("Search mode switching F-keys not yet implemented");
+                }
+            }
+            
             // Folder management shortcuts (when folder tree is focused)
             KeyCode::Char('f') => {
                 // Enter folder search mode
@@ -529,9 +540,10 @@ impl EventHandler {
                     }
                 }
             }
-            KeyCode::Char('d') => {
+            KeyCode::Char('d') if !key.modifiers.contains(KeyModifiers::CONTROL) => {
                 // Delete folder (when folder tree focused, non-Ctrl)
-                if matches!(ui.focused_pane(), FocusedPane::FolderTree) && !key.modifiers.contains(KeyModifiers::CONTROL) {
+                // Note: Ctrl+D is handled separately below for draft list
+                if matches!(ui.focused_pane(), FocusedPane::FolderTree) {
                     let folder_path = ui.folder_tree().selected_folder().map(|f| f.path.clone());
                     if let Some(path) = folder_path {
                         let _ = ui.folder_tree_mut().delete_folder(&path);

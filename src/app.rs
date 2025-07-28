@@ -149,11 +149,11 @@ impl App {
         imap_manager.load_accounts().await
             .map_err(|e| anyhow::anyhow!("Failed to load IMAP accounts: {}", e))?;
         
-        // Start automatic token refresh scheduler
-        if let Ok(scheduler) = crate::oauth2::token::TokenRefreshScheduler::new(Arc::new(token_manager.clone())).start().await {
-            tracing::info!("Started automatic OAuth2 token refresh scheduler");
+        // Start automatic token refresh _scheduler
+        if let Ok(_scheduler) = crate::oauth2::token::TokenRefreshScheduler::new(Arc::new(token_manager.clone())).start().await {
+            tracing::info!("Started automatic OAuth2 token refresh _scheduler");
         } else {
-            tracing::warn!("Failed to start automatic token refresh scheduler");
+            tracing::warn!("Failed to start automatic token refresh _scheduler");
         }
         
         self.token_manager = Some(token_manager);

@@ -3,6 +3,8 @@ use crate::contacts::{
     ContactsDatabase, ContactsProvider, GoogleContactsProvider, OutlookContactsProvider,
     ContactSource, AddressBookStats
 };
+#[cfg(test)]
+use crate::contacts::ContactEmail;
 use crate::oauth2::TokenManager;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -369,7 +371,7 @@ mod tests {
     #[tokio::test]
     async fn test_needs_update() {
         let database = ContactsDatabase::new(":memory:").await.unwrap();
-        let token_manager = TokenManager::new(":memory:".to_string()).await.unwrap();
+        let token_manager = TokenManager::new();
         let manager = ContactsManager::new(database, token_manager).await.unwrap();
         
         let mut contact1 = Contact::new(

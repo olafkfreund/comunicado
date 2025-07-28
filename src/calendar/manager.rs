@@ -528,13 +528,12 @@ impl CalendarManager {
 mod tests {
     use super::*;
     use crate::calendar::database::CalendarDatabase;
-    use crate::oauth2::token::{TokenManager, TokenStorage};
+    use crate::oauth2::token::{TokenManager, TokenStats};
     
     #[tokio::test]
     async fn test_calendar_manager_creation() {
         let db = Arc::new(CalendarDatabase::new_in_memory().await.unwrap());
-        let token_storage = Arc::new(TokenStorage::new_in_memory().await.unwrap());
-        let token_manager = Arc::new(TokenManager::new(token_storage).await.unwrap());
+        let token_manager = Arc::new(TokenManager::new());
         
         let manager = CalendarManager::new(db, token_manager).await.unwrap();
         
@@ -545,8 +544,7 @@ mod tests {
     #[tokio::test]
     async fn test_local_calendar_creation() {
         let db = Arc::new(CalendarDatabase::new_in_memory().await.unwrap());
-        let token_storage = Arc::new(TokenStorage::new_in_memory().await.unwrap());
-        let token_manager = Arc::new(TokenManager::new(token_storage).await.unwrap());
+        let token_manager = Arc::new(TokenManager::new());
         
         let manager = CalendarManager::new(db, token_manager).await.unwrap();
         
@@ -566,8 +564,7 @@ mod tests {
     #[tokio::test]
     async fn test_event_creation_and_retrieval() {
         let db = Arc::new(CalendarDatabase::new_in_memory().await.unwrap());
-        let token_storage = Arc::new(TokenStorage::new_in_memory().await.unwrap());
-        let token_manager = Arc::new(TokenManager::new(token_storage).await.unwrap());
+        let token_manager = Arc::new(TokenManager::new());
         
         let manager = CalendarManager::new(db, token_manager).await.unwrap();
         
@@ -601,8 +598,7 @@ mod tests {
     #[tokio::test]
     async fn test_email_invite_processing() {
         let db = Arc::new(CalendarDatabase::new_in_memory().await.unwrap());
-        let token_storage = Arc::new(TokenStorage::new_in_memory().await.unwrap());
-        let token_manager = Arc::new(TokenManager::new(token_storage).await.unwrap());
+        let token_manager = Arc::new(TokenManager::new());
         
         let manager = CalendarManager::new(db, token_manager).await.unwrap();
         
