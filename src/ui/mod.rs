@@ -23,6 +23,7 @@ use ratatui::{
 use crate::theme::{Theme, ThemeManager};
 use crate::email::{EmailDatabase, EmailNotificationManager, UIEmailUpdater, EmailNotification, sync_engine::SyncProgress};
 use chrono::Duration as ChronoDuration;
+use tokio::time::{Duration, Instant};
 use std::sync::Arc;
 
 use self::{
@@ -109,6 +110,9 @@ pub struct UI {
     invitation_viewer: InvitationViewer,
     search_ui: SearchUI,
     search_engine: Option<SearchEngine>,
+    // Notification system
+    notification_message: Option<String>,
+    notification_expires_at: Option<tokio::time::Instant>,
 }
 
 impl UI {
@@ -134,6 +138,9 @@ impl UI {
             invitation_viewer: InvitationViewer::new(),
             search_ui: SearchUI::new(),
             search_engine: None,
+            // Initialize notification system
+            notification_message: None,
+            notification_expires_at: None,
         };
         
         // Initialize status bar with default segments
@@ -321,7 +328,42 @@ impl UI {
 
     fn render_status_bar(&self, frame: &mut Frame, area: Rect) {
         let theme = self.theme_manager.current_theme();
-        self.status_bar.render(frame, area, theme);
+        
+        // Check if we have a notification to display
+        if let Some(notification) = self.get_notification() {
+            // Render notification on top of status bar with special styling
+            use ratatui::{
+                style::{Color, Modifier, Style},
+                text::{Line, Span},
+                widgets::{Block, Borders, Paragraph},
+                layout::Alignment,
+            };
+            
+            let notification_text = vec![
+                Line::from(vec![
+                    Span::styled(
+                        notification.clone(),
+                        Style::default()
+                            .fg(Color::Black)
+                            .bg(Color::Yellow)
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                ])
+            ];
+            
+            let notification_widget = Paragraph::new(notification_text)
+                .block(
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .border_style(Style::default().fg(Color::Yellow))
+                )
+                .alignment(Alignment::Center);
+            
+            frame.render_widget(notification_widget, area);
+        } else {
+            // Normal status bar rendering
+            self.status_bar.render(frame, area, theme);
+        }
     }
 
     // Navigation methods
@@ -1507,6 +1549,28 @@ impl UI {
         }
         
         Ok(())
+    }
+    
+    /// Show a notification message on the bottom powerline
+    pub fn show_notification(&mut self, message: String, duration: Duration) {
+        tracing::debug!("Showing notification: {}", message);
+        self.notification_message = Some(message);
+        self.notification_expires_at = Some(Instant::now() + duration);
+    }
+    
+    /// Clear expired notifications
+    pub fn update_notifications(&mut self) {
+        if let Some(expires_at) = self.notification_expires_at {
+            if Instant::now() >= expires_at {
+                self.notification_message = None;
+                self.notification_expires_at = None;
+            }
+        }
+    }
+    
+    /// Get current notification message for rendering
+    pub fn get_notification(&self) -> Option<&String> {
+        self.notification_message.as_ref()
     }
 }
 

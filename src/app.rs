@@ -12,6 +12,7 @@ use ratatui::{
 use std::io;
 use std::sync::Arc;
 use tokio::time::{Duration, Instant};
+use sqlx::Row;
 
 use crate::events::{EventHandler, EventResult};
 use crate::ui::{UI, ComposeAction, DraftAction};
@@ -34,6 +35,9 @@ pub struct App {
     smtp_service: Option<SmtpService>,
     contacts_manager: Option<Arc<ContactsManager>>,
     services: Option<ServiceManager>,
+    // Auto-sync functionality
+    last_auto_sync: Instant,
+    auto_sync_interval: Duration,
 }
 
 impl App {
@@ -51,6 +55,9 @@ impl App {
             smtp_service: None,
             contacts_manager: None,
             services: None,
+            // Initialize auto-sync with 3 minute interval
+            last_auto_sync: Instant::now(),
+            auto_sync_interval: Duration::from_secs(3 * 60), // 3 minutes
         })
     }
     
@@ -700,8 +707,17 @@ impl App {
         let mut previous_selection: Option<usize> = None;
 
         loop {
+            // Check for auto-sync (every 3 minutes)
+            if self.last_auto_sync.elapsed() >= self.auto_sync_interval {
+                self.perform_auto_sync().await;
+                self.last_auto_sync = Instant::now();
+            }
+            
             // Process email notifications
             self.ui.process_notifications().await;
+            
+            // Update UI notifications (clear expired ones)
+            self.ui.update_notifications();
             
             // Check if message selection changed and handle it
             let current_selection = self.ui.message_list().get_selection_state();
@@ -1875,6 +1891,123 @@ impl App {
         self.ui.folder_tree_mut().mark_folder_synced(folder_path, 0, 0);
         
         Ok(())
+    }
+    
+    /// Perform automatic background sync for all accounts
+    async fn perform_auto_sync(&mut self) {
+        tracing::info!("Performing automatic background sync for all accounts");
+        
+        // Get all account IDs
+        let account_ids = if let Some(ref database) = self.database {
+            match sqlx::query("SELECT id FROM accounts")
+                .fetch_all(&database.pool)
+                .await
+            {
+                Ok(rows) => {
+                    rows.into_iter()
+                        .map(|row| row.get::<String, _>("id"))
+                        .collect::<Vec<_>>()
+                }
+                Err(e) => {
+                    tracing::error!("Failed to get account IDs for auto-sync: {}", e);
+                    return;
+                }
+            }
+        } else {
+            tracing::warn!("Database not available for auto-sync");
+            return;
+        };
+        
+        if account_ids.is_empty() {
+            tracing::debug!("No accounts configured, skipping auto-sync");
+            return;
+        }
+        
+        tracing::info!("Auto-syncing {} accounts", account_ids.len());
+        
+        // Get the current account to reload its messages after sync
+        let current_account_id = self.ui.get_current_account_id().map(|s| s.clone());
+        let current_folder = self.ui.folder_tree()
+            .selected_folder()
+            .map(|f| f.name.clone())
+            .unwrap_or_else(|| "INBOX".to_string());
+        
+        let mut new_email_count = 0;
+        let mut synced_accounts: Vec<String> = Vec::new();
+        
+        // Sync each account
+        for account_id in &account_ids {
+            tracing::debug!("Auto-syncing account: {}", account_id);
+            
+            // Get message count before sync for this account's INBOX
+            let messages_before = if let Some(ref database) = self.database {
+                sqlx::query("SELECT COUNT(*) as count FROM messages WHERE account_id = ? AND folder_name = 'INBOX' AND is_deleted = FALSE")
+                    .bind(account_id)
+                    .fetch_one(&database.pool)
+                    .await
+                    .map(|row| row.get::<i64, _>("count") as u32)
+                    .unwrap_or(0)
+            } else {
+                0
+            };
+            
+            // Perform sync
+            match self.sync_account_from_imap(account_id).await {
+                Ok(()) => {
+                    tracing::debug!("Auto-sync successful for account: {}", account_id);
+                    synced_accounts.push(account_id.to_string());
+                    
+                    // Get message count after sync
+                    let messages_after = if let Some(ref database) = self.database {
+                        sqlx::query("SELECT COUNT(*) as count FROM messages WHERE account_id = ? AND folder_name = 'INBOX' AND is_deleted = FALSE")
+                            .bind(account_id)
+                            .fetch_one(&database.pool)
+                            .await
+                            .map(|row| row.get::<i64, _>("count") as u32)
+                            .unwrap_or(0)
+                    } else {
+                        0
+                    };
+                    
+                    // Count new emails
+                    if messages_after > messages_before {
+                        let new_count = messages_after - messages_before;
+                        new_email_count += new_count;
+                        tracing::info!("Found {} new emails for account: {}", new_count, account_id);
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!("Auto-sync failed for account {}: {}", account_id, e);
+                    // Don't stop the auto-sync for other accounts
+                    continue;
+                }
+            }
+        }
+        
+        // Show notification if we found new emails
+        if new_email_count > 0 {
+            let message = if new_email_count == 1 {
+                "📧 1 new email received".to_string()
+            } else {
+                format!("📧 {} new emails received", new_email_count)
+            };
+            
+            tracing::info!("Auto-sync found {} new emails", new_email_count);
+            self.ui.show_notification(message, Duration::from_secs(5));
+        }
+        
+        // If the current account was synced, reload its messages
+        if let Some(current_id) = current_account_id {
+            if synced_accounts.contains(&current_id) {
+                tracing::debug!("Reloading messages for current account after auto-sync");
+                if let Err(e) = self.ui.load_messages(current_id, current_folder).await {
+                    tracing::error!("Failed to reload messages after auto-sync: {}", e);
+                }
+            }
+        }
+        
+        tracing::info!("Auto-sync completed. Synced {} accounts, found {} new emails", 
+                      synced_accounts.len(), new_email_count);
     }
 }
 

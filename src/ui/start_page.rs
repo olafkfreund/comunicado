@@ -3,7 +3,7 @@ use ratatui::{
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{
-        Block, Borders, List, ListItem, Paragraph,
+        Block, Borders, Paragraph,
     },
     Frame,
 };
@@ -164,7 +164,7 @@ impl StartPage {
             calendar_events: Vec::new(),
             quick_actions,
             selected_widget: 0,
-            widget_count: 6, // weather, datetime, system, tasks, calendar, quick actions
+            widget_count: 5, // datetime, stats, weather, tasks, links
         }
     }
 
@@ -227,452 +227,342 @@ impl StartPage {
         self.quick_actions.iter().find(|a| a.id == action_id)
     }
 
-    /// Render the start page dashboard
+    /// Render the start page dashboard - inspired by terminal dashboard design
     pub fn render(&mut self, f: &mut Frame, area: Rect, theme: &Theme) {
-        // Create main layout
+        // Create main layout with margins for clean bordered look
         let main_chunks = Layout::default()
             .direction(Direction::Vertical)
             .margin(1)
             .constraints([
-                Constraint::Length(3),  // Header with greeting
-                Constraint::Min(0),     // Dashboard content
+                Constraint::Length(12),  // Top row: datetime + stats  
+                Constraint::Length(10),  // Middle row: weather + todoist
+                Constraint::Min(6),      // Bottom row: links
             ])
             .split(area);
 
-        // Render header
-        self.render_header(f, main_chunks[0], theme);
-
-        // Create main dashboard layout - focus on large time display
-        let main_layout_chunks = Layout::default()
-            .direction(Direction::Vertical)
+        // Top row: Large datetime display + System stats
+        let top_row = Layout::default()
+            .direction(Direction::Horizontal)
             .constraints([
-                Constraint::Percentage(45),  // Large central clock area
-                Constraint::Percentage(55),  // Bottom widgets area
+                Constraint::Percentage(70),  // Large datetime block
+                Constraint::Percentage(30),  // Stats block
+            ])
+            .split(main_chunks[0]);
+
+        // Middle row: Weather + Todo list
+        let middle_row = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Percentage(40),  // Weather block
+                Constraint::Percentage(60),  // Todo/task block
             ])
             .split(main_chunks[1]);
 
-        // Top section: large clock with small weather info
-        let top_section = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([
-                Constraint::Percentage(25),  // Weather (compact)
-                Constraint::Percentage(50),  // Large clock (central focus)
-                Constraint::Percentage(25),  // System stats (compact)
-            ])
-            .split(main_layout_chunks[0]);
+        // Bottom row: Links/bookmarks (full width)
+        let bottom_row = main_chunks[2];
 
-        // Bottom section: remaining widgets
-        let bottom_chunks = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([
-                Constraint::Percentage(40),  // Tasks
-                Constraint::Percentage(35),  // Calendar  
-                Constraint::Percentage(25),  // Quick actions
-            ])
-            .split(main_layout_chunks[1]);
-
-        // Render all widgets with new layout
-        self.render_weather_compact(f, top_section[0], theme, self.selected_widget == 0);
-        self.render_datetime_large(f, top_section[1], theme, self.selected_widget == 1);
-        self.render_system_stats_compact(f, top_section[2], theme, self.selected_widget == 2);
-        self.render_tasks(f, bottom_chunks[0], theme, self.selected_widget == 3);
-        self.render_calendar(f, bottom_chunks[1], theme, self.selected_widget == 4);
-        self.render_quick_actions(f, bottom_chunks[2], theme, self.selected_widget == 5);
+        // Render all widgets with bordered blocks
+        self.render_datetime_block(f, top_row[0], theme, self.selected_widget == 0);
+        self.render_system_stats_block(f, top_row[1], theme, self.selected_widget == 1);
+        self.render_weather_block(f, middle_row[0], theme, self.selected_widget == 2);
+        self.render_tasks_block(f, middle_row[1], theme, self.selected_widget == 3);
+        self.render_links_block(f, bottom_row, theme, self.selected_widget == 4);
     }
 
-    fn render_header(&self, f: &mut Frame, area: Rect, theme: &Theme) {
-        let header_text = vec![
+
+    fn render_weather_block(&self, f: &mut Frame, area: Rect, theme: &Theme, is_selected: bool) {
+        let block = create_border_block("weather", theme, is_selected);
+        let inner_area = block.inner(area);
+        
+        // Weather display matching reference format
+        let weather_lines = vec![
+            Line::from(""),
             Line::from(vec![
                 Span::styled(
-                    "COMUNICADO",
+                    "72°",
                     Style::default()
                         .fg(theme.colors.palette.text_primary)
                         .add_modifier(Modifier::BOLD),
                 ),
+            ]),
+            Line::from(vec![
                 Span::styled(
-                    " | TUI Email Client",
-                    Style::default()
-                        .fg(theme.colors.palette.text_secondary),
+                    "sunny",
+                    Style::default().fg(theme.colors.palette.text_secondary),
                 ),
-            ])
+            ]),
+            Line::from(""),
+            Line::from(vec![
+                Span::styled(
+                    "humi 51%    wind 6 mph",
+                    Style::default().fg(theme.colors.palette.text_secondary),
+                ),
+            ]),
+            Line::from(vec![
+                Span::styled(
+                    "prec 1%     feel 70°",
+                    Style::default().fg(theme.colors.palette.text_secondary),
+                ),
+            ]),
         ];
 
-        let header = Paragraph::new(header_text)
-            .alignment(Alignment::Center);
+        let weather_widget = Paragraph::new(weather_lines)
+            .block(block)
+            .alignment(Alignment::Left);
 
-        f.render_widget(header, area);
+        f.render_widget(weather_widget, area);
     }
 
-    fn render_weather_compact(&self, f: &mut Frame, area: Rect, theme: &Theme, _is_selected: bool) {
-        if let Some(ref weather) = self.weather {
-            let weather_text = vec![
-                Line::from(""),
-                Line::from(vec![
-                    Span::styled(
-                        "WEATHER",
-                        Style::default()
-                            .fg(theme.colors.palette.text_secondary)
-                            .add_modifier(Modifier::BOLD),
-                    ),
-                ]),
-                Line::from(""),
-                Line::from(vec![
-                    Span::styled(
-                        format!("{}°", weather.temperature),
-                        Style::default()
-                            .fg(theme.colors.palette.text_primary)
-                            .add_modifier(Modifier::BOLD),
-                    ),
-                ]),
-                Line::from(vec![
-                    Span::styled(
-                        weather.condition.to_uppercase(),
-                        Style::default()
-                            .fg(theme.colors.palette.text_secondary),
-                    ),
-                ]),
-                Line::from(""),
-                Line::from(vec![
-                    Span::styled(
-                        weather.location.to_uppercase(),
-                        Style::default()
-                            .fg(theme.colors.palette.text_secondary),
-                    ),
-                ]),
-                Line::from(""),
-                Line::from(vec![
-                    Span::styled(
-                        format!("H {}% | W {:.0}km/h", weather.humidity, weather.wind_speed),
-                        Style::default()
-                            .fg(theme.colors.palette.text_secondary),
-                    ),
-                ]),
-            ];
+    fn render_tasks_block(&self, f: &mut Frame, area: Rect, theme: &Theme, is_selected: bool) {
+        let block = create_border_block("todoist", theme, is_selected);
+        let inner_area = block.inner(area);
+        
+        // Mock task list matching reference format
+        let task_lines = vec![
+            Line::from(""),
+            Line::from(vec![
+                Span::styled(
+                    "6 tasks",
+                    Style::default().fg(theme.colors.palette.text_primary),
+                ),
+            ]),
+            Line::from(""),
+            Line::from(vec![
+                Span::styled("[ ] ", Style::default().fg(theme.colors.palette.text_secondary)),
+                Span::styled("fix midnight bug ", Style::default().fg(theme.colors.palette.text_primary)),
+                Span::styled("today", Style::default().fg(theme.colors.palette.text_secondary)),
+            ]),
+            Line::from(vec![
+                Span::styled("[ ] ", Style::default().fg(theme.colors.palette.text_secondary)),
+                Span::styled("dentist reschedule xray and checkup ", Style::default().fg(theme.colors.palette.text_primary)),
+                Span::styled("tmrw", Style::default().fg(theme.colors.palette.text_secondary)),
+            ]),
+            Line::from(vec![
+                Span::styled("[ ] ", Style::default().fg(theme.colors.palette.text_secondary)),
+                Span::styled("complete section 3 ", Style::default().fg(theme.colors.palette.text_primary)),
+                Span::styled("sun", Style::default().fg(theme.colors.palette.text_secondary)),
+            ]),
+            Line::from(vec![
+                Span::styled("[x] ", Style::default().fg(theme.colors.palette.text_secondary)),
+                Span::styled("#re-start fix weather loading ", Style::default().fg(theme.colors.palette.text_primary)),
+                Span::styled("today", Style::default().fg(theme.colors.palette.text_secondary)),
+            ]),
+        ];
 
-            let weather_widget = Paragraph::new(weather_text)
-                .alignment(Alignment::Center);
+        let tasks_widget = Paragraph::new(task_lines)
+            .block(block)
+            .alignment(Alignment::Left);
 
-            f.render_widget(weather_widget, area);
-        } else {
-            let loading_text = vec![
-                Line::from(""),
-                Line::from("WEATHER"),
-                Line::from(""),
-                Line::from("Loading..."),
-            ];
-
-            let weather_widget = Paragraph::new(loading_text)
-                .style(Style::default().fg(theme.colors.palette.text_secondary))
-                .alignment(Alignment::Center);
-
-            f.render_widget(weather_widget, area);
-        }
+        f.render_widget(tasks_widget, area);
     }
 
-    fn render_tasks(&self, f: &mut Frame, area: Rect, theme: &Theme, is_selected: bool) {
-        let block = create_border_block("TASKS", theme, is_selected);
-
-        if self.tasks.is_empty() {
-            let empty_text = vec![
-                Line::from(""),
-                Line::from("NO TASKS TODAY"),
-                Line::from(""),
-                Line::from("Press 't' to add a task"),
-            ];
-
-            let tasks_widget = Paragraph::new(empty_text)
-                .block(block)
-                .style(Style::default().fg(theme.colors.palette.text_secondary))
-                .alignment(Alignment::Center);
-
-            f.render_widget(tasks_widget, area);
-        } else {
-            let task_items: Vec<ListItem> = self.tasks
-                .iter()
-                .take(8) // Limit to fit in widget
-                .map(|task| {
-                    let checkbox = if task.completed { "■" } else { "□" };
-                    let style = if task.completed {
-                        Style::default()
-                            .fg(theme.colors.palette.text_secondary)
-                            .add_modifier(Modifier::CROSSED_OUT)
-                    } else {
-                        Style::default().fg(theme.colors.palette.text_primary)
-                    };
-
-                    let content = vec![
-                        Line::from(vec![
-                            Span::styled(checkbox, Style::default().fg(theme.colors.palette.text_secondary)),
-                            Span::raw(" "),
-                            Span::styled(task.priority.symbol(), Style::default().fg(task.priority.color(theme))),
-                            Span::raw(" "),
-                            Span::styled(&task.title, style),
-                        ])
-                    ];
-
-                    ListItem::new(content)
-                })
-                .collect();
-
-            let tasks_list = List::new(task_items)
-                .block(block);
-
-            f.render_widget(tasks_list, area);
-        }
-    }
-
-    fn render_datetime_large(&self, f: &mut Frame, area: Rect, theme: &Theme, _is_selected: bool) {
+    fn render_datetime_block(&self, f: &mut Frame, area: Rect, theme: &Theme, is_selected: bool) {
+        let block = create_border_block("datetime", theme, is_selected);
+        let inner_area = block.inner(area);
+        
         let now = Local::now();
         
-        // Create very large time display (peaclock inspired)
-        let time_str = now.format("%H:%M").to_string();
-        let date_str = now.format("%A, %B %d").to_string();
-        let year_str = now.format("%Y").to_string();
+        // Large time display like the reference image
+        let time_str = now.format("%H:%M:%S").to_string();
+        let date_str = now.format("%A, %B %d, %Y").to_string();
+        let am_pm = now.format("%p").to_string().to_lowercase();
         
-        // Split area for massive time, date, and year
+        // Create layout for time + date + am/pm
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(2),   // Spacing
-                Constraint::Length(8),   // Massive time (8 lines high)
-                Constraint::Length(3),   // Date  
-                Constraint::Length(2),   // Year
+                Constraint::Length(1),   // Spacing
+                Constraint::Length(4),   // Large time
+                Constraint::Length(2),   // Date
                 Constraint::Min(0),      // Bottom spacing
             ])
-            .split(area);
+            .split(inner_area);
 
-        // Create ASCII-art style large time (simplified block letters)
-        let time_lines = self.create_large_time_display(&time_str, theme);
+        // Render large time display  
+        let time_lines = vec![
+            Line::from(""),
+            Line::from(vec![
+                Span::styled(
+                    format!("{} {}", time_str, am_pm),
+                    Style::default()
+                        .fg(theme.colors.palette.text_primary)
+                        .add_modifier(Modifier::BOLD),
+                ),
+            ]),
+            Line::from(""),
+        ];
+        
         let time_widget = Paragraph::new(time_lines)
             .alignment(Alignment::Center);
         f.render_widget(time_widget, chunks[1]);
 
         // Date display
-        let date_text = vec![
-            Line::from(""),
+        let date_lines = vec![
             Line::from(vec![
                 Span::styled(
-                    date_str.to_uppercase(),
-                    Style::default()
-                        .fg(theme.colors.palette.text_primary)
-                        .add_modifier(Modifier::BOLD),
-                ),
-            ]),
-            Line::from(""),
-        ];
-
-        let date_widget = Paragraph::new(date_text)
-            .alignment(Alignment::Center);
-        f.render_widget(date_widget, chunks[2]);
-
-        // Year
-        let year_text = vec![
-            Line::from(vec![
-                Span::styled(
-                    year_str,
+                    date_str.to_lowercase(),
                     Style::default()
                         .fg(theme.colors.palette.text_secondary),
                 ),
             ]),
         ];
 
-        let year_widget = Paragraph::new(year_text)
+        let date_widget = Paragraph::new(date_lines)
             .alignment(Alignment::Center);
-        f.render_widget(year_widget, chunks[3]);
-    }
-
-    fn create_large_time_display(&self, time_str: &str, theme: &Theme) -> Vec<Line<'static>> {
-        // Create a massive, centered time display
-        let border_char = "■";
-        let padding_spaces = "  ";
-        let time_str_owned = time_str.to_string();
+        f.render_widget(date_widget, chunks[2]);
         
-        vec![
+        f.render_widget(block, area);
+    }
+
+
+
+    fn render_links_block(&self, f: &mut Frame, area: Rect, theme: &Theme, is_selected: bool) {
+        let block = create_border_block("links", theme, is_selected);
+        let inner_area = block.inner(area);
+        
+        // Create a 4-column layout for links like the reference
+        let cols = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Percentage(25),
+                Constraint::Percentage(25),
+                Constraint::Percentage(25),
+                Constraint::Percentage(25),
+            ])
+            .split(inner_area);
+        
+        // Column 1
+        let col1_lines = vec![
+            Line::from(vec![
+                Span::styled("> ", Style::default().fg(theme.colors.palette.accent)),
+                Span::styled("gmail", Style::default().fg(theme.colors.palette.text_primary)),
+            ]),
+            Line::from(vec![
+                Span::styled("> ", Style::default().fg(theme.colors.palette.accent)),
+                Span::styled("calendar", Style::default().fg(theme.colors.palette.text_primary)),
+            ]),
+            Line::from(vec![
+                Span::styled("> ", Style::default().fg(theme.colors.palette.accent)),
+                Span::styled("drive", Style::default().fg(theme.colors.palette.text_primary)),
+            ]),
+            Line::from(vec![
+                Span::styled("> ", Style::default().fg(theme.colors.palette.accent)),
+                Span::styled("docs", Style::default().fg(theme.colors.palette.text_primary)),
+            ]),
+        ];
+        
+        // Column 2
+        let col2_lines = vec![
+            Line::from(vec![
+                Span::styled("> ", Style::default().fg(theme.colors.palette.accent)),
+                Span::styled("github", Style::default().fg(theme.colors.palette.text_primary)),
+            ]),
+            Line::from(vec![
+                Span::styled("> ", Style::default().fg(theme.colors.palette.accent)),
+                Span::styled("slack", Style::default().fg(theme.colors.palette.text_primary)),
+            ]),
+            Line::from(vec![
+                Span::styled("> ", Style::default().fg(theme.colors.palette.accent)),
+                Span::styled("keep", Style::default().fg(theme.colors.palette.text_primary)),
+            ]),
+            Line::from(vec![
+                Span::styled("> ", Style::default().fg(theme.colors.palette.accent)),
+                Span::styled("leetcode", Style::default().fg(theme.colors.palette.text_primary)),
+            ]),
+        ];
+        
+        // Column 3  
+        let col3_lines = vec![
+            Line::from(vec![
+                Span::styled("> ", Style::default().fg(theme.colors.palette.accent)),
+                Span::styled("perplexity", Style::default().fg(theme.colors.palette.text_primary)),
+            ]),
+            Line::from(vec![
+                Span::styled("> ", Style::default().fg(theme.colors.palette.accent)),
+                Span::styled("claude", Style::default().fg(theme.colors.palette.text_primary)),
+            ]),
+            Line::from(vec![
+                Span::styled("> ", Style::default().fg(theme.colors.palette.accent)),
+                Span::styled("aistudio", Style::default().fg(theme.colors.palette.text_primary)),
+            ]),
+            Line::from(vec![
+                Span::styled("> ", Style::default().fg(theme.colors.palette.accent)),
+                Span::styled("chatgpt", Style::default().fg(theme.colors.palette.text_primary)),
+            ]),
+        ];
+        
+        // Column 4
+        let col4_lines = vec![
+            Line::from(vec![
+                Span::styled("> ", Style::default().fg(theme.colors.palette.accent)),
+                Span::styled("youtube", Style::default().fg(theme.colors.palette.text_primary)),
+            ]),
+            Line::from(vec![
+                Span::styled("> ", Style::default().fg(theme.colors.palette.accent)),
+                Span::styled("reddit", Style::default().fg(theme.colors.palette.text_primary)),
+            ]),
+            Line::from(vec![
+                Span::styled("> ", Style::default().fg(theme.colors.palette.accent)),
+                Span::styled("twitter", Style::default().fg(theme.colors.palette.text_primary)),
+            ]),
+            Line::from(vec![
+                Span::styled("> ", Style::default().fg(theme.colors.palette.accent)),
+                Span::styled("feedly", Style::default().fg(theme.colors.palette.text_primary)),
+            ]),
+        ];
+        
+        // Render each column
+        let col1_widget = Paragraph::new(col1_lines).alignment(Alignment::Left);
+        let col2_widget = Paragraph::new(col2_lines).alignment(Alignment::Left);
+        let col3_widget = Paragraph::new(col3_lines).alignment(Alignment::Left);
+        let col4_widget = Paragraph::new(col4_lines).alignment(Alignment::Left);
+        
+        f.render_widget(col1_widget, cols[0]);
+        f.render_widget(col2_widget, cols[1]);
+        f.render_widget(col3_widget, cols[2]);
+        f.render_widget(col4_widget, cols[3]);
+        
+        f.render_widget(block, area);
+    }
+
+    fn render_system_stats_block(&self, f: &mut Frame, area: Rect, theme: &Theme, is_selected: bool) {
+        let block = create_border_block("stats", theme, is_selected);
+        let inner_area = block.inner(area);
+        
+        // Mock stats that match the reference image format
+        let stats_lines = vec![
             Line::from(""),
             Line::from(vec![
                 Span::styled(
-                    format!("{}{}{}{}{}",
-                        border_char.repeat(10),
-                        padding_spaces,
-                        time_str_owned,
-                        padding_spaces,
-                        border_char.repeat(10)
-                    ),
-                    Style::default()
-                        .fg(theme.colors.palette.accent)
-                        .add_modifier(Modifier::BOLD),
+                    "load 24 ms",
+                    Style::default().fg(theme.colors.palette.text_primary),
                 ),
             ]),
-            Line::from(""),
             Line::from(vec![
                 Span::styled(
-                    time_str_owned,
-                    Style::default()
-                        .fg(theme.colors.palette.text_primary)
-                        .add_modifier(Modifier::BOLD),
+                    "ping 348 ms",
+                    Style::default().fg(theme.colors.palette.text_primary),
                 ),
             ]),
-            Line::from(""),
-        ]
-    }
+            Line::from(vec![
+                Span::styled(
+                    "fps 165",
+                    Style::default().fg(theme.colors.palette.text_primary),
+                ),
+            ]),
+            Line::from(vec![
+                Span::styled(
+                    "1673 x 901",
+                    Style::default().fg(theme.colors.palette.text_primary),
+                ),
+            ]),
+        ];
 
-    fn render_calendar(&self, f: &mut Frame, area: Rect, theme: &Theme, is_selected: bool) {
-        let block = create_border_block("CALENDAR", theme, is_selected);
+        let stats_widget = Paragraph::new(stats_lines)
+            .block(block)
+            .alignment(Alignment::Left);
 
-        if self.calendar_events.is_empty() {
-            let empty_text = vec![
-                Line::from(""),
-                Line::from("NO UPCOMING EVENTS"),
-                Line::from(""),
-                Line::from("Schedule is clear"),
-            ];
-
-            let calendar_widget = Paragraph::new(empty_text)
-                .block(block)
-                .style(Style::default().fg(theme.colors.palette.text_secondary))
-                .alignment(Alignment::Center);
-
-            f.render_widget(calendar_widget, area);
-        } else {
-            let event_items: Vec<ListItem> = self.calendar_events
-                .iter()
-                .take(6) // Limit to fit in widget
-                .map(|event| {
-                    let time_str = event.start_time.format("%H:%M").to_string();
-                    let title_upper = event.title.to_uppercase();
-                    let content = vec![
-                        Line::from(vec![
-                            Span::styled(
-                                format!("{}", time_str),
-                                Style::default()
-                                    .fg(theme.colors.palette.accent)
-                                    .add_modifier(Modifier::BOLD),
-                            ),
-                            Span::raw(" "),
-                            Span::styled(
-                                title_upper,
-                                Style::default().fg(theme.colors.palette.text_primary),
-                            ),
-                        ])
-                    ];
-
-                    ListItem::new(content)
-                })
-                .collect();
-
-            let calendar_list = List::new(event_items)
-                .block(block);
-
-            f.render_widget(calendar_list, area);
-        }
-    }
-
-    fn render_quick_actions(&self, f: &mut Frame, area: Rect, theme: &Theme, is_selected: bool) {
-        let block = create_border_block("ACTIONS", theme, is_selected);
-
-        let action_items: Vec<ListItem> = self.quick_actions
-            .iter()
-            .map(|action| {
-                let shortcut_text = if let Some(ref shortcut) = action.shortcut {
-                    format!(" [{}]", shortcut)
-                } else {
-                    String::new()
-                };
-                let title_upper = action.title.to_uppercase();
-
-                let content = vec![
-                    Line::from(vec![
-                        Span::styled(
-                            "▶",
-                            Style::default().fg(theme.colors.palette.accent),
-                        ),
-                        Span::raw(" "),
-                        Span::styled(
-                            title_upper,
-                            Style::default().fg(theme.colors.palette.text_primary),
-                        ),
-                        Span::styled(
-                            shortcut_text,
-                            Style::default().fg(theme.colors.palette.text_secondary),
-                        ),
-                    ])
-                ];
-
-                ListItem::new(content)
-            })
-            .collect();
-
-        let actions_list = List::new(action_items)
-            .block(block);
-
-        f.render_widget(actions_list, area);
-    }
-
-    fn render_system_stats_compact(&self, f: &mut Frame, area: Rect, theme: &Theme, _is_selected: bool) {
-        if let Some(ref stats) = self.system_stats {
-            let stats_text = vec![
-                Line::from(""),
-                Line::from(vec![
-                    Span::styled(
-                        "SYSTEM",
-                        Style::default()
-                            .fg(theme.colors.palette.text_secondary)
-                            .add_modifier(Modifier::BOLD),
-                    ),
-                ]),
-                Line::from(""),
-                Line::from(vec![
-                    Span::styled(
-                        format!("CPU {:.0}%", stats.cpu_usage),
-                        Style::default()
-                            .fg(theme.colors.palette.text_primary),
-                    ),
-                ]),
-                Line::from(vec![
-                    Span::styled(
-                        format!("MEM {:.0}%", stats.memory_usage),
-                        Style::default()
-                            .fg(theme.colors.palette.text_primary),
-                    ),
-                ]),
-                Line::from(vec![
-                    Span::styled(
-                        format!("DSK {:.0}%", stats.disk_usage),
-                        Style::default()
-                            .fg(theme.colors.palette.text_primary),
-                    ),
-                ]),
-                Line::from(""),
-                Line::from(vec![
-                    Span::styled(
-                        format!("UP {}D {}H", 
-                            stats.uptime.num_days(),
-                            stats.uptime.num_hours() % 24
-                        ),
-                        Style::default()
-                            .fg(theme.colors.palette.text_secondary),
-                    ),
-                ]),
-            ];
-
-            let stats_widget = Paragraph::new(stats_text)
-                .alignment(Alignment::Center);
-
-            f.render_widget(stats_widget, area);
-        } else {
-            let loading_text = vec![
-                Line::from(""),
-                Line::from("SYSTEM"),
-                Line::from(""),
-                Line::from("Loading..."),
-            ];
-
-            let stats_widget = Paragraph::new(loading_text)
-                .style(Style::default().fg(theme.colors.palette.text_secondary))
-                .alignment(Alignment::Center);
-
-            f.render_widget(stats_widget, area);
-        }
+        f.render_widget(stats_widget, area);
     }
 
 }
