@@ -1288,11 +1288,13 @@ impl StoredMessage {
             // Standard RFC headers
             "from:", "to:", "cc:", "bcc:", "subject:", "date:", "reply-to:",
             "message-id:", "in-reply-to:", "references:", "mime-version:",
-            // Content headers
+            // Content headers - VERY IMPORTANT: These are showing in the screenshot
             "content-type:", "content-transfer-encoding:", "content-disposition:",
             "content-id:", "content-description:", "content-language:", "content-length:",
+            // Apple Mail specific (seen in screenshot)
+            "x-mailer: apple mail", "x-mailer:", "--apple-mail=", "apple-mail",
             // Boundary and multipart headers
-            "boundary=", "multipart/", "--", 
+            "boundary=", "multipart/", "--", "charset=", "quoted-printable",
             // Authentication and routing headers
             "received:", "return-path:", "delivered-to:", "envelope-to:",
             "authentication-results:", "received-spf:", "dkim-signature:", "dkim-pass:",
@@ -1310,7 +1312,7 @@ impl StoredMessage {
             "list-id:", "list-unsubscribe:", "list-archive:", "list-post:",
             "list-help:", "list-subscribe:", "precedence:", "feedback-id:",
             // Other common headers
-            "x-priority:", "importance:", "x-mailer:", "user-agent:",
+            "x-priority:", "importance:", "user-agent:",
             "thread-topic:", "thread-index:", "x-original-to:",
             // Additional technical headers seen in screenshots
             "x-sg-eid:", "x-report-abuse:", "x-kmail-flow:", "x-kmail-message:",
@@ -1376,21 +1378,94 @@ impl StoredMessage {
                 }
             }
             
-            // Add content lines
-            content_lines.push(*line);
+            // Add content lines only if we're not in headers
+            if !in_headers {
+                content_lines.push(*line);
+            }
         }
         
         let cleaned = content_lines.join("\n").trim().to_string();
         
         tracing::debug!("Cleaned content length: {} (original: {})", cleaned.len(), raw_content.len());
         
-        // If we still don't have meaningful content, return a fallback
+        // If we still don't have meaningful content, try a more aggressive approach
         if cleaned.trim().is_empty() {
-            tracing::warn!("No content found after cleaning, using fallback");
-            return "Email content could not be displayed properly.".to_string();
+            tracing::warn!("No content found after first pass, trying aggressive cleaning");
+            return Self::aggressive_content_extraction(raw_content);
         }
         
         cleaned
+    }
+    
+    /// More aggressive content extraction for difficult cases
+    fn aggressive_content_extraction(raw_content: &str) -> String {
+        let lines: Vec<&str> = raw_content.lines().collect();
+        let mut result_lines = Vec::new();
+        
+        // List of exact header prefixes to completely skip
+        let header_prefixes = [
+            "from:", "to:", "cc:", "bcc:", "subject:", "date:", "reply-to:", "sender:",
+            "message-id:", "in-reply-to:", "references:", "mime-version:",
+            "content-type:", "content-transfer-encoding:", "content-disposition:",
+            "content-id:", "content-description:", "content-language:", "content-length:",
+            "x-mailer:", "x-apple-", "x-google-", "x-ms-", "x-microsoft-", "x-gm-",
+            "x-kmail-", "x-kde-", "x-evolution-", "x-thunderbird-", "x-spam-", "x-virus-",
+            "received:", "return-path:", "delivered-to:", "envelope-to:", "authentication-results:",
+            "received-spf:", "dkim-signature:", "arc-seal:", "arc-message-signature:",
+            "list-id:", "list-unsubscribe:", "precedence:", "x-priority:", "importance:",
+            "user-agent:", "thread-topic:", "thread-index:", "x-originating-ip:",
+        ];
+        
+        for line in lines {
+            let line_lower = line.to_lowercase();
+            let line_trimmed = line.trim();
+            
+            // Skip empty lines
+            if line_trimmed.is_empty() {
+                continue;
+            }
+            
+            // Skip lines starting with known header prefixes
+            if header_prefixes.iter().any(|&prefix| line_lower.starts_with(prefix)) {
+                continue;
+            }
+            
+            // Skip boundary markers
+            if line.starts_with("--") && (line.contains("Apple-Mail") || line.contains("boundary") || line.len() > 20) {
+                continue;
+            }
+            
+            // Skip lines that look like technical metadata
+            if line.contains("Content-Transfer-Encoding:") ||
+               line.contains("Content-Type:") ||
+               line.contains("charset=") ||
+               line.contains("boundary=") ||
+               line.contains("multipart/") ||
+               line.contains("quoted-printable") {
+                continue;
+            }
+            
+            // Skip encoded content (lines with =? ?= patterns)
+            if line.contains("=?") && line.contains("?=") {
+                continue;
+            }
+            
+            // Skip very long lines that look like encoded data or URLs without readable text
+            if line.len() > 200 && !line.contains(" ") && !line.starts_with("http") {
+                continue;
+            }
+            
+            // If we get here, it's likely content
+            result_lines.push(line);
+        }
+        
+        let result = result_lines.join("\n").trim().to_string();
+        
+        if result.is_empty() {
+            "Email content could not be displayed properly.".to_string()
+        } else {
+            result
+        }
     }
 }
 
