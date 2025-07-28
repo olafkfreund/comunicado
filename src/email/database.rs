@@ -1220,15 +1220,38 @@ impl StoredMessage {
         // Clean the raw email content to remove headers and technical data
         let cleaned_content = Self::clean_raw_email_content(raw_content);
         
-        // If we got HTML content, convert it to plain text
-        if crate::html::is_html_content(&cleaned_content) {
-            tracing::debug!("Converting HTML content to plain text");
+        // Check if we have HTML content that needs conversion to plain text
+        // Use more aggressive HTML detection since is_html_content might miss some cases
+        let has_html_tags = cleaned_content.contains("<html") || 
+                           cleaned_content.contains("<!DOCTYPE") ||
+                           cleaned_content.contains("<div") || 
+                           cleaned_content.contains("<span") || 
+                           cleaned_content.contains("<p>") || 
+                           cleaned_content.contains("<br") ||
+                           cleaned_content.contains("<td") || 
+                           cleaned_content.contains("<tr") || 
+                           cleaned_content.contains("<table") || 
+                           cleaned_content.contains("<li") ||
+                           cleaned_content.contains("<body") ||
+                           cleaned_content.contains("<head");
+        
+        if has_html_tags || crate::html::is_html_content(&cleaned_content) {
+            tracing::info!("Converting HTML content to plain text for body_text (length: {})", cleaned_content.len());
             let html_renderer = crate::html::HtmlRenderer::new(80);
             let plain_text = html_renderer.html_to_plain_text(&cleaned_content);
-            if !plain_text.trim().is_empty() {
+            
+            if !plain_text.trim().is_empty() && plain_text.len() > 10 {
+                tracing::info!("HTML-to-text conversion successful: {} chars -> {} chars", cleaned_content.len(), plain_text.len());
                 Some(plain_text)
             } else {
-                Some(cleaned_content) // Fallback to cleaned content
+                tracing::warn!("HTML-to-text conversion failed, using aggressive text extraction");
+                // If HTML conversion fails, try to extract readable text manually
+                let manual_text = Self::extract_text_from_html(&cleaned_content);
+                if !manual_text.trim().is_empty() {
+                    Some(manual_text)
+                } else {
+                    Some(cleaned_content) // Ultimate fallback
+                }
             }
         } else {
             tracing::debug!("Using cleaned plain text content");
@@ -1266,21 +1289,44 @@ impl StoredMessage {
     fn clean_raw_email_content(raw_content: &str) -> String {
         tracing::debug!("Cleaning raw email content of length: {}", raw_content.len());
         
-        // First, try to find HTML content directly
-        if let Some(html_start) = raw_content.find("<!DOCTYPE") {
-            tracing::debug!("Found HTML content starting with DOCTYPE");
-            return raw_content[html_start..].to_string();
-        } else if let Some(html_start) = raw_content.find("<html") {
-            tracing::debug!("Found HTML content starting with <html");
-            return raw_content[html_start..].to_string();
-        } else if let Some(body_start) = raw_content.find("<body") {
-            tracing::debug!("Found HTML content starting with <body");
-            return raw_content[body_start..].to_string();
-        }
-        
         // Use the more reliable aggressive extraction method as the primary approach
-        // The previous method was not catching all the technical headers
+        // This removes headers and technical content, but preserves HTML structure
+        // HTML-to-text conversion should happen at higher levels when appropriate
         return Self::aggressive_content_extraction(raw_content);
+    }
+    
+    /// Extract readable text from HTML content by manually removing tags
+    fn extract_text_from_html(html_content: &str) -> String {
+        tracing::debug!("Manually extracting text from HTML content");
+        
+        let result = html_content
+            .lines()
+            .map(|line| {
+                let mut text_line = line.to_string();
+                
+                // Remove HTML tags (simple regex-like approach)
+                while text_line.contains('<') && text_line.contains('>') {
+                    if let Some(start) = text_line.find('<') {
+                        if let Some(end) = text_line[start..].find('>') {
+                            let tag_end = start + end + 1;
+                            text_line.replace_range(start..tag_end, " ");
+                        } else {
+                            break;
+                        }
+                    } else {
+                        break;
+                    }
+                }
+                
+                // Clean up multiple spaces and trim
+                text_line.split_whitespace().collect::<Vec<_>>().join(" ").trim().to_string()
+            })
+            .filter(|line| !line.is_empty() && line.len() > 2) // Filter very short lines
+            .collect::<Vec<_>>()
+            .join("\n");
+        
+        tracing::debug!("Manual HTML text extraction complete: {} chars", result.len());
+        result
     }
     
     /// More aggressive content extraction for difficult cases
