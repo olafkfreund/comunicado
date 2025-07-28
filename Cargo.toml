@@ -41,6 +41,8 @@ regex = "1.10"
 # HTML parsing and rendering
 scraper = "0.19"
 html2text = "0.6"
+ammonia = "3.3"  # HTML sanitization and cleaning
+pulldown-cmark = "0.9"  # Markdown rendering for better text formatting
 
 # Image processing and terminal graphics
 image = { version = "0.24", features = ["jpeg", "png", "gif", "webp"] }

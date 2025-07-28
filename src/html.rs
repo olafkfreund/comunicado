@@ -1,8 +1,9 @@
-use scraper::{Html, Selector};
+use scraper::{Html, Selector, ElementRef};
 use ratatui::{
     style::{Color, Modifier, Style},
     text::{Line, Span, Text},
 };
+use ammonia::clean;
 
 /// HTML to terminal text converter for email content
 pub struct HtmlRenderer {
@@ -23,17 +24,24 @@ impl HtmlRenderer {
         }
     }
     
-    /// Convert HTML content to terminal-friendly text with styling
+    /// Convert HTML content to terminal-friendly text with styling (w3m/lynx style)
     pub fn render_html(&mut self, html_content: &str) -> Text<'static> {
         tracing::debug!("HTML Renderer: Processing content of length {}", html_content.len());
         
-        // First, try to use html2text for reliable conversion
-        let plain_text = self.html_to_plain_text(html_content);
+        // Step 1: Clean and sanitize HTML to remove malicious/unnecessary content
+        let cleaned_html = self.clean_and_sanitize_html(html_content);
         
+        // Step 2: Try our enhanced w3m-style renderer first
+        let enhanced_result = self.render_html_enhanced(&cleaned_html);
+        if !enhanced_result.lines.is_empty() {
+            tracing::debug!("HTML Renderer: Enhanced rendering successful ({} lines)", enhanced_result.lines.len());
+            return enhanced_result;
+        }
+        
+        // Step 3: Fallback to html2text
+        let plain_text = self.html_to_plain_text(&cleaned_html);
         if !plain_text.trim().is_empty() {
-            tracing::debug!("HTML Renderer: Successfully converted to plain text ({} chars)", plain_text.len());
-            
-            // Convert the plain text to styled lines
+            tracing::debug!("HTML Renderer: html2text fallback successful ({} chars)", plain_text.len());
             let lines: Vec<Line<'static>> = plain_text
                 .lines()
                 .map(|line| {
@@ -41,27 +49,21 @@ impl HtmlRenderer {
                     if line_content.is_empty() {
                         Line::from("")
                     } else {
-                        // Apply basic styling based on line content
                         self.style_text_line(line_content)
                     }
                 })
                 .collect();
-            
             return Text::from(lines);
         }
         
-        // Fallback: Try to parse as HTML and extract text
-        tracing::warn!("HTML Renderer: html2text failed, trying HTML parsing fallback");
-        let document = Html::parse_fragment(html_content);
+        // Step 4: Last resort - basic HTML parsing
+        tracing::warn!("HTML Renderer: Using basic HTML parsing fallback");
+        let document = Html::parse_fragment(&cleaned_html);
         let mut lines = Vec::new();
-        
-        // Extract text from HTML elements
         self.extract_text_from_html(&document, &mut lines);
         
         if lines.is_empty() {
-            tracing::warn!("HTML Renderer: HTML parsing failed, using strip tags fallback");
-            // Last resort: strip HTML tags and return plain text
-            let stripped = Self::strip_html_tags(html_content);
+            let stripped = Self::strip_html_tags(&cleaned_html);
             let fallback_lines: Vec<Line<'static>> = stripped
                 .lines()
                 .map(|line| Line::from(line.trim().to_string()))
@@ -70,6 +72,219 @@ impl HtmlRenderer {
         }
         
         Text::from(lines)
+    }
+    
+    /// Clean and sanitize HTML content (like w3m preprocessing)
+    fn clean_and_sanitize_html(&self, html: &str) -> String {
+        // Use ammonia to clean HTML and remove dangerous/unnecessary elements
+        let clean_html = clean(html);
+        
+        // Additional cleaning for email-specific issues
+        let mut cleaned = clean_html
+            // Remove script and style content completely
+            .replace(r#"<script[^>]*>.*?</script>"#, "")
+            .replace(r#"<style[^>]*>.*?</style>"#, "")
+            // Normalize whitespace
+            .trim()
+            .to_string();
+        
+        // If the content doesn't look like proper HTML, wrap it
+        if !cleaned.starts_with('<') && !cleaned.contains("<html") && !cleaned.contains("<body") {
+            cleaned = format!("<div>{}</div>", cleaned);
+        }
+        
+        cleaned
+    }
+    
+    /// Enhanced HTML renderer (w3m/lynx style)
+    fn render_html_enhanced(&mut self, html: &str) -> Text<'static> {
+        let document = Html::parse_fragment(html);
+        let mut lines = Vec::new();
+        let mut current_line = Vec::new();
+        let mut list_depth = 0;
+        let mut in_pre = false;
+        
+        // Walk through the HTML tree and render like a terminal browser
+        self.render_element_enhanced(&document.root_element(), &mut lines, &mut current_line, &mut list_depth, &mut in_pre);
+        
+        // Add any remaining content
+        if !current_line.is_empty() {
+            lines.push(Line::from(current_line));
+        }
+        
+        Text::from(lines)
+    }
+    
+    /// Render HTML elements in a w3m/lynx style
+    fn render_element_enhanced(
+        &self,
+        element: &ElementRef,
+        lines: &mut Vec<Line<'static>>,
+        current_line: &mut Vec<Span<'static>>,
+        list_depth: &mut usize,
+        in_pre: &mut bool,
+    ) {
+        use scraper::Node;
+        
+        for node in element.children() {
+            match node.value() {
+                Node::Element(elem) => {
+                    if let Some(element_ref) = ElementRef::wrap(node) {
+                        let tag_name = elem.name();
+                        
+                        match tag_name {
+                            // Skip these entirely
+                            "script" | "style" | "meta" | "link" | "head" => continue,
+                            
+                            // Block elements - create new lines
+                            "h1" | "h2" | "h3" | "h4" | "h5" | "h6" => {
+                                self.flush_current_line(lines, current_line);
+                                let text = element_ref.text().collect::<String>();
+                                if !text.trim().is_empty() {
+                                    let level = tag_name.chars().last().unwrap().to_digit(10).unwrap_or(1) as usize;
+                                    let style = match level {
+                                        1 => Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+                                        2 => Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+                                        _ => Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
+                                    };
+                                    lines.push(Line::from(vec![Span::styled(text.trim().to_string(), style)]));
+                                    lines.push(Line::from("")); // Add spacing after headers
+                                }
+                            }
+                            
+                            "p" | "div" => {
+                                self.flush_current_line(lines, current_line);
+                                self.render_element_enhanced(&element_ref, lines, current_line, list_depth, in_pre);
+                                self.flush_current_line(lines, current_line);
+                                lines.push(Line::from("")); // Add spacing
+                            }
+                            
+                            "br" => {
+                                self.flush_current_line(lines, current_line);
+                            }
+                            
+                            "ul" | "ol" => {
+                                self.flush_current_line(lines, current_line);
+                                *list_depth += 1;
+                                self.render_element_enhanced(&element_ref, lines, current_line, list_depth, in_pre);
+                                *list_depth -= 1;
+                                self.flush_current_line(lines, current_line);
+                            }
+                            
+                            "li" => {
+                                self.flush_current_line(lines, current_line);
+                                let indent = "  ".repeat(*list_depth);
+                                current_line.push(Span::raw(format!("{}• ", indent)));
+                                self.render_element_enhanced(&element_ref, lines, current_line, list_depth, in_pre);
+                            }
+                            
+                            "a" => {
+                                let text = element_ref.text().collect::<String>();
+                                if !text.trim().is_empty() {
+                                    let href = element_ref.value().attr("href").unwrap_or("");
+                                    let display_text = if href.is_empty() {
+                                        text.trim().to_string()
+                                    } else {
+                                        format!("{} ({})", text.trim(), href)
+                                    };
+                                    current_line.push(Span::styled(
+                                        display_text,
+                                        Style::default().fg(Color::Blue).add_modifier(Modifier::UNDERLINED)
+                                    ));
+                                }
+                            }
+                            
+                            "strong" | "b" => {
+                                let text = element_ref.text().collect::<String>();
+                                if !text.trim().is_empty() {
+                                    current_line.push(Span::styled(
+                                        text.trim().to_string(),
+                                        Style::default().add_modifier(Modifier::BOLD)
+                                    ));
+                                }
+                            }
+                            
+                            "em" | "i" => {
+                                let text = element_ref.text().collect::<String>();
+                                if !text.trim().is_empty() {
+                                    current_line.push(Span::styled(
+                                        text.trim().to_string(),
+                                        Style::default().add_modifier(Modifier::ITALIC)
+                                    ));
+                                }
+                            }
+                            
+                            "pre" | "code" => {
+                                let old_pre = *in_pre;
+                                *in_pre = true;
+                                let text = element_ref.text().collect::<String>();
+                                if !text.trim().is_empty() {
+                                    self.flush_current_line(lines, current_line);
+                                    for line in text.lines() {
+                                        lines.push(Line::from(vec![Span::styled(
+                                            line.to_string(),
+                                            Style::default().fg(Color::Green)
+                                        )]));
+                                    }
+                                }
+                                *in_pre = old_pre;
+                            }
+                            
+                            "table" => {
+                                self.flush_current_line(lines, current_line);
+                                lines.push(Line::from("┌─ Table ─┐"));
+                                self.render_element_enhanced(&element_ref, lines, current_line, list_depth, in_pre);
+                                lines.push(Line::from("└─────────┘"));
+                            }
+                            
+                            "tr" => {
+                                self.flush_current_line(lines, current_line);
+                                current_line.push(Span::raw("│ "));
+                                self.render_element_enhanced(&element_ref, lines, current_line, list_depth, in_pre);
+                                current_line.push(Span::raw(" │"));
+                                self.flush_current_line(lines, current_line);
+                            }
+                            
+                            "td" | "th" => {
+                                let text = element_ref.text().collect::<String>();
+                                if !text.trim().is_empty() {
+                                    let style = if tag_name == "th" {
+                                        Style::default().add_modifier(Modifier::BOLD)
+                                    } else {
+                                        Style::default()
+                                    };
+                                    current_line.push(Span::styled(format!("{} ", text.trim()), style));
+                                }
+                            }
+                            
+                            // Recursive rendering for other elements
+                            _ => {
+                                self.render_element_enhanced(&element_ref, lines, current_line, list_depth, in_pre);
+                            }
+                        }
+                    }
+                }
+                Node::Text(text) => {
+                    let text_content = if *in_pre {
+                        text.to_string()
+                    } else {
+                        text.trim().to_string()
+                    };
+                    
+                    if !text_content.is_empty() {
+                        current_line.push(Span::raw(text_content));
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    
+    /// Helper to flush current line to lines vector
+    fn flush_current_line(&self, lines: &mut Vec<Line<'static>>, current_line: &mut Vec<Span<'static>>) {
+        if !current_line.is_empty() {
+            lines.push(Line::from(current_line.drain(..).collect::<Vec<_>>()));
+        }
     }
     
     /// Convert HTML to plain text using html2text (most reliable method)

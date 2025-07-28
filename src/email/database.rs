@@ -1290,24 +1290,31 @@ impl StoredMessage {
             "message-id:", "in-reply-to:", "references:", "mime-version:",
             // Content headers
             "content-type:", "content-transfer-encoding:", "content-disposition:",
-            "content-id:", "content-description:", "content-language:",
+            "content-id:", "content-description:", "content-language:", "content-length:",
+            // Boundary and multipart headers
+            "boundary=", "multipart/", "--", 
             // Authentication and routing headers
             "received:", "return-path:", "delivered-to:", "envelope-to:",
-            "authentication-results:", "received-spf:", "dkim-signature:",
+            "authentication-results:", "received-spf:", "dkim-signature:", "dkim-pass:",
             "arc-seal:", "arc-message-signature:", "arc-authentication-results:",
             // Service-specific headers (Gmail, Outlook, etc.)
             "x-received:", "x-google-smtp-source:", "x-gm-message-state:",
             "x-google-dkim-signature:", "x-gm-thd-id:", "x-gmail-labels:",
             "x-ms-exchange-", "x-originating-ip:", "x-microsoft-antispam:",
+            // KMail and client-specific headers
+            "x-kmail-", "x-kde-", "x-evolution-", "x-thunderbird-",
             // Spam and security headers
             "x-spam-checker-version:", "x-spam-level:", "x-spam-status:",
             "x-spam-check-by:", "x-virus-scanned:", "x-barracuda-",
             // Mailing list headers
             "list-id:", "list-unsubscribe:", "list-archive:", "list-post:",
-            "list-help:", "list-subscribe:", "precedence:",
+            "list-help:", "list-subscribe:", "precedence:", "feedback-id:",
             // Other common headers
             "x-priority:", "importance:", "x-mailer:", "user-agent:",
             "thread-topic:", "thread-index:", "x-original-to:",
+            // Additional technical headers seen in screenshots
+            "x-sg-eid:", "x-report-abuse:", "x-kmail-flow:", "x-kmail-message:",
+            "x-kmail-ops:", "spf=pass",
         ];
         
         for (i, line) in lines.iter().enumerate() {
@@ -1331,27 +1338,42 @@ impl StoredMessage {
             if in_headers {
                 let is_header_line = email_headers.iter().any(|&header| {
                     line_lower.starts_with(header) || 
+                    line_lower.contains(header) || // More aggressive matching
                     // Handle continuation lines (starting with whitespace)
                     (line.starts_with(' ') || line.starts_with('\t'))
                 });
                 
-                // Also skip lines that look like headers (contain : and are at start of line)
-                let looks_like_header = line.contains(':') && 
-                    !line.starts_with(' ') && 
-                    !line.starts_with('\t') &&
-                    // But don't skip things that look like actual content
-                    !line_lower.contains("http") &&
-                    !line_lower.contains("www.") &&
-                    line.len() < 200; // Headers are usually shorter
+                // More aggressive header detection
+                let looks_like_header = (
+                    // Lines with colons (headers)
+                    (line.contains(':') && !line.starts_with(' ') && !line.starts_with('\t')) ||
+                    // Lines that are mostly uppercase and short (header-like)
+                    (line.len() < 100 && line.chars().filter(|c| c.is_uppercase()).count() > line.len() / 3) ||
+                    // Lines with encoded strings (=? ... ?=)
+                    (line.contains("=?") && line.contains("?=")) ||
+                    // Lines that start with technical indicators
+                    line_lower.starts_with("--") ||
+                    line_lower.starts_with("boundary") ||
+                    // Lines with base64-like content (long strings of alphanumeric + /+=)
+                    (line.len() > 50 && line.chars().filter(|c| c.is_alphanumeric() || *c == '/' || *c == '+' || *c == '=').count() > line.len() * 4 / 5)
+                ) && 
+                // But don't skip things that look like actual content
+                !line_lower.contains("http") &&
+                !line_lower.contains("www.") &&
+                !line_lower.contains("want to change") && // Common email content phrase
+                !line_lower.contains("you can") && // Common email content phrase
+                line.len() < 300; // Headers are usually shorter
                 
                 if is_header_line || looks_like_header {
                     tracing::debug!("Skipping header line {}: {}", i, &line[..std::cmp::min(50, line.len())]);
                     continue;
                 }
                 
-                // If we find a line that doesn't look like a header, we're in content
-                tracing::debug!("Found first content line at {}: {}", i, &line[..std::cmp::min(50, line.len())]);
-                in_headers = false;
+                // If we find a line that looks like actual content, we're in content
+                if line_trimmed.len() > 10 && !line.contains("=") && !line.contains(":") {
+                    tracing::debug!("Found first content line at {}: {}", i, &line[..std::cmp::min(50, line.len())]);
+                    in_headers = false;
+                }
             }
             
             // Add content lines
