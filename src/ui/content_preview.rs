@@ -324,26 +324,15 @@ This is a sample email showcasing the modern email display format.".to_string();
             // Do all mutable operations first to avoid borrowing conflicts
             let html_lines = if email.content_type == ContentType::Html {
                 tracing::debug!("Content Preview: Processing HTML content of length {}", email.body.len());
-                tracing::debug!("Content Preview: HTML detection result: {}", crate::html::is_html_content(&email.body));
                 
-                if crate::html::is_html_content(&email.body) {
-                    // Clone the body to avoid borrowing issues when calling render_html
-                    let email_body = email.body.clone();
-                    // Render HTML content using the HTML renderer
-                    let rendered_text = self.html_renderer.render_html(&email_body);
-                    
-                    // Process lines and replace image placeholders with enhanced rendering
-                    Some(self.process_image_placeholders_enhanced(rendered_text.lines, terminal_width))
-                } else {
-                    // Content marked as HTML but doesn't look like HTML - use html2text fallback
-                    tracing::warn!("Content Preview: Content marked as HTML but doesn't look like HTML, using fallback");
-                    let plain_text = self.html_renderer.html_to_plain_text(&email.body);
-                    let plain_lines: Vec<Line<'static>> = plain_text
-                        .lines()
-                        .map(|line| Line::from(line.to_string()))
-                        .collect();
-                    Some(plain_lines)
-                }
+                // Always try HTML rendering first - the new renderer handles detection internally
+                let email_body = email.body.clone();
+                let rendered_text = self.html_renderer.render_html(&email_body);
+                
+                tracing::debug!("Content Preview: HTML renderer generated {} lines", rendered_text.lines.len());
+                
+                // Process lines and replace image placeholders with enhanced rendering
+                Some(self.process_image_placeholders_enhanced(rendered_text.lines, terminal_width))
             } else {
                 tracing::debug!("Content Preview: Processing plain text content");
                 None
@@ -479,37 +468,19 @@ This is a sample email showcasing the modern email display format.".to_string();
             ]));
             all_lines.push(Line::from("")); // Separator
             
-            // Check if we have HTML content to render
+            // Always render HTML content - the renderer handles everything internally
             if !email.body.is_empty() {
                 tracing::debug!("HTML Content Rendering: Content length = {}", email.body.len());
-                tracing::debug!("HTML Content Rendering: Is HTML = {}", crate::html::is_html_content(&email.body));
                 
-                // Try to detect if this is HTML content
-                if crate::html::is_html_content(&email.body) {
-                    // Use the HTML renderer instance to render HTML content
-                    let rendered_text = self.html_renderer.render_html(&email.body);
-                    
-                    // Process lines and replace image placeholders with enhanced rendering
-                    let terminal_width = self.html_renderer.max_width as u16;
-                    let processed_lines = self.process_image_placeholders_enhanced(rendered_text.lines, terminal_width);
-                    all_lines.extend(processed_lines);
-                    
-                    tracing::debug!("HTML Content Rendering: Generated {} lines after processing", all_lines.len() - 3); // Subtract headers
-                } else {
-                    // Content marked as HTML but doesn't look like HTML - try html2text anyway
-                    tracing::warn!("HTML Content Rendering: Content doesn't look like HTML, trying html2text fallback");
-                    let plain_text = self.html_renderer.html_to_plain_text(&email.body);
-                    if !plain_text.trim().is_empty() {
-                        for line in plain_text.lines() {
-                            all_lines.push(Line::raw(line.to_string()));
-                        }
-                    } else {
-                        // Last resort - show raw content
-                        for line in email.body.lines() {
-                            all_lines.push(Line::raw(line.to_string()));
-                        }
-                    }
-                }
+                // Use the HTML renderer to convert HTML to readable text
+                let rendered_text = self.html_renderer.render_html(&email.body);
+                
+                // Process lines and replace image placeholders with enhanced rendering
+                let terminal_width = self.html_renderer.max_width as u16;
+                let processed_lines = self.process_image_placeholders_enhanced(rendered_text.lines, terminal_width);
+                all_lines.extend(processed_lines);
+                
+                tracing::debug!("HTML Content Rendering: Generated {} lines after processing", all_lines.len() - 3); // Subtract headers
             } else {
                 all_lines.push(Line::styled("(No HTML content available)", 
                     Style::default().fg(Color::Gray)));
@@ -1626,16 +1597,22 @@ This is a sample email showcasing the modern email display format.".to_string();
         
         // Prefer HTML body if available and has content, otherwise use text body
         let (body, content_type) = if let Some(ref html_body) = message.body_html {
-            if !html_body.trim().is_empty() && crate::html::is_html_content(html_body) {
+            if !html_body.trim().is_empty() {
+                // Always treat HTML as HTML regardless of detection - the renderer will handle it
+                tracing::debug!("Content Preview: Using HTML body (length: {})", html_body.len());
                 (html_body.clone(), ContentType::Html)
             } else if let Some(ref text_body) = message.body_text {
+                tracing::debug!("Content Preview: HTML body empty, using text body");
                 (text_body.clone(), ContentType::PlainText)
             } else {
-                (html_body.clone(), ContentType::Html) // Even if not detected as HTML, try HTML rendering
+                tracing::debug!("Content Preview: Only empty HTML body available");
+                ("No content available".to_string(), ContentType::PlainText)
             }
         } else if let Some(ref text_body) = message.body_text {
+            tracing::debug!("Content Preview: Using text body (length: {})", text_body.len());
             (text_body.clone(), ContentType::PlainText)
         } else {
+            tracing::debug!("Content Preview: No content available");
             ("No content available".to_string(), ContentType::PlainText)
         };
             

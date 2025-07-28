@@ -1,4 +1,4 @@
-use scraper::Html;
+use scraper::{Html, Selector};
 use ratatui::{
     style::{Color, Modifier, Style},
     text::{Line, Span, Text},
@@ -25,38 +25,211 @@ impl HtmlRenderer {
     
     /// Convert HTML content to terminal-friendly text with styling
     pub fn render_html(&mut self, html_content: &str) -> Text<'static> {
-        // Debug logging to help identify issues
         tracing::debug!("HTML Renderer: Processing content of length {}", html_content.len());
-        tracing::debug!("HTML Renderer: Content preview: {:?}", &html_content[..html_content.len().min(200)]);
         
-        // Parse HTML
-        let document = Html::parse_fragment(html_content);
+        // First, try to use html2text for reliable conversion
+        let plain_text = self.html_to_plain_text(html_content);
         
-        // Convert to text with styling
-        let mut lines = Vec::new();
-        self.process_element(&document.root_element(), &mut lines);
-        
-        // If no lines were generated, fall back to html2text
-        if lines.is_empty() {
-            tracing::warn!("HTML Renderer: No lines generated, falling back to html2text");
-            let plain_text = self.html_to_plain_text(html_content);
-            let plain_lines: Vec<Line<'static>> = plain_text
+        if !plain_text.trim().is_empty() {
+            tracing::debug!("HTML Renderer: Successfully converted to plain text ({} chars)", plain_text.len());
+            
+            // Convert the plain text to styled lines
+            let lines: Vec<Line<'static>> = plain_text
                 .lines()
-                .map(|line| Line::from(line.to_string()))
+                .map(|line| {
+                    let line_content = line.trim_end();
+                    if line_content.is_empty() {
+                        Line::from("")
+                    } else {
+                        // Apply basic styling based on line content
+                        self.style_text_line(line_content)
+                    }
+                })
                 .collect();
-            return Text::from(plain_lines);
+            
+            return Text::from(lines);
         }
         
-        tracing::debug!("HTML Renderer: Generated {} lines", lines.len());
+        // Fallback: Try to parse as HTML and extract text
+        tracing::warn!("HTML Renderer: html2text failed, trying HTML parsing fallback");
+        let document = Html::parse_fragment(html_content);
+        let mut lines = Vec::new();
         
-        // Create Text with proper line breaks
+        // Extract text from HTML elements
+        self.extract_text_from_html(&document, &mut lines);
+        
+        if lines.is_empty() {
+            tracing::warn!("HTML Renderer: HTML parsing failed, using strip tags fallback");
+            // Last resort: strip HTML tags and return plain text
+            let stripped = Self::strip_html_tags(html_content);
+            let fallback_lines: Vec<Line<'static>> = stripped
+                .lines()
+                .map(|line| Line::from(line.trim().to_string()))
+                .collect();
+            return Text::from(fallback_lines);
+        }
+        
         Text::from(lines)
     }
     
-    /// Convert HTML to plain text (fallback for simple terminals)
+    /// Convert HTML to plain text using html2text (most reliable method)
     pub fn html_to_plain_text(&self, html_content: &str) -> String {
-        // Use html2text for conversion
-        html2text::from_read(html_content.as_bytes(), self.max_width)
+        // Use html2text for conversion with proper width
+        let result = html2text::from_read(html_content.as_bytes(), self.max_width);
+        
+        // Clean up the result - remove excessive whitespace but preserve formatting
+        let cleaned = result
+            .lines()
+            .map(|line| line.trim_end()) // Remove trailing whitespace but keep leading
+            .collect::<Vec<_>>()
+            .join("\n");
+        
+        // Remove excessive blank lines (more than 2 consecutive)
+        let mut final_result = String::new();
+        let mut blank_line_count = 0;
+        
+        for line in cleaned.lines() {
+            if line.trim().is_empty() {
+                blank_line_count += 1;
+                if blank_line_count <= 2 {
+                    final_result.push('\n');
+                }
+            } else {
+                blank_line_count = 0;
+                final_result.push_str(line);
+                final_result.push('\n');
+            }
+        }
+        
+        final_result
+    }
+    
+    /// Style a text line based on its content patterns
+    fn style_text_line(&self, line: &str) -> Line<'static> {
+        let trimmed = line.trim();
+        
+        // Detect different types of content and apply appropriate styling
+        if trimmed.is_empty() {
+            return Line::from("");
+        }
+        
+        // Headers (lines that look like headings)
+        if trimmed.len() < 100 && (
+            trimmed.ends_with(':') ||
+            trimmed.chars().all(|c| c.is_uppercase() || c.is_whitespace() || c.is_ascii_punctuation()) ||
+            (trimmed.starts_with('*') && trimmed.ends_with('*') && trimmed.len() < 50)
+        ) {
+            return Line::styled(
+                line.to_string(),
+                Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+            );
+        }
+        
+        // Quote lines (lines starting with >)
+        if trimmed.starts_with('>') {
+            return Line::styled(
+                line.to_string(),
+                Style::default().fg(Color::Gray).add_modifier(Modifier::ITALIC)
+            );
+        }
+        
+        // Bullet points
+        if trimmed.starts_with("• ") || trimmed.starts_with("* ") || 
+           trimmed.starts_with("- ") || trimmed.matches(". ").next().map_or(false, |_| {
+               trimmed.split(". ").next().unwrap_or("").chars().all(|c| c.is_ascii_digit())
+           }) {
+            return Line::styled(
+                line.to_string(),
+                Style::default().fg(Color::Yellow)
+            );
+        }
+        
+        // URLs and email addresses
+        if trimmed.contains("http://") || trimmed.contains("https://") || 
+           trimmed.contains("www.") || (trimmed.contains('@') && trimmed.contains('.')) {
+            return Line::styled(
+                line.to_string(),
+                Style::default().fg(Color::Blue).add_modifier(Modifier::UNDERLINED)
+            );
+        }
+        
+        // Default styling
+        Line::styled(
+            line.to_string(),
+            Style::default().fg(Color::White)
+        )
+    }
+    
+    /// Extract text content from HTML document
+    fn extract_text_from_html(&self, document: &Html, lines: &mut Vec<Line<'static>>) {
+        // Try to find body content first
+        if let Ok(body_selector) = Selector::parse("body") {
+            if let Some(body) = document.select(&body_selector).next() {
+                self.extract_element_text(&body, lines);
+                return;
+            }
+        }
+        
+        // If no body found, extract from root
+        self.extract_element_text(&document.root_element(), lines);
+    }
+    
+    /// Extract text from a specific element
+    fn extract_element_text(&self, element: &scraper::ElementRef, lines: &mut Vec<Line<'static>>) {
+        use scraper::Node;
+        
+        for node in element.children() {
+            match node.value() {
+                Node::Element(elem) => {
+                    let tag_name = elem.name();
+                    if let Some(element_ref) = scraper::ElementRef::wrap(node) {
+                        match tag_name {
+                            // Skip these elements entirely
+                            "script" | "style" | "meta" | "link" | "head" => continue,
+                            
+                            // Block elements that should create new lines
+                            "p" | "div" | "h1" | "h2" | "h3" | "h4" | "h5" | "h6" | "br" => {
+                                let text_content = element_ref.text().collect::<Vec<_>>().join(" ");
+                                if !text_content.trim().is_empty() {
+                                    lines.push(Line::from(text_content.trim().to_string()));
+                                }
+                                if matches!(tag_name, "p" | "div" | "h1" | "h2" | "h3" | "h4" | "h5" | "h6") {
+                                    lines.push(Line::from(""));
+                                }
+                            }
+                            
+                            // List items
+                            "li" => {
+                                let text_content = element_ref.text().collect::<Vec<_>>().join(" ");
+                                if !text_content.trim().is_empty() {
+                                    lines.push(Line::from(format!("• {}", text_content.trim())));
+                                }
+                            }
+                            
+                            // Table cells
+                            "td" | "th" => {
+                                let text_content = element_ref.text().collect::<Vec<_>>().join(" ");
+                                if !text_content.trim().is_empty() {
+                                    lines.push(Line::from(format!("{} ", text_content.trim())));
+                                }
+                            }
+                            
+                            // Inline elements - just extract text
+                            _ => {
+                                self.extract_element_text(&element_ref, lines);
+                            }
+                        }
+                    }
+                }
+                Node::Text(text) => {
+                    let text_content = text.trim();
+                    if !text_content.is_empty() {
+                        lines.push(Line::from(text_content.to_string()));
+                    }
+                }
+                _ => {}
+            }
+        }
     }
     
     /// Simple HTML tag removal as last resort
@@ -82,414 +255,9 @@ impl HtmlRenderer {
             .join("\n")
     }
     
-    /// Process HTML elements recursively
-    fn process_element(&mut self, element: &scraper::ElementRef, lines: &mut Vec<Line<'static>>) {
-        use scraper::Node;
-        
-        for node in element.children() {
-            match node.value() {
-                Node::Element(elem) => {
-                    let tag_name = elem.name();
-                    let element_ref = scraper::ElementRef::wrap(node).unwrap();
-                    
-                    // Apply inline styles if present
-                    self.apply_inline_styles(&element_ref);
-                    
-                    // Handle different HTML tags
-                    match tag_name {
-                        "p" => {
-                            self.process_paragraph(&element_ref, lines);
-                            lines.push(Line::from(""));  // Add blank line after paragraph
-                        }
-                        "br" => {
-                            lines.push(Line::from(""));
-                        }
-                        "h1" | "h2" | "h3" | "h4" | "h5" | "h6" => {
-                            self.process_heading(&element_ref, lines, tag_name);
-                        }
-                        "strong" | "b" => {
-                            self.push_style(Style::default().add_modifier(Modifier::BOLD));
-                            self.process_element(&element_ref, lines);
-                            self.pop_style();
-                        }
-                        "em" | "i" => {
-                            self.push_style(Style::default().add_modifier(Modifier::ITALIC));
-                            self.process_element(&element_ref, lines);
-                            self.pop_style();
-                        }
-                        "u" => {
-                            self.push_style(Style::default().add_modifier(Modifier::UNDERLINED));
-                            self.process_element(&element_ref, lines);
-                            self.pop_style();
-                        }
-                        "a" => {
-                            self.process_link(&element_ref, lines);
-                        }
-                        "blockquote" => {
-                            self.process_blockquote(&element_ref, lines);
-                        }
-                        "ul" | "ol" => {
-                            self.process_list(&element_ref, lines, tag_name);
-                        }
-                        "pre" | "code" => {
-                            self.process_code(&element_ref, lines);
-                        }
-                        "img" => {
-                            self.process_image(&element_ref, lines);
-                        }
-                        "table" => {
-                            self.process_table(&element_ref, lines);
-                        }
-                        "div" | "span" | "body" | "html" => {
-                            // Container elements - just process children
-                            self.process_element(&element_ref, lines);
-                        }
-                        _ => {
-                            // Unknown elements - process children
-                            self.process_element(&element_ref, lines);
-                        }
-                    }
-                    
-                    // Pop inline styles if they were applied
-                    if element_ref.value().attr("style").is_some() {
-                        self.pop_style();
-                    }
-                }
-                Node::Text(text) => {
-                    let text_content = text.trim();
-                    if !text_content.is_empty() {
-                        self.add_text_to_lines(text_content, lines);
-                    }
-                }
-                _ => {}
-            }
-        }
-    }
-    
-    /// Process paragraph elements
-    fn process_paragraph(&mut self, element: &scraper::ElementRef, lines: &mut Vec<Line<'static>>) {
-        let mut paragraph_lines = Vec::new();
-        self.process_element(element, &mut paragraph_lines);
-        
-        // Join paragraph content into single line if short, or keep multiple lines
-        if paragraph_lines.len() == 1 {
-            lines.extend(paragraph_lines);
-        } else {
-            lines.extend(paragraph_lines);
-        }
-    }
-    
-    /// Process heading elements
-    fn process_heading(&mut self, element: &scraper::ElementRef, lines: &mut Vec<Line<'static>>, tag: &str) {
-        let level = tag.chars().last().unwrap().to_digit(10).unwrap_or(1) as usize;
-        let style = Style::default()
-            .fg(Color::Cyan)
-            .add_modifier(Modifier::BOLD);
-        
-        self.push_style(style);
-        
-        // Add visual hierarchy
-        let prefix = match level {
-            1 => "# ",
-            2 => "## ",
-            3 => "### ",
-            _ => "#### ",
-        };
-        
-        let mut heading_lines = Vec::new();
-        self.process_element(element, &mut heading_lines);
-        
-        if let Some(first_line) = heading_lines.first() {
-            let mut spans = vec![Span::styled(prefix, style)];
-            spans.extend(first_line.spans.clone());
-            lines.push(Line::from(spans));
-        }
-        
-        lines.push(Line::from(""));  // Add blank line after heading
-        self.pop_style();
-    }
-    
-    /// Process links
-    fn process_link(&mut self, element: &scraper::ElementRef, lines: &mut Vec<Line<'static>>) {
-        let href = element.value().attr("href").unwrap_or("#");
-        let link_style = Style::default()
-            .fg(Color::Blue)
-            .add_modifier(Modifier::UNDERLINED);
-        
-        self.push_style(link_style);
-        self.process_element(element, lines);
-        self.pop_style();
-        
-        // Add href in parentheses if it's different from text content
-        let text_content = element.text().collect::<String>();
-        if href != "#" && href != text_content.trim() {
-            self.add_text_to_lines(&format!(" ({})", href), lines);
-        }
-    }
-    
-    /// Process blockquotes
-    fn process_blockquote(&mut self, element: &scraper::ElementRef, lines: &mut Vec<Line<'static>>) {
-        let quote_style = Style::default().fg(Color::Gray);
-        
-        lines.push(Line::from(""));
-        let mut quote_lines = Vec::new();
-        self.process_element(element, &mut quote_lines);
-        
-        // Add quote prefix to each line
-        for line in quote_lines {
-            let mut spans = vec![Span::styled("> ", quote_style)];
-            spans.extend(line.spans);
-            lines.push(Line::from(spans));
-        }
-        lines.push(Line::from(""));
-    }
-    
-    /// Process lists
-    fn process_list(&mut self, element: &scraper::ElementRef, lines: &mut Vec<Line<'static>>, list_type: &str) {
-        lines.push(Line::from(""));
-        
-        let mut item_count = 0;
-        for child in element.children() {
-            if let Some(li) = scraper::ElementRef::wrap(child) {
-                if li.value().name() == "li" {
-                    item_count += 1;
-                    let prefix = if list_type == "ul" {
-                        "• ".to_string()
-                    } else {
-                        format!("{}. ", item_count)
-                    };
-                    
-                    let mut item_lines = Vec::new();
-                    self.process_element(&li, &mut item_lines);
-                    
-                    if let Some(first_line) = item_lines.first() {
-                        let mut spans = vec![Span::raw(prefix)];
-                        spans.extend(first_line.spans.clone());
-                        lines.push(Line::from(spans));
-                        
-                        // Add remaining lines with proper indentation
-                        for line in item_lines.iter().skip(1) {
-                            let mut spans = vec![Span::raw("  ")];
-                            spans.extend(line.spans.clone());
-                            lines.push(Line::from(spans));
-                        }
-                    }
-                }
-            }
-        }
-        lines.push(Line::from(""));
-    }
-    
-    /// Process code blocks
-    fn process_code(&mut self, element: &scraper::ElementRef, lines: &mut Vec<Line<'static>>) {
-        let code_style = Style::default()
-            .fg(Color::Green)
-            .bg(Color::DarkGray);
-        
-        let code_text = element.text().collect::<String>();
-        
-        if element.value().name() == "pre" {
-            // Multi-line code block
-            lines.push(Line::from(""));
-            lines.push(Line::styled("```", code_style));
-            
-            for line in code_text.lines() {
-                lines.push(Line::styled(line.to_string(), code_style));
-            }
-            
-            lines.push(Line::styled("```", code_style));
-            lines.push(Line::from(""));
-        } else {
-            // Inline code
-            lines.push(Line::styled(format!("`{}`", code_text), code_style));
-        }
-    }
-    
-    /// Process images (placeholder - actual rendering happens in content preview)
-    fn process_image(&mut self, element: &scraper::ElementRef, lines: &mut Vec<Line<'static>>) {
-        let src = element.value().attr("src").unwrap_or("");
-        let alt = element.value().attr("alt").unwrap_or("Image");
-        
-        let image_style = Style::default()
-            .fg(Color::Magenta)
-            .add_modifier(Modifier::ITALIC);
-        
-        // Create a marker that the content preview can recognize and replace with actual image
-        lines.push(Line::styled(
-            format!("IMG_PLACEHOLDER:{}:{}", src, alt),
-            image_style
-        ));
-        lines.push(Line::from(""));
-    }
-    
-    /// Process tables (simplified)
-    fn process_table(&mut self, element: &scraper::ElementRef, lines: &mut Vec<Line<'static>>) {
-        lines.push(Line::from(""));
-        lines.push(Line::styled("[ Table Content ]", Style::default().fg(Color::Yellow)));
-        
-        // TODO: Implement proper table rendering
-        let text_content = element.text().collect::<String>();
-        self.add_text_to_lines(&text_content, lines);
-        
-        lines.push(Line::from(""));
-    }
-    
-    /// Add text content to lines with current style
-    fn add_text_to_lines(&self, text: &str, lines: &mut Vec<Line<'static>>) {
-        let current_style = self.current_style();
-        
-        // Word wrap if necessary
-        if text.len() > self.max_width {
-            for wrapped_line in self.wrap_text(text) {
-                lines.push(Line::styled(wrapped_line, current_style));
-            }
-        } else {
-            lines.push(Line::styled(text.to_string(), current_style));
-        }
-    }
-    
-    /// Simple text wrapping
-    fn wrap_text(&self, text: &str) -> Vec<String> {
-        let mut lines = Vec::new();
-        let mut current_line = String::new();
-        
-        for word in text.split_whitespace() {
-            if current_line.len() + word.len() + 1 > self.max_width {
-                if !current_line.is_empty() {
-                    lines.push(current_line.clone());
-                    current_line.clear();
-                }
-            }
-            
-            if !current_line.is_empty() {
-                current_line.push(' ');
-            }
-            current_line.push_str(word);
-        }
-        
-        if !current_line.is_empty() {
-            lines.push(current_line);
-        }
-        
-        lines
-    }
-    
-    /// Push a new style onto the stack
-    fn push_style(&mut self, style: Style) {
-        self.style_stack.push(style);
-    }
-    
-    /// Pop the last style from the stack
-    fn pop_style(&mut self) {
-        if self.style_stack.len() > 1 {
-            self.style_stack.pop();
-        }
-    }
-    
     /// Get the current style (combination of all stacked styles)
     fn current_style(&self) -> Style {
         self.style_stack.last().copied().unwrap_or_default()
-    }
-    
-    /// Parse CSS color values (basic implementation)
-    fn parse_css_color(&self, color_str: &str) -> Option<Color> {
-        let color = color_str.trim().to_lowercase();
-        
-        // Named colors
-        match color.as_str() {
-            "red" => Some(Color::Red),
-            "green" => Some(Color::Green),
-            "blue" => Some(Color::Blue),
-            "yellow" => Some(Color::Yellow),
-            "cyan" => Some(Color::Cyan),
-            "magenta" => Some(Color::Magenta),
-            "white" => Some(Color::White),
-            "black" => Some(Color::Black),
-            "gray" | "grey" => Some(Color::Gray),
-            "darkgray" | "darkgrey" => Some(Color::DarkGray),
-            "lightred" => Some(Color::LightRed),
-            "lightgreen" => Some(Color::LightGreen),
-            "lightblue" => Some(Color::LightBlue),
-            "lightyellow" => Some(Color::LightYellow),
-            "lightcyan" => Some(Color::LightCyan),
-            "lightmagenta" => Some(Color::LightMagenta),
-            _ => {
-                // Try to parse hex colors
-                if color.starts_with('#') && color.len() == 7 {
-                    if let (Ok(r), Ok(g), Ok(b)) = (
-                        u8::from_str_radix(&color[1..3], 16),
-                        u8::from_str_radix(&color[3..5], 16),
-                        u8::from_str_radix(&color[5..7], 16),
-                    ) {
-                        return Some(Color::Rgb(r, g, b));
-                    }
-                }
-                
-                // Try to parse rgb() colors
-                if color.starts_with("rgb(") && color.ends_with(')') {
-                    let rgb_part = &color[4..color.len()-1];
-                    let parts: Vec<&str> = rgb_part.split(',').collect();
-                    if parts.len() == 3 {
-                        if let (Ok(r), Ok(g), Ok(b)) = (
-                            parts[0].trim().parse::<u8>(),
-                            parts[1].trim().parse::<u8>(),
-                            parts[2].trim().parse::<u8>(),
-                        ) {
-                            return Some(Color::Rgb(r, g, b));
-                        }
-                    }
-                }
-                
-                None
-            }
-        }
-    }
-    
-    /// Apply inline styles from style attribute
-    fn apply_inline_styles(&mut self, element: &scraper::ElementRef) {
-        if let Some(style_attr) = element.value().attr("style") {
-            let mut style = self.current_style();
-            
-            // Parse CSS properties
-            for declaration in style_attr.split(';') {
-                let parts: Vec<&str> = declaration.splitn(2, ':').collect();
-                if parts.len() == 2 {
-                    let property = parts[0].trim().to_lowercase();
-                    let value = parts[1].trim();
-                    
-                    match property.as_str() {
-                        "color" => {
-                            if let Some(color) = self.parse_css_color(value) {
-                                style = style.fg(color);
-                            }
-                        }
-                        "background-color" => {
-                            if let Some(bg_color) = self.parse_css_color(value) {
-                                style = style.bg(bg_color);
-                            }
-                        }
-                        "font-weight" => {
-                            if value == "bold" || value == "bolder" || value.parse::<i32>().unwrap_or(400) >= 600 {
-                                style = style.add_modifier(Modifier::BOLD);
-                            }
-                        }
-                        "font-style" => {
-                            if value == "italic" || value == "oblique" {
-                                style = style.add_modifier(Modifier::ITALIC);
-                            }
-                        }
-                        "text-decoration" => {
-                            if value.contains("underline") {
-                                style = style.add_modifier(Modifier::UNDERLINED);
-                            }
-                        }
-                        _ => {} // Ignore unknown properties
-                    }
-                }
-            }
-            
-            self.push_style(style);
-        }
     }
 }
 
@@ -498,28 +266,48 @@ pub fn is_html_content(content: &str) -> bool {
     let content_lower = content.to_lowercase();
     let trimmed = content.trim();
     
-    // Check for obvious HTML patterns
-    if content_lower.contains("<html") || 
-       content_lower.contains("<!doctype") ||
-       content_lower.contains("<body") ||
-       content_lower.contains("<div") ||
-       content_lower.contains("<p>") ||
-       content_lower.contains("<br") ||
-       content_lower.contains("<span") ||
-       content_lower.contains("<strong") ||
-       content_lower.contains("<em") ||
-       content_lower.contains("<a ") {
+    // More comprehensive HTML detection
+    if content_lower.contains("<!doctype html") || 
+       content_lower.contains("<html") ||
+       content_lower.contains("</html>") {
         return true;
     }
     
-    // Check if content has multiple HTML-like tags
-    let tag_count = content.matches('<').count();
-    if tag_count > 1 && content.contains('>') {
-        return true;
+    // Check for common HTML tags
+    let html_tags = [
+        "<body", "</body>", "<div", "</div>", "<p>", "</p>",
+        "<br", "<span", "</span>", "<strong", "</strong>",
+        "<em", "</em>", "<a ", "</a>", "<img", "<table",
+        "</table>", "<tr", "</tr>", "<td", "</td>", "<th", "</th>",
+        "<ul", "</ul>", "<ol", "</ol>", "<li", "</li>",
+        "<h1", "<h2", "<h3", "<h4", "<h5", "<h6"
+    ];
+    
+    let mut tag_count = 0;
+    for tag in &html_tags {
+        if content_lower.contains(tag) {
+            tag_count += 1;
+            if tag_count >= 2 {
+                return true;
+            }
+        }
+    }
+    
+    // Check if content has HTML structure (opening and closing tags)
+    if content.contains('<') && content.contains('>') {
+        let tag_pairs = content.matches('<').count();
+        let close_tags = content.matches('>').count();
+        if tag_pairs > 1 && close_tags > 1 {
+            return true;
+        }
     }
     
     // Check if content starts with HTML
-    trimmed.starts_with('<') && trimmed.contains('>')
+    if trimmed.starts_with('<') && trimmed.contains('>') && trimmed.len() > 10 {
+        return true;
+    }
+    
+    false
 }
 
 /// Quick HTML to plain text conversion for previews
@@ -554,6 +342,7 @@ mod tests {
         assert!(is_html_content("<html><body>Test</body></html>"));
         assert!(is_html_content("<p>This is a paragraph</p>"));
         assert!(is_html_content("Hello <br> World"));
+        assert!(is_html_content("<div><span>Content</span></div>"));
         assert!(!is_html_content("Plain text email"));
         assert!(!is_html_content("Email with > and < but no tags"));
     }
@@ -574,5 +363,15 @@ mod tests {
         
         // Should have at least one line of content
         assert!(!result.lines.is_empty());
+    }
+
+    #[test]
+    fn test_html_to_plain_text() {
+        let mut renderer = HtmlRenderer::new(80);
+        let html = "<p>Hello <strong>world</strong>!</p><p>Second paragraph.</p>";
+        let result = renderer.html_to_plain_text(html);
+        
+        assert!(result.contains("Hello world"));
+        assert!(result.contains("Second paragraph"));
     }
 }
