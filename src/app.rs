@@ -90,6 +90,11 @@ impl App {
         Ok(())
     }
     
+    /// Get database reference for maintenance operations
+    pub fn get_database(&self) -> Option<&Arc<EmailDatabase>> {
+        self.database.as_ref()
+    }
+    
     /// Initialize dashboard services for start page
     pub async fn initialize_dashboard_services(&mut self) -> Result<()> {
         let services = ServiceManager::new()

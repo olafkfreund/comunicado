@@ -1065,6 +1065,105 @@ impl EmailDatabase {
         
         Ok((total_count as u32, manual_count as u32))
     }
+    
+    /// Clean and reprocess existing message content in the database
+    /// This method fixes HTML/CSS and email headers that may still be present
+    /// in previously stored message content
+    pub async fn reprocess_message_content(&self) -> DatabaseResult<u32> {
+        tracing::info!("Starting message content reprocessing to clean HTML and headers");
+        
+        // Get all messages that might need content cleaning
+        let rows = sqlx::query(r#"
+            SELECT id, body_text, body_html
+            FROM messages 
+            WHERE is_deleted = FALSE 
+            AND (
+                body_text LIKE '%<html%' OR 
+                body_text LIKE '%<div%' OR 
+                body_text LIKE '%content-type:%' OR
+                body_text LIKE '%delivered-to:%' OR
+                body_text LIKE '%authentication-results:%' OR
+                body_text LIKE '%received:%' OR
+                body_html LIKE '%<html%' OR 
+                body_html LIKE '%<div%' OR 
+                body_html LIKE '%content-type:%' OR
+                body_html LIKE '%delivered-to:%' OR
+                body_html LIKE '%authentication-results:%'
+            )
+            ORDER BY id
+        "#)
+        .fetch_all(&self.pool)
+        .await?;
+        
+        let mut processed_count = 0;
+        
+        for row in rows {
+            let message_id: String = row.get("id");
+            let current_body_text: Option<String> = row.get("body_text");
+            let current_body_html: Option<String> = row.get("body_html");
+            
+            let mut needs_update = false;
+            let mut new_body_text = current_body_text.clone();
+            let mut new_body_html = current_body_html.clone();
+            
+            // Check if body_text needs reprocessing (contains HTML tags or headers)  
+            if let Some(body_text) = &current_body_text {
+                if Self::content_needs_reprocessing(body_text) {
+                    tracing::info!("Reprocessing body_text for message {}", message_id);
+                    new_body_text = StoredMessage::parse_and_clean_body_text(&Some(body_text.clone()));
+                    needs_update = true;
+                }
+            }
+            
+            // Check if body_html needs reprocessing 
+            if let Some(body_html) = &current_body_html {
+                if Self::content_needs_reprocessing(body_html) {
+                    tracing::info!("Reprocessing body_html for message {}", message_id);
+                    new_body_html = StoredMessage::parse_and_clean_body_html(&Some(body_html.clone()));
+                    needs_update = true;
+                }
+            }
+            
+            // Update the message if content was reprocessed
+            if needs_update {
+                sqlx::query("UPDATE messages SET body_text = ?, body_html = ?, updated_at = datetime('now') WHERE id = ?")
+                    .bind(&new_body_text)
+                    .bind(&new_body_html) 
+                    .bind(message_id)
+                    .execute(&self.pool)
+                    .await?;
+                    
+                processed_count += 1;
+            }
+        }
+        
+        tracing::info!("Completed message content reprocessing. {} messages updated", processed_count);
+        Ok(processed_count)
+    }
+    
+    /// Check if content needs reprocessing (contains HTML tags or email headers)
+    fn content_needs_reprocessing(content: &str) -> bool {
+        // Check for HTML tags
+        let has_html = content.contains("<html") || 
+                      content.contains("<div") ||
+                      content.contains("<span") ||
+                      content.contains("<p>") ||
+                      content.contains("<br") ||
+                      content.contains("<table") ||
+                      content.contains("<td") ||
+                      content.contains("<tr");
+        
+        // Check for email headers that shouldn't be in displayed content
+        let has_headers = content.contains("content-type:") ||
+                         content.contains("delivered-to:") ||
+                         content.contains("authentication-results:") ||
+                         content.contains("received:") ||
+                         content.contains("dkim-signature:") ||
+                         content.contains("mime-version:") ||
+                         content.contains("content-transfer-encoding:");
+        
+        has_html || has_headers
+    }
 }
 
 /// Database statistics
