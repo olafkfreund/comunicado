@@ -1512,20 +1512,173 @@ impl App {
             None => return (None, None),
         };
         
-        // Check if the content appears to be HTML
-        if is_html_content(raw_body) {
-            // This is HTML content
-            let html_body = Some(raw_body.clone());
+        // Apply aggressive email content cleaning before any processing
+        let cleaned_body = self.clean_email_content(raw_body);
+        
+        // Check if the cleaned content appears to be HTML
+        if is_html_content(&cleaned_body) {
+            // This is HTML content - clean it further
+            let html_renderer = crate::html::HtmlRenderer::new(80);
+            let cleaned_html = html_renderer.clean_and_sanitize_html(&cleaned_body);
+            
+            let html_body = Some(cleaned_html.clone());
             
             // Convert HTML to plain text for the text body
-            let html_renderer = crate::html::HtmlRenderer::new(80);
-            let text_body = Some(html_renderer.html_to_plain_text(raw_body));
+            let text_body = Some(html_renderer.html_to_plain_text(&cleaned_html));
             
             (text_body, html_body)
         } else {
-            // This is plain text content
-            (Some(raw_body.clone()), None)
+            // This is plain text content - apply text-specific cleaning
+            let cleaned_text = self.clean_plain_text_content(&cleaned_body);
+            (Some(cleaned_text), None)
         }
+    }
+    
+    /// Aggressively clean email content to remove headers, encoded data, and technical junk
+    fn clean_email_content(&self, raw_content: &str) -> String {
+        let lines: Vec<&str> = raw_content.lines().collect();
+        let mut cleaned_lines = Vec::new();
+        let mut in_header_section = true;
+        let mut found_content_start = false;
+        
+        for line in lines {
+            let trimmed = line.trim();
+            
+            // Skip empty lines at the start
+            if !found_content_start && trimmed.is_empty() {
+                continue;
+            }
+            
+            // Skip lines that look like email headers or technical metadata
+            if self.is_technical_line(trimmed) {
+                continue;
+            }
+            
+            // Look for the start of actual content
+            if !found_content_start {
+                // Check if this line looks like actual content (not headers/metadata)
+                if self.looks_like_content(trimmed) {
+                    found_content_start = true;
+                    in_header_section = false;
+                } else {
+                    continue; // Skip this line, still in header/metadata section
+                }
+            }
+            
+            // If we've found content, include non-empty meaningful lines
+            if found_content_start && !trimmed.is_empty() && trimmed.len() > 2 {
+                cleaned_lines.push(trimmed);
+            }
+        }
+        
+        // Join the cleaned lines
+        let result = cleaned_lines.join("\n");
+        
+        // Final cleanup of any remaining artifacts
+        self.final_content_cleanup(&result)
+    }
+    
+    /// Check if a line looks like technical email metadata
+    fn is_technical_line(&self, line: &str) -> bool {
+        // Check for common email headers and technical patterns
+        let technical_patterns = [
+            "Message-ID:", "Date:", "From:", "To:", "Subject:", "Content-Type:", 
+            "Content-Transfer-Encoding:", "MIME-Version:", "X-", "Return-Path:",
+            "Delivered-To:", "Received:", "Authentication-Results:", "DKIM-Signature:",
+            "List-", "ARC-", "DMARC", "SPF", "DomainKey", "with SMTP id",
+            "by 2002:", "X-Received:", "X-Google-", "X-MS-", "X-Mailer:",
+        ];
+        
+        for pattern in &technical_patterns {
+            if line.starts_with(pattern) {
+                return true;
+            }
+        }
+        
+        // Check for lines that are mostly encoded content
+        if line.len() > 30 && line.chars().all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '/' || c == '=') {
+            return true;
+        }
+        
+        // Check for timestamp patterns
+        if regex::Regex::new(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}").unwrap().is_match(line) {
+            return true;
+        }
+        
+        // Check for IP addresses and server names
+        if regex::Regex::new(r"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b").unwrap().is_match(line) {
+            return true;
+        }
+        
+        false
+    }
+    
+    /// Check if a line looks like actual email content (not metadata)
+    fn looks_like_content(&self, line: &str) -> bool {
+        // Skip if it looks technical
+        if self.is_technical_line(line) {
+            return false;
+        }
+        
+        // Look for signs of actual content
+        let content_indicators = [
+            // Common greeting patterns
+            "Hi", "Hello", "Dear", "Greetings",
+            // Common content words
+            "The", "This", "Please", "Thank", "We", "You", "I",
+            // HTML content indicators
+            "<html", "<body", "<div", "<p", "<span", "<a",
+            // Email body content
+            "wrote:", "said:", "From:", "Subject:",
+        ];
+        
+        // If line contains readable text and common words, it's likely content
+        for indicator in &content_indicators {
+            if line.contains(indicator) {
+                return true;
+            }
+        }
+        
+        // If line has reasonable length and mixed case, it's likely content
+        if line.len() > 10 && line.chars().any(|c| c.is_lowercase()) && line.chars().any(|c| c.is_uppercase()) {
+            return true;
+        }
+        
+        false
+    }
+    
+    /// Final cleanup of any remaining artifacts
+    fn final_content_cleanup(&self, content: &str) -> String {
+        let mut cleaned = content.to_string();
+        
+        // Remove remaining quoted-printable artifacts
+        cleaned = cleaned.replace("=20", " ");
+        cleaned = cleaned.replace("=3D", "=");
+        cleaned = cleaned.replace("=\n", "");
+        
+        // Remove excessive whitespace
+        if let Ok(re) = regex::Regex::new(r"\n\s*\n\s*\n") {
+            cleaned = re.replace_all(&cleaned, "\n\n").to_string();
+        }
+        
+        cleaned.trim().to_string()
+    }
+    
+    /// Clean plain text content specifically
+    fn clean_plain_text_content(&self, content: &str) -> String {
+        let mut cleaned = content.to_string();
+        
+        // Remove quoted-printable encoding artifacts
+        cleaned = cleaned.replace("=\n", "");
+        cleaned = cleaned.replace("=20", " ");
+        cleaned = cleaned.replace("=3D", "=");
+        
+        // Remove excessive whitespace
+        if let Ok(re) = regex::Regex::new(r"\n\s*\n\s*\n") {
+            cleaned = re.replace_all(&cleaned, "\n\n").to_string();
+        }
+        
+        cleaned.trim().to_string() 
     }
     
     /// Parse attachments from IMAP message body structure

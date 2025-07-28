@@ -75,7 +75,7 @@ impl HtmlRenderer {
     }
     
     /// Clean and sanitize HTML content (like w3m preprocessing)
-    fn clean_and_sanitize_html(&self, html: &str) -> String {
+    pub fn clean_and_sanitize_html(&self, html: &str) -> String {
         // Use ammonia to clean HTML and remove dangerous/unnecessary elements
         let clean_html = clean(html);
         
