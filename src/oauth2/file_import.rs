@@ -12,11 +12,16 @@ struct GoogleCredentialsFile {
 #[derive(Debug, Deserialize)]
 struct GoogleInstalledApp {
     client_id: String,
+    #[allow(dead_code)]
     project_id: String,
+    #[allow(dead_code)]
     auth_uri: String,
+    #[allow(dead_code)]
     token_uri: String,
+    #[allow(dead_code)]
     auth_provider_x509_cert_url: String,
     client_secret: String,
+    #[allow(dead_code)]
     redirect_uris: Vec<String>,
 }
 

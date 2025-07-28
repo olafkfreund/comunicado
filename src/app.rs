@@ -165,8 +165,40 @@ impl App {
         
         // Load OAuth2 tokens for all existing accounts into the TokenManager
         tracing::debug!("About to load tokens into manager");
-        let has_valid_tokens = self.load_tokens_into_manager(&token_manager).await?;
-        tracing::debug!("Tokens loaded successfully, has_valid_tokens: {}", has_valid_tokens);
+        let load_result = self.load_tokens_into_manager(&token_manager).await?;
+        tracing::debug!("Initial token loading complete");
+        
+        // Use robust initialization that handles problematic tokens
+        tracing::info!("Performing robust token initialization to prevent startup hangs");
+        let has_valid_tokens = match tokio::time::timeout(
+            std::time::Duration::from_secs(15), // 15 second timeout for entire initialization
+            token_manager.initialize_for_startup()
+        ).await {
+            Ok(Ok(valid_tokens)) => {
+                tracing::info!("Token initialization completed successfully");
+                valid_tokens
+            }
+            Ok(Err(e)) => {
+                tracing::error!("Token initialization failed: {}", e);
+                // Fallback to basic loading result
+                load_result
+            }
+            Err(_) => {
+                tracing::error!("Token initialization timed out after 15 seconds - using fallback");
+                // Use basic result and clear all tokens to prevent future hangs
+                match token_manager.validate_and_cleanup_tokens().await {
+                    Ok(problematic_accounts) => {
+                        if !problematic_accounts.is_empty() {
+                            tracing::warn!("Emergency cleanup removed {} problematic accounts", problematic_accounts.len());
+                        }
+                    }
+                    Err(e) => {
+                        tracing::error!("Emergency token cleanup failed: {}", e);
+                    }
+                }
+                false // Assume no valid tokens after timeout
+            }
+        };
         
         // Only create and start automatic token refresh scheduler if we have valid tokens
         if has_valid_tokens {

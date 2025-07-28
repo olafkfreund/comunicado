@@ -30,6 +30,7 @@ pub struct AddressBookUI {
     ui_mode: AddressBookMode,
     
     // Search and filters
+    #[allow(dead_code)]
     current_search: ContactSearchCriteria,
     is_searching: bool,
 }

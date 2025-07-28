@@ -102,10 +102,12 @@ pub enum ViewMode {
 pub struct MessageList {
     messages: Vec<MessageItem>,
     filtered_messages: Vec<MessageItem>,
+    #[allow(dead_code)]
     threads: Vec<EmailThread>,
     state: ListState,
     view_mode: ViewMode,
     sorter: MultiCriteriaSorter,
+    #[allow(dead_code)]
     threading_engine: ThreadingEngine,
     database: Option<Arc<EmailDatabase>>,
     current_account: Option<String>,

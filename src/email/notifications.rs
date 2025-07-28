@@ -81,6 +81,7 @@ pub struct EmailNotificationManager {
     /// Sender for internal notification publishing
     notification_sender: mpsc::UnboundedSender<EmailNotification>,
     /// Database reference for message operations
+    #[allow(dead_code)]
     database: Arc<EmailDatabase>,
 }
 

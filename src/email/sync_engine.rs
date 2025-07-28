@@ -90,6 +90,7 @@ pub struct SyncEngine {
     sync_locks: Arc<RwLock<HashMap<String, Arc<Mutex<()>>>>>,
     progress_sender: mpsc::UnboundedSender<SyncProgress>,
     conflict_resolution: ConflictResolution,
+    #[allow(dead_code)]
     max_concurrent_syncs: usize,
 }
 

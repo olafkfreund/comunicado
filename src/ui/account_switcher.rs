@@ -69,6 +69,7 @@ pub struct AccountSwitcher {
     state: ListState,
     current_account_id: Option<String>,
     is_expanded: bool,
+    #[allow(dead_code)]
     max_display_accounts: usize,
 }
 

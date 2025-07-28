@@ -427,6 +427,7 @@ struct CallbackServer {
 }
 
 impl CallbackServer {
+    #[allow(dead_code)]
     fn new(port: u16) -> OAuth2Result<Self> {
         let (sender, receiver) = tokio::sync::oneshot::channel();
         

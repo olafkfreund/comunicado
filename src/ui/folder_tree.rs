@@ -202,6 +202,7 @@ pub struct FolderTree {
     search_query: String,
     filtered_folders: Vec<usize>, // Indices of folders matching search
     show_unsubscribed: bool,
+    #[allow(dead_code)]
     selected_for_operation: Option<(usize, FolderOperation)>,
     database: Option<Arc<EmailDatabase>>,
     context_menu_visible: bool,

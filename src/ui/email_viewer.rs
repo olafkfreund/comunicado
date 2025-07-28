@@ -146,7 +146,7 @@ impl EmailViewer {
     }
 
     /// Set the viewport height for proper page scrolling
-    pub fn set_viewport_height(&mut self, height: usize) {
+    pub fn set_viewport_height(&mut self, _height: usize) {
         // Store viewport height for page scrolling calculations
         // This will be called from the render method
     }

@@ -235,7 +235,7 @@ impl InvitationProcessor {
             }
             
             if line == "END:VCALENDAR" {
-                in_calendar = false;
+                let _ = in_calendar; // Acknowledge the variable is intentionally unused here
                 break;
             }
             

@@ -194,6 +194,7 @@ impl ThreadingEngine {
 /// Container used in JWZ threading algorithm
 #[derive(Debug)]
 struct MessageContainer {
+    #[allow(dead_code)]
     message_id: Option<MessageId>,
     message: Option<EmailMessage>,
     parent: Option<MessageId>,

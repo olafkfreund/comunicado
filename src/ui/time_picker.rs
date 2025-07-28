@@ -182,7 +182,7 @@ impl TimePicker {
     }
     
     /// Render the title
-    fn render_title(&self, frame: &mut Frame, area: Rect, theme: &Theme) {
+    fn render_title(&self, frame: &mut Frame, area: Rect, _theme: &Theme) {
         let title = Paragraph::new("Select Time")
             .block(Block::default()
                 .borders(Borders::ALL))
@@ -192,7 +192,7 @@ impl TimePicker {
     }
     
     /// Render the time display with highlighted editing field
-    fn render_time_display(&self, frame: &mut Frame, area: Rect, theme: &Theme) {
+    fn render_time_display(&self, frame: &mut Frame, area: Rect, _theme: &Theme) {
         let time_chunks = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([
@@ -253,7 +253,7 @@ impl TimePicker {
     }
     
     /// Render the instructions
-    fn render_instructions(&self, frame: &mut Frame, area: Rect, theme: &Theme) {
+    fn render_instructions(&self, frame: &mut Frame, area: Rect, _theme: &Theme) {
         let instructions = if self.use_24_hour {
             "↑/↓: Change time  Tab: Switch field  Enter: Confirm  Esc: Cancel"
         } else {

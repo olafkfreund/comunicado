@@ -1008,7 +1008,7 @@ This is a sample email showcasing the modern email display format.".to_string();
                 }
             }
             ViewMode::Headers => {
-                if let Some(ref email) = self.email_content {
+                if let Some(ref _email) = self.email_content {
                     20 // Estimated header lines
                 } else {
                     0

@@ -184,6 +184,118 @@ impl TokenManager {
         self.get_access_token(account_id).await
     }
     
+    /// Validate and clean up invalid tokens during startup
+    pub async fn validate_and_cleanup_tokens(&self) -> OAuth2Result<Vec<String>> {
+        let mut accounts_needing_reauth = Vec::new();
+        let account_ids = self.get_account_ids().await;
+        
+        for account_id in account_ids {
+            let diagnosis = self.diagnose_account_tokens(&account_id).await;
+            
+            match diagnosis {
+                TokenDiagnosis::ExpiredNoRefresh { .. } => {
+                    tracing::warn!("Account '{}' has expired token without refresh capability - marking for removal", account_id);
+                    accounts_needing_reauth.push(account_id.clone());
+                    // Remove the expired token to prevent startup issues
+                    if let Err(e) = self.remove_tokens(&account_id).await {
+                        tracing::error!("Failed to remove expired tokens for account {}: {}", account_id, e);
+                    }
+                }
+                TokenDiagnosis::NotFound { .. } => {
+                    tracing::warn!("No tokens found for account '{}'", account_id);
+                    accounts_needing_reauth.push(account_id);
+                }
+                TokenDiagnosis::ExpiredWithRefresh { .. } => {
+                    tracing::info!("Account '{}' has expired token but can be refreshed", account_id);
+                    // Try to refresh it now during startup
+                    match self.refresh_access_token(&account_id).await {
+                        Ok(_) => {
+                            tracing::info!("Successfully refreshed token for account '{}' during startup", account_id);
+                        }
+                        Err(e) => {
+                            tracing::error!("Failed to refresh token for account '{}' during startup: {}", account_id, e);
+                            accounts_needing_reauth.push(account_id);
+                        }
+                    }
+                }
+                TokenDiagnosis::Valid { .. } => {
+                    tracing::debug!("Account '{}' has valid token", account_id);
+                }
+                TokenDiagnosis::ExpiringSoon { has_refresh_token, .. } => {
+                    if has_refresh_token {
+                        tracing::info!("Account '{}' token expires soon but can be refreshed", account_id);
+                    } else {
+                        tracing::warn!("Account '{}' token expires soon and cannot be refreshed", account_id);
+                        accounts_needing_reauth.push(account_id);
+                    }
+                }
+            }
+        }
+        
+        if !accounts_needing_reauth.is_empty() {
+            tracing::info!("Found {} accounts needing re-authentication", accounts_needing_reauth.len());
+        }
+        
+        Ok(accounts_needing_reauth)
+    }
+    
+    /// Robust startup initialization - cleans up tokens and prevents hangs
+    pub async fn initialize_for_startup(&self) -> OAuth2Result<bool> {
+        tracing::info!("Initializing TokenManager for application startup");
+        
+        // First, validate and clean up any problematic tokens
+        let accounts_needing_reauth = self.validate_and_cleanup_tokens().await?;
+        if !accounts_needing_reauth.is_empty() {
+            tracing::warn!("Cleaned up {} problematic accounts during startup", accounts_needing_reauth.len());
+        }
+        
+        // Check if we have any valid tokens remaining
+        let remaining_accounts = self.get_account_ids().await;
+        let has_valid_tokens = !remaining_accounts.is_empty();
+        
+        if has_valid_tokens {
+            tracing::info!("Found {} valid accounts after cleanup", remaining_accounts.len());
+            
+            // Perform a quick validation of remaining tokens with timeout
+            let validation_result = tokio::time::timeout(
+                std::time::Duration::from_secs(10),
+                async {
+                    for account_id in &remaining_accounts {
+                        let diagnosis = self.diagnose_account_tokens(account_id).await;
+                        match diagnosis {
+                            TokenDiagnosis::Valid { .. } => {
+                                tracing::debug!("Account '{}' validated successfully", account_id);
+                            }
+                            TokenDiagnosis::ExpiringSoon { .. } => {
+                                tracing::info!("Account '{}' expires soon but is valid", account_id);
+                            }
+                            TokenDiagnosis::ExpiredWithRefresh { .. } => {
+                                tracing::info!("Account '{}' needs refresh but is recoverable", account_id);
+                            }
+                            _ => {
+                                tracing::warn!("Account '{}' has validation issues: {}", account_id, diagnosis.description());
+                            }
+                        }
+                    }
+                }
+            ).await;
+            
+            match validation_result {
+                Ok(_) => {
+                    tracing::info!("Token validation completed successfully");
+                }
+                Err(_) => {
+                    tracing::warn!("Token validation timed out after 10 seconds, but continuing");
+                }
+            }
+        } else {
+            tracing::info!("No valid OAuth2 tokens found after cleanup - will need to run setup wizard");
+        }
+        
+        tracing::info!("TokenManager initialization complete - has_valid_tokens: {}", has_valid_tokens);
+        Ok(has_valid_tokens)
+    }
+    
     /// Refresh access token using refresh token
     pub async fn refresh_access_token(&self, account_id: &str) -> OAuth2Result<AccessToken> {
         let (refresh_token, provider) = {
@@ -587,7 +699,15 @@ impl TokenRefreshScheduler {
     pub fn new(token_manager: Arc<TokenManager>) -> Self {
         Self {
             token_manager,
-            refresh_interval: chrono::Duration::hours(1), // Check every hour
+            refresh_interval: chrono::Duration::minutes(30), // Check every 30 minutes for more responsive refreshing
+        }
+    }
+    
+    /// Create a scheduler with custom refresh interval
+    pub fn new_with_interval(token_manager: Arc<TokenManager>, interval: chrono::Duration) -> Self {
+        Self {
+            token_manager,
+            refresh_interval: interval,
         }
     }
     
@@ -596,10 +716,20 @@ impl TokenRefreshScheduler {
         let token_manager = Arc::clone(&self.token_manager);
         let interval = self.refresh_interval;
         
+        // Perform initial token check to ensure we don't start with broken tokens
+        tracing::debug!("Performing initial token validation before starting scheduler");
+        if let Err(e) = Self::refresh_expiring_tokens(&token_manager).await {
+            tracing::warn!("Initial token refresh failed, but continuing: {}", e);
+            // Don't fail startup - continue with scheduler anyway
+        }
+        
         tokio::spawn(async move {
             let mut refresh_interval = tokio::time::interval(
                 tokio::time::Duration::from_secs(interval.num_seconds() as u64)
             );
+            
+            // Skip the first tick since we already did initial validation
+            refresh_interval.tick().await;
             
             loop {
                 refresh_interval.tick().await;
@@ -610,34 +740,192 @@ impl TokenRefreshScheduler {
             }
         });
         
+        tracing::debug!("Token refresh scheduler started successfully");
         Ok(())
     }
     
     async fn refresh_expiring_tokens(token_manager: &TokenManager) -> OAuth2Result<()> {
         let account_ids = token_manager.get_account_ids().await;
         
+        if account_ids.is_empty() {
+            tracing::debug!("No accounts found for token refresh check");
+            return Ok(());
+        }
+        
+        tracing::debug!("Checking {} accounts for token refresh", account_ids.len());
+        
         for account_id in account_ids {
-            // Check if token needs refresh (30 minute buffer)
-            let needs_refresh = {
+            // Use timeout for each token refresh to prevent hanging
+            let refresh_result = tokio::time::timeout(
+                std::time::Duration::from_secs(30), // 30 second timeout per refresh
+                async {
+                    // Check if token needs refresh (2 hour buffer for proactive refreshing)
+                    let needs_refresh = {
+                        let tokens = token_manager.tokens.read().await;
+                        tokens.get(&account_id)
+                            .map(|pair| pair.access_token.needs_refresh(120)) // 2 hours
+                            .unwrap_or(false)
+                    };
+                    
+                    if needs_refresh {
+                        tracing::info!("Proactively refreshing token for account {} (2 hour buffer)", account_id);
+                        token_manager.refresh_access_token(&account_id).await
+                    } else {
+                        tracing::debug!("Token for account {} does not need refresh yet", account_id);
+                        Ok(AccessToken::new("dummy".to_string(), "Bearer".to_string())) // Dummy return for no-refresh case
+                    }
+                }
+            ).await;
+            
+            match refresh_result {
+                Ok(Ok(_)) => {
+                    tracing::debug!("Token refresh check completed for account {}", account_id);
+                }
+                Ok(Err(e)) => {
+                    tracing::warn!("Failed to refresh token for account {}: {}", account_id, e);
+                    // Continue with other accounts
+                }
+                Err(_) => {
+                    tracing::error!("Token refresh timed out for account {} after 30 seconds", account_id);
+                    // Continue with other accounts
+                }
+            }
+        }
+        
+        tracing::debug!("Token refresh check completed for all accounts");
+        Ok(())
+    }
+    
+    /// Force refresh all tokens that can be refreshed (for startup or manual refresh)
+    pub async fn force_refresh_all_tokens(&self) -> OAuth2Result<Vec<String>> {
+        let token_manager = Arc::clone(&self.token_manager);
+        let account_ids = token_manager.get_account_ids().await;
+        let mut successfully_refreshed = Vec::new();
+        
+        if account_ids.is_empty() {
+            tracing::info!("No accounts found for forced token refresh");
+            return Ok(successfully_refreshed);
+        }
+        
+        let total_accounts = account_ids.len();
+        tracing::info!("Force refreshing tokens for {} accounts", total_accounts);
+        
+        for account_id in &account_ids {
+            // Check if account has refresh capability
+            let has_refresh_token = {
                 let tokens = token_manager.tokens.read().await;
-                tokens.get(&account_id)
-                    .map(|pair| pair.access_token.needs_refresh(30))
-                    .unwrap_or(false)
+                tokens.get(account_id)
+                    .and_then(|pair| pair.refresh_token.as_ref())
+                    .is_some()
             };
             
-            if needs_refresh {
-                match token_manager.refresh_access_token(&account_id).await {
-                    Ok(_) => {
-                        tracing::info!("Successfully refreshed token for account {}", account_id);
+            if has_refresh_token {
+                match tokio::time::timeout(
+                    std::time::Duration::from_secs(45), // Longer timeout for forced refresh
+                    token_manager.refresh_access_token(account_id)
+                ).await {
+                    Ok(Ok(_)) => {
+                        tracing::info!("Successfully force-refreshed token for account {}", account_id);
+                        successfully_refreshed.push(account_id.clone());
                     }
-                    Err(e) => {
-                        tracing::warn!("Failed to refresh token for account {}: {}", account_id, e);
+                    Ok(Err(e)) => {
+                        tracing::error!("Failed to force-refresh token for account {}: {}", account_id, e);
+                    }
+                    Err(_) => {
+                        tracing::error!("Force refresh timed out for account {} after 45 seconds", account_id);
+                    }
+                }
+            } else {
+                tracing::warn!("Account {} has no refresh token - cannot force refresh", account_id);
+            }
+        }
+        
+        tracing::info!("Force refresh completed: {}/{} accounts successfully refreshed", 
+                      successfully_refreshed.len(), total_accounts);
+        Ok(successfully_refreshed)
+    }
+    
+    /// Get refresh statistics for monitoring
+    pub async fn get_refresh_stats(&self) -> RefreshStats {
+        let token_manager = Arc::clone(&self.token_manager);
+        let account_ids = token_manager.get_account_ids().await;
+        
+        let mut stats = RefreshStats {
+            total_accounts: account_ids.len(),
+            accounts_with_refresh_tokens: 0,
+            accounts_needing_refresh: 0,
+            accounts_expired: 0,
+            next_refresh_needed: None,
+        };
+        
+        let mut earliest_expiry: Option<chrono::DateTime<chrono::Utc>> = None;
+        
+        for account_id in &account_ids {
+            let tokens = token_manager.tokens.read().await;
+            if let Some(token_pair) = tokens.get(account_id) {
+                if token_pair.refresh_token.is_some() {
+                    stats.accounts_with_refresh_tokens += 1;
+                }
+                
+                if token_pair.access_token.is_expired() {
+                    stats.accounts_expired += 1;
+                } else if token_pair.access_token.needs_refresh(120) { // 2 hours
+                    stats.accounts_needing_refresh += 1;
+                }
+                
+                // Track the earliest expiry time
+                if let Some(expires_at) = token_pair.access_token.expires_at {
+                    match earliest_expiry {
+                        None => earliest_expiry = Some(expires_at),
+                        Some(current_earliest) if expires_at < current_earliest => {
+                            earliest_expiry = Some(expires_at);
+                        }
+                        _ => {}
                     }
                 }
             }
         }
         
-        Ok(())
+        stats.next_refresh_needed = earliest_expiry;
+        stats
+    }
+}
+
+/// Statistics for token refresh monitoring
+#[derive(Debug, Clone)]
+pub struct RefreshStats {
+    pub total_accounts: usize,
+    pub accounts_with_refresh_tokens: usize,
+    pub accounts_needing_refresh: usize,
+    pub accounts_expired: usize,
+    pub next_refresh_needed: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+impl RefreshStats {
+    /// Get a summary description of the refresh status
+    pub fn summary(&self) -> String {
+        if self.total_accounts == 0 {
+            return "No accounts configured".to_string();
+        }
+        
+        if self.accounts_expired > 0 {
+            return format!("⚠️ {} accounts have expired tokens and need re-authentication", self.accounts_expired);
+        }
+        
+        if self.accounts_needing_refresh > 0 {
+            return format!("🔄 {} accounts need token refresh", self.accounts_needing_refresh);
+        }
+        
+        if let Some(next_refresh) = self.next_refresh_needed {
+            let duration_until_refresh = next_refresh - chrono::Utc::now();
+            if duration_until_refresh.num_hours() < 24 {
+                return format!("✅ All tokens valid, next refresh in {} hours", duration_until_refresh.num_hours());
+            } else {
+                return format!("✅ All tokens valid, next refresh in {} days", duration_until_refresh.num_days());
+            }
+        }
+        
+        "✅ All accounts have valid tokens".to_string()
     }
 }
 

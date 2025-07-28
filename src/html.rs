@@ -10,8 +10,10 @@ pub struct HtmlRenderer {
     /// Maximum width for text wrapping
     pub max_width: usize,
     /// Current text style stack
+    #[allow(dead_code)]
     style_stack: Vec<Style>,
     /// Base text color
+    #[allow(dead_code)]
     base_color: Color,
 }
 

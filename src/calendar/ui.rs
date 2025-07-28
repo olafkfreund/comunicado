@@ -584,7 +584,7 @@ impl CalendarUI {
         area: Rect,
         date: DateTime<Local>,
         hour: i32,
-        theme: &Theme,
+        _theme: &Theme,
     ) {
         let slot_start = date.date_naive().and_hms_opt(hour as u32, 0, 0).unwrap();
         let slot_end = slot_start + Duration::hours(2);
@@ -658,7 +658,7 @@ impl CalendarUI {
         // Render hourly grid
         for (i, hour) in hours.iter().enumerate() {
             let y = inner_area.y + (i as u16) * hour_height;
-            let hour_area = Rect::new(inner_area.x, y, inner_area.width, hour_height);
+            let _hour_area = Rect::new(inner_area.x, y, inner_area.width, hour_height);
             
             // Time label
             let time_label_area = Rect::new(inner_area.x, y, 6, 1);

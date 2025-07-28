@@ -249,8 +249,8 @@ impl DatePicker {
         
         // Add all days of the month
         for day in 1..=days_in_month {
-            let is_selected = self.selected_day == Some(day);
-            let is_today = {
+            let _is_selected = self.selected_day == Some(day);
+            let _is_today = {
                 let today = chrono::Local::now().date_naive();
                 self.viewing_month.with_day(day) == Some(today)
             };
