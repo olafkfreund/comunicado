@@ -164,12 +164,16 @@ impl App {
             .map_err(|e| anyhow::anyhow!("Failed to load IMAP accounts: {}", e))?;
         
         // Load OAuth2 tokens for all existing accounts into the TokenManager
+        tracing::debug!("About to load tokens into manager");
         self.load_tokens_into_manager(&token_manager).await?;
+        tracing::debug!("Tokens loaded successfully");
         
         // Create and start automatic token refresh scheduler
+        tracing::debug!("Creating token refresh scheduler");
         let token_manager_arc = Arc::new(token_manager.clone());
         let scheduler = crate::oauth2::token::TokenRefreshScheduler::new(token_manager_arc);
         
+        tracing::debug!("Starting token refresh scheduler");
         match scheduler.start().await {
             Ok(()) => {
                 tracing::info!("Started automatic OAuth2 token refresh scheduler");
@@ -181,6 +185,7 @@ impl App {
                 self.token_refresh_scheduler = None;
             }
         }
+        tracing::debug!("Token refresh scheduler setup complete");
         
         self.token_manager = Some(token_manager);
         self.imap_manager = Some(imap_manager);
@@ -190,11 +195,27 @@ impl App {
     
     /// Load OAuth2 tokens from storage into the TokenManager
     async fn load_tokens_into_manager(&self, token_manager: &TokenManager) -> Result<()> {
+        tracing::debug!("Starting token loading process");
+        
         // Load all OAuth2 accounts from storage
-        let accounts = self.storage.load_all_accounts()
-            .map_err(|e| anyhow::anyhow!("Failed to load accounts from storage: {}", e))?;
+        let accounts = match self.storage.load_all_accounts() {
+            Ok(accounts) => {
+                tracing::debug!("Successfully loaded {} accounts from storage", accounts.len());
+                accounts
+            }
+            Err(e) => {
+                tracing::warn!("Failed to load accounts from storage: {}", e);
+                // Return early but don't fail the app startup - this is not critical
+                return Ok(());
+            }
+        };
         
         tracing::info!("Loading tokens for {} accounts into TokenManager", accounts.len());
+        
+        if accounts.is_empty() {
+            tracing::info!("No accounts found to load tokens for");
+            return Ok(());
+        }
         
         for account in accounts {
             // Skip accounts without access tokens

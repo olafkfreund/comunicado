@@ -88,18 +88,27 @@ async fn main() -> Result<()> {
     }
     
     // Initialize IMAP account manager
+    tracing::info!("Initializing IMAP account manager...");
     app.initialize_imap_manager().await?;
+    tracing::info!("IMAP account manager initialized successfully");
     
     // Check for existing accounts and run setup wizard if needed
+    tracing::info!("Checking accounts and setup...");
     app.check_accounts_and_setup().await?;
+    tracing::info!("Account check and setup completed");
     
     // Initialize SMTP service and contacts manager
+    tracing::info!("Initializing services...");
     app.initialize_services().await?;
+    tracing::info!("Services initialized successfully");
     
     // Initialize dashboard services for start page
+    tracing::info!("Initializing dashboard services...");
     app.initialize_dashboard_services().await?;
+    tracing::info!("Dashboard services initialized successfully");
     
     // Run the application
+    tracing::info!("Starting application main loop...");
     app.run().await?;
 
     Ok(())
