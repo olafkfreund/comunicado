@@ -358,7 +358,7 @@ impl StartPage {
 
     fn render_datetime_block(&self, f: &mut Frame, area: Rect, theme: &Theme, is_selected: bool) {
         let block = create_border_block("datetime", theme, is_selected);
-        let _inner_area = block.inner(area);
+        let inner_area = block.inner(area);
         
         let now = Local::now();
         
@@ -427,7 +427,7 @@ impl StartPage {
 
     fn render_shortcuts_block(&self, f: &mut Frame, area: Rect, theme: &Theme, is_selected: bool) {
         let block = create_border_block("shortcuts", theme, is_selected);
-        let _inner_area = block.inner(area);
+        let inner_area = block.inner(area);
         
         // Create a 4-column layout for shortcuts
         let cols = Layout::default()

@@ -1020,7 +1020,19 @@ This is a sample email showcasing the modern email display format.".to_string();
     }
 
     pub fn set_content(&mut self, content: Vec<String>) {
-        self.raw_content = content;
+        // Check if content contains HTML and clean it
+        let cleaned_content: Vec<String> = content.iter().map(|line| {
+            if crate::html::is_html_content(line) {
+                // Convert HTML to plain text for raw content display
+                let plain_text = self.html_renderer.html_to_plain_text(line);
+                // Split into lines if the conversion created multiple lines
+                plain_text.lines().map(|l| l.to_string()).collect::<Vec<String>>().join("\n")
+            } else {
+                line.clone()
+            }
+        }).collect();
+        
+        self.raw_content = cleaned_content;
         self.scroll = 0; // Reset scroll when content changes
     }
 
