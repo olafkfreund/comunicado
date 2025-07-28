@@ -429,6 +429,51 @@ impl ImapAccountManager {
             default_account: self.default_account.clone(),
         }
     }
+    
+    /// Fetch attachment data from IMAP server
+    pub async fn fetch_attachment_data(
+        &self,
+        account_id: &str,
+        folder_name: &str,
+        message_uid: u32,
+        attachment_part: &str,
+    ) -> ImapResult<Vec<u8>> {
+        tracing::debug!("Fetching attachment data for account {} folder {} message {} part {}", 
+                       account_id, folder_name, message_uid, attachment_part);
+        
+        let client = self.get_client(account_id).await?;
+        let mut client_guard = client.lock().await;
+        
+        // Select the folder
+        client_guard.select_folder(folder_name).await?;
+        
+        // Fetch the specific body part containing the attachment
+        let fetch_item = format!("BODY[{}]", attachment_part);
+        let fetch_items = &[fetch_item.as_str()];
+        let messages = client_guard.uid_fetch_messages(&message_uid.to_string(), fetch_items).await?;
+        
+        if let Some(message) = messages.first() {
+            // Extract the body content from the message
+            if let Some(body_content) = &message.body {
+                // The body content might be base64 encoded
+                match base64::Engine::decode(&base64::engine::general_purpose::STANDARD, body_content.trim()) {
+                    Ok(decoded) => {
+                        tracing::debug!("Successfully decoded attachment data: {} bytes", decoded.len());
+                        Ok(decoded)
+                    }
+                    Err(_) => {
+                        // If base64 decoding fails, return the raw content
+                        tracing::debug!("Using raw attachment data: {} bytes", body_content.len());
+                        Ok(body_content.as_bytes().to_vec())
+                    }
+                }
+            } else {
+                Err(ImapError::protocol("No body content found for attachment"))
+            }
+        } else {
+            Err(ImapError::protocol("Message not found for attachment fetch"))
+        }
+    }
 }
 
 impl Default for ImapAccountManager {

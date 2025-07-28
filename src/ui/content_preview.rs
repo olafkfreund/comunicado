@@ -101,6 +101,7 @@ pub struct ContentPreview {
     attachment_viewer: AttachmentViewer,
     is_viewing_attachment: bool,
     clipboard_manager: ClipboardManager,
+    imap_manager: Option<Arc<crate::imap::ImapAccountManager>>,
 }
 
 impl ContentPreview {
@@ -126,6 +127,7 @@ impl ContentPreview {
             attachment_viewer: AttachmentViewer::default(),
             is_viewing_attachment: false,
             clipboard_manager: ClipboardManager::new(),
+            imap_manager: None,
         };
         
         // Initialize with sample content
@@ -1357,6 +1359,10 @@ This is a sample email showcasing the modern email display format.".to_string();
         self.database = Some(database);
     }
     
+    pub fn set_imap_manager(&mut self, imap_manager: Arc<crate::imap::ImapAccountManager>) {
+        self.imap_manager = Some(imap_manager);
+    }
+    
     /// Load email content from database by message ID
     pub async fn load_message_by_id(&mut self, message_id: Uuid) -> Result<(), Box<dyn std::error::Error>> {
         if let Some(ref database) = self.database {
@@ -1798,19 +1804,41 @@ This is a sample email showcasing the modern email display format.".to_string();
     }
     
     /// Download attachment data from IMAP server
-    async fn download_attachment_from_imap(&self, _message: &StoredMessage, attachment: &crate::email::StoredAttachment) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
-        // This would require access to the IMAP client
-        // For now, we'll return an error since we don't have the IMAP client here
-        // In a full implementation, we'd need to:
-        // 1. Get the IMAP client from the app state
-        // 2. Connect to the account
-        // 3. Select the appropriate folder
-        // 4. Fetch the attachment part using BODYSTRUCTURE information
-        
-        // TODO: Implement IMAP attachment downloading
-        // This requires integrating with the IMAP client and is beyond the current scope
-        
-        Err(format!("IMAP attachment downloading not yet implemented for attachment: {}", attachment.filename).into())
+    async fn download_attachment_from_imap(&self, message: &StoredMessage, attachment: &crate::email::StoredAttachment) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+        if let Some(ref imap_manager) = self.imap_manager {
+            tracing::info!("Downloading attachment '{}' from IMAP for message UID {}", 
+                          attachment.filename, message.imap_uid);
+            
+            // For now, we'll use the attachment ID as a simple part identifier
+            // In a full implementation, we'd parse BODYSTRUCTURE to get the correct part
+            let attachment_part = if attachment.id.contains('.') {
+                attachment.id.clone()
+            } else {
+                // Assume it's part 2 for the first attachment (part 1 is usually the body)
+                "2".to_string()
+            };
+            
+            match imap_manager.fetch_attachment_data(
+                &message.account_id,
+                &message.folder_name,
+                message.imap_uid,
+                &attachment_part,
+            ).await {
+                Ok(attachment_data) => {
+                    tracing::info!("Successfully downloaded attachment '{}': {} bytes", 
+                                  attachment.filename, attachment_data.len());
+                    Ok(attachment_data)
+                }
+                Err(e) => {
+                    tracing::error!("Failed to download attachment '{}' from IMAP: {}", 
+                                   attachment.filename, e);
+                    Err(format!("Failed to download attachment from IMAP: {}", e).into())
+                }
+            }
+        } else {
+            tracing::error!("IMAP manager not available for attachment download");
+            Err("IMAP manager not available for attachment download".into())
+        }
     }
     
     /// Open the attachment viewer for the selected attachment
