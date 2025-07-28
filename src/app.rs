@@ -106,13 +106,33 @@ impl App {
     
     /// Initialize dashboard services for start page
     pub async fn initialize_dashboard_services(&mut self) -> Result<()> {
-        let services = ServiceManager::new()
-            .map_err(|e| anyhow::anyhow!("Failed to initialize dashboard services: {}", e))?;
+        tracing::debug!("Initializing dashboard services");
         
-        self.services = Some(services);
+        let dashboard_init_result = tokio::time::timeout(
+            std::time::Duration::from_secs(10), // 10 second timeout for dashboard init
+            async {
+                let services = ServiceManager::new()
+                    .map_err(|e| anyhow::anyhow!("Failed to initialize dashboard services: {}", e))?;
+                
+                self.services = Some(services);
+                
+                // Start background service updates
+                self.update_start_page_data().await?;
+                
+                Ok::<(), anyhow::Error>(())
+            }
+        ).await;
         
-        // Start background service updates
-        self.update_start_page_data().await?;
+        match dashboard_init_result {
+            Ok(result) => {
+                result?;
+                tracing::debug!("Dashboard services initialized successfully");
+            }
+            Err(_) => {
+                tracing::error!("Dashboard services initialization timed out after 10 seconds");
+                return Err(anyhow::anyhow!("Dashboard services initialization timed out"));
+            }
+        }
         
         Ok(())
     }
@@ -120,17 +140,28 @@ impl App {
     /// Update start page with fresh data
     pub async fn update_start_page_data(&mut self) -> Result<()> {
         if let Some(ref mut services) = self.services {
-            // Update weather
-            match services.weather.get_weather(None).await {
-                Ok(weather) => {
+            tracing::debug!("Updating start page data");
+            
+            // Update weather with timeout
+            let weather_result = tokio::time::timeout(
+                std::time::Duration::from_secs(5), // 5 second timeout for weather
+                services.weather.get_weather(None)
+            ).await;
+            
+            match weather_result {
+                Ok(Ok(weather)) => {
                     self.ui.start_page_mut().set_weather(weather);
+                    tracing::debug!("Weather data updated successfully");
                 }
-                Err(e) => {
+                Ok(Err(e)) => {
                     tracing::warn!("Failed to get weather data: {}", e);
+                }
+                Err(_) => {
+                    tracing::warn!("Weather update timed out after 5 seconds");
                 }
             }
             
-            // Update system stats
+            // Update system stats (this should be fast)
             let stats = services.system_stats.get_stats();
             self.ui.start_page_mut().set_system_stats(stats);
             
@@ -145,6 +176,8 @@ impl App {
             // TODO: Update calendar events when CalDAV is implemented
             // For now, set empty calendar events
             self.ui.start_page_mut().set_calendar_events(vec![]);
+            
+            tracing::debug!("Start page data update completed");
         }
         
         Ok(())
@@ -305,17 +338,41 @@ impl App {
     
     /// Check for existing accounts and run setup wizard if needed
     pub async fn check_accounts_and_setup(&mut self) -> Result<()> {
+        tracing::debug!("Starting account check and setup process");
+        
         let account_ids = self.storage.list_account_ids()
             .map_err(|e| anyhow::anyhow!("Failed to list accounts: {}", e))?;
         
+        tracing::debug!("Found {} existing account IDs", account_ids.len());
+        
         if account_ids.is_empty() {
+            tracing::info!("No existing accounts found, running setup wizard");
             // No accounts found, run setup wizard
-            self.run_setup_wizard().await?;
+            match tokio::time::timeout(
+                std::time::Duration::from_secs(300), // 5 minute timeout for setup
+                self.run_setup_wizard()
+            ).await {
+                Ok(result) => result?,
+                Err(_) => {
+                    return Err(anyhow::anyhow!("Setup wizard timed out after 5 minutes"));
+                }
+            }
         } else {
+            tracing::info!("Loading existing accounts");
             // Load existing accounts
-            self.load_existing_accounts().await?;
+            match tokio::time::timeout(
+                std::time::Duration::from_secs(30), // 30 second timeout for loading
+                self.load_existing_accounts()
+            ).await {
+                Ok(result) => result?,
+                Err(_) => {
+                    tracing::error!("Loading existing accounts timed out after 30 seconds");
+                    return Err(anyhow::anyhow!("Loading existing accounts timed out"));
+                }
+            }
         }
         
+        tracing::debug!("Account check and setup process completed");
         Ok(())
     }
     
@@ -956,55 +1013,102 @@ impl App {
     
     /// Initialize SMTP service and contacts manager
     pub async fn initialize_services(&mut self) -> Result<()> {
+        tracing::debug!("Starting service initialization");
+        
         // Initialize token manager if not already done
         if self.token_manager.is_none() {
+            tracing::debug!("Creating new token manager");
             let token_manager = TokenManager::new();
             self.token_manager = Some(token_manager);
         }
         
-        // Initialize SMTP service
+        // Initialize SMTP service with timeout
         if let (Some(ref token_manager), Some(ref database)) = (&self.token_manager, &self.database) {
-            let smtp_service = SmtpServiceBuilder::new()
-                .with_token_manager(Arc::new(token_manager.clone()))
-                .with_database(database.clone())
-                .build()
-                .map_err(|e| anyhow::anyhow!("Failed to initialize SMTP service: {}", e))?;
+            tracing::debug!("Initializing SMTP service");
             
-            self.smtp_service = Some(smtp_service);
+            let smtp_init_result = tokio::time::timeout(
+                std::time::Duration::from_secs(15), // 15 second timeout for SMTP init
+                async {
+                    SmtpServiceBuilder::new()
+                        .with_token_manager(Arc::new(token_manager.clone()))
+                        .with_database(database.clone())
+                        .build()
+                }
+            ).await;
+            
+            match smtp_init_result {
+                Ok(Ok(smtp_service)) => {
+                    self.smtp_service = Some(smtp_service);
+                    tracing::debug!("SMTP service initialized successfully");
+                }
+                Ok(Err(e)) => {
+                    tracing::error!("Failed to initialize SMTP service: {}", e);
+                    return Err(anyhow::anyhow!("Failed to initialize SMTP service: {}", e));
+                }
+                Err(_) => {
+                    tracing::error!("SMTP service initialization timed out after 15 seconds");
+                    return Err(anyhow::anyhow!("SMTP service initialization timed out"));
+                }
+            }
         }
         
         // Initialize contacts manager (optional - don't fail if it can't be initialized)
         if let (Some(ref _database), Some(ref token_manager)) = (&self.database, &self.token_manager) {
-            // Create contacts database from email database path  
-            let data_dir = dirs::data_dir()
-                .ok_or_else(|| anyhow::anyhow!("Failed to get data directory"))?
-                .join("comunicado");
+            tracing::debug!("Initializing contacts manager");
             
-            // Ensure the directory exists
-            if let Err(e) = std::fs::create_dir_all(&data_dir) {
-                tracing::warn!("Failed to create contacts directory: {}", e);
-                return Ok(()); // Don't fail initialization
-            }
-            
-            let contacts_db_path = data_dir.join("contacts.db");
-            
-            // Try to initialize contacts database, but don't fail if it can't be created
-            match crate::contacts::ContactsDatabase::new(
-                &format!("sqlite:{}", contacts_db_path.display())
-            ).await {
-                Ok(contacts_database) => {
-                    match ContactsManager::new(contacts_database, token_manager.clone()).await {
-                        Ok(contacts_manager) => {
-                            self.contacts_manager = Some(Arc::new(contacts_manager));
-                            tracing::info!("Contacts manager initialized successfully");
+            let contacts_init_result = tokio::time::timeout(
+                std::time::Duration::from_secs(20), // 20 second timeout for contacts init
+                async {
+                    // Create contacts database from email database path  
+                    let data_dir = dirs::data_dir()
+                        .ok_or_else(|| anyhow::anyhow!("Failed to get data directory"))?
+                        .join("comunicado");
+                    
+                    // Ensure the directory exists
+                    if let Err(e) = std::fs::create_dir_all(&data_dir) {
+                        tracing::warn!("Failed to create contacts directory: {}", e);
+                        return Ok::<Option<Arc<ContactsManager>>, anyhow::Error>(None);
+                    }
+                    
+                    let contacts_db_path = data_dir.join("contacts.db");
+                    
+                    // Try to initialize contacts database
+                    match crate::contacts::ContactsDatabase::new(
+                        &format!("sqlite:{}", contacts_db_path.display())
+                    ).await {
+                        Ok(contacts_database) => {
+                            match ContactsManager::new(contacts_database, token_manager.clone()).await {
+                                Ok(contacts_manager) => {
+                                    Ok(Some(Arc::new(contacts_manager)))
+                                }
+                                Err(e) => {
+                                    tracing::warn!("Failed to initialize contacts manager: {}", e);
+                                    Ok(None)
+                                }
+                            }
                         }
                         Err(e) => {
-                            tracing::warn!("Failed to initialize contacts manager: {}", e);
+                            tracing::warn!("Failed to initialize contacts database: {}", e);
+                            Ok(None)
                         }
                     }
                 }
-                Err(e) => {
-                    tracing::warn!("Failed to initialize contacts database: {}", e);
+            ).await;
+            
+            match contacts_init_result {
+                Ok(Ok(Some(contacts_manager))) => {
+                    self.contacts_manager = Some(contacts_manager);
+                    tracing::info!("Contacts manager initialized successfully");
+                }
+                Ok(Ok(None)) => {
+                    tracing::warn!("Contacts manager initialization skipped due to errors");
+                }
+                Ok(Err(e)) => {
+                    tracing::warn!("Contacts manager initialization failed: {}", e);
+                }
+                Err(_) => {
+                    tracing::error!("Contacts manager initialization timed out after 20 seconds");
+                    // Don't fail overall initialization - contacts are optional
                 }
             }
         }
