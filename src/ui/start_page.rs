@@ -164,7 +164,7 @@ impl StartPage {
             calendar_events: Vec::new(),
             quick_actions,
             selected_widget: 0,
-            widget_count: 5, // datetime, stats, weather, tasks, links
+            widget_count: 5, // datetime, stats, weather, tasks, shortcuts
         }
     }
 
@@ -236,7 +236,7 @@ impl StartPage {
             .constraints([
                 Constraint::Length(12),  // Top row: datetime + stats  
                 Constraint::Length(10),  // Middle row: weather + todoist
-                Constraint::Min(6),      // Bottom row: links
+                Constraint::Min(6),      // Bottom row: shortcuts
             ])
             .split(area);
 
@@ -258,7 +258,7 @@ impl StartPage {
             ])
             .split(main_chunks[1]);
 
-        // Bottom row: Links/bookmarks (full width)
+        // Bottom row: Shortcuts (full width)
         let bottom_row = main_chunks[2];
 
         // Render all widgets with bordered blocks
@@ -266,7 +266,7 @@ impl StartPage {
         self.render_system_stats_block(f, top_row[1], theme, self.selected_widget == 1);
         self.render_weather_block(f, middle_row[0], theme, self.selected_widget == 2);
         self.render_tasks_block(f, middle_row[1], theme, self.selected_widget == 3);
-        self.render_links_block(f, bottom_row, theme, self.selected_widget == 4);
+        self.render_shortcuts_block(f, bottom_row, theme, self.selected_widget == 4);
     }
 
 
@@ -372,20 +372,28 @@ impl StartPage {
             .direction(Direction::Vertical)
             .constraints([
                 Constraint::Length(1),   // Spacing
-                Constraint::Length(4),   // Large time
+                Constraint::Length(6),   // Much larger time section
                 Constraint::Length(2),   // Date
                 Constraint::Min(0),      // Bottom spacing
             ])
             .split(inner_area);
 
-        // Render large time display  
+        // Render HUGE time display with much bigger text by using multiple lines
         let time_lines = vec![
             Line::from(""),
             Line::from(vec![
                 Span::styled(
-                    format!("{} {}", time_str, am_pm),
+                    format!("█████ {} █████", time_str),
                     Style::default()
                         .fg(theme.colors.palette.text_primary)
+                        .add_modifier(Modifier::BOLD),
+                ),
+            ]),
+            Line::from(vec![
+                Span::styled(
+                    format!("█████ {} █████", am_pm.to_uppercase()),
+                    Style::default()
+                        .fg(theme.colors.palette.accent)
                         .add_modifier(Modifier::BOLD),
                 ),
             ]),
@@ -396,13 +404,14 @@ impl StartPage {
             .alignment(Alignment::Center);
         f.render_widget(time_widget, chunks[1]);
 
-        // Date display
+        // Date display - also make it bigger and bold
         let date_lines = vec![
             Line::from(vec![
                 Span::styled(
-                    date_str.to_lowercase(),
+                    format!("▓▓▓ {} ▓▓▓", date_str.to_uppercase()),
                     Style::default()
-                        .fg(theme.colors.palette.text_secondary),
+                        .fg(theme.colors.palette.text_secondary)
+                        .add_modifier(Modifier::BOLD),
                 ),
             ]),
         ];
@@ -416,11 +425,11 @@ impl StartPage {
 
 
 
-    fn render_links_block(&self, f: &mut Frame, area: Rect, theme: &Theme, is_selected: bool) {
-        let block = create_border_block("links", theme, is_selected);
+    fn render_shortcuts_block(&self, f: &mut Frame, area: Rect, theme: &Theme, is_selected: bool) {
+        let block = create_border_block("shortcuts", theme, is_selected);
         let inner_area = block.inner(area);
         
-        // Create a 4-column layout for links like the reference
+        // Create a 4-column layout for shortcuts
         let cols = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([
@@ -431,83 +440,95 @@ impl StartPage {
             ])
             .split(inner_area);
         
-        // Column 1
+        // Column 1: Global Navigation
         let col1_lines = vec![
             Line::from(vec![
-                Span::styled("> ", Style::default().fg(theme.colors.palette.accent)),
-                Span::styled("gmail", Style::default().fg(theme.colors.palette.text_primary)),
+                Span::styled("GLOBAL", Style::default().fg(theme.colors.palette.accent).add_modifier(Modifier::BOLD)),
             ]),
             Line::from(vec![
-                Span::styled("> ", Style::default().fg(theme.colors.palette.accent)),
-                Span::styled("calendar", Style::default().fg(theme.colors.palette.text_primary)),
+                Span::styled("q", Style::default().fg(theme.colors.palette.accent)),
+                Span::styled(" quit", Style::default().fg(theme.colors.palette.text_primary)),
             ]),
             Line::from(vec![
-                Span::styled("> ", Style::default().fg(theme.colors.palette.accent)),
-                Span::styled("drive", Style::default().fg(theme.colors.palette.text_primary)),
+                Span::styled("Tab", Style::default().fg(theme.colors.palette.accent)),
+                Span::styled(" next pane", Style::default().fg(theme.colors.palette.text_primary)),
             ]),
             Line::from(vec![
-                Span::styled("> ", Style::default().fg(theme.colors.palette.accent)),
-                Span::styled("docs", Style::default().fg(theme.colors.palette.text_primary)),
+                Span::styled("~", Style::default().fg(theme.colors.palette.accent)),
+                Span::styled(" start page", Style::default().fg(theme.colors.palette.text_primary)),
+            ]),
+            Line::from(vec![
+                Span::styled("Esc", Style::default().fg(theme.colors.palette.accent)),
+                Span::styled(" cancel", Style::default().fg(theme.colors.palette.text_primary)),
             ]),
         ];
         
-        // Column 2
+        // Column 2: Email Management
         let col2_lines = vec![
             Line::from(vec![
-                Span::styled("> ", Style::default().fg(theme.colors.palette.accent)),
-                Span::styled("github", Style::default().fg(theme.colors.palette.text_primary)),
+                Span::styled("EMAIL", Style::default().fg(theme.colors.palette.accent).add_modifier(Modifier::BOLD)),
             ]),
             Line::from(vec![
-                Span::styled("> ", Style::default().fg(theme.colors.palette.accent)),
-                Span::styled("slack", Style::default().fg(theme.colors.palette.text_primary)),
+                Span::styled("c", Style::default().fg(theme.colors.palette.accent)),
+                Span::styled(" compose", Style::default().fg(theme.colors.palette.text_primary)),
             ]),
             Line::from(vec![
-                Span::styled("> ", Style::default().fg(theme.colors.palette.accent)),
-                Span::styled("keep", Style::default().fg(theme.colors.palette.text_primary)),
+                Span::styled("p", Style::default().fg(theme.colors.palette.accent)),
+                Span::styled(" reply/forward", Style::default().fg(theme.colors.palette.text_primary)),
             ]),
             Line::from(vec![
-                Span::styled("> ", Style::default().fg(theme.colors.palette.accent)),
-                Span::styled("leetcode", Style::default().fg(theme.colors.palette.text_primary)),
+                Span::styled("/", Style::default().fg(theme.colors.palette.accent)),
+                Span::styled(" search", Style::default().fg(theme.colors.palette.text_primary)),
+            ]),
+            Line::from(vec![
+                Span::styled("Enter", Style::default().fg(theme.colors.palette.accent)),
+                Span::styled(" open", Style::default().fg(theme.colors.palette.text_primary)),
             ]),
         ];
         
-        // Column 3  
+        // Column 3: Navigation & Lists
         let col3_lines = vec![
             Line::from(vec![
-                Span::styled("> ", Style::default().fg(theme.colors.palette.accent)),
-                Span::styled("perplexity", Style::default().fg(theme.colors.palette.text_primary)),
+                Span::styled("NAVIGATE", Style::default().fg(theme.colors.palette.accent).add_modifier(Modifier::BOLD)),
             ]),
             Line::from(vec![
-                Span::styled("> ", Style::default().fg(theme.colors.palette.accent)),
-                Span::styled("claude", Style::default().fg(theme.colors.palette.text_primary)),
+                Span::styled("hjkl", Style::default().fg(theme.colors.palette.accent)),
+                Span::styled(" vim move", Style::default().fg(theme.colors.palette.text_primary)),
             ]),
             Line::from(vec![
-                Span::styled("> ", Style::default().fg(theme.colors.palette.accent)),
-                Span::styled("aistudio", Style::default().fg(theme.colors.palette.text_primary)),
+                Span::styled("↑↓", Style::default().fg(theme.colors.palette.accent)),
+                Span::styled(" up/down", Style::default().fg(theme.colors.palette.text_primary)),
             ]),
             Line::from(vec![
-                Span::styled("> ", Style::default().fg(theme.colors.palette.accent)),
-                Span::styled("chatgpt", Style::default().fg(theme.colors.palette.text_primary)),
+                Span::styled("t", Style::default().fg(theme.colors.palette.accent)),
+                Span::styled(" thread view", Style::default().fg(theme.colors.palette.text_primary)),
+            ]),
+            Line::from(vec![
+                Span::styled("s", Style::default().fg(theme.colors.palette.accent)),
+                Span::styled(" sort date", Style::default().fg(theme.colors.palette.text_primary)),
             ]),
         ];
         
-        // Column 4
+        // Column 4: Accounts & System
         let col4_lines = vec![
             Line::from(vec![
-                Span::styled("> ", Style::default().fg(theme.colors.palette.accent)),
-                Span::styled("youtube", Style::default().fg(theme.colors.palette.text_primary)),
+                Span::styled("SYSTEM", Style::default().fg(theme.colors.palette.accent).add_modifier(Modifier::BOLD)),
             ]),
             Line::from(vec![
-                Span::styled("> ", Style::default().fg(theme.colors.palette.accent)),
-                Span::styled("reddit", Style::default().fg(theme.colors.palette.text_primary)),
+                Span::styled("Ctrl+A", Style::default().fg(theme.colors.palette.accent)),
+                Span::styled(" add account", Style::default().fg(theme.colors.palette.text_primary)),
             ]),
             Line::from(vec![
-                Span::styled("> ", Style::default().fg(theme.colors.palette.accent)),
-                Span::styled("twitter", Style::default().fg(theme.colors.palette.text_primary)),
+                Span::styled("Ctrl+R", Style::default().fg(theme.colors.palette.accent)),
+                Span::styled(" refresh", Style::default().fg(theme.colors.palette.text_primary)),
             ]),
             Line::from(vec![
-                Span::styled("> ", Style::default().fg(theme.colors.palette.accent)),
-                Span::styled("feedly", Style::default().fg(theme.colors.palette.text_primary)),
+                Span::styled("F5", Style::default().fg(theme.colors.palette.accent)),
+                Span::styled(" refresh folder", Style::default().fg(theme.colors.palette.text_primary)),
+            ]),
+            Line::from(vec![
+                Span::styled("m", Style::default().fg(theme.colors.palette.accent)),
+                Span::styled(" view mode", Style::default().fg(theme.colors.palette.text_primary)),
             ]),
         ];
         
