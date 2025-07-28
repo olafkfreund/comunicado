@@ -2260,81 +2260,108 @@ This is a sample email showcasing the modern email display format.".to_string();
     
     /// Clean raw email content by removing technical headers and metadata
     fn clean_raw_email_content(&self, raw_content: &str) -> String {
+        tracing::debug!("Cleaning raw email content of length: {}", raw_content.len());
+        
+        // First, try to find HTML content directly
+        if let Some(html_start) = raw_content.find("<!DOCTYPE") {
+            tracing::debug!("Found HTML content starting with DOCTYPE");
+            return raw_content[html_start..].to_string();
+        } else if let Some(html_start) = raw_content.find("<html") {
+            tracing::debug!("Found HTML content starting with <html");
+            return raw_content[html_start..].to_string();
+        } else if let Some(body_start) = raw_content.find("<body") {
+            tracing::debug!("Found HTML content starting with <body");
+            return raw_content[body_start..].to_string();
+        }
+        
         let lines: Vec<&str> = raw_content.lines().collect();
         let mut content_lines = Vec::new();
         let mut in_headers = true;
-        let mut found_content_start = false;
+        let mut blank_line_count = 0;
         
-        // List of technical headers to skip
-        let technical_headers = [
-            "delivered-to:", "received:", "x-google-smtp-source:", "x-received:",
+        // Comprehensive list of email headers to skip - covers all common headers
+        let email_headers = [
+            // Standard RFC headers
+            "from:", "to:", "cc:", "bcc:", "subject:", "date:", "reply-to:",
+            "message-id:", "in-reply-to:", "references:", "mime-version:",
+            // Content headers
+            "content-type:", "content-transfer-encoding:", "content-disposition:",
+            "content-id:", "content-description:", "content-language:",
+            // Authentication and routing headers
+            "received:", "return-path:", "delivered-to:", "envelope-to:",
+            "authentication-results:", "received-spf:", "dkim-signature:",
             "arc-seal:", "arc-message-signature:", "arc-authentication-results:",
-            "dkim-signature:", "x-gm-message-state:", "x-google-dkim-signature:",
-            "x-gm-thd-id:", "x-gmail-labels:", "return-path:", "authentication-results:",
-            "received-spf:", "x-spam-check-by:", "x-spam-level:", "x-spam-status:",
-            "message-id:", "mime-version:", "content-transfer-encoding:",
+            // Service-specific headers (Gmail, Outlook, etc.)
+            "x-received:", "x-google-smtp-source:", "x-gm-message-state:",
+            "x-google-dkim-signature:", "x-gm-thd-id:", "x-gmail-labels:",
+            "x-ms-exchange-", "x-originating-ip:", "x-microsoft-antispam:",
+            // Spam and security headers
+            "x-spam-checker-version:", "x-spam-level:", "x-spam-status:",
+            "x-spam-check-by:", "x-virus-scanned:", "x-barracuda-",
+            // Mailing list headers
+            "list-id:", "list-unsubscribe:", "list-archive:", "list-post:",
+            "list-help:", "list-subscribe:", "precedence:",
+            // Other common headers
+            "x-priority:", "importance:", "x-mailer:", "user-agent:",
+            "thread-topic:", "thread-index:", "x-original-to:",
         ];
         
-        for line in lines {
+        for (i, line) in lines.iter().enumerate() {
             let line_lower = line.to_lowercase();
+            let line_trimmed = line.trim();
             
-            // Skip empty lines at the beginning
-            if in_headers && line.trim().is_empty() {
+            // Count consecutive blank lines
+            if line_trimmed.is_empty() {
+                blank_line_count += 1;
+                // After 2+ consecutive blank lines, we're likely past headers
+                if blank_line_count >= 2 && in_headers {
+                    in_headers = false;
+                    tracing::debug!("Found content after {} blank lines at line {}", blank_line_count, i);
+                }
                 continue;
+            } else {
+                blank_line_count = 0;
             }
             
-            // Check if this line is a technical header
-            let is_technical_header = technical_headers.iter().any(|&header| {
-                line_lower.starts_with(header) || 
-                (line.starts_with(' ') || line.starts_with('\t')) && line.trim().len() > 0
-            });
-            
-            // Look for content type or HTML start
-            if line_lower.contains("content-type:") && line_lower.contains("text/html") {
+            // Skip lines that are clearly email headers
+            if in_headers {
+                let is_header_line = email_headers.iter().any(|&header| {
+                    line_lower.starts_with(header) || 
+                    // Handle continuation lines (starting with whitespace)
+                    (line.starts_with(' ') || line.starts_with('\t'))
+                });
+                
+                // Also skip lines that look like headers (contain : and are at start of line)
+                let looks_like_header = line.contains(':') && 
+                    !line.starts_with(' ') && 
+                    !line.starts_with('\t') &&
+                    // But don't skip things that look like actual content
+                    !line_lower.contains("http") &&
+                    !line_lower.contains("www.") &&
+                    line.len() < 200; // Headers are usually shorter
+                
+                if is_header_line || looks_like_header {
+                    tracing::debug!("Skipping header line {}: {}", i, &line[..std::cmp::min(50, line.len())]);
+                    continue;
+                }
+                
+                // If we find a line that doesn't look like a header, we're in content
+                tracing::debug!("Found first content line at {}: {}", i, &line[..std::cmp::min(50, line.len())]);
                 in_headers = false;
-                continue;
-            }
-            
-            // Look for HTML content start
-            if line.trim().starts_with("<!doctype") || 
-               line.trim().starts_with("<html") ||
-               line.contains("<body") {
-                in_headers = false;
-                found_content_start = true;
-                content_lines.push(line);
-                continue;
-            }
-            
-            // Skip technical headers
-            if in_headers && is_technical_header {
-                continue;
-            }
-            
-            // If we find a non-header line, we're in content
-            if in_headers && !line.starts_with(' ') && !line.starts_with('\t') && 
-               !line.contains(':') && line.trim().len() > 0 {
-                in_headers = false;
-                found_content_start = true;
             }
             
             // Add content lines
-            if !in_headers {
-                content_lines.push(line);
-            }
+            content_lines.push(*line);
         }
         
-        let cleaned = content_lines.join("\n");
+        let cleaned = content_lines.join("\n").trim().to_string();
         
-        // If we didn't find any real content, try a different approach
-        if cleaned.trim().is_empty() || !found_content_start {
-            // Look for HTML content anywhere in the raw content
-            if let Some(html_start) = raw_content.find("<!DOCTYPE") {
-                return raw_content[html_start..].to_string();
-            } else if let Some(html_start) = raw_content.find("<html") {
-                return raw_content[html_start..].to_string();
-            } else if let Some(body_start) = raw_content.find("<body") {
-                return raw_content[body_start..].to_string();
-            }
+        tracing::debug!("Cleaned content length: {} (original: {})", cleaned.len(), raw_content.len());
+        
+        // If we still don't have meaningful content, return a fallback
+        if cleaned.trim().is_empty() {
+            tracing::warn!("No content found after cleaning, using fallback");
+            return "Email content could not be displayed properly.".to_string();
         }
         
         cleaned
