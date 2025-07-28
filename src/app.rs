@@ -32,6 +32,7 @@ pub struct App {
     storage: SecureStorage,
     imap_manager: Option<ImapAccountManager>,
     token_manager: Option<TokenManager>,
+    token_refresh_scheduler: Option<crate::oauth2::token::TokenRefreshScheduler>,
     smtp_service: Option<SmtpService>,
     contacts_manager: Option<Arc<ContactsManager>>,
     services: Option<ServiceManager>,
@@ -52,6 +53,7 @@ impl App {
                 .map_err(|e| anyhow::anyhow!("Failed to initialize secure storage: {}", e))?,
             imap_manager: None,
             token_manager: None,
+            token_refresh_scheduler: None,
             smtp_service: None,
             contacts_manager: None,
             services: None,
@@ -161,16 +163,71 @@ impl App {
         imap_manager.load_accounts().await
             .map_err(|e| anyhow::anyhow!("Failed to load IMAP accounts: {}", e))?;
         
-        // Start automatic token refresh _scheduler
-        if let Ok(_scheduler) = crate::oauth2::token::TokenRefreshScheduler::new(Arc::new(token_manager.clone())).start().await {
-            tracing::info!("Started automatic OAuth2 token refresh _scheduler");
-        } else {
-            tracing::warn!("Failed to start automatic token refresh _scheduler");
+        // Load OAuth2 tokens for all existing accounts into the TokenManager
+        self.load_tokens_into_manager(&token_manager).await?;
+        
+        // Create and start automatic token refresh scheduler
+        let token_manager_arc = Arc::new(token_manager.clone());
+        let scheduler = crate::oauth2::token::TokenRefreshScheduler::new(token_manager_arc);
+        
+        match scheduler.start().await {
+            Ok(()) => {
+                tracing::info!("Started automatic OAuth2 token refresh scheduler");
+                self.token_refresh_scheduler = Some(scheduler);
+            }
+            Err(e) => {
+                tracing::warn!("Failed to start automatic token refresh scheduler: {}", e);
+                // Continue without scheduler - tokens will need manual refresh
+                self.token_refresh_scheduler = None;
+            }
         }
         
         self.token_manager = Some(token_manager);
         self.imap_manager = Some(imap_manager);
         
+        Ok(())
+    }
+    
+    /// Load OAuth2 tokens from storage into the TokenManager
+    async fn load_tokens_into_manager(&self, token_manager: &TokenManager) -> Result<()> {
+        // Load all OAuth2 accounts from storage
+        let accounts = self.storage.load_all_accounts()
+            .map_err(|e| anyhow::anyhow!("Failed to load accounts from storage: {}", e))?;
+        
+        tracing::info!("Loading tokens for {} accounts into TokenManager", accounts.len());
+        
+        for account in accounts {
+            // Skip accounts without access tokens
+            if account.access_token.is_empty() {
+                tracing::warn!("No access token found for account {}", account.account_id);
+                continue;
+            }
+            
+            // Create a TokenResponse to store the tokens in TokenManager
+            let token_response = crate::oauth2::TokenResponse {
+                access_token: account.access_token,
+                refresh_token: account.refresh_token,
+                token_type: "Bearer".to_string(), // OAuth2 standard
+                expires_in: account.token_expires_at.map(|exp| {
+                    let now = chrono::Utc::now();
+                    std::cmp::max(0, (exp - now).num_seconds()) as u64
+                }),
+                scope: Some(account.scopes.join(" ")),
+            };
+            
+            // Store the tokens in the TokenManager
+            if let Err(e) = token_manager.store_tokens(
+                account.account_id.clone(),
+                account.provider.clone(),
+                &token_response,
+            ).await {
+                tracing::warn!("Failed to store tokens for account {}: {}", account.account_id, e);
+            } else {
+                tracing::debug!("Successfully loaded tokens for account {}", account.account_id);
+            }
+        }
+        
+        tracing::info!("Token loading complete");
         Ok(())
     }
     
