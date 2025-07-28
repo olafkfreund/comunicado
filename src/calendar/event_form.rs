@@ -1,4 +1,4 @@
-use chrono::{Duration, Local, NaiveDate, NaiveTime, Utc, Timelike, Datelike, TimeZone};
+use chrono::{DateTime, Duration, Local, NaiveDate, NaiveTime, Utc, Timelike, Datelike, TimeZone};
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Style},
@@ -8,11 +8,51 @@ use ratatui::{
 };
 use std::collections::HashMap;
 
-use crate::calendar::event::{Event, EventStatus, EventAttendee, AttendeeStatus, EventRecurrence};
-use crate::calendar::Calendar;
+use crate::calendar::event::{Event, EventStatus, EventAttendee, AttendeeStatus, EventRecurrence, RecurrenceFrequency};
+use crate::calendar::{Calendar, CalendarError, CalendarResult};
+use crate::calendar::database::CalendarDatabase;
 use crate::theme::Theme;
 use crate::ui::date_picker::DatePicker;
 use crate::ui::time_picker::TimePicker;
+
+/// Event conflict types
+#[derive(Debug, Clone, PartialEq)]
+pub enum EventConflict {
+    TimeOverlap {
+        conflicting_event_id: String,
+        conflicting_event_title: String,
+        overlap_start: DateTime<Utc>,
+        overlap_end: DateTime<Utc>,
+    },
+    ResourceBooking {
+        resource_name: String,
+        conflicting_event_id: String,
+        conflicting_event_title: String,
+    },
+    AttendeeConflict {
+        attendee_email: String,
+        conflicting_event_id: String,
+        conflicting_event_title: String,
+    },
+}
+
+/// Validation severity levels
+#[derive(Debug, Clone, PartialEq)]
+pub enum ValidationSeverity {
+    Error,    // Prevents saving
+    Warning,  // Allows saving with confirmation
+    Info,     // Just informational
+}
+
+/// Comprehensive validation result
+#[derive(Debug, Clone)]
+pub struct ValidationResult {
+    pub is_valid: bool,
+    pub errors: Vec<(ValidationSeverity, String)>,
+    pub conflicts: Vec<EventConflict>,
+    pub warnings: Vec<String>,
+    pub suggestions: Vec<String>,
+}
 
 /// Event form actions
 #[derive(Debug, Clone, PartialEq)]
@@ -60,6 +100,10 @@ pub struct EventFormValidation {
     pub time_error: Option<String>,
     pub calendar_error: Option<String>,
     pub attendee_error: Option<String>,
+    pub conflict_error: Option<String>,
+    pub duration_error: Option<String>,
+    pub recurrence_error: Option<String>,
+    pub location_error: Option<String>,
 }
 
 impl Default for EventFormValidation {
@@ -70,6 +114,10 @@ impl Default for EventFormValidation {
             time_error: None,
             calendar_error: None,
             attendee_error: None,
+            conflict_error: None,
+            duration_error: None,
+            recurrence_error: None,
+            location_error: None,
         }
     }
 }
@@ -408,6 +456,9 @@ impl EventFormUI {
         if self.title_input.trim().is_empty() {
             self.validation.title_error = Some("Title is required".to_string());
             is_valid = false;
+        } else if self.title_input.len() > 255 {
+            self.validation.title_error = Some("Title is too long (max 255 characters)".to_string());
+            is_valid = false;
         }
         
         // Date validation
@@ -419,13 +470,228 @@ impl EventFormUI {
             is_valid = false;
         }
         
+        // Duration validation
+        let start_datetime = self.start_date.and_time(if self.is_all_day { 
+            NaiveTime::from_hms_opt(0, 0, 0).unwrap() 
+        } else { 
+            self.start_time 
+        });
+        
+        let end_datetime = self.end_date.and_time(if self.is_all_day { 
+            NaiveTime::from_hms_opt(23, 59, 59).unwrap() 
+        } else { 
+            self.end_time 
+        });
+        
+        let duration = end_datetime - start_datetime;
+        if duration > Duration::days(7) {
+            self.validation.duration_error = Some("Event duration cannot exceed 7 days".to_string());
+            is_valid = false;
+        } else if !self.is_all_day && duration < Duration::minutes(1) {
+            self.validation.duration_error = Some("Event must be at least 1 minute long".to_string());
+            is_valid = false;
+        }
+        
         // Calendar validation
         if !self.calendars.iter().any(|c| c.id == self.selected_calendar_id) {
             self.validation.calendar_error = Some("Please select a valid calendar".to_string());
             is_valid = false;
         }
         
+        // Location validation
+        if !self.location_input.trim().is_empty() && self.location_input.len() > 500 {
+            self.validation.location_error = Some("Location is too long (max 500 characters)".to_string());
+            is_valid = false;
+        }
+        
+        // Attendee email validation
+        for attendee in &self.attendees {
+            if !self.is_valid_email(&attendee.email) {
+                self.validation.attendee_error = Some(format!("Invalid email address: {}", attendee.email));
+                is_valid = false;
+                break;
+            }
+        }
+        
         is_valid
+    }
+    
+    /// Perform comprehensive validation including conflict detection
+    pub async fn validate_comprehensive(&mut self, database: &CalendarDatabase) -> ValidationResult {
+        let mut result = ValidationResult {
+            is_valid: true,
+            errors: Vec::new(),
+            conflicts: Vec::new(),
+            warnings: Vec::new(),
+            suggestions: Vec::new(),
+        };
+        
+        // Basic validation first
+        if !self.validate() {
+            result.is_valid = false;
+            
+            if let Some(ref error) = self.validation.title_error {
+                result.errors.push((ValidationSeverity::Error, error.clone()));
+            }
+            if let Some(ref error) = self.validation.date_error {
+                result.errors.push((ValidationSeverity::Error, error.clone()));
+            }
+            if let Some(ref error) = self.validation.time_error {
+                result.errors.push((ValidationSeverity::Error, error.clone()));
+            }
+            if let Some(ref error) = self.validation.calendar_error {
+                result.errors.push((ValidationSeverity::Error, error.clone()));
+            }
+            if let Some(ref error) = self.validation.attendee_error {
+                result.errors.push((ValidationSeverity::Error, error.clone()));
+            }
+            if let Some(ref error) = self.validation.duration_error {
+                result.errors.push((ValidationSeverity::Error, error.clone()));
+            }
+            if let Some(ref error) = self.validation.location_error {
+                result.errors.push((ValidationSeverity::Error, error.clone()));
+            }
+        }
+        
+        // Build temporary event for conflict checking
+        let temp_event = self.build_event();
+        
+        // Check for time conflicts with existing events
+        if let Ok(conflicts) = self.check_time_conflicts(database, &temp_event).await {
+            if !conflicts.is_empty() {
+                result.conflicts.extend(conflicts);
+                result.warnings.push("This event conflicts with existing events".to_string());
+            }
+        }
+        
+        // Check for attendee conflicts
+        if let Ok(attendee_conflicts) = self.check_attendee_conflicts(database, &temp_event).await {
+            if !attendee_conflicts.is_empty() {
+                result.conflicts.extend(attendee_conflicts);
+                result.warnings.push("Some attendees have scheduling conflicts".to_string());
+            }
+        }
+        
+        // Add suggestions for optimization
+        self.add_suggestions(&mut result, &temp_event);
+        
+        result
+    }
+    
+    /// Check for time conflicts with existing events
+    async fn check_time_conflicts(&self, database: &CalendarDatabase, event: &Event) -> CalendarResult<Vec<EventConflict>> {
+        let mut conflicts = Vec::new();
+        
+        // Get all events in the same calendar within the time range
+        let start_range = event.start_time - Duration::hours(24); // Look 24 hours before
+        let end_range = event.end_time + Duration::hours(24);   // Look 24 hours after
+        
+        let existing_events = database.get_events(&event.calendar_id, Some(start_range), Some(end_range)).await
+            .map_err(|e| CalendarError::DatabaseError(format!("Failed to fetch events for conflict check: {}", e)))?;
+        
+        for existing_event in existing_events {
+            // Skip the current event if we're editing
+            if existing_event.id == event.id {
+                continue;
+            }
+            
+            // Check for time overlap
+            if event.overlaps_with(&existing_event) {
+                let overlap_start = event.start_time.max(existing_event.start_time);
+                let overlap_end = event.end_time.min(existing_event.end_time);
+                
+                conflicts.push(EventConflict::TimeOverlap {
+                    conflicting_event_id: existing_event.id.clone(),
+                    conflicting_event_title: existing_event.title.clone(),
+                    overlap_start,
+                    overlap_end,
+                });
+            }
+        }
+        
+        Ok(conflicts)
+    }
+    
+    /// Check for attendee conflicts (attendees with overlapping meetings)
+    async fn check_attendee_conflicts(&self, database: &CalendarDatabase, event: &Event) -> CalendarResult<Vec<EventConflict>> {
+        let mut conflicts = Vec::new();
+        
+        // Only check if there are attendees
+        if event.attendees.is_empty() {
+            return Ok(conflicts);
+        }
+        
+        // Get all calendars to check across different calendars
+        let calendars = database.get_calendars().await
+            .map_err(|e| CalendarError::DatabaseError(format!("Failed to fetch calendars: {}", e)))?;
+        
+        for calendar in calendars {
+            let start_range = event.start_time - Duration::minutes(30);
+            let end_range = event.end_time + Duration::minutes(30);
+            
+            let existing_events = database.get_events(&calendar.id, Some(start_range), Some(end_range)).await
+                .map_err(|e| CalendarError::DatabaseError(format!("Failed to fetch events: {}", e)))?;
+            
+            for existing_event in existing_events {
+                // Skip the current event
+                if existing_event.id == event.id {
+                    continue;
+                }
+                
+                // Check if any attendees overlap
+                if event.overlaps_with(&existing_event) {
+                    for our_attendee in &event.attendees {
+                        for existing_attendee in &existing_event.attendees {
+                            if our_attendee.email == existing_attendee.email {
+                                conflicts.push(EventConflict::AttendeeConflict {
+                                    attendee_email: our_attendee.email.clone(),
+                                    conflicting_event_id: existing_event.id.clone(),
+                                    conflicting_event_title: existing_event.title.clone(),
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        Ok(conflicts)
+    }
+    
+    /// Add helpful suggestions for the event
+    fn add_suggestions(&self, result: &mut ValidationResult, event: &Event) {
+        // Suggest better timing
+        let hour = event.start_time.hour();
+        if hour < 8 || hour > 18 {
+            result.suggestions.push("Consider scheduling during business hours (8 AM - 6 PM) for better attendance".to_string());
+        }
+        
+        // Suggest location for meetings with multiple attendees
+        if event.attendees.len() > 1 && event.location.is_none() {
+            result.suggestions.push("Consider adding a location for meetings with multiple attendees".to_string());
+        }
+        
+        // Suggest shorter meetings
+        let duration = event.end_time - event.start_time;
+        if duration > Duration::hours(2) {
+            result.suggestions.push("Consider breaking long meetings into shorter sessions for better engagement".to_string());
+        }
+        
+        // Suggest description for complex meetings
+        if event.attendees.len() > 5 && event.description.as_ref().map_or(true, |d| d.trim().is_empty()) {
+            result.suggestions.push("Consider adding a description for meetings with many attendees".to_string());
+        }
+        
+        // Suggest reminders
+        if event.reminders.is_empty() && !event.all_day {
+            result.suggestions.push("Consider adding a reminder to avoid missing this event".to_string());
+        }
+    }
+    
+    /// Validate email address format
+    fn is_valid_email(&self, email: &str) -> bool {
+        // Basic email validation - check for @ symbol and basic format
+        email.contains('@') && email.len() > 3 && email.contains('.') && !email.starts_with('@') && !email.ends_with('@')
     }
     
     /// Build the event from form data

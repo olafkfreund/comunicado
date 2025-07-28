@@ -378,6 +378,56 @@ impl EventHandler {
                     ui.message_list_mut().expand_selected_thread();
                 }
             }
+            KeyCode::Char('p') | KeyCode::Char('P') => {
+                // Open email popup viewer for reply/forward/edit actions
+                if ui.focused_pane() == FocusedPane::ContentPreview {
+                    if let Some(selected_message_item) = ui.message_list().selected_message() {
+                        // We need the email content to start the viewer
+                        if let Some(email_content) = ui.content_preview().get_email_content() {
+                            // Create a minimal StoredMessage from MessageItem and EmailContent
+                            // TODO: This should be improved to fetch the full StoredMessage from database
+                            if let Some(message_id) = selected_message_item.message_id {
+                                let stored_message = crate::email::StoredMessage {
+                                    id: message_id,
+                                    account_id: "default".to_string(), // TODO: Get actual account ID
+                                    folder_name: "INBOX".to_string(), // TODO: Get actual folder
+                                    imap_uid: 0, // TODO: Get actual UID
+                                    subject: email_content.headers.subject.clone(),
+                                    from_name: Some(email_content.headers.from.clone()),
+                                    from_addr: email_content.headers.from.clone(),
+                                    to_addrs: email_content.headers.to.clone(),
+                                    cc_addrs: email_content.headers.cc.clone(),
+                                    bcc_addrs: email_content.headers.bcc.clone(),
+                                    date: chrono::Utc::now(), // TODO: Parse actual date
+                                    body_text: Some(email_content.body.clone()),
+                                    body_html: if email_content.content_type == crate::ui::content_preview::ContentType::Html {
+                                        Some(email_content.body.clone())
+                                    } else {
+                                        None
+                                    },
+                                    attachments: Vec::new(), // TODO: Convert attachments
+                                    flags: if selected_message_item.is_read { vec!["\\Seen".to_string()] } else { Vec::new() },
+                                    labels: Vec::new(),
+                                    size: None,
+                                    priority: None,
+                                    is_draft: false,
+                                    is_deleted: false,
+                                    reply_to: email_content.headers.reply_to.clone(),
+                                    message_id: Some(email_content.headers.message_id.clone()),
+                                    thread_id: None,
+                                    in_reply_to: email_content.headers.in_reply_to.clone(),
+                                    references: Vec::new(),
+                                    created_at: chrono::Utc::now(),
+                                    updated_at: chrono::Utc::now(),
+                                    last_synced: chrono::Utc::now(),
+                                    sync_version: 1,
+                                };
+                                ui.start_email_viewer(stored_message, email_content.clone());
+                            }
+                        }
+                    }
+                }
+            }
             KeyCode::Char('C') => {
                 // Close/collapse thread (capital C)
                 if let FocusedPane::MessageList = ui.focused_pane() {
@@ -416,6 +466,19 @@ impl EventHandler {
                             // Open attachment viewer
                             if let Err(e) = ui.content_preview_mut().view_selected_attachment().await {
                                 tracing::error!("Failed to view attachment: {}", e);
+                            }
+                        }
+                    }
+                }
+            }
+            KeyCode::Char('O') => {
+                // Open selected attachment with system default application (xdg-open)
+                if let FocusedPane::ContentPreview = ui.focused_pane() {
+                    if ui.content_preview().has_attachments() {
+                        if let Some(_attachment) = ui.content_preview().get_selected_attachment() {
+                            // Open attachment with xdg-open
+                            if let Err(e) = ui.content_preview_mut().open_attachment_with_system().await {
+                                tracing::error!("Failed to open attachment with system application: {}", e);
                             }
                         }
                     }

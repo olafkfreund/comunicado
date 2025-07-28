@@ -1,6 +1,8 @@
 pub mod caldav;
 pub mod database;
 pub mod event;
+pub mod invitation;
+pub mod invitation_manager;
 pub mod manager;
 pub mod sync;
 pub mod ui;
@@ -13,6 +15,8 @@ pub use manager::CalendarManager;
 pub use sync::{CalendarSyncEngine, CalendarSyncProgress};
 pub use ui::{CalendarUI, CalendarAction, CalendarViewMode};
 pub use event_form::{EventFormUI, EventFormAction, EventFormMode, EventFormField};
+pub use invitation::{MeetingInvitation, InvitationMethod, RSVPResponse, InvitationProcessor};
+pub use invitation_manager::{InvitationManager, InvitationStatistics};
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;

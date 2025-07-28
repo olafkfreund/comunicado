@@ -845,6 +845,24 @@ impl MessageList {
             String::new()
         }
     }
+    
+    /// Set the selected message index
+    pub fn set_selected_index(&mut self, index: usize) {
+        let message_count = if self.search_active {
+            self.filtered_messages.len()
+        } else {
+            self.messages.len()
+        };
+        
+        if index < message_count {
+            self.state.select(Some(index));
+        } else if message_count > 0 {
+            // If index is out of bounds, select the last message
+            self.state.select(Some(message_count - 1));
+        } else {
+            self.state.select(None);
+        }
+    }
 }
 
 impl MessageItem {

@@ -11,6 +11,8 @@ pub mod draft_list;
 pub mod calendar;
 pub mod date_picker;
 pub mod email_viewer;
+pub mod invitation_viewer;
+pub mod search;
 pub mod time_picker;
 
 use ratatui::{
@@ -53,6 +55,12 @@ pub use time_picker::{TimePicker, TimeField};
 // Re-export email viewer types
 pub use email_viewer::{EmailViewer, EmailViewerAction};
 
+// Re-export invitation viewer types
+pub use invitation_viewer::{InvitationViewer, InvitationAction};
+
+// Re-export search types
+pub use search::{SearchUI, SearchAction, SearchMode, SearchResult, SearchEngine};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FocusedPane {
     AccountSwitcher,
@@ -76,6 +84,8 @@ pub enum UIMode {
     EventEdit,
     EventView,
     EmailViewer,
+    InvitationViewer,
+    Search,
 }
 
 pub struct UI {
@@ -96,6 +106,9 @@ pub struct UI {
     calendar_ui: CalendarUI,
     event_form_ui: Option<crate::calendar::EventFormUI>,
     email_viewer: EmailViewer,
+    invitation_viewer: InvitationViewer,
+    search_ui: SearchUI,
+    search_engine: Option<SearchEngine>,
 }
 
 impl UI {
@@ -118,6 +131,9 @@ impl UI {
             calendar_ui: CalendarUI::new(),
             event_form_ui: None,
             email_viewer: EmailViewer::new(),
+            invitation_viewer: InvitationViewer::new(),
+            search_ui: SearchUI::new(),
+            search_engine: None,
         };
         
         // Initialize status bar with default segments
@@ -224,6 +240,30 @@ impl UI {
                 // Render email viewer in full screen
                 let theme = self.theme_manager.current_theme();
                 self.email_viewer.render(frame, size, theme);
+            }
+            UIMode::InvitationViewer => {
+                // Render invitation viewer in full screen
+                let theme = self.theme_manager.current_theme();
+                self.invitation_viewer.render(frame, size, theme);
+            }
+            UIMode::Search => {
+                // Render search UI over the normal interface
+                let chunks = self.layout.calculate_layout(size);
+
+                // Render normal interface in background
+                self.render_account_switcher(frame, chunks[0]);
+                self.render_folder_tree(frame, chunks[1]);
+                self.render_message_list(frame, chunks[2]);
+                self.render_content_preview(frame, chunks[3]);
+                
+                // Render the status bar
+                if chunks.len() > 4 {
+                    self.render_status_bar(frame, chunks[4]);
+                }
+                
+                // Render search UI on top
+                let theme = self.theme_manager.current_theme();
+                self.search_ui.render(frame, size, theme);
             }
         }
     }
@@ -392,6 +432,8 @@ impl UI {
             UIMode::EventEdit => "Edit Event",
             UIMode::EventView => "View Event",
             UIMode::EmailViewer => "Email Viewer",
+            UIMode::InvitationViewer => "Meeting Invitation",
+            UIMode::Search => "Search",
         };
         
         let nav_segment = NavigationHintsSegment {
@@ -506,6 +548,23 @@ impl UI {
                 ("Space".to_string(), "Actions".to_string()),
                 ("v".to_string(), "View Mode".to_string()),
                 ("q/Esc".to_string(), "Close".to_string()),
+            ],
+            UIMode::InvitationViewer => vec![
+                ("j/k".to_string(), "Navigate".to_string()),
+                ("Enter".to_string(), "Select Action".to_string()),
+                ("a".to_string(), "Accept".to_string()),
+                ("d".to_string(), "Decline".to_string()),
+                ("t".to_string(), "Tentative".to_string()),
+                ("v".to_string(), "Details".to_string()),
+                ("q/Esc".to_string(), "Close".to_string()),
+            ],
+            UIMode::Search => vec![
+                ("Type".to_string(), "Search Query".to_string()),
+                ("↑↓/j/k".to_string(), "Navigate Results".to_string()),
+                ("Enter".to_string(), "Open Result".to_string()),  
+                ("Tab".to_string(), "Search Mode".to_string()),
+                ("F1-F4".to_string(), "Quick Mode".to_string()),
+                ("Esc".to_string(), "Close Search".to_string()),
             ],
         }
     }
@@ -1318,6 +1377,136 @@ impl UI {
     /// Get mutable reference to email viewer
     pub fn email_viewer_mut(&mut self) -> &mut crate::ui::email_viewer::EmailViewer {
         &mut self.email_viewer
+    }
+    
+    /// Start invitation viewer mode
+    pub fn start_invitation_viewer(&mut self, invitation: crate::calendar::MeetingInvitation, user_status: Option<crate::calendar::event::AttendeeStatus>, user_invited: bool) {
+        self.invitation_viewer.set_invitation(invitation, user_status, user_invited);
+        self.mode = UIMode::InvitationViewer;
+    }
+    
+    /// Exit invitation viewer mode
+    pub fn exit_invitation_viewer(&mut self) {
+        self.invitation_viewer.clear();
+        self.mode = UIMode::Normal;
+    }
+    
+    /// Check if invitation viewer is active
+    pub fn is_invitation_viewer_active(&self) -> bool {
+        matches!(self.mode, UIMode::InvitationViewer)
+    }
+    
+    /// Handle invitation viewer key input
+    pub fn handle_invitation_viewer_key(&mut self, key: char) -> Option<InvitationAction> {
+        self.invitation_viewer.handle_key(key)
+    }
+    
+    /// Get mutable reference to invitation viewer
+    pub fn invitation_viewer_mut(&mut self) -> &mut InvitationViewer {
+        &mut self.invitation_viewer
+    }
+    
+    /// Start search mode
+    pub fn start_search(&mut self) {
+        self.search_ui.start_search();
+        self.mode = UIMode::Search;
+        self.update_navigation_hints();
+    }
+    
+    /// End search mode
+    pub fn end_search(&mut self) {
+        self.search_ui.end_search();
+        self.mode = UIMode::Normal;
+        self.update_navigation_hints();
+    }
+    
+    /// Check if search is active
+    pub fn is_search_active(&self) -> bool {
+        matches!(self.mode, UIMode::Search)
+    }
+    
+    /// Handle search key input
+    pub fn handle_search_key(&mut self, key: crossterm::event::KeyCode) -> Option<SearchAction> {
+        self.search_ui.handle_key(key)
+    }
+    
+    /// Get search UI for direct access
+    pub fn search_ui(&self) -> &SearchUI {
+        &self.search_ui
+    }
+    
+    /// Get mutable search UI for direct access
+    pub fn search_ui_mut(&mut self) -> &mut SearchUI {
+        &mut self.search_ui
+    }
+    
+    /// Set search engine
+    pub fn set_search_engine(&mut self, search_engine: SearchEngine) {
+        self.search_engine = Some(search_engine);
+    }
+    
+    /// Perform search with current query
+    pub async fn perform_search(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        if let Some(ref search_engine) = self.search_engine {
+            if let Some(account_id) = self.get_current_account_id().cloned() {
+                let query = self.search_ui.query().to_string();
+                let mode = self.search_ui.mode().clone();
+                
+                if !query.is_empty() && query.len() >= 2 {
+                    self.search_ui.set_searching(true);
+                    
+                    match search_engine.search(&account_id, &query, &mode, Some(50)).await {
+                        Ok(results) => {
+                            self.search_ui.set_results(results, 0); // TODO: Get actual search time
+                        }
+                        Err(e) => {
+                            self.search_ui.set_error(format!("Search failed: {}", e));
+                        }
+                    }
+                }
+            } else {
+                self.search_ui.set_error("No account selected".to_string());
+            }
+        } else {
+            self.search_ui.set_error("Search engine not initialized".to_string());
+        }
+        
+        Ok(())
+    }
+    
+    /// Open selected search result
+    pub async fn open_search_result(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        if let Some(result) = self.search_ui.selected_result() {
+            // Clone the necessary data to avoid borrowing conflicts
+            let message_id = result.message.id;
+            let account_id = result.message.account_id.clone();
+            let folder_name = result.message.folder_name.clone();
+            
+            // Load the message in the content preview using the database ID
+            self.content_preview.load_message_by_id(message_id).await?;
+            
+            // Switch to the folder containing the message
+            if let Some(current_account) = self.get_current_account_id() {
+                if current_account != &account_id {
+                    self.switch_to_account(&account_id).await?;
+                }
+                
+                // Load messages for the folder
+                self.load_messages(account_id, folder_name).await?;
+                
+                // Find and select the message in the list using the database ID
+                if let Some(index) = self.message_list.messages().iter().position(|msg| {
+                    msg.message_id == Some(message_id)
+                }) {
+                    self.message_list.set_selected_index(index);
+                }
+            }
+            
+            // Close search and return to normal view
+            self.end_search();
+        }
+        
+        Ok(())
     }
 }
 

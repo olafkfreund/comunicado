@@ -309,17 +309,37 @@ This is a sample email showcasing the modern email display format.".to_string();
     }
     
     fn render_formatted_content(&mut self, content_height: usize, theme: &Theme) -> Vec<Line> {
-        if let Some(ref email) = self.email_content {
+        if let Some(email) = self.email_content.clone() {
+            // Extract all data we need before any mutable borrows
+            let show_headers_expanded = self.show_headers_expanded;
+            let terminal_width = self.html_renderer.max_width as u16;
+            let scroll = self.scroll;
+            let selected_attachment = self.selected_attachment;
+            
             let mut all_lines = Vec::new();
             
-            // Add modern formatted sender box and subject
-            if self.show_headers_expanded {
-                // Show full headers when expanded
+            // Do all mutable operations first to avoid borrowing conflicts
+            let html_lines = if email.content_type == ContentType::Html && crate::html::is_html_content(&email.body) {
+                // Clone the body to avoid borrowing issues when calling render_html
+                let email_body = email.body.clone();
+                // Render HTML content using the HTML renderer
+                let rendered_text = self.html_renderer.render_html(&email_body);
+                
+                // Process lines and replace image placeholders with enhanced rendering
+                Some(self.process_image_placeholders_enhanced(rendered_text.lines, terminal_width))
+            } else {
+                None
+            };
+            
+            // Now do immutable operations
+            // Add header information based on user preference
+            if show_headers_expanded {
+                // Show full headers when expanded (for advanced users)
                 all_lines.extend(self.render_email_headers(&email.headers, theme));
                 all_lines.push(Line::from("")); // Empty line separator
             } else {
-                // Modern compact header with sender box
-                all_lines.extend(self.render_modern_sender_box(&email.headers, theme));
+                // Minimal header showing only From and Subject as requested
+                all_lines.extend(self.render_minimal_headers(&email.headers, theme));
                 all_lines.push(Line::from("")); // Empty line separator
             }
             
@@ -330,13 +350,19 @@ This is a sample email showcasing the modern email display format.".to_string();
             ]));
             all_lines.push(Line::from("")); // Spacing after separator
             
-            // Add formatted content lines
-            for content_line in &email.parsed_content {
-                all_lines.push(self.render_content_line(content_line, theme));
+            // Add formatted content lines with HTML detection
+            if let Some(processed_lines) = html_lines {
+                all_lines.extend(processed_lines);
+            } else {
+                // Use parsed content lines for plain text
+                for content_line in &email.parsed_content {
+                    all_lines.push(self.render_content_line(content_line, theme));
+                }
             }
             
             // Add attachments section if there are any
-            if !email.attachments.is_empty() {
+            let attachments = email.attachments.clone(); // Clone to avoid borrowing issues
+            if !attachments.is_empty() {
                 all_lines.push(Line::from("")); // Empty line separator
                 all_lines.push(Line::from(vec![
                     Span::styled("📎 Attachments:", Style::default()
@@ -345,7 +371,7 @@ This is a sample email showcasing the modern email display format.".to_string();
                     )
                 ]));
                 
-                for (index, attachment) in email.attachments.iter().enumerate() {
+                for (index, attachment) in attachments.iter().enumerate() {
                     // Enhanced attachment info with type detection
                     let attachment_type = crate::email::AttachmentType::from_content_type(&attachment.content_type);
                     let attachment_icon = attachment_type.icon();
@@ -363,7 +389,7 @@ This is a sample email showcasing the modern email display format.".to_string();
                         String::new()
                     };
                     
-                    let is_selected = self.selected_attachment == Some(index);
+                    let is_selected = selected_attachment == Some(index);
                     let selection_prefix = if is_selected { "► " } else { "  " };
                     
                     let number_style = if is_selected {
@@ -392,7 +418,7 @@ This is a sample email showcasing the modern email display format.".to_string();
                     let attachment_line = Line::from(vec![
                         Span::styled(format!("{}{}. ", selection_prefix, index + 1), number_style),
                         Span::styled(format!("{} ", attachment_icon), Style::default().fg(type_color)),
-                        Span::styled(&attachment.filename, filename_style),
+                        Span::styled(attachment.filename.clone(), filename_style),
                         Span::styled(size_display, 
                             Style::default().fg(theme.colors.content_preview.quote)),
                         Span::styled(format!(" [{}]", type_description), 
@@ -404,13 +430,13 @@ This is a sample email showcasing the modern email display format.".to_string();
                 
                 // Add instruction lines
                 all_lines.push(Line::from(vec![
-                    Span::styled("  Press 'v' to view selected attachment or 's' to save", 
+                    Span::styled("  Press 'v' to view, 'O' to open with system app, or 's' to save", 
                         Style::default().fg(theme.colors.content_preview.quote).add_modifier(Modifier::ITALIC))
                 ]));
             }
             
             // Apply scrolling
-            let start_line = self.scroll;
+            let start_line = scroll;
             let end_line = (start_line + content_height).min(all_lines.len());
             
             all_lines[start_line..end_line].to_vec()
@@ -486,6 +512,36 @@ This is a sample email showcasing the modern email display format.".to_string();
         }
     }
     
+    /// Render minimal headers showing only From and Subject as requested by user
+    fn render_minimal_headers(&self, headers: &EmailHeader, theme: &Theme) -> Vec<Line> {
+        let mut lines = Vec::new();
+        
+        // Show From field (simplified, clean format)
+        if !headers.from.is_empty() {
+            lines.push(Line::from(vec![
+                Span::styled("From: ", Style::default()
+                    .fg(theme.colors.content_preview.header)
+                    .add_modifier(Modifier::BOLD)),
+                Span::styled(headers.from.clone(), Style::default()
+                    .fg(theme.colors.content_preview.body)),
+            ]));
+        }
+        
+        // Show Subject field (simplified, clean format) 
+        if !headers.subject.is_empty() {
+            lines.push(Line::from(vec![
+                Span::styled("Subject: ", Style::default()
+                    .fg(theme.colors.content_preview.header)
+                    .add_modifier(Modifier::BOLD)),
+                Span::styled(headers.subject.clone(), Style::default()
+                    .fg(theme.colors.palette.accent)
+                    .add_modifier(Modifier::BOLD)),
+            ]));
+        }
+        
+        lines
+    }
+
     /// Render modern sender box with attractive formatting
     fn render_modern_sender_box(&self, headers: &EmailHeader, theme: &Theme) -> Vec<Line> {
         let mut lines = Vec::new();
@@ -1108,6 +1164,10 @@ This is a sample email showcasing the modern email display format.".to_string();
         self.email_content = Some(email_content);
         self.view_mode = ViewMode::Formatted;
         self.scroll = 0;
+    }
+    
+    pub fn get_email_content(&self) -> Option<&EmailContent> {
+        self.email_content.as_ref()
     }
     
     /// Parse raw email content into structured format
@@ -1994,6 +2054,43 @@ This is a sample email showcasing the modern email display format.".to_string();
     pub fn close_attachment_viewer(&mut self) {
         self.is_viewing_attachment = false;
         self.attachment_viewer.clear();
+    }
+    
+    /// Open the selected attachment with the system default application (xdg-open)
+    pub async fn open_attachment_with_system(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        if let Some(attachment) = self.get_selected_attachment() {
+            // Get attachment data
+            let attachment_data = self.get_attachment_data(attachment).await?;
+            
+            // Create a temporary file for the attachment
+            let temp_dir = std::env::temp_dir();
+            let temp_path = temp_dir.join(&attachment.filename);
+            
+            // Write attachment data to temporary file
+            std::fs::write(&temp_path, &attachment_data)?;
+            
+            // Use xdg-open to open the file with system default application
+            let output = std::process::Command::new("xdg-open")
+                .arg(&temp_path)
+                .output();
+                
+            match output {
+                Ok(result) => {
+                    if result.status.success() {
+                        tracing::info!("Successfully opened attachment '{}' with system application", attachment.filename);
+                        Ok(())
+                    } else {
+                        let error_msg = String::from_utf8_lossy(&result.stderr);
+                        Err(format!("xdg-open failed: {}", error_msg).into())
+                    }
+                }
+                Err(e) => {
+                    Err(format!("Failed to execute xdg-open: {}", e).into())
+                }
+            }
+        } else {
+            Err("No attachment selected".into())
+        }
     }
     
     /// Check if we're currently viewing an attachment
