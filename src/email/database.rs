@@ -1182,8 +1182,8 @@ impl StoredMessage {
                 .and_then(|env| env.reply_to.first())
                 .and_then(|addr| addr.email_address()),
             date: imap_message.internal_date.unwrap_or(now),
-            body_text: imap_message.body.clone(), // Simplified - would need body parsing
-            body_html: None, // Would need proper MIME parsing
+            body_text: Self::parse_and_clean_body_text(&imap_message.body),
+            body_html: Self::parse_and_clean_body_html(&imap_message.body),
             attachments: Vec::new(), // Would need body structure parsing
             flags: imap_message.flags.iter().map(|flag| {
                 match flag {
@@ -1206,6 +1206,169 @@ impl StoredMessage {
             is_draft: imap_message.flags.contains(&MessageFlag::Draft),
             is_deleted: imap_message.flags.contains(&MessageFlag::Deleted),
         }
+    }
+    
+    /// Parse and clean body text from raw IMAP content
+    fn parse_and_clean_body_text(raw_body: &Option<String>) -> Option<String> {
+        let raw_content = match raw_body {
+            Some(body) => body,
+            None => return None,
+        };
+        
+        tracing::debug!("Parsing body text, raw content length: {}", raw_content.len());
+        
+        // Clean the raw email content to remove headers and technical data
+        let cleaned_content = Self::clean_raw_email_content(raw_content);
+        
+        // If we got HTML content, convert it to plain text
+        if crate::html::is_html_content(&cleaned_content) {
+            tracing::debug!("Converting HTML content to plain text");
+            let html_renderer = crate::html::HtmlRenderer::new(80);
+            let plain_text = html_renderer.html_to_plain_text(&cleaned_content);
+            if !plain_text.trim().is_empty() {
+                Some(plain_text)
+            } else {
+                Some(cleaned_content) // Fallback to cleaned content
+            }
+        } else {
+            tracing::debug!("Using cleaned plain text content");
+            if !cleaned_content.trim().is_empty() {
+                Some(cleaned_content)
+            } else {
+                None
+            }
+        }
+    }
+    
+    /// Parse and clean HTML body from raw IMAP content
+    fn parse_and_clean_body_html(raw_body: &Option<String>) -> Option<String> {
+        let raw_content = match raw_body {
+            Some(body) => body,
+            None => return None,
+        };
+        
+        tracing::debug!("Parsing HTML body, raw content length: {}", raw_content.len());
+        
+        // Clean the raw email content to remove headers and technical data
+        let cleaned_content = Self::clean_raw_email_content(raw_content);
+        
+        // Only return HTML if it's actually HTML content
+        if crate::html::is_html_content(&cleaned_content) {
+            tracing::debug!("Found HTML content, storing as HTML body");
+            Some(cleaned_content)
+        } else {
+            tracing::debug!("No HTML content found");
+            None
+        }
+    }
+    
+    /// Clean raw email content by removing technical headers and metadata
+    fn clean_raw_email_content(raw_content: &str) -> String {
+        tracing::debug!("Cleaning raw email content of length: {}", raw_content.len());
+        
+        // First, try to find HTML content directly
+        if let Some(html_start) = raw_content.find("<!DOCTYPE") {
+            tracing::debug!("Found HTML content starting with DOCTYPE");
+            return raw_content[html_start..].to_string();
+        } else if let Some(html_start) = raw_content.find("<html") {
+            tracing::debug!("Found HTML content starting with <html");
+            return raw_content[html_start..].to_string();
+        } else if let Some(body_start) = raw_content.find("<body") {
+            tracing::debug!("Found HTML content starting with <body");
+            return raw_content[body_start..].to_string();
+        }
+        
+        let lines: Vec<&str> = raw_content.lines().collect();
+        let mut content_lines = Vec::new();
+        let mut in_headers = true;
+        let mut blank_line_count = 0;
+        
+        // Comprehensive list of email headers to skip - covers all common headers
+        let email_headers = [
+            // Standard RFC headers
+            "from:", "to:", "cc:", "bcc:", "subject:", "date:", "reply-to:",
+            "message-id:", "in-reply-to:", "references:", "mime-version:",
+            // Content headers
+            "content-type:", "content-transfer-encoding:", "content-disposition:",
+            "content-id:", "content-description:", "content-language:",
+            // Authentication and routing headers
+            "received:", "return-path:", "delivered-to:", "envelope-to:",
+            "authentication-results:", "received-spf:", "dkim-signature:",
+            "arc-seal:", "arc-message-signature:", "arc-authentication-results:",
+            // Service-specific headers (Gmail, Outlook, etc.)
+            "x-received:", "x-google-smtp-source:", "x-gm-message-state:",
+            "x-google-dkim-signature:", "x-gm-thd-id:", "x-gmail-labels:",
+            "x-ms-exchange-", "x-originating-ip:", "x-microsoft-antispam:",
+            // Spam and security headers
+            "x-spam-checker-version:", "x-spam-level:", "x-spam-status:",
+            "x-spam-check-by:", "x-virus-scanned:", "x-barracuda-",
+            // Mailing list headers
+            "list-id:", "list-unsubscribe:", "list-archive:", "list-post:",
+            "list-help:", "list-subscribe:", "precedence:",
+            // Other common headers
+            "x-priority:", "importance:", "x-mailer:", "user-agent:",
+            "thread-topic:", "thread-index:", "x-original-to:",
+        ];
+        
+        for (i, line) in lines.iter().enumerate() {
+            let line_lower = line.to_lowercase();
+            let line_trimmed = line.trim();
+            
+            // Count consecutive blank lines
+            if line_trimmed.is_empty() {
+                blank_line_count += 1;
+                // After 2+ consecutive blank lines, we're likely past headers
+                if blank_line_count >= 2 && in_headers {
+                    in_headers = false;
+                    tracing::debug!("Found content after {} blank lines at line {}", blank_line_count, i);
+                }
+                continue;
+            } else {
+                blank_line_count = 0;
+            }
+            
+            // Skip lines that are clearly email headers
+            if in_headers {
+                let is_header_line = email_headers.iter().any(|&header| {
+                    line_lower.starts_with(header) || 
+                    // Handle continuation lines (starting with whitespace)
+                    (line.starts_with(' ') || line.starts_with('\t'))
+                });
+                
+                // Also skip lines that look like headers (contain : and are at start of line)
+                let looks_like_header = line.contains(':') && 
+                    !line.starts_with(' ') && 
+                    !line.starts_with('\t') &&
+                    // But don't skip things that look like actual content
+                    !line_lower.contains("http") &&
+                    !line_lower.contains("www.") &&
+                    line.len() < 200; // Headers are usually shorter
+                
+                if is_header_line || looks_like_header {
+                    tracing::debug!("Skipping header line {}: {}", i, &line[..std::cmp::min(50, line.len())]);
+                    continue;
+                }
+                
+                // If we find a line that doesn't look like a header, we're in content
+                tracing::debug!("Found first content line at {}: {}", i, &line[..std::cmp::min(50, line.len())]);
+                in_headers = false;
+            }
+            
+            // Add content lines
+            content_lines.push(*line);
+        }
+        
+        let cleaned = content_lines.join("\n").trim().to_string();
+        
+        tracing::debug!("Cleaned content length: {} (original: {})", cleaned.len(), raw_content.len());
+        
+        // If we still don't have meaningful content, return a fallback
+        if cleaned.trim().is_empty() {
+            tracing::warn!("No content found after cleaning, using fallback");
+            return "Email content could not be displayed properly.".to_string();
+        }
+        
+        cleaned
     }
 }
 
