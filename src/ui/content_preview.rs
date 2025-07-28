@@ -6,6 +6,7 @@ use ratatui::{
     Frame,
 };
 use crate::theme::Theme;
+use crate::clipboard::ClipboardManager;
 use crate::email::{EmailDatabase, StoredMessage, AttachmentViewer, AttachmentInfo};
 use crate::images::{ImageManager, extract_images_from_html};
 use regex::Regex;
@@ -99,6 +100,7 @@ pub struct ContentPreview {
     selected_attachment: Option<usize>, // Index of selected attachment
     attachment_viewer: AttachmentViewer,
     is_viewing_attachment: bool,
+    clipboard_manager: ClipboardManager,
 }
 
 impl ContentPreview {
@@ -123,6 +125,7 @@ impl ContentPreview {
             selected_attachment: None,
             attachment_viewer: AttachmentViewer::default(),
             is_viewing_attachment: false,
+            clipboard_manager: ClipboardManager::new(),
         };
         
         // Initialize with sample content
@@ -319,15 +322,30 @@ This is a sample email showcasing the modern email display format.".to_string();
             let mut all_lines = Vec::new();
             
             // Do all mutable operations first to avoid borrowing conflicts
-            let html_lines = if email.content_type == ContentType::Html && crate::html::is_html_content(&email.body) {
-                // Clone the body to avoid borrowing issues when calling render_html
-                let email_body = email.body.clone();
-                // Render HTML content using the HTML renderer
-                let rendered_text = self.html_renderer.render_html(&email_body);
+            let html_lines = if email.content_type == ContentType::Html {
+                tracing::debug!("Content Preview: Processing HTML content of length {}", email.body.len());
+                tracing::debug!("Content Preview: HTML detection result: {}", crate::html::is_html_content(&email.body));
                 
-                // Process lines and replace image placeholders with enhanced rendering
-                Some(self.process_image_placeholders_enhanced(rendered_text.lines, terminal_width))
+                if crate::html::is_html_content(&email.body) {
+                    // Clone the body to avoid borrowing issues when calling render_html
+                    let email_body = email.body.clone();
+                    // Render HTML content using the HTML renderer
+                    let rendered_text = self.html_renderer.render_html(&email_body);
+                    
+                    // Process lines and replace image placeholders with enhanced rendering
+                    Some(self.process_image_placeholders_enhanced(rendered_text.lines, terminal_width))
+                } else {
+                    // Content marked as HTML but doesn't look like HTML - use html2text fallback
+                    tracing::warn!("Content Preview: Content marked as HTML but doesn't look like HTML, using fallback");
+                    let plain_text = self.html_renderer.html_to_plain_text(&email.body);
+                    let plain_lines: Vec<Line<'static>> = plain_text
+                        .lines()
+                        .map(|line| Line::from(line.to_string()))
+                        .collect();
+                    Some(plain_lines)
+                }
             } else {
+                tracing::debug!("Content Preview: Processing plain text content");
                 None
             };
             
@@ -463,6 +481,9 @@ This is a sample email showcasing the modern email display format.".to_string();
             
             // Check if we have HTML content to render
             if !email.body.is_empty() {
+                tracing::debug!("HTML Content Rendering: Content length = {}", email.body.len());
+                tracing::debug!("HTML Content Rendering: Is HTML = {}", crate::html::is_html_content(&email.body));
+                
                 // Try to detect if this is HTML content
                 if crate::html::is_html_content(&email.body) {
                     // Use the HTML renderer instance to render HTML content
@@ -472,10 +493,21 @@ This is a sample email showcasing the modern email display format.".to_string();
                     let terminal_width = self.html_renderer.max_width as u16;
                     let processed_lines = self.process_image_placeholders_enhanced(rendered_text.lines, terminal_width);
                     all_lines.extend(processed_lines);
+                    
+                    tracing::debug!("HTML Content Rendering: Generated {} lines after processing", all_lines.len() - 3); // Subtract headers
                 } else {
-                    // Fall back to plain text rendering
-                    for line in email.body.lines() {
-                        all_lines.push(Line::raw(line.to_string()));
+                    // Content marked as HTML but doesn't look like HTML - try html2text anyway
+                    tracing::warn!("HTML Content Rendering: Content doesn't look like HTML, trying html2text fallback");
+                    let plain_text = self.html_renderer.html_to_plain_text(&email.body);
+                    if !plain_text.trim().is_empty() {
+                        for line in plain_text.lines() {
+                            all_lines.push(Line::raw(line.to_string()));
+                        }
+                    } else {
+                        // Last resort - show raw content
+                        for line in email.body.lines() {
+                            all_lines.push(Line::raw(line.to_string()));
+                        }
                     }
                 }
             } else {
@@ -2142,7 +2174,7 @@ This is a sample email showcasing the modern email display format.".to_string();
     
     /// Find stored attachment by filename
     fn find_stored_attachment_by_filename(&self, filename: &str) -> Result<crate::email::StoredAttachment, Box<dyn std::error::Error>> {
-        if let (Some(ref database), Some(message_id)) = (&self.database, self.current_message_id) {
+        if let (Some(_database), Some(_message_id)) = (&self.database, self.current_message_id) {
             // This is a simplified approach - in practice we'd need async access to the database
             // For now, we'll create a basic StoredAttachment from the display data
             let stored = crate::email::StoredAttachment {
@@ -2160,6 +2192,55 @@ This is a sample email showcasing the modern email display format.".to_string();
         } else {
             Err("No database connection or message ID available".into())
         }
+    }
+    
+    /// Copy email content to clipboard
+    pub fn copy_email_content(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        if let Some(ref email) = self.email_content {
+            let content_to_copy = match self.view_mode {
+                ViewMode::Html => {
+                    // For HTML mode, copy plain text version
+                    self.html_renderer.html_to_plain_text(&email.body)
+                }
+                ViewMode::Formatted | ViewMode::Raw => {
+                    email.body.clone()
+                }
+                ViewMode::Headers => {
+                    // Copy headers + body
+                    format!(
+                        "From: {}\nTo: {}\nSubject: {}\nDate: {}\n\n{}",
+                        email.headers.from,
+                        email.headers.to.join(", "),
+                        email.headers.subject,
+                        email.headers.date,
+                        email.body
+                    )
+                }
+            };
+            
+            self.clipboard_manager.copy(&content_to_copy)?;
+            tracing::info!("Copied email content to clipboard ({} characters)", content_to_copy.len());
+        }
+        Ok(())
+    }
+    
+    /// Copy selected attachment name/path to clipboard  
+    pub fn copy_attachment_info(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        if let Some(attachment_index) = self.selected_attachment {
+            if let Some(ref email) = self.email_content {
+                if let Some(attachment) = email.attachments.get(attachment_index) {
+                    let info = format!("{} ({})", attachment.filename, attachment.content_type);
+                    self.clipboard_manager.copy(&info)?;
+                    tracing::info!("Copied attachment info to clipboard: {}", info);
+                }
+            }
+        }
+        Ok(())
+    }
+    
+    /// Check if clipboard is available
+    pub fn is_clipboard_available(&self) -> bool {
+        self.clipboard_manager.is_available()
     }
 }
 

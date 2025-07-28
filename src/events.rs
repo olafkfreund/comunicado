@@ -630,6 +630,24 @@ impl EventHandler {
                 }
             }
             
+            // Copy functionality
+            KeyCode::Char('y') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                // Ctrl+Y to copy email content to clipboard
+                if matches!(ui.focused_pane(), FocusedPane::ContentPreview) {
+                    if let Err(e) = ui.content_preview_mut().copy_email_content() {
+                        tracing::error!("Failed to copy email content: {}", e);
+                    }
+                }
+            }
+            KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::ALT) => {
+                // Alt+C to copy attachment info to clipboard
+                if matches!(ui.focused_pane(), FocusedPane::ContentPreview) {
+                    if let Err(e) = ui.content_preview_mut().copy_attachment_info() {
+                        tracing::error!("Failed to copy attachment info: {}", e);
+                    }
+                }
+            }
+            
             _ => {}
         }
         

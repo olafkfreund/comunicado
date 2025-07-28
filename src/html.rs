@@ -25,12 +25,29 @@ impl HtmlRenderer {
     
     /// Convert HTML content to terminal-friendly text with styling
     pub fn render_html(&mut self, html_content: &str) -> Text<'static> {
+        // Debug logging to help identify issues
+        tracing::debug!("HTML Renderer: Processing content of length {}", html_content.len());
+        tracing::debug!("HTML Renderer: Content preview: {:?}", &html_content[..html_content.len().min(200)]);
+        
         // Parse HTML
         let document = Html::parse_fragment(html_content);
         
         // Convert to text with styling
         let mut lines = Vec::new();
         self.process_element(&document.root_element(), &mut lines);
+        
+        // If no lines were generated, fall back to html2text
+        if lines.is_empty() {
+            tracing::warn!("HTML Renderer: No lines generated, falling back to html2text");
+            let plain_text = self.html_to_plain_text(html_content);
+            let plain_lines: Vec<Line<'static>> = plain_text
+                .lines()
+                .map(|line| Line::from(line.to_string()))
+                .collect();
+            return Text::from(plain_lines);
+        }
+        
+        tracing::debug!("HTML Renderer: Generated {} lines", lines.len());
         
         // Create Text with proper line breaks
         Text::from(lines)
@@ -479,13 +496,30 @@ impl HtmlRenderer {
 /// Check if content appears to be HTML
 pub fn is_html_content(content: &str) -> bool {
     let content_lower = content.to_lowercase();
-    content_lower.contains("<html") || 
-    content_lower.contains("<!doctype") ||
-    content_lower.contains("<body") ||
-    content_lower.contains("<div") ||
-    content_lower.contains("<p>") ||
-    content_lower.contains("<br") ||
-    (content_lower.contains('<') && content_lower.contains('>'))
+    let trimmed = content.trim();
+    
+    // Check for obvious HTML patterns
+    if content_lower.contains("<html") || 
+       content_lower.contains("<!doctype") ||
+       content_lower.contains("<body") ||
+       content_lower.contains("<div") ||
+       content_lower.contains("<p>") ||
+       content_lower.contains("<br") ||
+       content_lower.contains("<span") ||
+       content_lower.contains("<strong") ||
+       content_lower.contains("<em") ||
+       content_lower.contains("<a ") {
+        return true;
+    }
+    
+    // Check if content has multiple HTML-like tags
+    let tag_count = content.matches('<').count();
+    if tag_count > 1 && content.contains('>') {
+        return true;
+    }
+    
+    // Check if content starts with HTML
+    trimmed.starts_with('<') && trimmed.contains('>')
 }
 
 /// Quick HTML to plain text conversion for previews
