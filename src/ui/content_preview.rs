@@ -1164,11 +1164,8 @@ This is a sample email showcasing the modern email display format.".to_string();
     
     /// Set rich email content with parsed structure
     pub fn set_email_content(&mut self, email_content: EmailContent) {
-        // Set appropriate view mode based on content type
-        self.view_mode = match email_content.content_type {
-            ContentType::Html => ViewMode::Html,
-            _ => ViewMode::Formatted,
-        };
+        // Always use Formatted mode - it handles HTML content properly
+        self.view_mode = ViewMode::Formatted;
         
         self.email_content = Some(email_content);
         self.scroll = 0;

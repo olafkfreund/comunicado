@@ -271,6 +271,28 @@ impl EmailDatabase {
             )
         "#).execute(&self.pool).await?;
         
+        // Add unique constraint to prevent duplicate messages
+        sqlx::query(r#"
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_unique 
+            ON messages (account_id, folder_name, imap_uid)
+        "#).execute(&self.pool).await?;
+        
+        // Clean up any existing duplicates by keeping only the latest one
+        sqlx::query(r#"
+            DELETE FROM messages 
+            WHERE id NOT IN (
+                SELECT id FROM (
+                    SELECT id, 
+                           ROW_NUMBER() OVER (
+                               PARTITION BY account_id, folder_name, imap_uid 
+                               ORDER BY updated_at DESC
+                           ) as rn
+                    FROM messages
+                ) ranked
+                WHERE rn = 1
+            )
+        "#).execute(&self.pool).await?;
+        
         sqlx::query(r#"
             CREATE TABLE IF NOT EXISTS folder_sync_state (
                 account_id TEXT NOT NULL,
