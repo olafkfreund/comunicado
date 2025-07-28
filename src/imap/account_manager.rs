@@ -268,35 +268,33 @@ impl ImapAccountManager {
     
     /// Get IMAP client for account
     pub async fn get_client(&self, account_id: &str) -> ImapResult<Arc<Mutex<ImapClient>>> {
-        println!("DEBUG: get_client() called for account: {}", account_id);
         tracing::debug!("Getting IMAP client for account: '{}'", account_id);
         
-        println!("DEBUG: About to acquire accounts.read() lock");
+        tracing::debug!("About to acquire accounts.read() lock");
         let accounts = self.accounts.read().await;
-        println!("DEBUG: Acquired accounts.read() lock, {} accounts available", accounts.len());
+        tracing::debug!("Acquired accounts.read() lock, {} accounts available", accounts.len());
         tracing::debug!("IMAP AccountManager has {} accounts: {:?}", accounts.len(), accounts.keys().collect::<Vec<_>>());
         
         let account = accounts.get(account_id)
             .ok_or_else(|| {
-                println!("DEBUG: Account '{}' not found! Available: {:?}", account_id, accounts.keys().collect::<Vec<_>>());
                 tracing::error!("Account '{}' not found in IMAP manager. Available accounts: {:?}", account_id, accounts.keys().collect::<Vec<_>>());
                 ImapError::not_found(&format!("Account {} not found", account_id))
             })?;
         
-        println!("DEBUG: Found account, about to acquire connection_pool.write() lock");
+        tracing::debug!("Found account, about to acquire connection_pool.write() lock");
         let mut pool = self.connection_pool.write().await;
-        println!("DEBUG: Acquired connection_pool.write() lock");
-        println!("DEBUG: About to call pool.get_or_create_client()");
+        tracing::debug!("Acquired connection_pool.write() lock");
+        tracing::debug!("About to call pool.get_or_create_client()");
         let client_arc = pool.get_or_create_client(account, self.token_manager.as_ref()).await?;
-        println!("DEBUG: Got client_arc from pool, about to ensure connection/auth");
+        tracing::debug!("Got client_arc from pool, about to ensure connection/auth");
         
         // Ensure client is connected and authenticated
         {
-            println!("DEBUG: About to acquire client.lock()");
+            tracing::debug!("About to acquire client.lock()");
             let mut client = client_arc.lock().await;
-            println!("DEBUG: Acquired client.lock(), checking connection status");
+            tracing::debug!("Acquired client.lock(), checking connection status");
             if !client.is_connected() {
-                println!("DEBUG: Client not connected, attempting connection...");
+                tracing::debug!("Client not connected, attempting connection...");
                 tracing::info!("Connecting to IMAP server for account: {}", account_id);
                 
                 // Add timeout to connection attempt
@@ -307,22 +305,22 @@ impl ImapAccountManager {
                 
                 match connection_result {
                     Ok(Ok(())) => {
-                        println!("DEBUG: Connection successful");
+                        tracing::debug!("Connection successful");
                         tracing::info!("Successfully connected to IMAP server for account: {}", account_id);
                     }
                     Ok(Err(e)) => {
-                        println!("DEBUG: Connection failed: {}", e);
+                        tracing::debug!("Connection failed: {}", e);
                         return Err(e);
                     }
                     Err(_) => {
-                        println!("DEBUG: Connection timed out after 30 seconds");
+                        tracing::debug!("Connection timed out after 30 seconds");
                         return Err(ImapError::Timeout);
                     }
                 }
             }
             
             if !client.is_authenticated() {
-                println!("DEBUG: Client not authenticated, attempting authentication...");
+                tracing::debug!("Client not authenticated, attempting authentication...");
                 tracing::info!("Authenticating IMAP connection for account: {}", account_id);
                 
                 // Add timeout to authentication attempt
@@ -333,16 +331,16 @@ impl ImapAccountManager {
                 
                 match auth_result {
                     Ok(Ok(())) => {
-                        println!("DEBUG: Authentication successful");
+                        tracing::debug!("Authentication successful");
                         tracing::info!("Successfully authenticated IMAP connection for account: {}", account_id);
                     }
                     Ok(Err(e)) => {
-                        println!("DEBUG: Authentication failed: {}", e);
+                        tracing::debug!("Authentication failed: {}", e);
                         tracing::error!("IMAP authentication failed for account {}: {}", account_id, e);
                         return Err(e);
                     }
                     Err(_) => {
-                        println!("DEBUG: Authentication timed out after 30 seconds");
+                        tracing::debug!("Authentication timed out after 30 seconds");
                         return Err(ImapError::Timeout);
                     }
                 }

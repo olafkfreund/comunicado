@@ -54,7 +54,7 @@ impl ImapConnection {
     
     /// Connect to the IMAP server
     pub async fn connect(&mut self) -> ImapResult<()> {
-        println!("DEBUG: ImapConnection::connect() called");
+        tracing::debug!("ImapConnection::connect() called");
         if self.state != ConnectionState::Disconnected {
             return Err(ImapError::invalid_state("Already connected"));
         }
@@ -88,7 +88,7 @@ impl ImapConnection {
         
         let split_stream = if self.config.use_tls {
             // Set up TLS connection
-            println!("DEBUG: Starting TLS handshake with {}", addr);
+            tracing::debug!("Starting TLS handshake with {}", addr);
             tracing::info!("Starting TLS handshake with {}", addr);
             let mut root_store = RootCertStore::empty();
             root_store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
@@ -372,11 +372,11 @@ impl ImapConnection {
         self.tag_counter += 1;
         let tag = format!("A{:04}", self.tag_counter);
         
-        println!("DEBUG: send_authenticate - Starting AUTHENTICATE {} with tag {}", mechanism, tag);
+        tracing::debug!("send_authenticate - Starting AUTHENTICATE {} with tag {}", mechanism, tag);
         
         // Step 1: Send AUTHENTICATE command
         let auth_command = format!("{} AUTHENTICATE {}\r\n", tag, mechanism);
-        println!("DEBUG: send_authenticate - Sending command: {}", auth_command.trim());
+        tracing::debug!("send_authenticate - Sending command: {}", auth_command.trim());
         match self.stream.as_mut() {
             Some(SplitStream::Plain { writer, .. }) => {
                 writer.write_all(auth_command.as_bytes()).await
@@ -396,9 +396,9 @@ impl ImapConnection {
         let mut responses = Vec::new();
         
         // Step 2: Read continuation response
-        println!("DEBUG: send_authenticate - Waiting for continuation response...");
+        tracing::debug!("send_authenticate - Waiting for continuation response...");
         let continuation = self.read_response().await?;
-        println!("DEBUG: send_authenticate - Got continuation: {}", continuation);
+        tracing::debug!("send_authenticate - Got continuation: {}", continuation);
         responses.push(continuation.clone());
         
         if !continuation.starts_with("+ ") {
@@ -406,21 +406,21 @@ impl ImapConnection {
         }
         
         // Step 3: Send authentication data
-        println!("DEBUG: send_authenticate - Sending auth data (length: {})", auth_data.len());
+        tracing::debug!("send_authenticate - Sending auth data (length: {})", auth_data.len());
         let data_command = format!("{}\r\n", auth_data);
         self.send_raw(&data_command).await?;
         
         // Step 4: Read final tagged response
-        println!("DEBUG: send_authenticate - Reading final response...");
+        tracing::debug!("send_authenticate - Reading final response...");
         loop {
             let line = self.read_response().await?;
-            println!("DEBUG: send_authenticate - Got response line: {}", line);
+            tracing::debug!("send_authenticate - Got response line: {}", line);
             responses.push(line.clone());
             
             if line.starts_with(&tag) {
                 // This is our tagged response
                 if line.starts_with(&format!("{} OK", tag)) {
-                    println!("DEBUG: send_authenticate - Authentication successful!");
+                    tracing::debug!("send_authenticate - Authentication successful!");
                     break;
                 } else if line.starts_with(&format!("{} NO", tag)) {
                     return Err(ImapError::server(format!("Authentication failed: {}", line)));
@@ -434,10 +434,10 @@ impl ImapConnection {
                     // Try to decode base64 and see if it's an error
                     if let Ok(decoded_bytes) = base64::prelude::BASE64_STANDARD.decode(continuation_data) {
                         if let Ok(decoded_str) = String::from_utf8(decoded_bytes) {
-                            println!("DEBUG: send_authenticate - Decoded continuation: {}", decoded_str);
+                            tracing::debug!("send_authenticate - Decoded continuation: {}", decoded_str);
                             // Check if this looks like a JSON error response
                             if decoded_str.contains("\"status\"") && decoded_str.contains("400") {
-                                println!("DEBUG: send_authenticate - Gmail returned error in continuation: {}", decoded_str);
+                                tracing::debug!("send_authenticate - Gmail returned error in continuation: {}", decoded_str);
                                 // Send empty line to complete the authentication attempt
                                 self.send_raw("\r\n").await?;
                                 // Continue to read the final tagged response

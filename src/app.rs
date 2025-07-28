@@ -330,9 +330,9 @@ impl App {
         let accounts = self.storage.load_all_accounts()
             .map_err(|e| anyhow::anyhow!("Failed to load accounts: {}", e))?;
         
-        println!("DEBUG: Loaded {} accounts from storage", accounts.len());
+        tracing::debug!("Loaded {} accounts from storage", accounts.len());
         for (i, account) in accounts.iter().enumerate() {
-            println!("DEBUG: Account {}: {} ({})", i, account.display_name, account.account_id);
+            tracing::debug!("Account {}: {} ({})", i, account.display_name, account.account_id);
         }
         
         if accounts.is_empty() {
@@ -385,26 +385,26 @@ impl App {
         }
         
         // Load messages for the first account (or current account)
-        println!("DEBUG: App.load_existing_accounts() - Loading messages for accounts");
-        println!("DEBUG: Checking for current account...");
+        tracing::debug!("App.load_existing_accounts() - Loading messages for accounts");
+        tracing::debug!("Checking for current account...");
         if let Some(current_account_id) = self.ui.get_current_account_id().cloned() {
-            println!("DEBUG: Found current account: {}", current_account_id);
+            tracing::debug!("Found current account: {}", current_account_id);
             // Try to sync folders and messages from IMAP
             if let Some(ref mut _imap_manager) = self.imap_manager {
-                println!("DEBUG: Starting IMAP sync for account: {}", current_account_id);
+                tracing::debug!("Starting IMAP sync for account: {}", current_account_id);
                 match self.sync_account_from_imap(&current_account_id).await {
                     Ok(_) => {
-                        println!("DEBUG: IMAP sync completed successfully, loading folders and messages");
+                        tracing::debug!("IMAP sync completed successfully, loading folders and messages");
                         // Successfully synced from IMAP, load folders first
                         match self.ui.load_folders(&current_account_id).await {
-                            Ok(_) => println!("DEBUG: Successfully loaded folders from database"),
-                            Err(e) => println!("DEBUG: Failed to load folders from database: {}", e),
+                            Ok(_) => tracing::debug!("Successfully loaded folders from database"),
+                            Err(e) => tracing::debug!("Failed to load folders from database: {}", e),
                         }
                         
                         // Then load messages for INBOX
                         match self.ui.load_messages(current_account_id.clone(), "INBOX".to_string()).await {
-                            Ok(_) => println!("DEBUG: Successfully loaded messages for INBOX"),
-                            Err(e) => println!("DEBUG: Failed to load messages for INBOX: {}", e),
+                            Ok(_) => tracing::debug!("Successfully loaded messages for INBOX"),
+                            Err(e) => tracing::debug!("Failed to load messages for INBOX: {}", e),
                         }
                     }
                     Err(e) => {
@@ -514,7 +514,7 @@ impl App {
     
     /// Fetch messages from IMAP and store in database
     async fn fetch_messages_from_imap(&mut self, account_id: &str, folder_name: &str) -> Result<()> {
-        println!("DEBUG: fetch_messages_from_imap called for account: {}, folder: {}", account_id, folder_name);
+        tracing::debug!("fetch_messages_from_imap called for account: {}, folder: {}", account_id, folder_name);
         let imap_manager = self.imap_manager.as_mut()
             .ok_or_else(|| anyhow::anyhow!("IMAP manager not initialized"))?;
         
@@ -585,7 +585,7 @@ impl App {
     
     /// Sync account data from IMAP (folders and messages)
     async fn sync_account_from_imap(&mut self, account_id: &str) -> Result<()> {
-        println!("DEBUG: sync_account_from_imap called for: {}", account_id);
+        tracing::debug!("sync_account_from_imap called for: {}", account_id);
         tracing::info!("Starting IMAP sync for account: {}", account_id);
         
         // First sync folders
@@ -599,7 +599,7 @@ impl App {
     
     /// Sync folders from IMAP and store in database
     async fn sync_folders_from_imap(&mut self, account_id: &str) -> Result<()> {
-        println!("DEBUG: sync_folders_from_imap called for: {}", account_id);
+        tracing::debug!("sync_folders_from_imap called for: {}", account_id);
         let imap_manager = self.imap_manager.as_mut()
             .ok_or_else(|| anyhow::anyhow!("IMAP manager not initialized"))?;
         
@@ -609,22 +609,22 @@ impl App {
         tracing::info!("Syncing folders for account: {}", account_id);
         
         // Get IMAP client
-        println!("DEBUG: About to call imap_manager.get_client() for: {}", account_id);
+        tracing::debug!("About to call imap_manager.get_client() for: {}", account_id);
         let client_arc = imap_manager.get_client(account_id).await
             .map_err(|e| anyhow::anyhow!("Failed to get IMAP client: {}", e))?;
-        println!("DEBUG: Successfully got IMAP client for: {}", account_id);
+        tracing::debug!("Successfully got IMAP client for: {}", account_id);
         
         {
             let mut client = client_arc.lock().await;
             
             // List all folders from IMAP server
-            println!("DEBUG: About to call client.list_folders()");
+            tracing::debug!("About to call client.list_folders()");
             let folders = client.list_folders("", "*").await
                 .map_err(|e| {
-                    println!("DEBUG: Failed to list folders: {}", e);
+                    tracing::debug!("Failed to list folders: {}", e);
                     anyhow::anyhow!("Failed to list folders: {}", e)
                 })?;
-            println!("DEBUG: Successfully listed {} folders", folders.len());
+            tracing::debug!("Successfully listed {} folders", folders.len());
             
             let folder_count = folders.len();
             tracing::info!("Found {} folders from IMAP", folder_count);
@@ -636,9 +636,9 @@ impl App {
                 .await?;
             
             // Store each folder in database
-            println!("DEBUG: About to store {} folders in database", folders.len());
+            tracing::debug!("About to store {} folders in database", folders.len());
             for folder in folders {
-                println!("DEBUG: Storing folder: {} ({})", folder.name, folder.full_name);
+                tracing::debug!("Storing folder: {} ({})", folder.name, folder.full_name);
                 tracing::debug!("Storing folder: {} ({})", folder.name, folder.full_name);
                 
                 let attributes_json = serde_json::to_string(&folder.attributes)
