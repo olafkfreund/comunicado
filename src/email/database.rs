@@ -1066,8 +1066,17 @@ impl StoredMessage {
         // Extract envelope information if available
         let envelope = imap_message.envelope.as_ref();
         
+        // Generate deterministic ID based on account, folder, and UID to prevent duplicates
+        let deterministic_id = {
+            let uid = imap_message.uid.unwrap_or(0);
+            let id_string = format!("{}:{}:{}", account_id, folder_name, uid);
+            // Use a deterministic UUID based on the combination
+            let namespace = Uuid::parse_str("6ba7b810-9dad-11d1-80b4-00c04fd430c8").unwrap();
+            Uuid::new_v5(&namespace, id_string.as_bytes())
+        };
+        
         Self {
-            id: Uuid::new_v4(),
+            id: deterministic_id,
             account_id,
             folder_name,
             imap_uid: imap_message.uid.unwrap_or(0),

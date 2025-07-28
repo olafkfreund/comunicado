@@ -1161,8 +1161,13 @@ This is a sample email showcasing the modern email display format.".to_string();
     
     /// Set rich email content with parsed structure
     pub fn set_email_content(&mut self, email_content: EmailContent) {
+        // Set appropriate view mode based on content type
+        self.view_mode = match email_content.content_type {
+            ContentType::Html => ViewMode::Html,
+            _ => ViewMode::Formatted,
+        };
+        
         self.email_content = Some(email_content);
-        self.view_mode = ViewMode::Formatted;
         self.scroll = 0;
     }
     
@@ -1587,11 +1592,20 @@ This is a sample email showcasing the modern email display format.".to_string();
             in_reply_to: message.in_reply_to.clone(),
         };
         
-        // Use text body if available, otherwise HTML body, otherwise empty
-        let body = message.body_text.as_deref()
-            .or(message.body_html.as_deref())
-            .unwrap_or("")
-            .to_string();
+        // Prefer HTML body if available and has content, otherwise use text body
+        let (body, content_type) = if let Some(ref html_body) = message.body_html {
+            if !html_body.trim().is_empty() && crate::html::is_html_content(html_body) {
+                (html_body.clone(), ContentType::Html)
+            } else if let Some(ref text_body) = message.body_text {
+                (text_body.clone(), ContentType::PlainText)
+            } else {
+                (html_body.clone(), ContentType::Html) // Even if not detected as HTML, try HTML rendering
+            }
+        } else if let Some(ref text_body) = message.body_text {
+            (text_body.clone(), ContentType::PlainText)
+        } else {
+            ("No content available".to_string(), ContentType::PlainText)
+        };
             
         // Parse URLs from the body
         let parsed_urls = self.extract_urls(&body);
@@ -1609,13 +1623,6 @@ This is a sample email showcasing the modern email display format.".to_string();
                 is_inline: att.is_inline,
             }
         }).collect();
-        
-        // Determine content type
-        let content_type = if message.body_html.is_some() {
-            ContentType::Html
-        } else {
-            ContentType::PlainText
-        };
         
         EmailContent {
             headers,
