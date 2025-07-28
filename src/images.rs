@@ -22,8 +22,11 @@ pub enum TerminalProtocol {
 #[derive(Debug, Clone)]
 struct CachedImage {
     data: Vec<u8>,
+    #[allow(dead_code)]
     format: ImageFormat,
+    #[allow(dead_code)]
     width: u32,
+    #[allow(dead_code)]
     height: u32,
     encoded_data: Option<String>, // Pre-encoded for terminal display
 }
@@ -34,6 +37,7 @@ pub struct ImageManager {
     protocol: TerminalProtocol,
     max_width: u32,
     max_height: u32,
+    #[allow(dead_code)]
     cache_dir: PathBuf,
 }
 

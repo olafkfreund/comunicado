@@ -1664,7 +1664,7 @@ impl App {
     fn clean_email_content(&self, raw_content: &str) -> String {
         let lines: Vec<&str> = raw_content.lines().collect();
         let mut cleaned_lines = Vec::new();
-        let mut in_header_section = true;
+        let mut _in_header_section = true;
         let mut found_content_start = false;
         
         for line in lines {
@@ -1685,7 +1685,7 @@ impl App {
                 // Check if this line looks like actual content (not headers/metadata)
                 if self.looks_like_content(trimmed) {
                     found_content_start = true;
-                    in_header_section = false;
+                    _in_header_section = false;
                 } else {
                     continue; // Skip this line, still in header/metadata section
                 }

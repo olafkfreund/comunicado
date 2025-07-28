@@ -95,6 +95,7 @@ pub struct CalendarEventRecurrence {
 /// Calendar database manager
 pub struct CalendarDatabase {
     pub pool: SqlitePool,
+    #[allow(dead_code)]
     db_path: String,
 }
 

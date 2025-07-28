@@ -272,7 +272,7 @@ impl StartPage {
 
     fn render_weather_block(&self, f: &mut Frame, area: Rect, theme: &Theme, is_selected: bool) {
         let block = create_border_block("weather", theme, is_selected);
-        let inner_area = block.inner(area);
+        let _inner_area = block.inner(area);
         
         // Weather display matching reference format
         let weather_lines = vec![
@@ -315,7 +315,7 @@ impl StartPage {
 
     fn render_tasks_block(&self, f: &mut Frame, area: Rect, theme: &Theme, is_selected: bool) {
         let block = create_border_block("todoist", theme, is_selected);
-        let inner_area = block.inner(area);
+        let _inner_area = block.inner(area);
         
         // Mock task list matching reference format
         let task_lines = vec![
@@ -358,7 +358,7 @@ impl StartPage {
 
     fn render_datetime_block(&self, f: &mut Frame, area: Rect, theme: &Theme, is_selected: bool) {
         let block = create_border_block("datetime", theme, is_selected);
-        let inner_area = block.inner(area);
+        let _inner_area = block.inner(area);
         
         let now = Local::now();
         
@@ -427,7 +427,7 @@ impl StartPage {
 
     fn render_shortcuts_block(&self, f: &mut Frame, area: Rect, theme: &Theme, is_selected: bool) {
         let block = create_border_block("shortcuts", theme, is_selected);
-        let inner_area = block.inner(area);
+        let _inner_area = block.inner(area);
         
         // Create a 4-column layout for shortcuts
         let cols = Layout::default()
@@ -548,7 +548,7 @@ impl StartPage {
 
     fn render_system_stats_block(&self, f: &mut Frame, area: Rect, theme: &Theme, is_selected: bool) {
         let block = create_border_block("stats", theme, is_selected);
-        let inner_area = block.inner(area);
+        let _inner_area = block.inner(area);
         
         // Mock stats that match the reference image format
         let stats_lines = vec![

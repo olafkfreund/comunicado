@@ -780,7 +780,7 @@ impl SearchEngine {
         &self,
         message: StoredMessage,
         query: &str,
-        mode: &SearchMode,
+        _mode: &SearchMode,
     ) -> Result<SearchResult, Box<dyn std::error::Error>> {
         let mut snippets = Vec::new();
         let mut matched_fields = Vec::new();

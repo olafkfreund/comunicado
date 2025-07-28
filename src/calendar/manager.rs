@@ -14,6 +14,7 @@ use crate::oauth2::token::TokenManager;
 /// Calendar manager for coordinating all calendar operations
 pub struct CalendarManager {
     database: Arc<CalendarDatabase>,
+    #[allow(dead_code)]
     token_manager: Arc<TokenManager>,
     caldav_clients: RwLock<HashMap<String, Arc<CalDAVClient>>>,
     calendars: RwLock<HashMap<String, Calendar>>,
@@ -403,11 +404,11 @@ impl CalendarManager {
                 CalendarSource::CalDAV { account_id, calendar_url } => {
                     self.sync_caldav_calendar(account_id, calendar_url, &calendar.id).await?;
                 }
-                CalendarSource::Google { account_id, calendar_id } => {
+                CalendarSource::Google { account_id: _, calendar_id } => {
                     // TODO: Implement Google Calendar sync
                     tracing::info!("Google Calendar sync not yet implemented for {}", calendar_id);
                 }
-                CalendarSource::Outlook { account_id, calendar_id } => {
+                CalendarSource::Outlook { account_id: _, calendar_id } => {
                     // TODO: Implement Outlook Calendar sync
                     tracing::info!("Outlook Calendar sync not yet implemented for {}", calendar_id);
                 }

@@ -70,6 +70,7 @@ pub struct CalendarUI {
     current_view: CalendarViewMode,
     current_date: DateTime<Local>,
     selected_date: NaiveDate,
+    #[allow(dead_code)]
     selected_event_id: Option<String>,
     
     // Data
@@ -89,7 +90,9 @@ pub struct CalendarUI {
     focused_pane: CalendarPane,
     
     // Search
+    #[allow(dead_code)]
     search_query: String,
+    #[allow(dead_code)]
     search_results: Vec<Event>,
     
     // Event details

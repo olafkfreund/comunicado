@@ -315,7 +315,7 @@ This is a sample email showcasing the modern email display format.".to_string();
         if let Some(email) = self.email_content.clone() {
             // Extract all data we need before any mutable borrows
             let show_headers_expanded = self.show_headers_expanded;
-            let terminal_width = self.html_renderer.max_width as u16;
+            let _terminal_width = self.html_renderer.max_width as u16;
             let scroll = self.scroll;
             let selected_attachment = self.selected_attachment;
             

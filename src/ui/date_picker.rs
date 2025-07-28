@@ -199,7 +199,7 @@ impl DatePicker {
     }
     
     /// Render the header with month/year and navigation
-    fn render_header(&self, frame: &mut Frame, area: Rect, theme: &Theme) {
+    fn render_header(&self, frame: &mut Frame, area: Rect, _theme: &Theme) {
         let month_names = [
             "January", "February", "March", "April", "May", "June",
             "July", "August", "September", "October", "November", "December"
@@ -220,7 +220,7 @@ impl DatePicker {
     }
     
     /// Render the day names header
-    fn render_day_names(&self, frame: &mut Frame, area: Rect, theme: &Theme) {
+    fn render_day_names(&self, frame: &mut Frame, area: Rect, _theme: &Theme) {
         let day_names = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
         
         let cells: Vec<Cell> = day_names
@@ -235,7 +235,7 @@ impl DatePicker {
     }
     
     /// Render the calendar grid with dates
-    fn render_calendar_grid(&self, frame: &mut Frame, area: Rect, theme: &Theme) {
+    fn render_calendar_grid(&self, frame: &mut Frame, area: Rect, _theme: &Theme) {
         let days_in_month = self.days_in_viewing_month();
         let first_weekday = self.first_day_weekday();
         

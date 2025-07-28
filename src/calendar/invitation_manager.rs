@@ -80,7 +80,7 @@ impl InvitationManager {
         &self, 
         invitation_uid: &str, 
         response: RSVPResponse,
-        comment: Option<String>
+        _comment: Option<String>
     ) -> InvitationResult<()> {
         let invitation = {
             let cache = self.invitation_cache.read().await;
