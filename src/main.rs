@@ -57,14 +57,10 @@ async fn main() -> Result<()> {
     }
 
     // Create and initialize the application
-    println!("🔧 Creating application...");
     let mut app = App::new()?;
-    println!("✅ Application created successfully");
     
     // Initialize database connection
-    println!("🔧 Initializing database...");
     app.initialize_database().await?;
-    println!("✅ Database initialized successfully");
     
     // Check for --clean-content flag to reprocess database content
     if args.contains(&"--clean-content".to_string()) {
@@ -92,35 +88,26 @@ async fn main() -> Result<()> {
     }
     
     // Initialize IMAP account manager
-    println!("🔧 Initializing IMAP account manager...");
     tracing::info!("Initializing IMAP account manager...");
     app.initialize_imap_manager().await?;
-    println!("✅ IMAP account manager initialized successfully");
     tracing::info!("IMAP account manager initialized successfully");
     
     // Check for existing accounts and run setup wizard if needed
-    println!("🔧 Checking accounts and setup...");
     tracing::info!("Checking accounts and setup...");
     app.check_accounts_and_setup().await?;
-    println!("✅ Account check and setup completed");
     tracing::info!("Account check and setup completed");
     
     // Initialize SMTP service and contacts manager
-    println!("🔧 Initializing services...");
     tracing::info!("Initializing services...");
     app.initialize_services().await?;
-    println!("✅ Services initialized successfully");
     tracing::info!("Services initialized successfully");
     
     // Initialize dashboard services for start page
-    println!("🔧 Initializing dashboard services...");
     tracing::info!("Initializing dashboard services...");
     app.initialize_dashboard_services().await?;
-    println!("✅ Dashboard services initialized successfully");
     tracing::info!("Dashboard services initialized successfully");
     
     // Run the application
-    println!("🚀 Starting application main loop...");
     tracing::info!("Starting application main loop...");
     app.run().await?;
 

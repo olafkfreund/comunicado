@@ -471,14 +471,11 @@ impl App {
         
         // Load messages for the first account (or current account)
         tracing::debug!("App.load_existing_accounts() - Loading messages for accounts");
-        println!("🔧 About to check for current account...");
         tracing::debug!("Checking for current account...");
         if let Some(current_account_id) = self.ui.get_current_account_id().cloned() {
-            println!("🔧 Found current account: {}", current_account_id);
             tracing::debug!("Found current account: {}", current_account_id);
             // Try to sync folders and messages from IMAP
             if let Some(ref mut _imap_manager) = self.imap_manager {
-                println!("🔧 Starting IMAP sync for account: {}", current_account_id);
                 tracing::debug!("Starting IMAP sync for account: {}", current_account_id);
                 match self.sync_account_from_imap(&current_account_id).await {
                     Ok(_) => {
@@ -497,9 +494,16 @@ impl App {
                     }
                     Err(e) => {
                         tracing::error!("IMAP sync failed for account {}: {}", current_account_id, e);
-                        // Show the actual error instead of falling back to sample data
-                        // This helps debug OAuth2 authentication issues
-                        return Err(anyhow::anyhow!("Failed to sync IMAP data: {}", e));
+                        
+                        // If it's an authentication timeout, log helpful information
+                        if e.to_string().contains("timed out") || e.to_string().contains("authentication") {
+                            tracing::warn!("Authentication issue detected - tokens may have expired");
+                            tracing::info!("Consider re-running setup if this persists: rm ~/.config/comunicado/{}.json", current_account_id);
+                        }
+                        
+                        // Continue with sample data instead of crashing
+                        tracing::info!("Falling back to sample data due to IMAP sync failure");
+                        let _ = self.load_sample_data().await;
                     }
                 }
             } else {
@@ -673,12 +677,10 @@ impl App {
     
     /// Sync account data from IMAP (folders and messages)
     async fn sync_account_from_imap(&mut self, account_id: &str) -> Result<()> {
-        println!("🔧 sync_account_from_imap called for: {}", account_id);
         tracing::debug!("sync_account_from_imap called for: {}", account_id);
         tracing::info!("Starting IMAP sync for account: {}", account_id);
         
         // First sync folders
-        println!("🔧 About to sync folders from IMAP...");
         self.sync_folders_from_imap(account_id).await?;
         
         // Then sync messages for INBOX (or first available folder)
@@ -689,7 +691,6 @@ impl App {
     
     /// Sync folders from IMAP and store in database
     async fn sync_folders_from_imap(&mut self, account_id: &str) -> Result<()> {
-        println!("🔧 sync_folders_from_imap called for: {}", account_id);
         tracing::debug!("sync_folders_from_imap called for: {}", account_id);
         let imap_manager = self.imap_manager.as_mut()
             .ok_or_else(|| anyhow::anyhow!("IMAP manager not initialized"))?;
@@ -697,14 +698,30 @@ impl App {
         let database = self.database.as_ref()
             .ok_or_else(|| anyhow::anyhow!("Database not initialized"))?;
         
-        println!("🔧 About to sync folders for account: {}", account_id);
         tracing::info!("Syncing folders for account: {}", account_id);
         
-        // Get IMAP client
-        println!("🔧 About to call imap_manager.get_client() for: {}", account_id);
+        // Get IMAP client with timeout to prevent hanging on expired tokens
         tracing::debug!("About to call imap_manager.get_client() for: {}", account_id);
-        let client_arc = imap_manager.get_client(account_id).await
-            .map_err(|e| anyhow::anyhow!("Failed to get IMAP client: {}", e))?;
+        
+        let client_result = tokio::time::timeout(
+            std::time::Duration::from_secs(10),
+            imap_manager.get_client(account_id)
+        ).await;
+        
+        let client_arc = match client_result {
+            Ok(Ok(client)) => {
+                tracing::debug!("Successfully got IMAP client for: {}", account_id);
+                client
+            }
+            Ok(Err(e)) => {
+                tracing::error!("Failed to get IMAP client for {}: {}", account_id, e);
+                return Err(anyhow::anyhow!("Failed to get IMAP client: {}", e));
+            }
+            Err(_) => {
+                tracing::error!("IMAP client connection timed out for: {}", account_id);
+                return Err(anyhow::anyhow!("IMAP client connection timed out after 10 seconds"));
+            }
+        };
         tracing::debug!("Successfully got IMAP client for: {}", account_id);
         
         {
