@@ -1278,188 +1278,131 @@ impl StoredMessage {
             return raw_content[body_start..].to_string();
         }
         
+        // Use the more reliable aggressive extraction method as the primary approach
+        // The previous method was not catching all the technical headers
+        return Self::aggressive_content_extraction(raw_content);
+    }
+    
+    /// More aggressive content extraction for difficult cases
+    fn aggressive_content_extraction(raw_content: &str) -> String {
         let lines: Vec<&str> = raw_content.lines().collect();
-        let mut content_lines = Vec::new();
-        let mut in_headers = true;
-        let mut blank_line_count = 0;
+        let mut result_lines: Vec<&str> = Vec::new();
+        let mut found_content_start = false;
         
-        // Comprehensive list of email headers to skip - covers all common headers
-        let email_headers = [
-            // Standard RFC headers
-            "from:", "to:", "cc:", "bcc:", "subject:", "date:", "reply-to:",
+        // Comprehensive list of email header patterns to skip
+        let header_patterns = [
+            // Basic RFC headers
+            "from:", "to:", "cc:", "bcc:", "subject:", "date:", "reply-to:", "sender:",
             "message-id:", "in-reply-to:", "references:", "mime-version:",
-            // Content headers - VERY IMPORTANT: These are showing in the screenshot
+            // Content and encoding headers
             "content-type:", "content-transfer-encoding:", "content-disposition:",
             "content-id:", "content-description:", "content-language:", "content-length:",
-            // Apple Mail specific (seen in screenshot)
-            "x-mailer: apple mail", "x-mailer:", "--apple-mail=", "apple-mail",
-            // Boundary and multipart headers
-            "boundary=", "multipart/", "--", "charset=", "quoted-printable",
-            // Authentication and routing headers
-            "received:", "return-path:", "delivered-to:", "envelope-to:",
-            "authentication-results:", "received-spf:", "dkim-signature:", "dkim-pass:",
+            // Routing and delivery headers (CRITICAL - these are in the screenshots)
+            "delivered-to:", "received:", "return-path:", "envelope-to:",
+            // Authentication headers (CRITICAL - showing in screenshots)
+            "authentication-results:", "received-spf:", "dkim-signature:", "dkim-filter:",
             "arc-seal:", "arc-message-signature:", "arc-authentication-results:",
-            // Service-specific headers (Gmail, Outlook, etc.)
-            "x-received:", "x-google-smtp-source:", "x-gm-message-state:",
-            "x-google-dkim-signature:", "x-gm-thd-id:", "x-gmail-labels:",
-            "x-ms-exchange-", "x-originating-ip:", "x-microsoft-antispam:",
-            // KMail and client-specific headers
+            // Google/Gmail specific headers
+            "x-received:", "x-google-smtp-source:", "x-gm-message-state:", "x-google-dkim-signature:",
+            "x-gm-thd-id:", "x-gmail-labels:", "x-google-", "x-gm-",
+            // Microsoft/Outlook headers
+            "x-ms-exchange-", "x-originating-ip:", "x-microsoft-", "x-ms-",
+            // Apple Mail headers (seen in screenshots)
+            "x-mailer:", "x-apple-", "--apple-mail", "apple-mail",
+            // Other client headers
             "x-kmail-", "x-kde-", "x-evolution-", "x-thunderbird-",
-            // Spam and security headers
-            "x-spam-checker-version:", "x-spam-level:", "x-spam-status:",
-            "x-spam-check-by:", "x-virus-scanned:", "x-barracuda-",
+            // Security and spam headers
+            "x-spam-", "x-virus-", "x-barracuda-", "x-report-abuse:",
             // Mailing list headers
             "list-id:", "list-unsubscribe:", "list-archive:", "list-post:",
             "list-help:", "list-subscribe:", "precedence:", "feedback-id:",
-            // Other common headers
-            "x-priority:", "importance:", "user-agent:",
+            // Priority and tracking headers
+            "x-priority:", "x-sg-eid:", "importance:", "user-agent:",
             "thread-topic:", "thread-index:", "x-original-to:",
-            // Additional technical headers seen in screenshots
-            "x-sg-eid:", "x-report-abuse:", "x-kmail-flow:", "x-kmail-message:",
-            "x-kmail-ops:", "spf=pass",
+            // Additional patterns that appear in raw emails
+            "spf=pass", "dkim=pass", "dmarc=pass", "smtp.mailfrom=", "smtp.helo=",
         ];
         
         for (i, line) in lines.iter().enumerate() {
             let line_lower = line.to_lowercase();
             let line_trimmed = line.trim();
             
-            // Count consecutive blank lines
-            if line_trimmed.is_empty() {
-                blank_line_count += 1;
-                // After 2+ consecutive blank lines, we're likely past headers
-                if blank_line_count >= 2 && in_headers {
-                    in_headers = false;
-                    tracing::debug!("Found content after {} blank lines at line {}", blank_line_count, i);
-                }
-                continue;
-            } else {
-                blank_line_count = 0;
+            // Skip completely empty lines until we find content
+            if line_trimmed.is_empty() && !found_content_start {
+                continue;  
             }
             
-            // Skip lines that are clearly email headers
-            if in_headers {
-                let is_header_line = email_headers.iter().any(|&header| {
-                    line_lower.starts_with(header) || 
-                    line_lower.contains(header) || // More aggressive matching
-                    // Handle continuation lines (starting with whitespace)
-                    (line.starts_with(' ') || line.starts_with('\t'))
-                });
-                
-                // More aggressive header detection
-                let looks_like_header = (
-                    // Lines with colons (headers)
-                    (line.contains(':') && !line.starts_with(' ') && !line.starts_with('\t')) ||
-                    // Lines that are mostly uppercase and short (header-like)
-                    (line.len() < 100 && line.chars().filter(|c| c.is_uppercase()).count() > line.len() / 3) ||
-                    // Lines with encoded strings (=? ... ?=)
-                    (line.contains("=?") && line.contains("?=")) ||
-                    // Lines that start with technical indicators
-                    line_lower.starts_with("--") ||
-                    line_lower.starts_with("boundary") ||
-                    // Lines with base64-like content (long strings of alphanumeric + /+=)
-                    (line.len() > 50 && line.chars().filter(|c| c.is_alphanumeric() || *c == '/' || *c == '+' || *c == '=').count() > line.len() * 4 / 5)
-                ) && 
-                // But don't skip things that look like actual content
-                !line_lower.contains("http") &&
-                !line_lower.contains("www.") &&
-                !line_lower.contains("want to change") && // Common email content phrase
-                !line_lower.contains("you can") && // Common email content phrase
-                line.len() < 300; // Headers are usually shorter
-                
-                if is_header_line || looks_like_header {
-                    tracing::debug!("Skipping header line {}: {}", i, &line[..std::cmp::min(50, line.len())]);
+            // Skip lines that match header patterns (case-insensitive)
+            let is_header = header_patterns.iter().any(|&pattern| {
+                line_lower.starts_with(pattern) || 
+                line_lower.contains(&format!(" {}", pattern)) // Headers can be indented
+            });
+            
+            if is_header {
+                tracing::debug!("Skipping header line {}: {}", i, &line[..std::cmp::min(60, line.len())]);
+                continue;
+            }
+            
+            // Skip boundary markers and multipart delimiters
+            if line.starts_with("--") && (
+                line.contains("Apple-Mail") || 
+                line.contains("boundary") || 
+                line.contains("=_") ||
+                line.len() > 15  // Long boundary markers
+            ) {
+                tracing::debug!("Skipping boundary line {}: {}", i, &line[..std::cmp::min(40, line.len())]);
+                continue;
+            }
+            
+            // Skip lines with technical content patterns
+            if line_lower.contains("content-type:") ||
+               line_lower.contains("content-transfer-encoding:") ||
+               line_lower.contains("charset=") ||
+               line_lower.contains("boundary=") ||
+               line_lower.contains("multipart/") ||
+               line_lower.contains("quoted-printable") ||
+               line_lower.contains("base64") {
+                tracing::debug!("Skipping technical line {}: {}", i, &line[..std::cmp::min(40, line.len())]);
+                continue;
+            }
+            
+            // Skip encoded strings (=?charset?encoding?data?=)
+            if line.contains("=?") && line.contains("?=") {
+                tracing::debug!("Skipping encoded line {}: {}", i, &line[..std::cmp::min(40, line.len())]);
+                continue;
+            }
+            
+            // Skip lines that are mostly technical data (base64-like, long strings without spaces)
+            if line.len() > 100 && !line.contains(" ") && !line.starts_with("http") {
+                let non_alnum_count = line.chars().filter(|c| !c.is_alphanumeric() && *c != '/' && *c != '+' && *c != '=').count();
+                if non_alnum_count < 5 { // Looks like encoded data
+                    tracing::debug!("Skipping encoded data line {}: {}", i, &line[..std::cmp::min(40, line.len())]);
                     continue;
                 }
-                
-                // If we find a line that looks like actual content, we're in content
-                if line_trimmed.len() > 10 && !line.contains("=") && !line.contains(":") {
-                    tracing::debug!("Found first content line at {}: {}", i, &line[..std::cmp::min(50, line.len())]);
-                    in_headers = false;
+            }
+            
+            // Skip lines with excessive technical characters
+            if line.len() > 50 {
+                let technical_chars = line.chars().filter(|&c| c == '=' || c == ';' || c == ':').count();
+                if technical_chars > line.len() / 10 { // More than 10% technical characters
+                    tracing::debug!("Skipping technical data line {}: {}", i, &line[..std::cmp::min(40, line.len())]);
+                    continue;
                 }
             }
             
-            // Add content lines only if we're not in headers
-            if !in_headers {
-                content_lines.push(*line);
-            }
-        }
-        
-        let cleaned = content_lines.join("\n").trim().to_string();
-        
-        tracing::debug!("Cleaned content length: {} (original: {})", cleaned.len(), raw_content.len());
-        
-        // If we still don't have meaningful content, try a more aggressive approach
-        if cleaned.trim().is_empty() {
-            tracing::warn!("No content found after first pass, trying aggressive cleaning");
-            return Self::aggressive_content_extraction(raw_content);
-        }
-        
-        cleaned
-    }
-    
-    /// More aggressive content extraction for difficult cases
-    fn aggressive_content_extraction(raw_content: &str) -> String {
-        let lines: Vec<&str> = raw_content.lines().collect();
-        let mut result_lines = Vec::new();
-        
-        // List of exact header prefixes to completely skip
-        let header_prefixes = [
-            "from:", "to:", "cc:", "bcc:", "subject:", "date:", "reply-to:", "sender:",
-            "message-id:", "in-reply-to:", "references:", "mime-version:",
-            "content-type:", "content-transfer-encoding:", "content-disposition:",
-            "content-id:", "content-description:", "content-language:", "content-length:",
-            "x-mailer:", "x-apple-", "x-google-", "x-ms-", "x-microsoft-", "x-gm-",
-            "x-kmail-", "x-kde-", "x-evolution-", "x-thunderbird-", "x-spam-", "x-virus-",
-            "received:", "return-path:", "delivered-to:", "envelope-to:", "authentication-results:",
-            "received-spf:", "dkim-signature:", "arc-seal:", "arc-message-signature:",
-            "list-id:", "list-unsubscribe:", "precedence:", "x-priority:", "importance:",
-            "user-agent:", "thread-topic:", "thread-index:", "x-originating-ip:",
-        ];
-        
-        for line in lines {
-            let line_lower = line.to_lowercase();
-            let line_trimmed = line.trim();
+            // If we reach here, this line looks like actual content
+            found_content_start = true;
+            result_lines.push(*line);
             
-            // Skip empty lines
-            if line_trimmed.is_empty() {
-                continue;
+            if result_lines.len() == 1 {
+                tracing::debug!("Found first content line at {}: {}", i, &line[..std::cmp::min(50, line.len())]);
             }
-            
-            // Skip lines starting with known header prefixes
-            if header_prefixes.iter().any(|&prefix| line_lower.starts_with(prefix)) {
-                continue;
-            }
-            
-            // Skip boundary markers
-            if line.starts_with("--") && (line.contains("Apple-Mail") || line.contains("boundary") || line.len() > 20) {
-                continue;
-            }
-            
-            // Skip lines that look like technical metadata
-            if line.contains("Content-Transfer-Encoding:") ||
-               line.contains("Content-Type:") ||
-               line.contains("charset=") ||
-               line.contains("boundary=") ||
-               line.contains("multipart/") ||
-               line.contains("quoted-printable") {
-                continue;
-            }
-            
-            // Skip encoded content (lines with =? ?= patterns)
-            if line.contains("=?") && line.contains("?=") {
-                continue;
-            }
-            
-            // Skip very long lines that look like encoded data or URLs without readable text
-            if line.len() > 200 && !line.contains(" ") && !line.starts_with("http") {
-                continue;
-            }
-            
-            // If we get here, it's likely content
-            result_lines.push(line);
         }
         
         let result = result_lines.join("\n").trim().to_string();
+        
+        tracing::debug!("Aggressive extraction result: {} lines, {} chars (from {} input chars)", 
+                       result_lines.len(), result.len(), raw_content.len());
         
         if result.is_empty() {
             "Email content could not be displayed properly.".to_string()
