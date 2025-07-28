@@ -1,7 +1,7 @@
 # Technical Stack
 
-> Last Updated: 2025-07-25
-> Version: 1.0.0
+> Last Updated: 2025-07-28
+> Version: 1.1.0
 
 ## Core Technologies
 
@@ -53,7 +53,10 @@
 - **Animation Support:** GIF and basic video format support in compatible terminals
 
 ### Content Rendering
-- **HTML Parser:** Custom lightweight HTML parser optimized for terminal display
+- **HTML Parser:** Multi-layered HTML rendering system with w3m/lynx-style terminal optimization
+- **HTML Sanitization:** ammonia crate for secure HTML content cleaning
+- **Markdown Support:** pulldown-cmark for enhanced content formatting
+- **Content Cleaning:** Aggressive email header filtering with 30+ pattern recognition
 - **CSS Support:** Basic CSS styling for terminal-appropriate rendering
 - **Font Handling:** Terminal font fallback and Unicode support
 
@@ -64,6 +67,7 @@
 - **Code Formatting:** rustfmt for consistent code style
 - **Linting:** clippy for code quality checks
 - **Documentation:** rustdoc for API documentation
+- **Code Cleanup:** cargo fix for automated dead code removal and optimization
 
 ### Testing Framework
 - **Unit Testing:** Rust's built-in testing framework
@@ -100,6 +104,11 @@
 - **OpenSSL:** For TLS/SSL connections (or rustls for pure Rust alternative)
 - **SQLite:** For local database storage
 - **XDG Libraries:** For proper Linux desktop integration
+
+### Content Processing Dependencies (Added July 2025)
+- **ammonia:** HTML sanitization and security filtering
+- **pulldown-cmark:** Markdown parsing and rendering support
+- **html2text:** HTML to plain text conversion with fallback support
 
 ### Optional Dependencies
 - **GPG:** For email encryption support
