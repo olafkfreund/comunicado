@@ -165,25 +165,40 @@ impl App {
         
         // Load OAuth2 tokens for all existing accounts into the TokenManager
         tracing::debug!("About to load tokens into manager");
-        self.load_tokens_into_manager(&token_manager).await?;
-        tracing::debug!("Tokens loaded successfully");
+        let has_valid_tokens = self.load_tokens_into_manager(&token_manager).await?;
+        tracing::debug!("Tokens loaded successfully, has_valid_tokens: {}", has_valid_tokens);
         
-        // Create and start automatic token refresh scheduler
-        tracing::debug!("Creating token refresh scheduler");
-        let token_manager_arc = Arc::new(token_manager.clone());
-        let scheduler = crate::oauth2::token::TokenRefreshScheduler::new(token_manager_arc);
-        
-        tracing::debug!("Starting token refresh scheduler");
-        match scheduler.start().await {
-            Ok(()) => {
-                tracing::info!("Started automatic OAuth2 token refresh scheduler");
-                self.token_refresh_scheduler = Some(scheduler);
+        // Only create and start automatic token refresh scheduler if we have valid tokens
+        if has_valid_tokens {
+            tracing::debug!("Creating token refresh scheduler");
+            let token_manager_arc = Arc::new(token_manager.clone());
+            let scheduler = crate::oauth2::token::TokenRefreshScheduler::new(token_manager_arc);
+            
+            tracing::debug!("Starting token refresh scheduler");
+            let scheduler_result = tokio::time::timeout(
+                std::time::Duration::from_secs(5),
+                scheduler.start()
+            ).await;
+            
+            match scheduler_result {
+                Ok(Ok(())) => {
+                    tracing::info!("Started automatic OAuth2 token refresh scheduler");
+                    self.token_refresh_scheduler = Some(scheduler);
+                }
+                Ok(Err(e)) => {
+                    tracing::warn!("Failed to start automatic token refresh scheduler: {}", e);
+                    // Continue without scheduler - tokens will need manual refresh
+                    self.token_refresh_scheduler = None;
+                }
+                Err(_) => {
+                    tracing::warn!("Token refresh scheduler startup timed out after 5 seconds");
+                    // Continue without scheduler - tokens will need manual refresh
+                    self.token_refresh_scheduler = None;
+                }
             }
-            Err(e) => {
-                tracing::warn!("Failed to start automatic token refresh scheduler: {}", e);
-                // Continue without scheduler - tokens will need manual refresh
-                self.token_refresh_scheduler = None;
-            }
+        } else {
+            tracing::info!("No valid OAuth2 tokens found, skipping token refresh scheduler");
+            self.token_refresh_scheduler = None;
         }
         tracing::debug!("Token refresh scheduler setup complete");
         
@@ -194,7 +209,8 @@ impl App {
     }
     
     /// Load OAuth2 tokens from storage into the TokenManager
-    async fn load_tokens_into_manager(&self, token_manager: &TokenManager) -> Result<()> {
+    /// Returns true if any valid tokens were loaded
+    async fn load_tokens_into_manager(&self, token_manager: &TokenManager) -> Result<bool> {
         tracing::debug!("Starting token loading process");
         
         // Load all OAuth2 accounts from storage
@@ -206,7 +222,7 @@ impl App {
             Err(e) => {
                 tracing::warn!("Failed to load accounts from storage: {}", e);
                 // Return early but don't fail the app startup - this is not critical
-                return Ok(());
+                return Ok(false);
             }
         };
         
@@ -214,8 +230,10 @@ impl App {
         
         if accounts.is_empty() {
             tracing::info!("No accounts found to load tokens for");
-            return Ok(());
+            return Ok(false);
         }
+        
+        let mut has_valid_tokens = false;
         
         for account in accounts {
             // Skip accounts without access tokens
@@ -245,11 +263,12 @@ impl App {
                 tracing::warn!("Failed to store tokens for account {}: {}", account.account_id, e);
             } else {
                 tracing::debug!("Successfully loaded tokens for account {}", account.account_id);
+                has_valid_tokens = true;
             }
         }
         
-        tracing::info!("Token loading complete");
-        Ok(())
+        tracing::info!("Token loading complete, has_valid_tokens: {}", has_valid_tokens);
+        Ok(has_valid_tokens)
     }
     
     /// Check for existing accounts and run setup wizard if needed
@@ -425,8 +444,10 @@ impl App {
         }
         
         // Load OAuth2 tokens into TokenManager for existing accounts
+        tracing::debug!("About to load OAuth2 tokens for {} accounts", accounts.len());
         if let Some(ref token_manager) = self.token_manager {
             for account in &accounts {
+                tracing::debug!("Processing account: {} (has access token: {})", account.account_id, !account.access_token.is_empty());
                 if !account.access_token.is_empty() {
                     // Create TokenResponse from AccountConfig for TokenManager storage
                     let token_response = crate::oauth2::TokenResponse {
@@ -441,6 +462,7 @@ impl App {
                         scope: Some(account.scopes.join(" ")),
                     };
                     
+                    tracing::debug!("About to store tokens for account: {}", account.account_id);
                     if let Err(e) = token_manager.store_tokens(
                         account.account_id.clone(),
                         account.provider.clone(),
@@ -455,6 +477,7 @@ impl App {
         } else {
             tracing::warn!("TokenManager not initialized, OAuth2 tokens not loaded for existing accounts");
         }
+        tracing::debug!("Finished loading OAuth2 tokens");
         
         // Convert AccountConfig to AccountItem for the UI
         let account_items: Vec<crate::ui::AccountItem> = accounts.iter()
