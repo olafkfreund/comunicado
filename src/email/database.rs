@@ -289,11 +289,8 @@ impl EmailDatabase {
         }
         
         // Now add unique constraint to prevent future duplicates
-        // Drop the index first if it exists to avoid conflicts
-        let _ = sqlx::query("DROP INDEX IF EXISTS idx_messages_unique").execute(&self.pool).await;
-        
         sqlx::query(r#"
-            CREATE UNIQUE INDEX idx_messages_unique 
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_unique 
             ON messages (account_id, folder_name, imap_uid)
         "#).execute(&self.pool).await?;
         
