@@ -1,5 +1,5 @@
 use crate::oauth2::{OAuth2Error, OAuth2Result, OAuth2Provider, ProviderConfig, OAuth2Client, AccountConfig};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use std::fs;
 use std::path::Path;
 

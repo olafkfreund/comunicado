@@ -331,8 +331,8 @@ This is a sample email showcasing the modern email display format.".to_string();
                 
                 tracing::debug!("Content Preview: HTML renderer generated {} lines", rendered_text.lines.len());
                 
-                // Process lines and replace image placeholders with enhanced rendering
-                Some(self.process_image_placeholders_enhanced(rendered_text.lines, terminal_width))
+                // Return rendered HTML lines directly
+                Some(rendered_text.lines)
             } else {
                 tracing::debug!("Content Preview: Processing plain text content");
                 None
@@ -475,10 +475,8 @@ This is a sample email showcasing the modern email display format.".to_string();
                 // Use the HTML renderer to convert HTML to readable text
                 let rendered_text = self.html_renderer.render_html(&email.body);
                 
-                // Process lines and replace image placeholders with enhanced rendering
-                let terminal_width = self.html_renderer.max_width as u16;
-                let processed_lines = self.process_image_placeholders_enhanced(rendered_text.lines, terminal_width);
-                all_lines.extend(processed_lines);
+                // Add rendered HTML lines directly
+                all_lines.extend(rendered_text.lines);
                 
                 tracing::debug!("HTML Content Rendering: Generated {} lines after processing", all_lines.len() - 3); // Subtract headers
             } else {
@@ -572,163 +570,6 @@ This is a sample email showcasing the modern email display format.".to_string();
         lines
     }
 
-    /// Render modern sender box with attractive formatting
-    fn render_modern_sender_box(&self, headers: &EmailHeader, theme: &Theme) -> Vec<Line> {
-        let mut lines = Vec::new();
-        
-        // Parse sender name and email
-        let (sender_name, sender_email) = self.parse_sender_info(&headers.from);
-        let box_width: usize = 60; // Fixed width for consistent appearance
-        
-        // Create top border of sender box
-        let header_text = " From ";
-        let remaining_width = box_width.saturating_sub(header_text.len() + 3); // 3 for borders
-        lines.push(Line::from(vec![
-            Span::styled("┌─", Style::default().fg(theme.colors.palette.border)),
-            Span::styled(header_text, Style::default().fg(theme.colors.palette.accent).add_modifier(Modifier::BOLD)),
-            Span::styled("─".repeat(remaining_width), Style::default().fg(theme.colors.palette.border)),
-            Span::styled("┐", Style::default().fg(theme.colors.palette.border)),
-        ]));
-        
-        // Sender name line (larger, bold)
-        if !sender_name.is_empty() {
-            let content_width = box_width.saturating_sub(4); // 4 for "│ " and " │"
-            let truncated_name = if sender_name.len() > content_width {
-                format!("{}...", &sender_name[..content_width.saturating_sub(3)])
-            } else {
-                sender_name.clone()
-            };
-            let padding = content_width.saturating_sub(truncated_name.len());
-            
-            lines.push(Line::from(vec![
-                Span::styled("│ ", Style::default().fg(theme.colors.palette.border)),
-                Span::styled(truncated_name, Style::default()
-                    .fg(theme.colors.palette.accent)
-                    .add_modifier(Modifier::BOLD)),
-                Span::styled(" ".repeat(padding), Style::default()),
-                Span::styled(" │", Style::default().fg(theme.colors.palette.border)),
-            ]));
-        }
-        
-        // Sender email line (smaller, muted)
-        if !sender_email.is_empty() {
-            let email_display = format!("<{}>", sender_email);
-            let content_width = box_width.saturating_sub(4); // 4 for "│ " and " │"
-            let truncated_email = if email_display.len() > content_width {
-                format!("{}...", &email_display[..content_width.saturating_sub(3)])
-            } else {
-                email_display
-            };
-            let padding = content_width.saturating_sub(truncated_email.len());
-            
-            lines.push(Line::from(vec![
-                Span::styled("│ ", Style::default().fg(theme.colors.palette.border)),
-                Span::styled(truncated_email, Style::default()
-                    .fg(theme.colors.palette.text_muted)),
-                Span::styled(" ".repeat(padding), Style::default()),
-                Span::styled(" │", Style::default().fg(theme.colors.palette.border)),
-            ]));
-        }
-        
-        // Date line in sender box  
-        if !headers.date.is_empty() {
-            let formatted_date = self.format_friendly_date(&headers.date);
-            let date_display = format!("📅 {}", formatted_date);
-            let content_width = box_width.saturating_sub(4); // 4 for "│ " and " │"
-            let truncated_date = if date_display.len() > content_width {
-                format!("{}...", &date_display[..content_width.saturating_sub(3)])
-            } else {
-                date_display.clone()
-            };
-            let padding = content_width.saturating_sub(truncated_date.len());
-            
-            lines.push(Line::from(vec![
-                Span::styled("│ ", Style::default().fg(theme.colors.palette.border)),
-                Span::styled("📅 ", Style::default().fg(theme.colors.palette.info)),
-                Span::styled(formatted_date.clone(), Style::default().fg(theme.colors.content_preview.body)),
-                Span::styled(" ".repeat(padding.saturating_sub(2)), Style::default()), // -2 for emoji
-                Span::styled(" │", Style::default().fg(theme.colors.palette.border)),
-            ]));
-        }
-        
-        // Bottom border of sender box
-        lines.push(Line::from(vec![
-            Span::styled("└", Style::default().fg(theme.colors.palette.border)),
-            Span::styled("─".repeat(box_width.saturating_sub(2)), Style::default().fg(theme.colors.palette.border)),
-            Span::styled("┘", Style::default().fg(theme.colors.palette.border)),
-        ]));
-        
-        // Subject line (outside box, prominent)
-        if !headers.subject.is_empty() {
-            lines.push(Line::from("")); // Spacing
-            lines.push(Line::from(vec![
-                Span::styled("📧 ", Style::default().fg(theme.colors.palette.accent)),
-                Span::styled(headers.subject.clone(), Style::default()
-                    .fg(theme.colors.palette.accent)
-                    .add_modifier(Modifier::BOLD | Modifier::UNDERLINED)),
-            ]));
-        }
-        
-        // Add "To" info if there are multiple recipients (collapsed by default)
-        if headers.to.len() > 1 || (!headers.cc.is_empty() && self.show_headers_expanded) {
-            lines.push(Line::from("")); // Spacing
-            lines.push(Line::from(vec![
-                Span::styled("👥 To: ", Style::default()
-                    .fg(theme.colors.palette.text_muted)
-                    .add_modifier(Modifier::ITALIC)),
-                Span::styled(
-                    if headers.to.len() > 1 {
-                        format!("{} and {} others", headers.to.first().unwrap_or(&String::new()), headers.to.len() - 1)
-                    } else {
-                        headers.to.join(", ")
-                    },
-                    Style::default().fg(theme.colors.content_preview.body)
-                ),
-            ]));
-        }
-        
-        // Show instruction for expanding headers
-        if !self.show_headers_expanded {
-            lines.push(Line::from("")); // Spacing
-            lines.push(Line::from(vec![
-                Span::styled("Press 'H' to show all headers", Style::default()
-                    .fg(theme.colors.palette.text_muted)
-                    .add_modifier(Modifier::ITALIC)),
-            ]));
-        }
-        
-        lines
-    }
-    
-    /// Parse sender information from "Name <email>" format
-    fn parse_sender_info(&self, from_str: &str) -> (String, String) {
-        if from_str.contains('<') && from_str.contains('>') {
-            // Format: "Display Name <email@domain.com>"
-            if let Some(email_start) = from_str.find('<') {
-                if let Some(email_end) = from_str.find('>') {
-                    let name = from_str[..email_start].trim().trim_matches('"').to_string();
-                    let email = from_str[email_start + 1..email_end].trim().to_string();
-                    return (name, email);
-                }
-            }
-        }
-        
-        // If no angle brackets, assume it's just an email
-        if from_str.contains('@') {
-            (String::new(), from_str.to_string())
-        } else {
-            // If no @ symbol, assume it's just a name
-            (from_str.to_string(), String::new())
-        }
-    }
-    
-    /// Format date in a more user-friendly way
-    fn format_friendly_date(&self, date_str: &str) -> String {
-        // For now, just return the date string as-is
-        // In a full implementation, we'd parse and format it nicely
-        // e.g., "Today 2:30 PM", "Yesterday 4:15 PM", "March 15, 2024"
-        date_str.to_string()
-    }
     
     fn render_email_headers(&self, headers: &EmailHeader, theme: &Theme) -> Vec<Line> {
         let mut lines = Vec::new();
@@ -1620,34 +1461,33 @@ This is a sample email showcasing the modern email display format.".to_string();
         };
         
         // Prefer HTML body if available and has content, otherwise use text body
+        // NOTE: Content should already be cleaned by the database layer, so we use it directly
         let (body, content_type) = if let Some(ref html_body) = message.body_html {
             if !html_body.trim().is_empty() {
                 // Always treat HTML as HTML regardless of detection - the renderer will handle it
-                tracing::debug!("Content Preview: Using HTML body (length: {})", html_body.len());
+                tracing::debug!("Content Preview: Using pre-cleaned HTML body (length: {})", html_body.len());
                 (html_body.clone(), ContentType::Html)
             } else if let Some(ref text_body) = message.body_text {
-                // Clean the text body from raw email headers and check if it contains HTML content
-                let cleaned_body = self.clean_raw_email_content(text_body);
-                if crate::html::is_html_content(&cleaned_body) {
-                    tracing::debug!("Content Preview: HTML body empty, but text body contains HTML (length: {} -> {})", text_body.len(), cleaned_body.len());
-                    (cleaned_body, ContentType::Html)
+                // Use pre-cleaned text body and check if it contains HTML content
+                if crate::html::is_html_content(text_body) {
+                    tracing::debug!("Content Preview: HTML body empty, but text body contains HTML (length: {})", text_body.len());
+                    (text_body.clone(), ContentType::Html)
                 } else {
-                    tracing::debug!("Content Preview: HTML body empty, using plain text body (cleaned: {})", cleaned_body.len());
-                    (cleaned_body, ContentType::PlainText)
+                    tracing::debug!("Content Preview: HTML body empty, using plain text body (length: {})", text_body.len());
+                    (text_body.clone(), ContentType::PlainText)
                 }
             } else {
                 tracing::debug!("Content Preview: Only empty HTML body available");
                 ("No content available".to_string(), ContentType::PlainText)
             }
         } else if let Some(ref text_body) = message.body_text {
-            // Clean the text body from raw email headers and check if it contains HTML content
-            let cleaned_body = self.clean_raw_email_content(text_body);
-            if crate::html::is_html_content(&cleaned_body) {
-                tracing::debug!("Content Preview: No HTML body, but cleaned text body contains HTML (length: {} -> {})", text_body.len(), cleaned_body.len());
-                (cleaned_body, ContentType::Html)
+            // Use pre-cleaned text body and check if it contains HTML content  
+            if crate::html::is_html_content(text_body) {
+                tracing::debug!("Content Preview: No HTML body, but text body contains HTML (length: {})", text_body.len());
+                (text_body.clone(), ContentType::Html)
             } else {
-                tracing::debug!("Content Preview: Using cleaned plain text body (length: {} -> {})", text_body.len(), cleaned_body.len());
-                (cleaned_body, ContentType::PlainText)
+                tracing::debug!("Content Preview: Using plain text body (length: {})", text_body.len());
+                (text_body.clone(), ContentType::PlainText)
             }
         } else {
             tracing::debug!("Content Preview: No content available");
@@ -1696,130 +1536,7 @@ This is a sample email showcasing the modern email display format.".to_string();
         self.email_content.is_some() || !self.raw_content.is_empty()
     }
     
-    /// Process image placeholders in rendered HTML lines
-    fn process_image_placeholders(&self, lines: Vec<Line<'static>>) -> Vec<Line<'static>> {
-        let mut processed_lines = Vec::new();
-        
-        for line in lines {
-            // Check if this line contains an image placeholder
-            if line.spans.len() == 1 {
-                let span_text = &line.spans[0].content;
-                if span_text.starts_with("IMG_PLACEHOLDER:") {
-                    // Parse the placeholder: IMG_PLACEHOLDER:src:alt
-                    let parts: Vec<&str> = span_text.splitn(3, ':').collect();
-                    if parts.len() >= 3 {
-                        let src = parts[1];
-                        let alt = parts[2];
-                        
-                        // Try to get rendered image content
-                        if let Some(rendered) = self.processed_images.get(src) {
-                            // Split rendered content into lines and add them
-                            for img_line in rendered.lines() {
-                                processed_lines.push(Line::raw(img_line.to_string()));
-                            }
-                        } else {
-                            // Use fallback placeholder
-                            let placeholder = self.image_manager.generate_placeholder(
-                                Some(alt), 
-                                Some(60), 
-                                Some(8)
-                            );
-                            for placeholder_line in placeholder.lines() {
-                                processed_lines.push(Line::styled(
-                                    placeholder_line.to_string(),
-                                    Style::default().fg(Color::Cyan)
-                                ));
-                            }
-                        }
-                    } else {
-                        // Malformed placeholder, keep as is
-                        processed_lines.push(line);
-                    }
-                } else {
-                    // Regular line, keep as is
-                    processed_lines.push(line);
-                }
-            } else {
-                // Multi-span line, keep as is
-                processed_lines.push(line);
-            }
-        }
-        
-        processed_lines
-    }
     
-    /// Enhanced image placeholder processing with dynamic sizing
-    fn process_image_placeholders_enhanced(&self, lines: Vec<Line<'static>>, terminal_width: u16) -> Vec<Line<'static>> {
-        let mut processed_lines = Vec::new();
-        
-        for line in lines {
-            // Check if this line contains an image placeholder
-            if line.spans.len() == 1 {
-                let span_text = &line.spans[0].content;
-                if span_text.starts_with("IMG_PLACEHOLDER:") {
-                    // Parse the placeholder: IMG_PLACEHOLDER:src:alt
-                    let parts: Vec<&str> = span_text.splitn(3, ':').collect();
-                    if parts.len() >= 3 {
-                        let src = parts[1];
-                        let alt = parts[2];
-                        
-                        // Try to get rendered image content
-                        if let Some(rendered) = self.processed_images.get(src) {
-                            // Split rendered content into lines and add them
-                            for img_line in rendered.lines() {
-                                processed_lines.push(Line::raw(img_line.to_string()));
-                            }
-                        } else {
-                            // Create enhanced placeholder based on terminal width
-                            let image_width = ((terminal_width as usize).saturating_sub(4)).min(60);
-                            let image_height = (image_width / 8).max(3).min(12); // Reasonable aspect ratio
-                            
-                            let placeholder = self.image_manager.generate_placeholder(
-                                Some(alt), 
-                                Some(image_width as u32), 
-                                Some(image_height as u32)
-                            );
-                            
-                            // Add enhanced styling for image placeholders
-                            for (i, placeholder_line) in placeholder.lines().enumerate() {
-                                let style = if i == 0 || i == placeholder.lines().count().saturating_sub(1) {
-                                    // Border lines
-                                    Style::default().fg(Color::Blue)
-                                } else {
-                                    // Content lines
-                                    Style::default().fg(Color::Cyan)
-                                };
-                                
-                                processed_lines.push(Line::styled(
-                                    placeholder_line.to_string(),
-                                    style
-                                ));
-                            }
-                            
-                            // Add a note about image loading if we support images
-                            if self.image_manager.supports_images() {
-                                processed_lines.push(Line::styled(
-                                    format!("🖼️  Loading image: {}", src),
-                                    Style::default().fg(Color::Yellow).add_modifier(Modifier::ITALIC)
-                                ));
-                            }
-                        }
-                    } else {
-                        // Malformed placeholder, keep as is
-                        processed_lines.push(line);
-                    }
-                } else {
-                    // Regular line, keep as is
-                    processed_lines.push(line);
-                }
-            } else {
-                // Multi-span line, keep as is
-                processed_lines.push(line);
-            }
-        }
-        
-        processed_lines
-    }
     
     /// Asynchronously load images from HTML content
     pub async fn load_images_from_html(&mut self, html_content: &str) {
@@ -2258,114 +1975,6 @@ This is a sample email showcasing the modern email display format.".to_string();
         self.clipboard_manager.is_available()
     }
     
-    /// Clean raw email content by removing technical headers and metadata
-    fn clean_raw_email_content(&self, raw_content: &str) -> String {
-        tracing::debug!("Cleaning raw email content of length: {}", raw_content.len());
-        
-        // First, try to find HTML content directly
-        if let Some(html_start) = raw_content.find("<!DOCTYPE") {
-            tracing::debug!("Found HTML content starting with DOCTYPE");
-            return raw_content[html_start..].to_string();
-        } else if let Some(html_start) = raw_content.find("<html") {
-            tracing::debug!("Found HTML content starting with <html");
-            return raw_content[html_start..].to_string();
-        } else if let Some(body_start) = raw_content.find("<body") {
-            tracing::debug!("Found HTML content starting with <body");
-            return raw_content[body_start..].to_string();
-        }
-        
-        let lines: Vec<&str> = raw_content.lines().collect();
-        let mut content_lines = Vec::new();
-        let mut in_headers = true;
-        let mut blank_line_count = 0;
-        
-        // Comprehensive list of email headers to skip - covers all common headers
-        let email_headers = [
-            // Standard RFC headers
-            "from:", "to:", "cc:", "bcc:", "subject:", "date:", "reply-to:",
-            "message-id:", "in-reply-to:", "references:", "mime-version:",
-            // Content headers
-            "content-type:", "content-transfer-encoding:", "content-disposition:",
-            "content-id:", "content-description:", "content-language:",
-            // Authentication and routing headers
-            "received:", "return-path:", "delivered-to:", "envelope-to:",
-            "authentication-results:", "received-spf:", "dkim-signature:",
-            "arc-seal:", "arc-message-signature:", "arc-authentication-results:",
-            // Service-specific headers (Gmail, Outlook, etc.)
-            "x-received:", "x-google-smtp-source:", "x-gm-message-state:",
-            "x-google-dkim-signature:", "x-gm-thd-id:", "x-gmail-labels:",
-            "x-ms-exchange-", "x-originating-ip:", "x-microsoft-antispam:",
-            // Spam and security headers
-            "x-spam-checker-version:", "x-spam-level:", "x-spam-status:",
-            "x-spam-check-by:", "x-virus-scanned:", "x-barracuda-",
-            // Mailing list headers
-            "list-id:", "list-unsubscribe:", "list-archive:", "list-post:",
-            "list-help:", "list-subscribe:", "precedence:",
-            // Other common headers
-            "x-priority:", "importance:", "x-mailer:", "user-agent:",
-            "thread-topic:", "thread-index:", "x-original-to:",
-        ];
-        
-        for (i, line) in lines.iter().enumerate() {
-            let line_lower = line.to_lowercase();
-            let line_trimmed = line.trim();
-            
-            // Count consecutive blank lines
-            if line_trimmed.is_empty() {
-                blank_line_count += 1;
-                // After 2+ consecutive blank lines, we're likely past headers
-                if blank_line_count >= 2 && in_headers {
-                    in_headers = false;
-                    tracing::debug!("Found content after {} blank lines at line {}", blank_line_count, i);
-                }
-                continue;
-            } else {
-                blank_line_count = 0;
-            }
-            
-            // Skip lines that are clearly email headers
-            if in_headers {
-                let is_header_line = email_headers.iter().any(|&header| {
-                    line_lower.starts_with(header) || 
-                    // Handle continuation lines (starting with whitespace)
-                    (line.starts_with(' ') || line.starts_with('\t'))
-                });
-                
-                // Also skip lines that look like headers (contain : and are at start of line)
-                let looks_like_header = line.contains(':') && 
-                    !line.starts_with(' ') && 
-                    !line.starts_with('\t') &&
-                    // But don't skip things that look like actual content
-                    !line_lower.contains("http") &&
-                    !line_lower.contains("www.") &&
-                    line.len() < 200; // Headers are usually shorter
-                
-                if is_header_line || looks_like_header {
-                    tracing::debug!("Skipping header line {}: {}", i, &line[..std::cmp::min(50, line.len())]);
-                    continue;
-                }
-                
-                // If we find a line that doesn't look like a header, we're in content
-                tracing::debug!("Found first content line at {}: {}", i, &line[..std::cmp::min(50, line.len())]);
-                in_headers = false;
-            }
-            
-            // Add content lines
-            content_lines.push(*line);
-        }
-        
-        let cleaned = content_lines.join("\n").trim().to_string();
-        
-        tracing::debug!("Cleaned content length: {} (original: {})", cleaned.len(), raw_content.len());
-        
-        // If we still don't have meaningful content, return a fallback
-        if cleaned.trim().is_empty() {
-            tracing::warn!("No content found after cleaning, using fallback");
-            return "Email content could not be displayed properly.".to_string();
-        }
-        
-        cleaned
-    }
 }
 
 impl Default for ContentPreview {

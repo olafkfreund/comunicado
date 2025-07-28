@@ -1,8 +1,6 @@
 use chrono::{NaiveTime, Timelike};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
-    style::{Color, Style},
-    text::{Line, Span},
     widgets::{Block, Borders, Clear, Paragraph},
     Frame,
 };

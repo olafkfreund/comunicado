@@ -1,11 +1,11 @@
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use std::collections::HashMap;
 use tokio::sync::RwLock;
 
 use crate::calendar::invitation::{InvitationProcessor, MeetingInvitation, RSVPResponse, InvitationResult, InvitationError};
 use crate::calendar::database::CalendarDatabase; 
-use crate::calendar::event::{Event, AttendeeStatus};
-use crate::calendar::{CalendarError, CalendarResult};
+use crate::calendar::event::AttendeeStatus;
+use crate::calendar::CalendarError;
 use crate::email::StoredMessage;
 
 /// Meeting invitation manager for processing invitations and handling RSVP responses
@@ -207,60 +207,6 @@ impl InvitationManager {
         Ok(())
     }
     
-    /// Create iCalendar REPLY for RSVP response
-    fn create_ical_reply(
-        &self,
-        invitation: &MeetingInvitation,
-        response: RSVPResponse,
-        user_email: &str
-    ) -> InvitationResult<String> {
-        let partstat = match response {
-            RSVPResponse::Accept => "ACCEPTED",
-            RSVPResponse::Decline => "DECLINED",
-            RSVPResponse::Tentative => "TENTATIVE", 
-            RSVPResponse::NeedsAction => "NEEDS-ACTION",
-        };
-        
-        // Find user's name from original invitation
-        let user_name = invitation.attendees.iter()
-            .find(|a| a.email.eq_ignore_ascii_case(user_email))
-            .and_then(|a| a.name.as_ref())
-            .cloned()
-            .unwrap_or_else(|| user_email.to_string());
-        
-        let ical = format!(
-            "BEGIN:VCALENDAR\r\n\
-             VERSION:2.0\r\n\
-             PRODID:-//Comunicado//Calendar//EN\r\n\
-             METHOD:REPLY\r\n\
-             BEGIN:VEVENT\r\n\
-             UID:{}\r\n\
-             DTSTART:{}\r\n\
-             DTEND:{}\r\n\
-             SUMMARY:{}\r\n\
-             ORGANIZER;CN={}:mailto:{}\r\n\
-             ATTENDEE;CN={};PARTSTAT={}:mailto:{}\r\n\
-             SEQUENCE:{}\r\n\
-             DTSTAMP:{}\r\n\
-             END:VEVENT\r\n\
-             END:VCALENDAR\r\n",
-            invitation.uid,
-            invitation.start_time.format("%Y%m%dT%H%M%SZ"),
-            invitation.end_time.format("%Y%m%dT%H%M%SZ"),
-            invitation.title,
-            invitation.organizer.as_ref()
-                .and_then(|o| o.name.as_ref())
-                .unwrap_or(&invitation.organizer.as_ref().unwrap().email),
-            invitation.organizer.as_ref().unwrap().email,
-            user_name,
-            partstat,
-            user_email,
-            invitation.sequence,
-            Utc::now().format("%Y%m%dT%H%M%SZ")
-        );
-        
-        Ok(ical)
-    }
     
     /// Check for invitation updates in emails
     pub async fn check_for_updates(&self, messages: &[StoredMessage]) -> InvitationResult<Vec<String>> {

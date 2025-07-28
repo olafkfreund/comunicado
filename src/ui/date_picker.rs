@@ -1,8 +1,6 @@
 use chrono::{Datelike, NaiveDate, Weekday};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
-    style::{Color, Style},
-    text::{Line, Span},
     widgets::{Block, Borders, Clear, Paragraph, Table, Row, Cell},
     Frame,
 };

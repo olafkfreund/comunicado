@@ -1,10 +1,8 @@
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect, Margin},
     style::{Color, Modifier, Style},
-    symbols,
     text::{Line, Span, Text},
     widgets::{
-        block::{Position, Title},
         Block, Borders, Clear, List, ListItem, ListState, 
         Paragraph, Tabs, Wrap,
     },
@@ -1466,39 +1464,6 @@ impl CalendarUI {
         self.events.iter().find(|e| e.id == event_id)
     }
     
-    /// Get currently selected event
-    fn get_selected_event(&self) -> Option<&Event> {
-        if let Some(selected) = self.event_list_state.selected() {
-            match self.current_view {
-                CalendarViewMode::Month | CalendarViewMode::Week | CalendarViewMode::Day => {
-                    let selected_events: Vec<&Event> = self.events
-                        .iter()
-                        .filter(|event| {
-                            self.enabled_calendars.contains(&event.calendar_id) &&
-                            event.start_time.date_naive() == self.selected_date
-                        })
-                        .collect();
-                    selected_events.get(selected).copied()
-                }
-                CalendarViewMode::Agenda => {
-                    let now = Utc::now();
-                    let thirty_days_from_now = now + Duration::days(30);
-                    
-                    let upcoming_events: Vec<&Event> = self.events
-                        .iter()
-                        .filter(|event| {
-                            self.enabled_calendars.contains(&event.calendar_id) &&
-                            event.start_time >= now &&
-                            event.start_time <= thirty_days_from_now
-                        })
-                        .collect();
-                    upcoming_events.get(selected).copied()
-                }
-            }
-        } else {
-            None
-        }
-    }
     
     /// Show event details overlay
     fn show_event_details(&mut self, event: Event) {

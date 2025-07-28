@@ -1,17 +1,13 @@
-use chrono::{DateTime, Duration, Local, NaiveDate, NaiveTime, Utc, Timelike, Datelike, TimeZone};
+use chrono::{DateTime, Duration, Local, NaiveDate, NaiveTime, Utc, Timelike, TimeZone};
 use ratatui::{
-    layout::{Constraint, Direction, Layout, Rect},
-    style::{Color, Style},
-    text::{Line, Span, Text},
-    widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Wrap},
+    layout::Rect,
+    widgets::ListState,
     Frame,
 };
-use std::collections::HashMap;
 
-use crate::calendar::event::{Event, EventStatus, EventAttendee, AttendeeStatus, EventRecurrence, RecurrenceFrequency};
+use crate::calendar::event::{Event, EventStatus, EventAttendee, AttendeeStatus, EventRecurrence};
 use crate::calendar::{Calendar, CalendarError, CalendarResult};
 use crate::calendar::database::CalendarDatabase;
-use crate::theme::Theme;
 use crate::ui::date_picker::DatePicker;
 use crate::ui::time_picker::TimePicker;
 
@@ -903,10 +899,9 @@ impl EventFormUI {
     /// Render the event form
     pub fn render(&mut self, frame: &mut Frame, area: Rect, theme: &crate::theme::Theme) {
         use ratatui::{
-            layout::{Constraint, Direction, Layout, Margin},
+            layout::{Constraint, Direction, Layout},
             style::{Modifier, Style},
-            text::{Line, Span},
-            widgets::{Block, Borders, Clear, Paragraph, Wrap},
+            widgets::{Block, Borders, Paragraph, Wrap},
         };
         
         // Create main layout
@@ -958,12 +953,7 @@ impl EventFormUI {
     
     /// Render the main form content
     fn render_form_content(&self, frame: &mut Frame, area: Rect, theme: &crate::theme::Theme) {
-        use ratatui::{
-            layout::{Constraint, Direction, Layout},
-            style::{Modifier, Style},
-            text::{Line, Span},
-            widgets::{Block, Borders, Paragraph, Wrap},
-        };
+        use ratatui::layout::{Constraint, Direction, Layout};
         
         // Create two-column layout
         let columns = Layout::default()
@@ -1014,7 +1004,6 @@ impl EventFormUI {
         use ratatui::{
             layout::{Constraint, Direction, Layout},
             style::{Modifier, Style},
-            text::{Line, Span},
             widgets::{Block, Borders, Paragraph},
         };
         
@@ -1060,9 +1049,8 @@ impl EventFormUI {
     /// Render date picker popup
     fn render_date_picker_popup(&self, frame: &mut Frame, area: Rect, theme: &crate::theme::Theme) {
         use ratatui::{
-            layout::{Alignment, Constraint, Direction, Layout, Margin},
-            style::{Modifier, Style},
-            text::{Line, Span},
+            layout::{Alignment, Constraint, Direction, Layout},
+            style::Style,
             widgets::{Block, Borders, Clear, Paragraph},
         };
         
@@ -1114,8 +1102,7 @@ impl EventFormUI {
     fn render_time_picker_popup(&self, frame: &mut Frame, area: Rect, theme: &crate::theme::Theme) {
         use ratatui::{
             layout::{Alignment, Constraint, Direction, Layout},
-            style::{Modifier, Style},
-            text::{Line, Span},
+            style::Style,
             widgets::{Block, Borders, Clear, Paragraph},
         };
         

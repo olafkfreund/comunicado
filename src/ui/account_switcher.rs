@@ -332,10 +332,6 @@ impl AccountSwitcher {
         ListItem::new(Line::from(spans))
     }
     
-    /// Create a list item for an account in expanded view (instance version)
-    fn create_account_list_item(&self, account: &AccountItem, is_selected: bool, theme: &Theme) -> ListItem {
-        Self::create_account_list_item_static(account, is_selected, theme)
-    }
     
     /// Create a list item for the current account in collapsed view (static version)
     fn create_current_account_item_static(account: &AccountItem, accounts: &[AccountItem], theme: &Theme) -> ListItem<'static> {
@@ -366,10 +362,6 @@ impl AccountSwitcher {
         ListItem::new(Line::from(spans))
     }
     
-    /// Create a list item for the current account in collapsed view (instance version)
-    fn create_current_account_item(&self, account: &AccountItem, theme: &Theme) -> ListItem {
-        Self::create_current_account_item_static(account, &self.accounts, theme)
-    }
 }
 
 impl Default for AccountSwitcher {

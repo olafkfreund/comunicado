@@ -5,9 +5,9 @@ use std::collections::HashMap;
 
 use crate::calendar::{
     CalendarError, CalendarResult, Calendar, CalendarSource, CalendarStats,
-    CalDAVClient, CalDAVConfig, CalDAVResult,
+    CalDAVClient, CalDAVConfig,
 };
-use crate::calendar::database::{CalendarDatabase, CalendarDatabaseResult};
+use crate::calendar::database::CalendarDatabase;
 use crate::calendar::event::{Event, EventStatus, EventAttendee, AttendeeStatus};
 use crate::oauth2::token::TokenManager;
 

@@ -1,14 +1,13 @@
-use chrono::{DateTime, Utc};
 use ratatui::{
-    layout::{Alignment, Constraint, Direction, Layout, Margin, Rect},
+    layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
-    text::{Line, Span, Text},
+    text::{Line, Span},
     widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Wrap},
     Frame,
 };
 
-use crate::calendar::invitation::{MeetingInvitation, InvitationMethod, RSVPResponse};
-use crate::calendar::event::{AttendeeStatus, EventStatus};
+use crate::calendar::invitation::{MeetingInvitation, InvitationMethod};
+use crate::calendar::event::AttendeeStatus;
 use crate::theme::Theme;
 
 /// Meeting invitation viewer actions

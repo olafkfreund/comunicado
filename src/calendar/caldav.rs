@@ -1,6 +1,5 @@
-use reqwest::{Client, Method, Request, Response};
+use reqwest::{Client, Method, Response};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use thiserror::Error;
 use url::Url;
 use chrono::{DateTime, Utc};

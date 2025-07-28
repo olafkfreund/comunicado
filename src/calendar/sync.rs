@@ -2,7 +2,6 @@ use std::sync::Arc;
 use std::collections::HashMap;
 use chrono::{DateTime, Utc, Duration};
 use tokio::sync::RwLock;
-use tokio::time::{interval, Duration as TokioDuration};
 use tracing::{info, warn, error};
 
 use crate::calendar::{
@@ -160,58 +159,7 @@ impl CalendarSyncEngine {
         info!("Stopped calendar sync engine");
     }
     
-    /// Main synchronization loop
-    async fn run_sync_loop(&self) {
-        let mut sync_interval = interval(TokioDuration::from_secs(60)); // Check every minute
-        
-        while *self.is_running.read().await {
-            sync_interval.tick().await;
-            
-            // Check which calendars need syncing
-            let configs = self.sync_configs.read().await.clone();
-            
-            for (calendar_id, config) in configs {
-                if !config.enabled {
-                    continue;
-                }
-                
-                // Check if sync is due
-                if self.is_sync_due(&config).await {
-                    // Spawn sync task for this calendar
-                    let engine_clone = self.clone();
-                    let config_clone = config.clone();
-                    
-                    tokio::spawn(async move {
-                        if let Err(e) = engine_clone.sync_calendar(config_clone).await {
-                            error!("Failed to sync calendar {}: {}", calendar_id, e);
-                        }
-                    });
-                }
-            }
-        }
-    }
     
-    /// Check if a calendar sync is due
-    async fn is_sync_due(&self, config: &CalendarSyncConfig) -> bool {
-        let now = Utc::now();
-        
-        // Check if currently syncing
-        let status_map = self.sync_status.read().await;
-        if let Some(status) = status_map.get(&config.calendar_id) {
-            if status.status == SyncState::Syncing {
-                return false;
-            }
-        }
-        
-        // Check last sync time
-        match config.last_sync {
-            Some(last_sync) => {
-                let sync_interval = Duration::minutes(config.sync_interval_minutes as i64);
-                now - last_sync >= sync_interval
-            }
-            None => true, // Never synced before
-        }
-    }
     
     /// Synchronize a specific calendar
     pub async fn sync_calendar(&self, config: CalendarSyncConfig) -> CalendarResult<()> {

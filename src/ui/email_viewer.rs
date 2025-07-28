@@ -1,7 +1,7 @@
 use chrono::{DateTime, Local};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Clear, Paragraph, Wrap},
     Frame,
@@ -658,9 +658,6 @@ impl EmailViewer {
         lines
     }
 
-    fn parse_sender_info(&self, from: &str) -> (String, String) {
-        Self::parse_sender_info_static(from)
-    }
 
     fn parse_sender_info_static(from: &str) -> (String, String) {
         // Simple parsing of "Name <email>" format
@@ -676,9 +673,6 @@ impl EmailViewer {
         ("".to_string(), from.to_string())
     }
 
-    fn format_date(&self, date_str: &str) -> String {
-        Self::format_date_static(date_str)
-    }
 
     fn format_date_static(date_str: &str) -> String {
         // Try to parse and format the date

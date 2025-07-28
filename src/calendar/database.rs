@@ -2,8 +2,7 @@ use sqlx::{SqlitePool, Row, sqlite::SqlitePoolOptions};
 use sqlx::migrate::MigrateDatabase;
 use chrono::{DateTime, Utc};
 use serde::{Serialize, Deserialize};
-use uuid::Uuid;
-use crate::calendar::{CalendarError, CalendarResult, Calendar, CalendarSource};
+use crate::calendar::{Calendar, CalendarSource};
 use crate::calendar::event::{Event, EventStatus, EventPriority, EventAttendee, AttendeeStatus, AttendeeRole, EventRecurrence, EventReminder};
 use thiserror::Error;
 

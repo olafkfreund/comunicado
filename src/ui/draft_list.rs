@@ -9,7 +9,7 @@ use ratatui::{
     },
     Frame,
 };
-use chrono::{DateTime, Local};
+use chrono::Local;
 
 /// Draft list UI component for browsing and managing saved drafts
 pub struct DraftListUI {
@@ -358,10 +358,6 @@ impl DraftListUI {
         ListItem::new(line_text).style(style)
     }
     
-    /// Create a list item for a draft (non-static version for convenience)
-    fn create_draft_list_item<'a>(&self, draft: &'a StoredDraft, is_selected: bool, theme: &'a Theme) -> ListItem<'a> {
-        Self::create_draft_list_item_static(draft, is_selected, theme)
-    }
     
     /// Render draft details in side panel
     fn render_draft_details(&self, f: &mut Frame, area: Rect, theme: &Theme) {

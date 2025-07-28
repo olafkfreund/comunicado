@@ -8,7 +8,7 @@ use ratatui::{
     Frame,
 };
 use crate::theme::Theme;
-use crate::email::{AttachmentType, AttachmentInfo, StoredAttachment};
+use crate::email::{AttachmentType, AttachmentInfo};
 use crate::images::ImageManager;
 
 /// Viewer modes for different attachment types

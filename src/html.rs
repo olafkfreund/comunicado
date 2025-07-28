@@ -470,10 +470,6 @@ impl HtmlRenderer {
             .join("\n")
     }
     
-    /// Get the current style (combination of all stacked styles)
-    fn current_style(&self) -> Style {
-        self.style_stack.last().copied().unwrap_or_default()
-    }
 }
 
 /// Check if content appears to be HTML

@@ -9,11 +9,6 @@ use tokio_rustls::{TlsConnector, client::TlsStream};
 use rustls::{ClientConfig, RootCertStore};
 use base64::prelude::*;
 
-/// Connection stream that can be either plain TCP or TLS
-enum ConnectionStream {
-    Plain(AsyncTcpStream),
-    Tls(TlsStream<AsyncTcpStream>),
-}
 
 /// Split connection stream for reading/writing
 enum SplitStream {

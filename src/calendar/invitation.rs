@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use thiserror::Error;
 
 use crate::calendar::event::{Event, EventAttendee, AttendeeStatus, AttendeeRole, EventStatus};
-use crate::calendar::{CalendarError, CalendarResult};
+use crate::calendar::CalendarError;
 use crate::email::{StoredMessage, StoredAttachment};
 
 /// Meeting invitation processing errors
@@ -218,7 +218,7 @@ impl InvitationProcessor {
     
     /// Parse iCalendar data into a meeting invitation
     fn parse_icalendar(&self, ical_data: &str, email_message_id: Option<String>) -> InvitationResult<MeetingInvitation> {
-        let mut lines = ical_data.lines().map(|line| line.trim()).collect::<Vec<_>>();
+        let lines = ical_data.lines().map(|line| line.trim()).collect::<Vec<_>>();
         let mut properties = HashMap::new();
         let mut attendees = Vec::new();
         let mut organizer = None;

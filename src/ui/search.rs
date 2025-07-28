@@ -1,12 +1,10 @@
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
-    text::{Line, Span, Text},
-    widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Wrap},
+    text::{Line, Span},
+    widgets::{Block, Borders, Clear, List, ListItem, Paragraph},
     Frame,
 };
-use chrono::{DateTime, Utc};
-use std::collections::HashMap;
 
 use crate::email::{StoredMessage, EmailDatabase};
 use crate::theme::Theme;
