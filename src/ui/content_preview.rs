@@ -530,6 +530,33 @@ This is a sample email showcasing the modern email display format.".to_string();
             ]));
         }
         
+        // Show To field if available
+        if !headers.to.is_empty() {
+            let to_display = if headers.to.len() > 1 {
+                format!("{} and {} others", headers.to[0], headers.to.len() - 1)
+            } else {
+                headers.to[0].clone()
+            };
+            lines.push(Line::from(vec![
+                Span::styled("To: ", Style::default()
+                    .fg(theme.colors.content_preview.header)
+                    .add_modifier(Modifier::BOLD)),
+                Span::styled(to_display, Style::default()
+                    .fg(theme.colors.content_preview.body)),
+            ]));
+        }
+        
+        // Show Date field
+        if !headers.date.is_empty() {
+            lines.push(Line::from(vec![
+                Span::styled("Date: ", Style::default()
+                    .fg(theme.colors.content_preview.header)
+                    .add_modifier(Modifier::BOLD)),
+                Span::styled(headers.date.clone(), Style::default()
+                    .fg(theme.colors.content_preview.body)),
+            ]));
+        }
+        
         // Show Subject field (simplified, clean format) 
         if !headers.subject.is_empty() {
             lines.push(Line::from(vec![
@@ -1599,15 +1626,29 @@ This is a sample email showcasing the modern email display format.".to_string();
                 tracing::debug!("Content Preview: Using HTML body (length: {})", html_body.len());
                 (html_body.clone(), ContentType::Html)
             } else if let Some(ref text_body) = message.body_text {
-                tracing::debug!("Content Preview: HTML body empty, using text body");
-                (text_body.clone(), ContentType::PlainText)
+                // Clean the text body from raw email headers and check if it contains HTML content
+                let cleaned_body = self.clean_raw_email_content(text_body);
+                if crate::html::is_html_content(&cleaned_body) {
+                    tracing::debug!("Content Preview: HTML body empty, but text body contains HTML (length: {} -> {})", text_body.len(), cleaned_body.len());
+                    (cleaned_body, ContentType::Html)
+                } else {
+                    tracing::debug!("Content Preview: HTML body empty, using plain text body (cleaned: {})", cleaned_body.len());
+                    (cleaned_body, ContentType::PlainText)
+                }
             } else {
                 tracing::debug!("Content Preview: Only empty HTML body available");
                 ("No content available".to_string(), ContentType::PlainText)
             }
         } else if let Some(ref text_body) = message.body_text {
-            tracing::debug!("Content Preview: Using text body (length: {})", text_body.len());
-            (text_body.clone(), ContentType::PlainText)
+            // Clean the text body from raw email headers and check if it contains HTML content
+            let cleaned_body = self.clean_raw_email_content(text_body);
+            if crate::html::is_html_content(&cleaned_body) {
+                tracing::debug!("Content Preview: No HTML body, but cleaned text body contains HTML (length: {} -> {})", text_body.len(), cleaned_body.len());
+                (cleaned_body, ContentType::Html)
+            } else {
+                tracing::debug!("Content Preview: Using cleaned plain text body (length: {} -> {})", text_body.len(), cleaned_body.len());
+                (cleaned_body, ContentType::PlainText)
+            }
         } else {
             tracing::debug!("Content Preview: No content available");
             ("No content available".to_string(), ContentType::PlainText)
@@ -2215,6 +2256,88 @@ This is a sample email showcasing the modern email display format.".to_string();
     /// Check if clipboard is available
     pub fn is_clipboard_available(&self) -> bool {
         self.clipboard_manager.is_available()
+    }
+    
+    /// Clean raw email content by removing technical headers and metadata
+    fn clean_raw_email_content(&self, raw_content: &str) -> String {
+        let lines: Vec<&str> = raw_content.lines().collect();
+        let mut content_lines = Vec::new();
+        let mut in_headers = true;
+        let mut found_content_start = false;
+        
+        // List of technical headers to skip
+        let technical_headers = [
+            "delivered-to:", "received:", "x-google-smtp-source:", "x-received:",
+            "arc-seal:", "arc-message-signature:", "arc-authentication-results:",
+            "dkim-signature:", "x-gm-message-state:", "x-google-dkim-signature:",
+            "x-gm-thd-id:", "x-gmail-labels:", "return-path:", "authentication-results:",
+            "received-spf:", "x-spam-check-by:", "x-spam-level:", "x-spam-status:",
+            "message-id:", "mime-version:", "content-transfer-encoding:",
+        ];
+        
+        for line in lines {
+            let line_lower = line.to_lowercase();
+            
+            // Skip empty lines at the beginning
+            if in_headers && line.trim().is_empty() {
+                continue;
+            }
+            
+            // Check if this line is a technical header
+            let is_technical_header = technical_headers.iter().any(|&header| {
+                line_lower.starts_with(header) || 
+                (line.starts_with(' ') || line.starts_with('\t')) && line.trim().len() > 0
+            });
+            
+            // Look for content type or HTML start
+            if line_lower.contains("content-type:") && line_lower.contains("text/html") {
+                in_headers = false;
+                continue;
+            }
+            
+            // Look for HTML content start
+            if line.trim().starts_with("<!doctype") || 
+               line.trim().starts_with("<html") ||
+               line.contains("<body") {
+                in_headers = false;
+                found_content_start = true;
+                content_lines.push(line);
+                continue;
+            }
+            
+            // Skip technical headers
+            if in_headers && is_technical_header {
+                continue;
+            }
+            
+            // If we find a non-header line, we're in content
+            if in_headers && !line.starts_with(' ') && !line.starts_with('\t') && 
+               !line.contains(':') && line.trim().len() > 0 {
+                in_headers = false;
+                found_content_start = true;
+            }
+            
+            // Add content lines
+            if !in_headers {
+                content_lines.push(line);
+            }
+        }
+        
+        let cleaned = content_lines.join("\n");
+        
+        // If we didn't find any real content, try a different approach
+        if cleaned.trim().is_empty() || !found_content_start {
+            // Look for HTML content anywhere in the raw content
+            if let Some(html_start) = raw_content.find("<!DOCTYPE") {
+                return raw_content[html_start..].to_string();
+            } else if let Some(html_start) = raw_content.find("<html") {
+                return raw_content[html_start..].to_string();
+            } else if let Some(body_start) = raw_content.find("<body") {
+                return raw_content[body_start..].to_string();
+            }
+        }
+        
+        cleaned
     }
 }
 
