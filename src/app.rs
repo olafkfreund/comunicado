@@ -471,11 +471,14 @@ impl App {
         
         // Load messages for the first account (or current account)
         tracing::debug!("App.load_existing_accounts() - Loading messages for accounts");
+        println!("🔧 About to check for current account...");
         tracing::debug!("Checking for current account...");
         if let Some(current_account_id) = self.ui.get_current_account_id().cloned() {
+            println!("🔧 Found current account: {}", current_account_id);
             tracing::debug!("Found current account: {}", current_account_id);
             // Try to sync folders and messages from IMAP
             if let Some(ref mut _imap_manager) = self.imap_manager {
+                println!("🔧 Starting IMAP sync for account: {}", current_account_id);
                 tracing::debug!("Starting IMAP sync for account: {}", current_account_id);
                 match self.sync_account_from_imap(&current_account_id).await {
                     Ok(_) => {
@@ -670,10 +673,12 @@ impl App {
     
     /// Sync account data from IMAP (folders and messages)
     async fn sync_account_from_imap(&mut self, account_id: &str) -> Result<()> {
+        println!("🔧 sync_account_from_imap called for: {}", account_id);
         tracing::debug!("sync_account_from_imap called for: {}", account_id);
         tracing::info!("Starting IMAP sync for account: {}", account_id);
         
         // First sync folders
+        println!("🔧 About to sync folders from IMAP...");
         self.sync_folders_from_imap(account_id).await?;
         
         // Then sync messages for INBOX (or first available folder)
@@ -684,6 +689,7 @@ impl App {
     
     /// Sync folders from IMAP and store in database
     async fn sync_folders_from_imap(&mut self, account_id: &str) -> Result<()> {
+        println!("🔧 sync_folders_from_imap called for: {}", account_id);
         tracing::debug!("sync_folders_from_imap called for: {}", account_id);
         let imap_manager = self.imap_manager.as_mut()
             .ok_or_else(|| anyhow::anyhow!("IMAP manager not initialized"))?;
@@ -691,9 +697,11 @@ impl App {
         let database = self.database.as_ref()
             .ok_or_else(|| anyhow::anyhow!("Database not initialized"))?;
         
+        println!("🔧 About to sync folders for account: {}", account_id);
         tracing::info!("Syncing folders for account: {}", account_id);
         
         // Get IMAP client
+        println!("🔧 About to call imap_manager.get_client() for: {}", account_id);
         tracing::debug!("About to call imap_manager.get_client() for: {}", account_id);
         let client_arc = imap_manager.get_client(account_id).await
             .map_err(|e| anyhow::anyhow!("Failed to get IMAP client: {}", e))?;
