@@ -2758,7 +2758,8 @@ impl App {
         Ok(())
     }
 
-    /// Handle folder selection event - load messages from the selected folder
+    /// Handle folder selection event - refresh folder from IMAP and load messages
+    /// This method fetches the latest emails from the IMAP server when a user selects a folder
     async fn handle_folder_select(&mut self, folder_path: &str) -> Result<()> {
         // Get the current account ID and clone it to avoid borrowing issues
         let current_account_id = match self.ui.get_current_account_id() {
@@ -2770,12 +2771,27 @@ impl App {
         };
 
         tracing::info!(
-            "Loading messages from folder: {} for account: {}",
+            "Refreshing and loading messages from folder: {} for account: {}",
             folder_path,
             current_account_id
         );
 
-        // Load messages from the selected folder
+        // First, fetch fresh messages from IMAP to ensure we have the latest emails
+        tracing::debug!("Fetching latest messages from IMAP for folder: {}", folder_path);
+        match self.fetch_messages_from_imap(&current_account_id, folder_path).await {
+            Ok(()) => {
+                tracing::debug!("Successfully fetched latest messages from IMAP for folder: {}", folder_path);
+            }
+            Err(e) => {
+                tracing::warn!(
+                    "Failed to fetch fresh messages from IMAP for folder {}: {}. Will try to load from local database.",
+                    folder_path, e
+                );
+                // Continue to load from database even if IMAP fetch fails
+            }
+        }
+
+        // Then load messages from the database (either newly fetched or existing)
         match self
             .ui
             .load_messages(current_account_id.clone(), folder_path.to_string())
@@ -2786,30 +2802,11 @@ impl App {
             }
             Err(e) => {
                 tracing::error!("Failed to load messages from folder {}: {}", folder_path, e);
-                // Try to fetch fresh messages from IMAP if database load fails
-                if let Err(fetch_error) = self
-                    .fetch_messages_from_imap(&current_account_id, folder_path)
-                    .await
-                {
-                    tracing::error!(
-                        "Failed to fetch messages from IMAP for folder {}: {}",
-                        folder_path,
-                        fetch_error
-                    );
-                } else {
-                    // Retry loading from database after fetch
-                    if let Err(retry_error) = self
-                        .ui
-                        .load_messages(current_account_id.clone(), folder_path.to_string())
-                        .await
-                    {
-                        tracing::error!(
-                            "Failed to load messages even after IMAP fetch for folder {}: {}",
-                            folder_path,
-                            retry_error
-                        );
-                    }
-                }
+                // If both IMAP fetch and database load fail, show an error to the user
+                self.ui.show_notification(
+                    format!("Failed to load folder '{}': {}", folder_path, e),
+                    std::time::Duration::from_secs(5)
+                );
             }
         }
 
