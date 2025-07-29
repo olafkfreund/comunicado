@@ -41,11 +41,11 @@ chrono = { version = "0.4", features = ["serde"] }
 # Text processing
 regex = "1.10"
 
-# HTML parsing and rendering
-scraper = "0.19"
-html2text = "0.6"
-ammonia = "3.3"  # HTML sanitization and cleaning
-pulldown-cmark = "0.9"  # Markdown rendering for better text formatting
+# HTML parsing and rendering (industry best practices - 2024/2025)
+scraper = "0.19"  # Built on html5ever - browser-grade HTML parsing
+html2text = "0.6"  # Industry standard for terminal HTML-to-text conversion
+ammonia = "3.3"   # Security-first HTML sanitization using html5ever
+pulldown-cmark = "0.9"  # Enhanced markdown support for better text formatting
 
 # Image processing and terminal graphics
 image = { version = "0.24", features = ["jpeg", "png", "gif", "webp"] }

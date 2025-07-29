@@ -26,24 +26,17 @@ impl HtmlRenderer {
         }
     }
     
-    /// Convert HTML content to terminal-friendly text with styling (w3m/lynx style)
+    /// Convert HTML content to terminal-friendly text with styling (industry best practice approach)
     pub fn render_html(&mut self, html_content: &str) -> Text<'static> {
         tracing::debug!("HTML Renderer: Processing content of length {}", html_content.len());
         
         // Step 1: Clean and sanitize HTML to remove malicious/unnecessary content
         let cleaned_html = self.clean_and_sanitize_html(html_content);
         
-        // Step 2: Try our enhanced w3m-style renderer first
-        let enhanced_result = self.render_html_enhanced(&cleaned_html);
-        if !enhanced_result.lines.is_empty() {
-            tracing::debug!("HTML Renderer: Enhanced rendering successful ({} lines)", enhanced_result.lines.len());
-            return enhanced_result;
-        }
-        
-        // Step 3: Fallback to html2text
-        let plain_text = self.html_to_plain_text(&cleaned_html);
+        // Step 2: Use html2text as primary renderer (industry standard)
+        let plain_text = self.html_to_plain_text_optimized(&cleaned_html);
         if !plain_text.trim().is_empty() {
-            tracing::debug!("HTML Renderer: html2text fallback successful ({} chars)", plain_text.len());
+            tracing::debug!("HTML Renderer: html2text rendering successful ({} chars)", plain_text.len());
             let lines: Vec<Line<'static>> = plain_text
                 .lines()
                 .map(|line| {
@@ -56,6 +49,13 @@ impl HtmlRenderer {
                 })
                 .collect();
             return Text::from(lines);
+        }
+        
+        // Step 3: Try our enhanced w3m-style renderer as fallback
+        let enhanced_result = self.render_html_enhanced(&cleaned_html);
+        if !enhanced_result.lines.is_empty() {
+            tracing::debug!("HTML Renderer: Enhanced rendering fallback successful ({} lines)", enhanced_result.lines.len());
+            return enhanced_result;
         }
         
         // Step 4: Last resort - basic HTML parsing
@@ -357,9 +357,9 @@ impl HtmlRenderer {
         }
     }
     
-    /// Convert HTML to plain text using html2text (most reliable method)
-    pub fn html_to_plain_text(&self, html_content: &str) -> String {
-        // Use html2text for conversion with proper width
+    /// Convert HTML to plain text using html2text (most reliable method) - optimized version
+    pub fn html_to_plain_text_optimized(&self, html_content: &str) -> String {
+        // Use html2text for conversion with proper width (industry best practice)
         let result = html2text::from_read(html_content.as_bytes(), self.max_width);
         
         // Clean up the result - remove excessive whitespace but preserve formatting
@@ -387,6 +387,11 @@ impl HtmlRenderer {
         }
         
         final_result
+    }
+    
+    /// Convert HTML to plain text using html2text (most reliable method) - legacy version
+    pub fn html_to_plain_text(&self, html_content: &str) -> String {
+        self.html_to_plain_text_optimized(html_content)
     }
     
     /// Style a text line based on its content patterns
