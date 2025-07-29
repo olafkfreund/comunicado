@@ -1,7 +1,7 @@
-use tokio::sync::{mpsc, broadcast};
-use std::sync::Arc;
-use std::collections::HashMap;
 use crate::email::{EmailDatabase, StoredMessage};
+use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::{broadcast, mpsc};
 use uuid::Uuid;
 
 /// Types of email notifications
@@ -58,7 +58,7 @@ impl EmailNotification {
             EmailNotification::SyncFailed { account_id, .. } => account_id,
         }
     }
-    
+
     /// Get the folder name from the notification
     pub fn folder_name(&self) -> &str {
         match self {
@@ -90,7 +90,7 @@ impl EmailNotificationManager {
     pub fn new(database: Arc<EmailDatabase>) -> Self {
         let (sender, _) = broadcast::channel(1000); // Buffer for 1000 notifications
         let (notification_sender, notification_receiver) = mpsc::unbounded_channel();
-        
+
         Self {
             sender,
             notification_receiver: Arc::new(tokio::sync::Mutex::new(notification_receiver)),
@@ -98,103 +98,124 @@ impl EmailNotificationManager {
             database,
         }
     }
-    
+
     /// Subscribe to email notifications
     pub fn subscribe(&self) -> broadcast::Receiver<EmailNotification> {
         self.sender.subscribe()
     }
-    
+
     /// Get a sender for publishing notifications
     pub fn get_sender(&self) -> mpsc::UnboundedSender<EmailNotification> {
         self.notification_sender.clone()
     }
-    
+
     /// Start the notification processing loop
     pub async fn start(&self) {
         let receiver = self.notification_receiver.clone();
         let sender = self.sender.clone();
-        
+
         tokio::spawn(async move {
             let mut receiver = receiver.lock().await;
-            
+
             while let Some(notification) = receiver.recv().await {
                 // Broadcast the notification to all subscribers
                 if let Err(e) = sender.send(notification.clone()) {
                     tracing::warn!("Failed to broadcast notification: {}", e);
                 }
-                
+
                 // Log the notification for debugging
                 tracing::debug!("Processed notification: {:?}", notification);
             }
         });
     }
-    
+
     /// Publish a new message notification
-    pub async fn notify_new_message(&self, account_id: String, folder_name: String, message: StoredMessage) {
+    pub async fn notify_new_message(
+        &self,
+        account_id: String,
+        folder_name: String,
+        message: StoredMessage,
+    ) {
         let notification = EmailNotification::NewMessage {
             account_id,
             folder_name,
             message,
         };
-        
+
         if let Err(e) = self.notification_sender.send(notification) {
             tracing::error!("Failed to send new message notification: {}", e);
         }
     }
-    
+
     /// Publish a message updated notification
-    pub async fn notify_message_updated(&self, account_id: String, folder_name: String, message: StoredMessage) {
+    pub async fn notify_message_updated(
+        &self,
+        account_id: String,
+        folder_name: String,
+        message: StoredMessage,
+    ) {
         let notification = EmailNotification::MessageUpdated {
             account_id,
             folder_name,
             message_id: message.id,
             message,
         };
-        
+
         if let Err(e) = self.notification_sender.send(notification) {
             tracing::error!("Failed to send message updated notification: {}", e);
         }
     }
-    
+
     /// Publish a message deleted notification
-    pub async fn notify_message_deleted(&self, account_id: String, folder_name: String, message_id: Uuid) {
+    pub async fn notify_message_deleted(
+        &self,
+        account_id: String,
+        folder_name: String,
+        message_id: Uuid,
+    ) {
         let notification = EmailNotification::MessageDeleted {
             account_id,
             folder_name,
             message_id,
         };
-        
+
         if let Err(e) = self.notification_sender.send(notification) {
             tracing::error!("Failed to send message deleted notification: {}", e);
         }
     }
-    
+
     /// Publish a sync started notification
     pub async fn notify_sync_started(&self, account_id: String, folder_name: String) {
         let notification = EmailNotification::SyncStarted {
             account_id,
             folder_name,
         };
-        
+
         if let Err(e) = self.notification_sender.send(notification) {
             tracing::error!("Failed to send sync started notification: {}", e);
         }
     }
-    
+
     /// Publish a sync completed notification
-    pub async fn notify_sync_completed(&self, account_id: String, folder_name: String, new_count: u32, updated_count: u32) {
+    pub async fn notify_sync_completed(
+        &self,
+        account_id: String,
+        folder_name: String,
+        new_count: u32,
+        updated_count: u32,
+    ) {
         let notification = EmailNotification::SyncCompleted {
             account_id,
             folder_name,
             new_count,
             updated_count,
         };
-        
+
         if let Err(e) = self.notification_sender.send(notification) {
             tracing::error!("Failed to send sync completed notification: {}", e);
         }
     }
-    
+
     /// Publish a sync failed notification
     pub async fn notify_sync_failed(&self, account_id: String, folder_name: String, error: String) {
         let notification = EmailNotification::SyncFailed {
@@ -202,7 +223,7 @@ impl EmailNotificationManager {
             folder_name,
             error,
         };
-        
+
         if let Err(e) = self.notification_sender.send(notification) {
             tracing::error!("Failed to send sync failed notification: {}", e);
         }
@@ -225,7 +246,7 @@ impl UIEmailUpdater {
             subscriptions: HashMap::new(),
         }
     }
-    
+
     /// Subscribe to updates for a specific account and folder
     pub fn subscribe_to_folder(&mut self, account_id: String, folder_name: String) {
         self.subscriptions
@@ -233,7 +254,7 @@ impl UIEmailUpdater {
             .or_default()
             .push(folder_name);
     }
-    
+
     /// Unsubscribe from updates for a specific account and folder
     pub fn unsubscribe_from_folder(&mut self, account_id: &str, folder_name: &str) {
         if let Some(folders) = self.subscriptions.get_mut(account_id) {
@@ -243,7 +264,7 @@ impl UIEmailUpdater {
             }
         }
     }
-    
+
     /// Check for new notifications (non-blocking)
     pub fn try_recv_notification(&mut self) -> Option<EmailNotification> {
         match self.notification_receiver.try_recv() {
@@ -266,24 +287,24 @@ impl UIEmailUpdater {
             }
         }
     }
-    
+
     /// Check if we're subscribed to a notification
     fn is_subscribed_to(&self, notification: &EmailNotification) -> bool {
         let account_id = notification.account_id();
         let folder_name = notification.folder_name();
-        
+
         if let Some(folders) = self.subscriptions.get(account_id) {
             folders.contains(&folder_name.to_string())
         } else {
             false
         }
     }
-    
+
     /// Get all current subscriptions
     pub fn get_subscriptions(&self) -> &HashMap<String, Vec<String>> {
         &self.subscriptions
     }
-    
+
     /// Clear all subscriptions
     pub fn clear_subscriptions(&mut self) {
         self.subscriptions.clear();
@@ -294,19 +315,30 @@ impl UIEmailUpdater {
 pub trait EmailNotificationHandler {
     /// Handle a new message notification
     fn handle_new_message(&mut self, account_id: &str, folder_name: &str, message: &StoredMessage);
-    
+
     /// Handle a message updated notification
-    fn handle_message_updated(&mut self, account_id: &str, folder_name: &str, message: &StoredMessage);
-    
+    fn handle_message_updated(
+        &mut self,
+        account_id: &str,
+        folder_name: &str,
+        message: &StoredMessage,
+    );
+
     /// Handle a message deleted notification
     fn handle_message_deleted(&mut self, account_id: &str, folder_name: &str, message_id: Uuid);
-    
+
     /// Handle a sync started notification
     fn handle_sync_started(&mut self, account_id: &str, folder_name: &str);
-    
+
     /// Handle a sync completed notification
-    fn handle_sync_completed(&mut self, account_id: &str, folder_name: &str, new_count: u32, updated_count: u32);
-    
+    fn handle_sync_completed(
+        &mut self,
+        account_id: &str,
+        folder_name: &str,
+        new_count: u32,
+        updated_count: u32,
+    );
+
     /// Handle a sync failed notification
     fn handle_sync_failed(&mut self, account_id: &str, folder_name: &str, error: &str);
 }
@@ -314,39 +346,39 @@ pub trait EmailNotificationHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::tempdir;
     use crate::email::{EmailDatabase, StoredMessage};
     use chrono::Utc;
-    
+    use tempfile::tempdir;
+
     #[tokio::test]
     async fn test_notification_manager_creation() {
         let temp_dir = tempdir().unwrap();
         let db_path = temp_dir.path().join("test.db");
         let db_path_str = db_path.to_str().unwrap();
-        
+
         let database = Arc::new(EmailDatabase::new(db_path_str).await.unwrap());
         let manager = EmailNotificationManager::new(database);
-        
+
         // Should be able to create subscribers
         let _receiver = manager.subscribe();
         let _sender = manager.get_sender();
     }
-    
+
     #[tokio::test]
     async fn test_notification_publishing() {
         let temp_dir = tempdir().unwrap();
         let db_path = temp_dir.path().join("test.db");
         let db_path_str = db_path.to_str().unwrap();
-        
+
         let database = Arc::new(EmailDatabase::new(db_path_str).await.unwrap());
         let manager = EmailNotificationManager::new(database);
-        
+
         // Start the notification processing
         manager.start().await;
-        
+
         // Subscribe to notifications
         let mut receiver = manager.subscribe();
-        
+
         // Create a sample message
         let message = StoredMessage {
             id: Uuid::new_v4(),
@@ -379,10 +411,16 @@ mod tests {
             is_draft: false,
             is_deleted: false,
         };
-        
+
         // Publish a notification
-        manager.notify_new_message("test-account".to_string(), "INBOX".to_string(), message.clone()).await;
-        
+        manager
+            .notify_new_message(
+                "test-account".to_string(),
+                "INBOX".to_string(),
+                message.clone(),
+            )
+            .await;
+
         // Should receive the notification
         tokio::select! {
             result = receiver.recv() => {
@@ -401,32 +439,32 @@ mod tests {
             }
         }
     }
-    
+
     #[tokio::test]
     async fn test_ui_updater_subscriptions() {
         let temp_dir = tempdir().unwrap();
         let db_path = temp_dir.path().join("test.db");
         let db_path_str = db_path.to_str().unwrap();
-        
+
         let database = Arc::new(EmailDatabase::new(db_path_str).await.unwrap());
         let manager = EmailNotificationManager::new(database);
-        
+
         let mut updater = UIEmailUpdater::new(&manager);
-        
+
         // Subscribe to a folder
         updater.subscribe_to_folder("test-account".to_string(), "INBOX".to_string());
         updater.subscribe_to_folder("test-account".to_string(), "Sent".to_string());
-        
+
         // Check subscriptions
         let subscriptions = updater.get_subscriptions();
         assert!(subscriptions.contains_key("test-account"));
         assert_eq!(subscriptions.get("test-account").unwrap().len(), 2);
-        
+
         // Unsubscribe
         updater.unsubscribe_from_folder("test-account", "Sent");
         let subscriptions = updater.get_subscriptions();
         assert_eq!(subscriptions.get("test-account").unwrap().len(), 1);
-        
+
         // Clear all subscriptions
         updater.clear_subscriptions();
         assert!(updater.get_subscriptions().is_empty());

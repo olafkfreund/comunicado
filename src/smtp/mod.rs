@@ -5,7 +5,7 @@ pub mod service;
 
 pub use client::{SmtpClient, SmtpConfig};
 pub use message::{EmailMessage, MessageBuilder};
-pub use providers::{SmtpProviderRegistry, SmtpProviderConfig};
+pub use providers::{SmtpProviderConfig, SmtpProviderRegistry};
 pub use service::{SmtpService, SmtpServiceBuilder};
 
 use thiserror::Error;
@@ -15,31 +15,31 @@ use thiserror::Error;
 pub enum SmtpError {
     #[error("Connection failed: {0}")]
     ConnectionFailed(String),
-    
+
     #[error("Authentication failed: {0}")]
     AuthenticationFailed(String),
-    
+
     #[error("Message send failed: {0}")]
     SendFailed(String),
-    
+
     #[error("Invalid configuration: {0}")]
     InvalidConfig(String),
-    
+
     #[error("Invalid email address: {0}")]
     InvalidAddress(String),
-    
+
     #[error("Message formatting error: {0}")]
     MessageFormatError(String),
-    
+
     #[error("OAuth2 error: {0}")]
     OAuth2Error(String),
-    
+
     #[error("Network error: {0}")]
     NetworkError(#[from] lettre::transport::smtp::Error),
-    
+
     #[error("Address parse error: {0}")]
     AddressParseError(#[from] lettre::address::AddressError),
-    
+
     #[error("Message build error: {0}")]
     MessageBuildError(#[from] lettre::error::Error),
 }
@@ -55,15 +55,9 @@ pub enum SmtpAuth {
         access_token: String,
     },
     /// Plain username/password authentication
-    Plain {
-        username: String,
-        password: String,
-    },
+    Plain { username: String, password: String },
     /// Login authentication
-    Login {
-        username: String,
-        password: String,
-    },
+    Login { username: String, password: String },
 }
 
 /// SMTP connection security
@@ -96,11 +90,11 @@ impl SendResult {
     pub fn is_success(&self) -> bool {
         !self.accepted_recipients.is_empty() && self.rejected_recipients.is_empty()
     }
-    
+
     pub fn is_partial_success(&self) -> bool {
         !self.accepted_recipients.is_empty() && !self.rejected_recipients.is_empty()
     }
-    
+
     pub fn is_failure(&self) -> bool {
         self.accepted_recipients.is_empty()
     }

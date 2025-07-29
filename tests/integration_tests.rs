@@ -1,4 +1,4 @@
-use comunicado::{App};
+use comunicado::App;
 
 #[tokio::test]
 async fn test_app_creation() {
@@ -17,17 +17,15 @@ fn test_project_structure() {
 #[test]
 fn test_ui_components() {
     use comunicado::ui::{
-        folder_tree::FolderTree,
+        content_preview::ContentPreview, folder_tree::FolderTree, layout::AppLayout,
         message_list::MessageList,
-        content_preview::ContentPreview,
-        layout::AppLayout,
     };
-    
+
     // Test that UI components can be created
     let _folder_tree = FolderTree::new();
     let _message_list = MessageList::new();
     let _content_preview = ContentPreview::new();
     let _layout = AppLayout::new();
-    
+
     assert!(true);
 }

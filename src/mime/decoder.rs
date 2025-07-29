@@ -1,10 +1,10 @@
 use base64::prelude::*;
 
 /// Decode MIME-encoded header text (RFC 2047)
-/// 
+///
 /// Handles encoded words in the format: =?charset?encoding?encoded-text?=
 /// where encoding is either 'B' (base64) or 'Q' (quoted-printable)
-/// 
+///
 /// Examples:
 /// - =?UTF-8?B?SGVsbG8gV29ybGQ=?= -> "Hello World"
 /// - =?ISO-8859-1?Q?Hello_World?= -> "Hello World"
@@ -12,25 +12,25 @@ use base64::prelude::*;
 pub fn decode_mime_header(header: &str) -> String {
     let mut result = String::new();
     let mut remaining = header;
-    
+
     while !remaining.is_empty() {
         if let Some(start) = remaining.find("=?") {
             // Add any text before the encoded word
             result.push_str(&remaining[..start]);
             remaining = &remaining[start..];
-            
+
             // Find the end of the encoded word
             if let Some(end) = remaining.find("?=") {
                 let encoded_word = &remaining[2..end]; // Skip "=?"
                 remaining = &remaining[end + 2..]; // Skip "?="
-                
+
                 // Parse the encoded word: charset?encoding?text
                 let parts: Vec<&str> = encoded_word.split('?').collect();
                 if parts.len() == 3 {
                     let charset = parts[0];
                     let encoding = parts[1].to_uppercase();
                     let encoded_text = parts[2];
-                    
+
                     match decode_encoded_word(charset, &encoding, encoded_text) {
                         Ok(decoded) => result.push_str(&decoded),
                         Err(_) => {
@@ -57,29 +57,43 @@ pub fn decode_mime_header(header: &str) -> String {
             break;
         }
     }
-    
+
     result
 }
 
 /// Decode a single encoded word
-fn decode_encoded_word(charset: &str, encoding: &str, encoded_text: &str) -> Result<String, Box<dyn std::error::Error>> {
+fn decode_encoded_word(
+    charset: &str,
+    encoding: &str,
+    encoded_text: &str,
+) -> Result<String, Box<dyn std::error::Error>> {
     let bytes = match encoding {
         "B" => decode_base64(encoded_text)?,
         "Q" => decode_quoted_printable(encoded_text)?,
         _ => return Err(format!("Unsupported encoding: {}", encoding).into()),
     };
-    
+
     // Convert bytes to string based on charset
     let decoded = match charset.to_uppercase().as_str() {
         "UTF-8" => String::from_utf8(bytes)?,
         "ISO-8859-1" | "LATIN-1" => {
             // Convert Latin-1 to UTF-8
-            String::from_utf8(bytes.iter().map(|&b| b as u32).map(char::from_u32).collect::<Option<Vec<_>>>().ok_or("Invalid Latin-1")?.into_iter().collect::<String>().into_bytes())?
-        },
+            String::from_utf8(
+                bytes
+                    .iter()
+                    .map(|&b| b as u32)
+                    .map(char::from_u32)
+                    .collect::<Option<Vec<_>>>()
+                    .ok_or("Invalid Latin-1")?
+                    .into_iter()
+                    .collect::<String>()
+                    .into_bytes(),
+            )?
+        }
         "ASCII" | "US-ASCII" => {
             // ASCII is a subset of UTF-8
             String::from_utf8(bytes)?
-        },
+        }
         _ => {
             // For unsupported charsets, try UTF-8 and fall back to lossy conversion
             match String::from_utf8(bytes) {
@@ -88,7 +102,7 @@ fn decode_encoded_word(charset: &str, encoding: &str, encoded_text: &str) -> Res
             }
         }
     };
-    
+
     Ok(decoded)
 }
 
@@ -101,7 +115,7 @@ fn decode_base64(encoded: &str) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
 fn decode_quoted_printable(encoded: &str) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     let mut result = Vec::new();
     let mut chars = encoded.chars().peekable();
-    
+
     while let Some(ch) = chars.next() {
         match ch {
             '=' => {
@@ -123,18 +137,18 @@ fn decode_quoted_printable(encoded: &str) -> Result<Vec<u8>, Box<dyn std::error:
                         chars.next();
                     }
                 }
-            },
+            }
             '_' => {
                 // Underscore represents space in quoted-printable
                 result.push(b' ');
-            },
+            }
             _ => {
                 // Regular character
                 result.push(ch as u8);
             }
         }
     }
-    
+
     Ok(result)
 }
 

@@ -80,11 +80,11 @@ impl AccessibilityOptions {
 
     /// Check if any accessibility features are enabled
     pub fn has_accessibility_features(&self) -> bool {
-        self.high_contrast || 
-        self.reduce_motion || 
-        self.color_blindness.is_some() || 
-        self.large_text || 
-        self.screen_reader_compatible
+        self.high_contrast
+            || self.reduce_motion
+            || self.color_blindness.is_some()
+            || self.large_text
+            || self.screen_reader_compatible
     }
 
     /// Get accessibility description for user display
@@ -100,7 +100,7 @@ impl AccessibilityOptions {
         if let Some(color_blindness) = self.color_blindness {
             features.push(match color_blindness {
                 ColorBlindness::Protanopia => "Protanopia Support",
-                ColorBlindness::Deuteranopia => "Deuteranopia Support", 
+                ColorBlindness::Deuteranopia => "Deuteranopia Support",
                 ColorBlindness::Tritanopia => "Tritanopia Support",
             });
         }
@@ -132,7 +132,8 @@ impl AccessibilityOptions {
             reduce_motion: self.reduce_motion || other.reduce_motion,
             color_blindness: other.color_blindness.or(self.color_blindness),
             large_text: self.large_text || other.large_text,
-            screen_reader_compatible: self.screen_reader_compatible || other.screen_reader_compatible,
+            screen_reader_compatible: self.screen_reader_compatible
+                || other.screen_reader_compatible,
         }
     }
 }
@@ -169,7 +170,7 @@ impl ColorBlindness {
     pub fn prevalence(&self) -> &'static str {
         match self {
             ColorBlindness::Protanopia => "~1% of men, <0.1% of women",
-            ColorBlindness::Deuteranopia => "~1% of men, <0.1% of women", 
+            ColorBlindness::Deuteranopia => "~1% of men, <0.1% of women",
             ColorBlindness::Tritanopia => "~0.01% of population",
         }
     }

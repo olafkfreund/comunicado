@@ -1,13 +1,11 @@
+use chrono::{DateTime, Local};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{
-        Block, Borders, Paragraph,
-    },
+    widgets::{Block, Borders, Paragraph},
     Frame,
 };
-use chrono::{DateTime, Local};
 
 use crate::theme::Theme;
 // Widget helper functions
@@ -17,7 +15,7 @@ fn create_border_block<'a>(title: &'a str, theme: &Theme, is_selected: bool) -> 
     } else {
         Style::default().fg(theme.colors.palette.border)
     };
-    
+
     Block::default()
         .title(title)
         .borders(Borders::ALL)
@@ -74,7 +72,7 @@ impl TaskPriority {
     pub fn symbol(&self) -> &'static str {
         match self {
             TaskPriority::Low => "○",
-            TaskPriority::Medium => "◦", 
+            TaskPriority::Medium => "◦",
             TaskPriority::High => "●",
             TaskPriority::Urgent => "█",
         }
@@ -234,9 +232,9 @@ impl StartPage {
             .direction(Direction::Vertical)
             .margin(1)
             .constraints([
-                Constraint::Length(12),  // Top row: datetime + stats  
-                Constraint::Length(10),  // Middle row: weather + todoist
-                Constraint::Min(6),      // Bottom row: shortcuts
+                Constraint::Length(12), // Top row: datetime + stats
+                Constraint::Length(10), // Middle row: weather + todoist
+                Constraint::Min(6),     // Bottom row: shortcuts
             ])
             .split(area);
 
@@ -244,8 +242,8 @@ impl StartPage {
         let top_row = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([
-                Constraint::Percentage(70),  // Large datetime block
-                Constraint::Percentage(30),  // Stats block
+                Constraint::Percentage(70), // Large datetime block
+                Constraint::Percentage(30), // Stats block
             ])
             .split(main_chunks[0]);
 
@@ -253,8 +251,8 @@ impl StartPage {
         let middle_row = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([
-                Constraint::Percentage(40),  // Weather block
-                Constraint::Percentage(60),  // Todo/task block
+                Constraint::Percentage(40), // Weather block
+                Constraint::Percentage(60), // Todo/task block
             ])
             .split(main_chunks[1]);
 
@@ -269,41 +267,32 @@ impl StartPage {
         self.render_shortcuts_block(f, bottom_row, theme, self.selected_widget == 4);
     }
 
-
     fn render_weather_block(&self, f: &mut Frame, area: Rect, theme: &Theme, is_selected: bool) {
         let block = create_border_block("weather", theme, is_selected);
         let _inner_area = block.inner(area);
-        
+
         // Weather display matching reference format
         let weather_lines = vec![
             Line::from(""),
-            Line::from(vec![
-                Span::styled(
-                    "72°",
-                    Style::default()
-                        .fg(theme.colors.palette.text_primary)
-                        .add_modifier(Modifier::BOLD),
-                ),
-            ]),
-            Line::from(vec![
-                Span::styled(
-                    "sunny",
-                    Style::default().fg(theme.colors.palette.text_secondary),
-                ),
-            ]),
+            Line::from(vec![Span::styled(
+                "72°",
+                Style::default()
+                    .fg(theme.colors.palette.text_primary)
+                    .add_modifier(Modifier::BOLD),
+            )]),
+            Line::from(vec![Span::styled(
+                "sunny",
+                Style::default().fg(theme.colors.palette.text_secondary),
+            )]),
             Line::from(""),
-            Line::from(vec![
-                Span::styled(
-                    "humi 51%    wind 6 mph",
-                    Style::default().fg(theme.colors.palette.text_secondary),
-                ),
-            ]),
-            Line::from(vec![
-                Span::styled(
-                    "prec 1%     feel 70°",
-                    Style::default().fg(theme.colors.palette.text_secondary),
-                ),
-            ]),
+            Line::from(vec![Span::styled(
+                "humi 51%    wind 6 mph",
+                Style::default().fg(theme.colors.palette.text_secondary),
+            )]),
+            Line::from(vec![Span::styled(
+                "prec 1%     feel 70°",
+                Style::default().fg(theme.colors.palette.text_secondary),
+            )]),
         ];
 
         let weather_widget = Paragraph::new(weather_lines)
@@ -316,36 +305,70 @@ impl StartPage {
     fn render_tasks_block(&self, f: &mut Frame, area: Rect, theme: &Theme, is_selected: bool) {
         let block = create_border_block("todoist", theme, is_selected);
         let _inner_area = block.inner(area);
-        
+
         // Mock task list matching reference format
         let task_lines = vec![
             Line::from(""),
-            Line::from(vec![
-                Span::styled(
-                    "6 tasks",
-                    Style::default().fg(theme.colors.palette.text_primary),
-                ),
-            ]),
+            Line::from(vec![Span::styled(
+                "6 tasks",
+                Style::default().fg(theme.colors.palette.text_primary),
+            )]),
             Line::from(""),
             Line::from(vec![
-                Span::styled("[ ] ", Style::default().fg(theme.colors.palette.text_secondary)),
-                Span::styled("fix midnight bug ", Style::default().fg(theme.colors.palette.text_primary)),
-                Span::styled("today", Style::default().fg(theme.colors.palette.text_secondary)),
+                Span::styled(
+                    "[ ] ",
+                    Style::default().fg(theme.colors.palette.text_secondary),
+                ),
+                Span::styled(
+                    "fix midnight bug ",
+                    Style::default().fg(theme.colors.palette.text_primary),
+                ),
+                Span::styled(
+                    "today",
+                    Style::default().fg(theme.colors.palette.text_secondary),
+                ),
             ]),
             Line::from(vec![
-                Span::styled("[ ] ", Style::default().fg(theme.colors.palette.text_secondary)),
-                Span::styled("dentist reschedule xray and checkup ", Style::default().fg(theme.colors.palette.text_primary)),
-                Span::styled("tmrw", Style::default().fg(theme.colors.palette.text_secondary)),
+                Span::styled(
+                    "[ ] ",
+                    Style::default().fg(theme.colors.palette.text_secondary),
+                ),
+                Span::styled(
+                    "dentist reschedule xray and checkup ",
+                    Style::default().fg(theme.colors.palette.text_primary),
+                ),
+                Span::styled(
+                    "tmrw",
+                    Style::default().fg(theme.colors.palette.text_secondary),
+                ),
             ]),
             Line::from(vec![
-                Span::styled("[ ] ", Style::default().fg(theme.colors.palette.text_secondary)),
-                Span::styled("complete section 3 ", Style::default().fg(theme.colors.palette.text_primary)),
-                Span::styled("sun", Style::default().fg(theme.colors.palette.text_secondary)),
+                Span::styled(
+                    "[ ] ",
+                    Style::default().fg(theme.colors.palette.text_secondary),
+                ),
+                Span::styled(
+                    "complete section 3 ",
+                    Style::default().fg(theme.colors.palette.text_primary),
+                ),
+                Span::styled(
+                    "sun",
+                    Style::default().fg(theme.colors.palette.text_secondary),
+                ),
             ]),
             Line::from(vec![
-                Span::styled("[x] ", Style::default().fg(theme.colors.palette.text_secondary)),
-                Span::styled("#re-start fix weather loading ", Style::default().fg(theme.colors.palette.text_primary)),
-                Span::styled("today", Style::default().fg(theme.colors.palette.text_secondary)),
+                Span::styled(
+                    "[x] ",
+                    Style::default().fg(theme.colors.palette.text_secondary),
+                ),
+                Span::styled(
+                    "#re-start fix weather loading ",
+                    Style::default().fg(theme.colors.palette.text_primary),
+                ),
+                Span::styled(
+                    "today",
+                    Style::default().fg(theme.colors.palette.text_secondary),
+                ),
             ]),
         ];
 
@@ -359,76 +382,64 @@ impl StartPage {
     fn render_datetime_block(&self, f: &mut Frame, area: Rect, theme: &Theme, is_selected: bool) {
         let block = create_border_block("datetime", theme, is_selected);
         let inner_area = block.inner(area);
-        
+
         let now = Local::now();
-        
+
         // Large time display like the reference image
         let time_str = now.format("%H:%M:%S").to_string();
         let date_str = now.format("%A, %B %d, %Y").to_string();
         let am_pm = now.format("%p").to_string().to_lowercase();
-        
+
         // Create layout for time + date + am/pm
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(1),   // Spacing
-                Constraint::Length(6),   // Much larger time section
-                Constraint::Length(2),   // Date
-                Constraint::Min(0),      // Bottom spacing
+                Constraint::Length(1), // Spacing
+                Constraint::Length(6), // Much larger time section
+                Constraint::Length(2), // Date
+                Constraint::Min(0),    // Bottom spacing
             ])
             .split(inner_area);
 
         // Render HUGE time display with much bigger text by using multiple lines
         let time_lines = vec![
             Line::from(""),
-            Line::from(vec![
-                Span::styled(
-                    format!("█████ {} █████", time_str),
-                    Style::default()
-                        .fg(theme.colors.palette.text_primary)
-                        .add_modifier(Modifier::BOLD),
-                ),
-            ]),
-            Line::from(vec![
-                Span::styled(
-                    format!("█████ {} █████", am_pm.to_uppercase()),
-                    Style::default()
-                        .fg(theme.colors.palette.accent)
-                        .add_modifier(Modifier::BOLD),
-                ),
-            ]),
+            Line::from(vec![Span::styled(
+                format!("█████ {} █████", time_str),
+                Style::default()
+                    .fg(theme.colors.palette.text_primary)
+                    .add_modifier(Modifier::BOLD),
+            )]),
+            Line::from(vec![Span::styled(
+                format!("█████ {} █████", am_pm.to_uppercase()),
+                Style::default()
+                    .fg(theme.colors.palette.accent)
+                    .add_modifier(Modifier::BOLD),
+            )]),
             Line::from(""),
         ];
-        
-        let time_widget = Paragraph::new(time_lines)
-            .alignment(Alignment::Center);
+
+        let time_widget = Paragraph::new(time_lines).alignment(Alignment::Center);
         f.render_widget(time_widget, chunks[1]);
 
         // Date display - also make it bigger and bold
-        let date_lines = vec![
-            Line::from(vec![
-                Span::styled(
-                    format!("▓▓▓ {} ▓▓▓", date_str.to_uppercase()),
-                    Style::default()
-                        .fg(theme.colors.palette.text_secondary)
-                        .add_modifier(Modifier::BOLD),
-                ),
-            ]),
-        ];
+        let date_lines = vec![Line::from(vec![Span::styled(
+            format!("▓▓▓ {} ▓▓▓", date_str.to_uppercase()),
+            Style::default()
+                .fg(theme.colors.palette.text_secondary)
+                .add_modifier(Modifier::BOLD),
+        )])];
 
-        let date_widget = Paragraph::new(date_lines)
-            .alignment(Alignment::Center);
+        let date_widget = Paragraph::new(date_lines).alignment(Alignment::Center);
         f.render_widget(date_widget, chunks[2]);
-        
+
         f.render_widget(block, area);
     }
-
-
 
     fn render_shortcuts_block(&self, f: &mut Frame, area: Rect, theme: &Theme, is_selected: bool) {
         let block = create_border_block("shortcuts", theme, is_selected);
         let inner_area = block.inner(area);
-        
+
         // Create a 4-column layout for shortcuts
         let cols = Layout::default()
             .direction(Direction::Horizontal)
@@ -439,144 +450,202 @@ impl StartPage {
                 Constraint::Percentage(25),
             ])
             .split(inner_area);
-        
+
         // Column 1: Global Navigation
         let col1_lines = vec![
-            Line::from(vec![
-                Span::styled("GLOBAL", Style::default().fg(theme.colors.palette.accent).add_modifier(Modifier::BOLD)),
-            ]),
+            Line::from(vec![Span::styled(
+                "GLOBAL",
+                Style::default()
+                    .fg(theme.colors.palette.accent)
+                    .add_modifier(Modifier::BOLD),
+            )]),
             Line::from(vec![
                 Span::styled("q", Style::default().fg(theme.colors.palette.accent)),
-                Span::styled(" quit", Style::default().fg(theme.colors.palette.text_primary)),
+                Span::styled(
+                    " quit",
+                    Style::default().fg(theme.colors.palette.text_primary),
+                ),
             ]),
             Line::from(vec![
                 Span::styled("Tab", Style::default().fg(theme.colors.palette.accent)),
-                Span::styled(" next pane", Style::default().fg(theme.colors.palette.text_primary)),
+                Span::styled(
+                    " next pane",
+                    Style::default().fg(theme.colors.palette.text_primary),
+                ),
             ]),
             Line::from(vec![
                 Span::styled("~", Style::default().fg(theme.colors.palette.accent)),
-                Span::styled(" start page", Style::default().fg(theme.colors.palette.text_primary)),
+                Span::styled(
+                    " start page",
+                    Style::default().fg(theme.colors.palette.text_primary),
+                ),
             ]),
             Line::from(vec![
                 Span::styled("Esc", Style::default().fg(theme.colors.palette.accent)),
-                Span::styled(" cancel", Style::default().fg(theme.colors.palette.text_primary)),
+                Span::styled(
+                    " cancel",
+                    Style::default().fg(theme.colors.palette.text_primary),
+                ),
             ]),
         ];
-        
+
         // Column 2: Email Management
         let col2_lines = vec![
-            Line::from(vec![
-                Span::styled("EMAIL", Style::default().fg(theme.colors.palette.accent).add_modifier(Modifier::BOLD)),
-            ]),
+            Line::from(vec![Span::styled(
+                "EMAIL",
+                Style::default()
+                    .fg(theme.colors.palette.accent)
+                    .add_modifier(Modifier::BOLD),
+            )]),
             Line::from(vec![
                 Span::styled("c", Style::default().fg(theme.colors.palette.accent)),
-                Span::styled(" compose", Style::default().fg(theme.colors.palette.text_primary)),
+                Span::styled(
+                    " compose",
+                    Style::default().fg(theme.colors.palette.text_primary),
+                ),
             ]),
             Line::from(vec![
                 Span::styled("p", Style::default().fg(theme.colors.palette.accent)),
-                Span::styled(" reply/forward", Style::default().fg(theme.colors.palette.text_primary)),
+                Span::styled(
+                    " reply/forward",
+                    Style::default().fg(theme.colors.palette.text_primary),
+                ),
             ]),
             Line::from(vec![
                 Span::styled("/", Style::default().fg(theme.colors.palette.accent)),
-                Span::styled(" search", Style::default().fg(theme.colors.palette.text_primary)),
+                Span::styled(
+                    " search",
+                    Style::default().fg(theme.colors.palette.text_primary),
+                ),
             ]),
             Line::from(vec![
                 Span::styled("Enter", Style::default().fg(theme.colors.palette.accent)),
-                Span::styled(" open", Style::default().fg(theme.colors.palette.text_primary)),
+                Span::styled(
+                    " open",
+                    Style::default().fg(theme.colors.palette.text_primary),
+                ),
             ]),
         ];
-        
+
         // Column 3: Navigation & Lists
         let col3_lines = vec![
-            Line::from(vec![
-                Span::styled("NAVIGATE", Style::default().fg(theme.colors.palette.accent).add_modifier(Modifier::BOLD)),
-            ]),
+            Line::from(vec![Span::styled(
+                "NAVIGATE",
+                Style::default()
+                    .fg(theme.colors.palette.accent)
+                    .add_modifier(Modifier::BOLD),
+            )]),
             Line::from(vec![
                 Span::styled("hjkl", Style::default().fg(theme.colors.palette.accent)),
-                Span::styled(" vim move", Style::default().fg(theme.colors.palette.text_primary)),
+                Span::styled(
+                    " vim move",
+                    Style::default().fg(theme.colors.palette.text_primary),
+                ),
             ]),
             Line::from(vec![
                 Span::styled("↑↓", Style::default().fg(theme.colors.palette.accent)),
-                Span::styled(" up/down", Style::default().fg(theme.colors.palette.text_primary)),
+                Span::styled(
+                    " up/down",
+                    Style::default().fg(theme.colors.palette.text_primary),
+                ),
             ]),
             Line::from(vec![
                 Span::styled("t", Style::default().fg(theme.colors.palette.accent)),
-                Span::styled(" thread view", Style::default().fg(theme.colors.palette.text_primary)),
+                Span::styled(
+                    " thread view",
+                    Style::default().fg(theme.colors.palette.text_primary),
+                ),
             ]),
             Line::from(vec![
                 Span::styled("s", Style::default().fg(theme.colors.palette.accent)),
-                Span::styled(" sort date", Style::default().fg(theme.colors.palette.text_primary)),
+                Span::styled(
+                    " sort date",
+                    Style::default().fg(theme.colors.palette.text_primary),
+                ),
             ]),
         ];
-        
+
         // Column 4: Accounts & System
         let col4_lines = vec![
-            Line::from(vec![
-                Span::styled("SYSTEM", Style::default().fg(theme.colors.palette.accent).add_modifier(Modifier::BOLD)),
-            ]),
+            Line::from(vec![Span::styled(
+                "SYSTEM",
+                Style::default()
+                    .fg(theme.colors.palette.accent)
+                    .add_modifier(Modifier::BOLD),
+            )]),
             Line::from(vec![
                 Span::styled("Ctrl+A", Style::default().fg(theme.colors.palette.accent)),
-                Span::styled(" add account", Style::default().fg(theme.colors.palette.text_primary)),
+                Span::styled(
+                    " add account",
+                    Style::default().fg(theme.colors.palette.text_primary),
+                ),
             ]),
             Line::from(vec![
                 Span::styled("Ctrl+R", Style::default().fg(theme.colors.palette.accent)),
-                Span::styled(" refresh", Style::default().fg(theme.colors.palette.text_primary)),
+                Span::styled(
+                    " refresh",
+                    Style::default().fg(theme.colors.palette.text_primary),
+                ),
             ]),
             Line::from(vec![
                 Span::styled("F5", Style::default().fg(theme.colors.palette.accent)),
-                Span::styled(" refresh folder", Style::default().fg(theme.colors.palette.text_primary)),
+                Span::styled(
+                    " refresh folder",
+                    Style::default().fg(theme.colors.palette.text_primary),
+                ),
             ]),
             Line::from(vec![
                 Span::styled("m", Style::default().fg(theme.colors.palette.accent)),
-                Span::styled(" view mode", Style::default().fg(theme.colors.palette.text_primary)),
+                Span::styled(
+                    " view mode",
+                    Style::default().fg(theme.colors.palette.text_primary),
+                ),
             ]),
         ];
-        
+
         // Render each column
         let col1_widget = Paragraph::new(col1_lines).alignment(Alignment::Left);
         let col2_widget = Paragraph::new(col2_lines).alignment(Alignment::Left);
         let col3_widget = Paragraph::new(col3_lines).alignment(Alignment::Left);
         let col4_widget = Paragraph::new(col4_lines).alignment(Alignment::Left);
-        
+
         f.render_widget(col1_widget, cols[0]);
         f.render_widget(col2_widget, cols[1]);
         f.render_widget(col3_widget, cols[2]);
         f.render_widget(col4_widget, cols[3]);
-        
+
         f.render_widget(block, area);
     }
 
-    fn render_system_stats_block(&self, f: &mut Frame, area: Rect, theme: &Theme, is_selected: bool) {
+    fn render_system_stats_block(
+        &self,
+        f: &mut Frame,
+        area: Rect,
+        theme: &Theme,
+        is_selected: bool,
+    ) {
         let block = create_border_block("stats", theme, is_selected);
         let _inner_area = block.inner(area);
-        
+
         // Mock stats that match the reference image format
         let stats_lines = vec![
             Line::from(""),
-            Line::from(vec![
-                Span::styled(
-                    "load 24 ms",
-                    Style::default().fg(theme.colors.palette.text_primary),
-                ),
-            ]),
-            Line::from(vec![
-                Span::styled(
-                    "ping 348 ms",
-                    Style::default().fg(theme.colors.palette.text_primary),
-                ),
-            ]),
-            Line::from(vec![
-                Span::styled(
-                    "fps 165",
-                    Style::default().fg(theme.colors.palette.text_primary),
-                ),
-            ]),
-            Line::from(vec![
-                Span::styled(
-                    "1673 x 901",
-                    Style::default().fg(theme.colors.palette.text_primary),
-                ),
-            ]),
+            Line::from(vec![Span::styled(
+                "load 24 ms",
+                Style::default().fg(theme.colors.palette.text_primary),
+            )]),
+            Line::from(vec![Span::styled(
+                "ping 348 ms",
+                Style::default().fg(theme.colors.palette.text_primary),
+            )]),
+            Line::from(vec![Span::styled(
+                "fps 165",
+                Style::default().fg(theme.colors.palette.text_primary),
+            )]),
+            Line::from(vec![Span::styled(
+                "1673 x 901",
+                Style::default().fg(theme.colors.palette.text_primary),
+            )]),
         ];
 
         let stats_widget = Paragraph::new(stats_lines)
@@ -585,7 +654,6 @@ impl StartPage {
 
         f.render_widget(stats_widget, area);
     }
-
 }
 
 impl Default for StartPage {

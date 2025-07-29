@@ -1,6 +1,7 @@
 pub mod caldav;
 pub mod database;
 pub mod event;
+pub mod event_form;
 pub mod google;
 pub mod invitation;
 pub mod invitation_manager;
@@ -8,48 +9,49 @@ pub mod manager;
 pub mod notifications;
 pub mod sync;
 pub mod ui;
-pub mod event_form;
 
-pub use caldav::{CalDAVClient, CalDAVError, CalDAVResult, CalDAVConfig};
-pub use database::{CalendarDatabase, CalendarEvent, CalendarEventAttendee, CalendarEventRecurrence};
-pub use event::{Event, EventStatus, EventPriority, EventRecurrence, EventReminder};
-pub use google::{GoogleCalendarClient, GoogleCalendar, GoogleEvent, GoogleEventList};
-pub use manager::CalendarManager;
-pub use sync::{CalendarSyncEngine, CalendarSyncProgress};
-pub use ui::{CalendarUI, CalendarAction, CalendarViewMode};
-pub use event_form::{EventFormUI, EventFormAction, EventFormMode, EventFormField};
-pub use invitation::{MeetingInvitation, InvitationMethod, RSVPResponse, InvitationProcessor};
+pub use caldav::{CalDAVClient, CalDAVConfig, CalDAVError, CalDAVResult};
+pub use database::{
+    CalendarDatabase, CalendarEvent, CalendarEventAttendee, CalendarEventRecurrence,
+};
+pub use event::{Event, EventPriority, EventRecurrence, EventReminder, EventStatus};
+pub use event_form::{EventFormAction, EventFormField, EventFormMode, EventFormUI};
+pub use google::{GoogleCalendar, GoogleCalendarClient, GoogleEvent, GoogleEventList};
+pub use invitation::{InvitationMethod, InvitationProcessor, MeetingInvitation, RSVPResponse};
 pub use invitation_manager::{InvitationManager, InvitationStatistics};
+pub use manager::CalendarManager;
 pub use notifications::{CalendarNotification, CalendarNotificationManager};
+pub use sync::{CalendarSyncEngine, CalendarSyncProgress};
+pub use ui::{CalendarAction, CalendarUI, CalendarViewMode};
 
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use chrono::{DateTime, Utc};
 
 /// Calendar management errors
 #[derive(Error, Debug)]
 pub enum CalendarError {
     #[error("CalDAV error: {0}")]
     CalDAVError(#[from] CalDAVError),
-    
+
     #[error("Database error: {0}")]
     DatabaseError(String),
-    
+
     #[error("Sync error: {0}")]
     SyncError(String),
-    
+
     #[error("Authentication error: {0}")]
     AuthError(String),
-    
+
     #[error("Invalid event data: {0}")]
     InvalidData(String),
-    
+
     #[error("Network error: {0}")]
     NetworkError(#[from] reqwest::Error),
-    
+
     #[error("iCalendar parsing error: {0}")]
     ICalError(String),
-    
+
     #[error("DateTime parsing error: {0}")]
     DateTimeError(#[from] chrono::ParseError),
 }
@@ -59,9 +61,18 @@ pub type CalendarResult<T> = Result<T, CalendarError>;
 /// Calendar provider source
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CalendarSource {
-    Google { account_id: String, calendar_id: String },
-    Outlook { account_id: String, calendar_id: String },
-    CalDAV { account_id: String, calendar_url: String },
+    Google {
+        account_id: String,
+        calendar_id: String,
+    },
+    Outlook {
+        account_id: String,
+        calendar_id: String,
+    },
+    CalDAV {
+        account_id: String,
+        calendar_url: String,
+    },
     Local,
 }
 
@@ -74,7 +85,7 @@ impl CalendarSource {
             CalendarSource::Local => None,
         }
     }
-    
+
     pub fn provider_name(&self) -> &str {
         match self {
             CalendarSource::Google { .. } => "Google Calendar",
@@ -83,7 +94,7 @@ impl CalendarSource {
             CalendarSource::Local => "Local",
         }
     }
-    
+
     pub fn calendar_identifier(&self) -> String {
         match self {
             CalendarSource::Google { calendar_id, .. } => calendar_id.clone(),

@@ -1,4 +1,4 @@
-use crate::oauth2::{OAuth2Scope, OAuth2Error, OAuth2Result};
+use crate::oauth2::{OAuth2Error, OAuth2Result, OAuth2Scope};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -20,7 +20,7 @@ impl OAuth2Provider {
             OAuth2Provider::Custom(name) => name,
         }
     }
-    
+
     pub fn display_name(&self) -> &str {
         match self {
             OAuth2Provider::Gmail => "Gmail",
@@ -29,7 +29,7 @@ impl OAuth2Provider {
             OAuth2Provider::Custom(name) => name,
         }
     }
-    
+
     pub fn from_str(s: &str) -> OAuth2Result<Self> {
         match s.to_lowercase().as_str() {
             "gmail" => Ok(OAuth2Provider::Gmail),
@@ -71,10 +71,10 @@ impl ProviderConfig {
             token_url: "https://oauth2.googleapis.com/token".to_string(),
             redirect_uri: "http://localhost:8080/oauth/callback".to_string(), // Standard desktop app redirect
             scopes: vec![
-                OAuth2Scope::OpenId, // Required for user info access
-                OAuth2Scope::Email, // Required to get user email address
-                OAuth2Scope::Profile, // Required to get user name
-                OAuth2Scope::GmailFull, // Full Gmail access required for IMAP
+                OAuth2Scope::OpenId,         // Required for user info access
+                OAuth2Scope::Email,          // Required to get user email address
+                OAuth2Scope::Profile,        // Required to get user name
+                OAuth2Scope::GmailFull,      // Full Gmail access required for IMAP
                 OAuth2Scope::GoogleContacts, // Access to Google Contacts
             ],
             additional_params: {
@@ -91,14 +91,15 @@ impl ProviderConfig {
             uses_pkce: true,
         }
     }
-    
+
     /// Create Outlook/Hotmail configuration
     pub fn outlook() -> Self {
         Self {
             provider: OAuth2Provider::Outlook,
             client_id: "your-outlook-client-id".to_string(),
             client_secret: None, // Outlook supports PKCE without client secret
-            authorization_url: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize".to_string(),
+            authorization_url: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
+                .to_string(),
             token_url: "https://login.microsoftonline.com/common/oauth2/v2.0/token".to_string(),
             redirect_uri: "http://localhost:8080/oauth/callback".to_string(),
             scopes: vec![
@@ -116,7 +117,7 @@ impl ProviderConfig {
             uses_pkce: true,
         }
     }
-    
+
     /// Create Yahoo configuration
     pub fn yahoo() -> Self {
         Self {
@@ -126,10 +127,7 @@ impl ProviderConfig {
             authorization_url: "https://api.login.yahoo.com/oauth2/request_auth".to_string(),
             token_url: "https://api.login.yahoo.com/oauth2/get_token".to_string(),
             redirect_uri: "http://localhost:8080/oauth/callback".to_string(),
-            scopes: vec![
-                OAuth2Scope::YahooMailRead,
-                OAuth2Scope::YahooMailWrite,
-            ],
+            scopes: vec![OAuth2Scope::YahooMailRead, OAuth2Scope::YahooMailWrite],
             additional_params: HashMap::new(),
             imap_server: "imap.mail.yahoo.com".to_string(),
             imap_port: 993,
@@ -139,7 +137,7 @@ impl ProviderConfig {
             uses_pkce: false, // Yahoo doesn't support PKCE
         }
     }
-    
+
     /// Create custom provider configuration
     pub fn custom(
         name: String,
@@ -169,7 +167,7 @@ impl ProviderConfig {
             uses_pkce: true,
         }
     }
-    
+
     /// Get all supported providers
     pub fn supported_providers() -> Vec<OAuth2Provider> {
         vec![
@@ -178,7 +176,7 @@ impl ProviderConfig {
             OAuth2Provider::Yahoo,
         ]
     }
-    
+
     /// Get provider configuration by provider type
     pub fn get_config(provider: &OAuth2Provider) -> OAuth2Result<Self> {
         match provider {
@@ -186,36 +184,36 @@ impl ProviderConfig {
             OAuth2Provider::Outlook => Ok(Self::outlook()),
             OAuth2Provider::Yahoo => Ok(Self::yahoo()),
             OAuth2Provider::Custom(_) => Err(OAuth2Error::InvalidConfig(
-                "Custom provider configuration must be provided".to_string()
+                "Custom provider configuration must be provided".to_string(),
             )),
         }
     }
-    
+
     /// Update client credentials (for production use)
     pub fn with_credentials(mut self, client_id: String, client_secret: Option<String>) -> Self {
         self.client_id = client_id;
         self.client_secret = client_secret;
         self
     }
-    
+
     /// Update redirect URI
     pub fn with_redirect_uri(mut self, redirect_uri: String) -> Self {
         self.redirect_uri = redirect_uri;
         self
     }
-    
+
     /// Add custom scopes
     pub fn with_scopes(mut self, scopes: Vec<OAuth2Scope>) -> Self {
         self.scopes = scopes;
         self
     }
-    
+
     /// Add additional authorization parameters
     pub fn with_additional_params(mut self, params: HashMap<String, String>) -> Self {
         self.additional_params.extend(params);
         self
     }
-    
+
     /// Get scope strings for authorization request
     pub fn scope_string(&self) -> String {
         self.scopes
@@ -224,42 +222,54 @@ impl ProviderConfig {
             .collect::<Vec<_>>()
             .join(" ")
     }
-    
+
     /// Validate configuration
     pub fn validate(&self) -> OAuth2Result<()> {
         if self.client_id.is_empty() {
-            return Err(OAuth2Error::InvalidConfig("Client ID is required".to_string()));
-        }
-        
-        if !self.uses_pkce && self.client_secret.is_none() {
             return Err(OAuth2Error::InvalidConfig(
-                "Client secret is required when PKCE is not used".to_string()
+                "Client ID is required".to_string(),
             ));
         }
-        
+
+        if !self.uses_pkce && self.client_secret.is_none() {
+            return Err(OAuth2Error::InvalidConfig(
+                "Client secret is required when PKCE is not used".to_string(),
+            ));
+        }
+
         if self.authorization_url.is_empty() {
-            return Err(OAuth2Error::InvalidConfig("Authorization URL is required".to_string()));
+            return Err(OAuth2Error::InvalidConfig(
+                "Authorization URL is required".to_string(),
+            ));
         }
-        
+
         if self.token_url.is_empty() {
-            return Err(OAuth2Error::InvalidConfig("Token URL is required".to_string()));
+            return Err(OAuth2Error::InvalidConfig(
+                "Token URL is required".to_string(),
+            ));
         }
-        
+
         if self.redirect_uri.is_empty() {
-            return Err(OAuth2Error::InvalidConfig("Redirect URI is required".to_string()));
+            return Err(OAuth2Error::InvalidConfig(
+                "Redirect URI is required".to_string(),
+            ));
         }
-        
+
         if self.imap_server.is_empty() {
-            return Err(OAuth2Error::InvalidConfig("IMAP server is required".to_string()));
+            return Err(OAuth2Error::InvalidConfig(
+                "IMAP server is required".to_string(),
+            ));
         }
-        
+
         if self.smtp_server.is_empty() {
-            return Err(OAuth2Error::InvalidConfig("SMTP server is required".to_string()));
+            return Err(OAuth2Error::InvalidConfig(
+                "SMTP server is required".to_string(),
+            ));
         }
-        
+
         Ok(())
     }
-    
+
     /// Get provider-specific setup instructions
     pub fn setup_instructions(&self) -> Vec<String> {
         match &self.provider {
@@ -385,7 +395,7 @@ impl ProviderDetector {
     /// Detect provider from email address
     pub fn detect_from_email(email: &str) -> Option<OAuth2Provider> {
         let domain = email.split('@').nth(1)?.to_lowercase();
-        
+
         match domain.as_str() {
             "gmail.com" | "googlemail.com" => Some(OAuth2Provider::Gmail),
             "outlook.com" | "hotmail.com" | "live.com" | "msn.com" => Some(OAuth2Provider::Outlook),
@@ -393,7 +403,7 @@ impl ProviderDetector {
             _ => None,
         }
     }
-    
+
     /// Get all common email domains for each provider
     pub fn get_provider_domains(provider: &OAuth2Provider) -> Vec<&'static str> {
         match provider {
@@ -403,7 +413,7 @@ impl ProviderDetector {
             OAuth2Provider::Custom(_) => vec![],
         }
     }
-    
+
     /// Check if email domain is supported by any provider
     pub fn is_supported_domain(email: &str) -> bool {
         Self::detect_from_email(email).is_some()
@@ -413,22 +423,31 @@ impl ProviderDetector {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_provider_from_str() {
-        assert_eq!(OAuth2Provider::from_str("gmail").unwrap(), OAuth2Provider::Gmail);
-        assert_eq!(OAuth2Provider::from_str("outlook").unwrap(), OAuth2Provider::Outlook);
-        assert_eq!(OAuth2Provider::from_str("yahoo").unwrap(), OAuth2Provider::Yahoo);
+        assert_eq!(
+            OAuth2Provider::from_str("gmail").unwrap(),
+            OAuth2Provider::Gmail
+        );
+        assert_eq!(
+            OAuth2Provider::from_str("outlook").unwrap(),
+            OAuth2Provider::Outlook
+        );
+        assert_eq!(
+            OAuth2Provider::from_str("yahoo").unwrap(),
+            OAuth2Provider::Yahoo
+        );
         assert!(OAuth2Provider::from_str("invalid").is_err());
     }
-    
+
     #[test]
     fn test_provider_display_names() {
         assert_eq!(OAuth2Provider::Gmail.display_name(), "Gmail");
         assert_eq!(OAuth2Provider::Outlook.display_name(), "Outlook/Hotmail");
         assert_eq!(OAuth2Provider::Yahoo.display_name(), "Yahoo Mail");
     }
-    
+
     #[test]
     fn test_provider_detection() {
         assert_eq!(
@@ -448,27 +467,27 @@ mod tests {
             None
         );
     }
-    
+
     #[test]
     fn test_provider_config_validation() {
         let config = ProviderConfig::gmail();
         // This will fail because we're using placeholder credentials
         assert!(config.validate().is_err());
-        
+
         let valid_config = config.with_credentials(
             "real-client-id".to_string(),
-            Some("real-client-secret".to_string())
+            Some("real-client-secret".to_string()),
         );
         assert!(valid_config.validate().is_ok());
     }
-    
+
     #[test]
     fn test_scope_string() {
         let config = ProviderConfig::gmail();
         let scope_string = config.scope_string();
         assert!(scope_string.contains("https://mail.google.com/"));
     }
-    
+
     #[test]
     fn test_supported_providers() {
         let providers = ProviderConfig::supported_providers();

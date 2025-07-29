@@ -1,6 +1,6 @@
+use crate::theme::color::ThemeColors;
 use ratatui::style::{Color, Modifier, Style};
 use serde::{Deserialize, Serialize};
-use crate::theme::color::ThemeColors;
 
 /// Component-specific styling definitions
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -134,14 +134,14 @@ impl StyleSet {
             "accent" => Some(colors.palette.accent),
             "highlight" => Some(colors.palette.highlight),
             "disabled" => Some(colors.palette.disabled),
-            
+
             // Component-specific colors
             "folder_normal" => Some(colors.folder_tree.folder_normal),
             "folder_selected" => Some(colors.folder_tree.folder_selected),
             "folder_unread" => Some(colors.folder_tree.folder_unread),
             "count_badge" => Some(colors.folder_tree.count_badge),
             "expand_icon" => Some(colors.folder_tree.expand_icon),
-            
+
             "sender" => Some(colors.message_list.sender),
             "subject_read" => Some(colors.message_list.subject_read),
             "subject_unread" => Some(colors.message_list.subject_unread),
@@ -149,18 +149,18 @@ impl StyleSet {
             "thread_indicator" => Some(colors.message_list.thread_indicator),
             "attachment_icon" => Some(colors.message_list.attachment_icon),
             "priority_high" => Some(colors.message_list.priority_high),
-            
+
             "header" => Some(colors.content_preview.header),
             "body" => Some(colors.content_preview.body),
             "quote" => Some(colors.content_preview.quote),
             "link" => Some(colors.content_preview.link),
             "code" => Some(colors.content_preview.code),
-            
+
             "status_bg" => Some(colors.status_bar.background),
             "status_text" => Some(colors.status_bar.text),
             "status_separator" => Some(colors.status_bar.section_separator),
             "status_active" => Some(colors.status_bar.active_indicator),
-            
+
             _ => None,
         }
     }

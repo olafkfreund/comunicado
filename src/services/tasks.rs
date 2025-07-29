@@ -1,8 +1,8 @@
+use chrono::{DateTime, Local};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
-use chrono::{DateTime, Local};
-use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::ui::start_page::{TaskItem, TaskPriority};
@@ -83,10 +83,10 @@ impl TaskService {
         let data_dir = dirs::data_dir()
             .unwrap_or_else(|| std::path::PathBuf::from("."))
             .join("comunicado");
-        
+
         // Create directory if it doesn't exist
         std::fs::create_dir_all(&data_dir)?;
-        
+
         let data_file = data_dir.join("tasks.json");
 
         let mut service = Self {
@@ -174,13 +174,17 @@ impl TaskService {
 
     /// Get tasks by priority
     pub fn get_tasks_by_priority(&self, priority: TaskPriority) -> Vec<&TaskItem> {
-        self.tasks.iter().filter(|task| task.priority == priority).collect()
+        self.tasks
+            .iter()
+            .filter(|task| task.priority == priority)
+            .collect()
     }
 
     /// Get tasks due today
     pub fn get_tasks_due_today(&self) -> Vec<&TaskItem> {
         let today = Local::now().date_naive();
-        self.tasks.iter()
+        self.tasks
+            .iter()
             .filter(|task| {
                 if let Some(due_date) = task.due_date {
                     due_date.date_naive() == today
@@ -194,10 +198,9 @@ impl TaskService {
     /// Get overdue tasks
     pub fn get_overdue_tasks(&self) -> Vec<&TaskItem> {
         let now = Local::now();
-        self.tasks.iter()
-            .filter(|task| {
-                !task.completed && task.due_date.map_or(false, |due| due < now)
-            })
+        self.tasks
+            .iter()
+            .filter(|task| !task.completed && task.due_date.map_or(false, |due| due < now))
             .collect()
     }
 
@@ -219,10 +222,10 @@ impl TaskService {
 
     /// Create and add a simple task
     pub fn add_simple_task(
-        &mut self, 
-        title: String, 
+        &mut self,
+        title: String,
         priority: TaskPriority,
-        due_date: Option<DateTime<Local>>
+        due_date: Option<DateTime<Local>>,
     ) -> Result<String, Box<dyn std::error::Error>> {
         let task_id = Uuid::new_v4().to_string();
         let task = TaskItem {
@@ -242,11 +245,11 @@ impl TaskService {
         if let Some(task) = self.tasks.iter_mut().find(|t| t.id == task_id) {
             task.completed = !task.completed;
             let completed = task.completed;
-            
+
             if self.auto_save {
                 self.save_tasks()?;
             }
-            
+
             Ok(completed)
         } else {
             Err(format!("Task with id {} not found", task_id).into())
@@ -254,14 +257,18 @@ impl TaskService {
     }
 
     /// Update task priority
-    pub fn update_task_priority(&mut self, task_id: &str, priority: TaskPriority) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn update_task_priority(
+        &mut self,
+        task_id: &str,
+        priority: TaskPriority,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         if let Some(task) = self.tasks.iter_mut().find(|t| t.id == task_id) {
             task.priority = priority;
-            
+
             if self.auto_save {
                 self.save_tasks()?;
             }
-            
+
             Ok(())
         } else {
             Err(format!("Task with id {} not found", task_id).into())
@@ -269,14 +276,18 @@ impl TaskService {
     }
 
     /// Update task due date
-    pub fn update_task_due_date(&mut self, task_id: &str, due_date: Option<DateTime<Local>>) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn update_task_due_date(
+        &mut self,
+        task_id: &str,
+        due_date: Option<DateTime<Local>>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         if let Some(task) = self.tasks.iter_mut().find(|t| t.id == task_id) {
             task.due_date = due_date;
-            
+
             if self.auto_save {
                 self.save_tasks()?;
             }
-            
+
             Ok(())
         } else {
             Err(format!("Task with id {} not found", task_id).into())
@@ -287,7 +298,7 @@ impl TaskService {
     pub fn delete_task(&mut self, task_id: &str) -> Result<(), Box<dyn std::error::Error>> {
         let initial_len = self.tasks.len();
         self.tasks.retain(|task| task.id != task_id);
-        
+
         if self.tasks.len() < initial_len {
             if self.auto_save {
                 self.save_tasks()?;
@@ -303,41 +314,52 @@ impl TaskService {
         let initial_len = self.tasks.len();
         self.tasks.retain(|task| !task.completed);
         let removed_count = initial_len - self.tasks.len();
-        
+
         if removed_count > 0 && self.auto_save {
             self.save_tasks()?;
         }
-        
+
         Ok(removed_count)
     }
 
     /// Get task statistics
     pub fn get_stats(&self) -> HashMap<String, usize> {
         let mut stats = HashMap::new();
-        
+
         stats.insert("total".to_string(), self.tasks.len());
         stats.insert("completed".to_string(), self.get_completed_tasks().len());
         stats.insert("pending".to_string(), self.get_pending_tasks().len());
         stats.insert("overdue".to_string(), self.get_overdue_tasks().len());
         stats.insert("due_today".to_string(), self.get_tasks_due_today().len());
-        
-        stats.insert("low_priority".to_string(), self.get_tasks_by_priority(TaskPriority::Low).len());
-        stats.insert("medium_priority".to_string(), self.get_tasks_by_priority(TaskPriority::Medium).len());
-        stats.insert("high_priority".to_string(), self.get_tasks_by_priority(TaskPriority::High).len());
-        stats.insert("urgent_priority".to_string(), self.get_tasks_by_priority(TaskPriority::Urgent).len());
-        
+
+        stats.insert(
+            "low_priority".to_string(),
+            self.get_tasks_by_priority(TaskPriority::Low).len(),
+        );
+        stats.insert(
+            "medium_priority".to_string(),
+            self.get_tasks_by_priority(TaskPriority::Medium).len(),
+        );
+        stats.insert(
+            "high_priority".to_string(),
+            self.get_tasks_by_priority(TaskPriority::High).len(),
+        );
+        stats.insert(
+            "urgent_priority".to_string(),
+            self.get_tasks_by_priority(TaskPriority::Urgent).len(),
+        );
+
         stats
     }
 
     /// Save tasks to file
     pub fn save_tasks(&self) -> Result<(), Box<dyn std::error::Error>> {
-        let serializable_tasks: Vec<SerializableTask> = self.tasks.iter()
-            .map(SerializableTask::from)
-            .collect();
+        let serializable_tasks: Vec<SerializableTask> =
+            self.tasks.iter().map(SerializableTask::from).collect();
 
         let json = serde_json::to_string_pretty(&serializable_tasks)?;
         fs::write(&self.data_file, json)?;
-        
+
         tracing::debug!("Saved {} tasks to {:?}", self.tasks.len(), self.data_file);
         Ok(())
     }
@@ -345,13 +367,16 @@ impl TaskService {
     /// Load tasks from file
     pub fn load_tasks(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         if !self.data_file.exists() {
-            tracing::debug!("Task file {:?} does not exist, starting with empty tasks", self.data_file);
+            tracing::debug!(
+                "Task file {:?} does not exist, starting with empty tasks",
+                self.data_file
+            );
             return Ok(());
         }
 
         let json = fs::read_to_string(&self.data_file)?;
         let serializable_tasks: Vec<SerializableTask> = serde_json::from_str(&json)?;
-        
+
         self.tasks.clear();
         for serializable_task in serializable_tasks {
             match TaskItem::try_from(serializable_task) {
@@ -359,8 +384,12 @@ impl TaskService {
                 Err(e) => tracing::warn!("Failed to deserialize task: {}", e),
             }
         }
-        
-        tracing::debug!("Loaded {} tasks from {:?}", self.tasks.len(), self.data_file);
+
+        tracing::debug!(
+            "Loaded {} tasks from {:?}",
+            self.tasks.len(),
+            self.data_file
+        );
         Ok(())
     }
 

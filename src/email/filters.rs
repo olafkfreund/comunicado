@@ -1,6 +1,6 @@
+use crate::email::StoredMessage;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use crate::email::StoredMessage;
 
 /// Email filter rule for organizing messages
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -144,7 +144,7 @@ impl FilterEngine {
 
             if self.evaluate_filter(filter, message) {
                 result.matched_filters.push(filter.id);
-                
+
                 for action in &filter.actions {
                     if matches!(action, FilterAction::StopProcessing) {
                         result.stop_processing = true;
@@ -169,15 +169,16 @@ impl FilterEngine {
         }
 
         // All conditions must match (AND logic)
-        filter.conditions.iter().all(|condition| {
-            self.evaluate_condition(condition, message)
-        })
+        filter
+            .conditions
+            .iter()
+            .all(|condition| self.evaluate_condition(condition, message))
     }
 
     /// Evaluate a single condition against a message
     fn evaluate_condition(&self, condition: &FilterCondition, message: &StoredMessage) -> bool {
         let field_value = self.extract_field_value(&condition.field, message);
-        
+
         let value_to_check = if condition.case_sensitive {
             field_value.clone()
         } else {
@@ -198,14 +199,18 @@ impl FilterEngine {
             FilterOperator::Equals => value_to_check == condition_value,
             FilterOperator::NotEquals => value_to_check != condition_value,
             FilterOperator::GreaterThan => {
-                if let (Ok(field_num), Ok(condition_num)) = (field_value.parse::<f64>(), condition.value.parse::<f64>()) {
+                if let (Ok(field_num), Ok(condition_num)) =
+                    (field_value.parse::<f64>(), condition.value.parse::<f64>())
+                {
                     field_num > condition_num
                 } else {
                     false
                 }
             }
             FilterOperator::LessThan => {
-                if let (Ok(field_num), Ok(condition_num)) = (field_value.parse::<f64>(), condition.value.parse::<f64>()) {
+                if let (Ok(field_num), Ok(condition_num)) =
+                    (field_value.parse::<f64>(), condition.value.parse::<f64>())
+                {
                     field_num < condition_num
                 } else {
                     false
@@ -229,16 +234,19 @@ impl FilterEngine {
             FilterField::From => message.from_addr.clone(),
             FilterField::To => message.to_addrs.join(", "),
             FilterField::Subject => message.subject.clone(),
-            FilterField::Body => {
-                message.body_text.clone()
-                    .or_else(|| message.body_html.clone())
-                    .unwrap_or_default()
-            }
+            FilterField::Body => message
+                .body_text
+                .clone()
+                .or_else(|| message.body_html.clone())
+                .unwrap_or_default(),
             FilterField::Sender => message.from_addr.clone(), // Could be different from From
             FilterField::MessageId => message.message_id.clone().unwrap_or_default(),
-            FilterField::HasAttachment => {
-                if !message.attachments.is_empty() { "true" } else { "false" }.to_string()
+            FilterField::HasAttachment => if !message.attachments.is_empty() {
+                "true"
+            } else {
+                "false"
             }
+            .to_string(),
             FilterField::Size => message.size.map(|s| s.to_string()).unwrap_or_default(),
             FilterField::Date => message.date.to_rfc3339(),
             FilterField::Folder => message.folder_name.clone(),
@@ -246,21 +254,19 @@ impl FilterEngine {
             FilterField::BCC => message.bcc_addrs.join(", "),
             FilterField::ReplyTo => message.reply_to.clone().unwrap_or_default(),
             FilterField::InReplyTo => message.in_reply_to.clone().unwrap_or_default(),
-            FilterField::AttachmentName => {
-                message.attachments.iter()
-                    .map(|a| a.filename.clone())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            }
-            FilterField::AttachmentType => {
-                message.attachments.iter()
-                    .map(|a| a.content_type.clone())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            }
-            FilterField::Priority => {
-                message.priority.clone().unwrap_or_default()
-            }
+            FilterField::AttachmentName => message
+                .attachments
+                .iter()
+                .map(|a| a.filename.clone())
+                .collect::<Vec<_>>()
+                .join(", "),
+            FilterField::AttachmentType => message
+                .attachments
+                .iter()
+                .map(|a| a.content_type.clone())
+                .collect::<Vec<_>>()
+                .join(", "),
+            FilterField::Priority => message.priority.clone().unwrap_or_default(),
         }
     }
 
@@ -408,11 +414,8 @@ mod tests {
 
     #[test]
     fn test_filter_creation() {
-        let filter = EmailFilter::new(
-            "Test Filter".to_string(),
-            "Test description".to_string(),
-        );
-        
+        let filter = EmailFilter::new("Test Filter".to_string(), "Test description".to_string());
+
         assert_eq!(filter.name, "Test Filter");
         assert_eq!(filter.description, "Test description");
         assert!(filter.enabled);
@@ -429,7 +432,7 @@ mod tests {
 
         let engine = FilterEngine::new();
         let message = create_test_message();
-        
+
         // This would require a full test setup - simplified for now
         assert_eq!(condition.field, FilterField::Subject);
     }

@@ -67,6 +67,9 @@ webpki-roots = "0.26"
 
 # Additional dependencies for contacts
 async-trait = "0.1"
+
+# Desktop notifications
+notify-rust = "4.10"
 percent-encoding = "2.3"
 
 # SMTP email sending
@@ -84,6 +87,9 @@ dirs = "5.0"
 
 # System monitoring
 sysinfo = "0.30"
+
+# Hostname for Maildir unique IDs
+hostname = "0.3"
 
 # Spell checking dependencies removed - implementing custom solution
 

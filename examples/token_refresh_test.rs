@@ -1,18 +1,18 @@
 #!/usr/bin/env cargo run --example
 //! OAuth2 Token Refresh Test
-//! 
+//!
 //! This example tests the OAuth2 token refresh functionality for Gmail.
-//! 
+//!
 //! Setup:
 //! 1. Set environment variables for your Gmail OAuth2 credentials:
 //!    export GMAIL_CLIENT_ID="your-client-id.apps.googleusercontent.com"
 //!    export GMAIL_CLIENT_SECRET="your-client-secret"
-//! 
+//!
 //! 2. Run the test:
 //!    cargo run --example token_refresh_test
 
 use anyhow::Result;
-use comunicado::oauth2::{SecureStorage, TokenManager, TokenDiagnosis};
+use comunicado::oauth2::{SecureStorage, TokenDiagnosis, TokenManager};
 use std::sync::Arc;
 
 #[tokio::main]
@@ -27,15 +27,22 @@ async fn main() -> Result<()> {
         .map_err(|_| anyhow::anyhow!("GMAIL_CLIENT_SECRET environment variable not set"))?;
 
     println!("✅ Found OAuth2 credentials in environment");
-    println!("   Client ID: {}...{}", &client_id[..20], &client_id[client_id.len()-20..]);
+    println!(
+        "   Client ID: {}...{}",
+        &client_id[..20],
+        &client_id[client_id.len() - 20..]
+    );
     println!();
 
     // Initialize storage
-    let storage = Arc::new(SecureStorage::new("comunicado".to_string())
-        .map_err(|e| anyhow::anyhow!("Failed to initialize storage: {}", e))?);
+    let storage = Arc::new(
+        SecureStorage::new("comunicado".to_string())
+            .map_err(|e| anyhow::anyhow!("Failed to initialize storage: {}", e))?,
+    );
 
     // Get all stored account IDs
-    let account_ids = storage.list_account_ids()
+    let account_ids = storage
+        .list_account_ids()
         .map_err(|e| anyhow::anyhow!("Failed to list accounts: {}", e))?;
 
     if account_ids.is_empty() {
@@ -51,12 +58,18 @@ async fn main() -> Result<()> {
     for account_id in &account_ids {
         if let Ok(Some(account)) = storage.load_account(account_id) {
             if account.provider != "gmail" {
-                println!("⏭️  Skipping non-Gmail account: {} ({})", account.display_name, account.provider);
+                println!(
+                    "⏭️  Skipping non-Gmail account: {} ({})",
+                    account.display_name, account.provider
+                );
                 continue;
             }
 
-            println!("🔍 Testing token refresh for Gmail account: {} ({})", account.display_name, account.email_address);
-            
+            println!(
+                "🔍 Testing token refresh for Gmail account: {} ({})",
+                account.display_name, account.email_address
+            );
+
             // Load tokens into token manager
             let token_response = comunicado::oauth2::TokenResponse {
                 access_token: account.access_token.clone(),
@@ -69,36 +82,45 @@ async fn main() -> Result<()> {
                 }),
                 scope: Some(account.scopes.join(" ")),
             };
-            
-            if let Err(e) = token_manager.store_tokens(
-                account_id.clone(),
-                account.provider.clone(),
-                &token_response,
-            ).await {
+
+            if let Err(e) = token_manager
+                .store_tokens(
+                    account_id.clone(),
+                    account.provider.clone(),
+                    &token_response,
+                )
+                .await
+            {
                 println!("   ❌ Failed to load tokens into manager: {}", e);
                 continue;
             }
-            
+
             // Get current token status
             let diagnosis = token_manager.diagnose_account_tokens(account_id).await;
             println!("   📊 Current status: {}", diagnosis.description());
-            
+
             // Test token refresh if needed
             if diagnosis.needs_action() {
                 println!("   🔄 Attempting token refresh...");
-                
+
                 match token_manager.refresh_access_token(account_id).await {
                     Ok(new_token) => {
                         println!("   ✅ Token refresh successful!");
                         if let Some(expires_at) = new_token.expires_at {
-                            println!("   📅 New expiration: {}", expires_at.format("%Y-%m-%d %H:%M:%S UTC"));
+                            println!(
+                                "   📅 New expiration: {}",
+                                expires_at.format("%Y-%m-%d %H:%M:%S UTC")
+                            );
                         }
-                        
+
                         // Verify the refreshed token works
                         match token_manager.get_valid_access_token(account_id).await {
                             Ok(Some(valid_token)) => {
                                 println!("   ✅ Refreshed token is valid and ready for use");
-                                println!("   🔑 Token length: {} characters", valid_token.token.len());
+                                println!(
+                                    "   🔑 Token length: {} characters",
+                                    valid_token.token.len()
+                                );
                             }
                             Ok(None) => {
                                 println!("   ⚠️  Warning: No valid token available after refresh");
@@ -120,7 +142,7 @@ async fn main() -> Result<()> {
             } else {
                 println!("   ✅ Token is valid, no refresh needed");
             }
-            
+
             println!();
         }
     }

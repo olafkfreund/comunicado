@@ -1,7 +1,9 @@
-use crate::contacts::{ContactsError, ContactsResult, ContactSource, ContactSearchCriteria, AddressBookStats};
+use crate::contacts::{
+    AddressBookStats, ContactSearchCriteria, ContactSource, ContactsError, ContactsResult,
+};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use sqlx::{Pool, Sqlite, Row};
+use sqlx::{Pool, Row, Sqlite};
 
 /// Contact information
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -48,15 +50,21 @@ impl Contact {
             etag: None,
         }
     }
-    
+
     pub fn primary_email(&self) -> Option<&ContactEmail> {
-        self.emails.iter().find(|e| e.is_primary).or_else(|| self.emails.first())
+        self.emails
+            .iter()
+            .find(|e| e.is_primary)
+            .or_else(|| self.emails.first())
     }
-    
+
     pub fn primary_phone(&self) -> Option<&ContactPhone> {
-        self.phones.iter().find(|p| p.is_primary).or_else(|| self.phones.first())
+        self.phones
+            .iter()
+            .find(|p| p.is_primary)
+            .or_else(|| self.phones.first())
     }
-    
+
     pub fn full_name(&self) -> String {
         match (&self.first_name, &self.last_name) {
             (Some(first), Some(last)) => format!("{} {}", first, last),
@@ -65,25 +73,22 @@ impl Contact {
             (None, None) => self.display_name.clone(),
         }
     }
-    
+
     pub fn search_text(&self) -> String {
-        let mut text = vec![
-            self.display_name.clone(),
-            self.full_name(),
-        ];
-        
+        let mut text = vec![self.display_name.clone(), self.full_name()];
+
         if let Some(company) = &self.company {
             text.push(company.clone());
         }
-        
+
         for email in &self.emails {
             text.push(email.address.clone());
         }
-        
+
         for phone in &self.phones {
             text.push(phone.number.clone());
         }
-        
+
         text.join(" ").to_lowercase()
     }
 }
@@ -104,7 +109,7 @@ impl ContactEmail {
             is_primary: false,
         }
     }
-    
+
     pub fn primary(address: String, label: String) -> Self {
         Self {
             address,
@@ -130,7 +135,7 @@ impl ContactPhone {
             is_primary: false,
         }
     }
-    
+
     pub fn primary(number: String, label: String) -> Self {
         Self {
             number,
@@ -177,14 +182,15 @@ pub struct ContactsDatabase {
 impl ContactsDatabase {
     /// Create a new contacts database
     pub async fn new(database_url: &str) -> ContactsResult<Self> {
-        let pool = Pool::<Sqlite>::connect(database_url).await
+        let pool = Pool::<Sqlite>::connect(database_url)
+            .await
             .map_err(|e| ContactsError::DatabaseError(e.to_string()))?;
-        
+
         let db = Self { pool };
         db.init_tables().await?;
         Ok(db)
     }
-    
+
     /// Initialize database tables
     async fn init_tables(&self) -> ContactsResult<()> {
         // Contacts table
@@ -213,7 +219,7 @@ impl ContactsDatabase {
         .execute(&self.pool)
         .await
         .map_err(|e| ContactsError::DatabaseError(e.to_string()))?;
-        
+
         // Contact emails table
         sqlx::query(
             r#"
@@ -230,7 +236,7 @@ impl ContactsDatabase {
         .execute(&self.pool)
         .await
         .map_err(|e| ContactsError::DatabaseError(e.to_string()))?;
-        
+
         // Contact phones table
         sqlx::query(
             r#"
@@ -247,7 +253,7 @@ impl ContactsDatabase {
         .execute(&self.pool)
         .await
         .map_err(|e| ContactsError::DatabaseError(e.to_string()))?;
-        
+
         // Contact groups table
         sqlx::query(
             r#"
@@ -268,7 +274,7 @@ impl ContactsDatabase {
         .execute(&self.pool)
         .await
         .map_err(|e| ContactsError::DatabaseError(e.to_string()))?;
-        
+
         // Contact group memberships table
         sqlx::query(
             r#"
@@ -284,26 +290,30 @@ impl ContactsDatabase {
         .execute(&self.pool)
         .await
         .map_err(|e| ContactsError::DatabaseError(e.to_string()))?;
-        
+
         // Create indexes for better search performance
-        sqlx::query("CREATE INDEX IF NOT EXISTS idx_contacts_display_name ON contacts (display_name)")
-            .execute(&self.pool)
-            .await
-            .map_err(|e| ContactsError::DatabaseError(e.to_string()))?;
-        
-        sqlx::query("CREATE INDEX IF NOT EXISTS idx_contact_emails_address ON contact_emails (address)")
-            .execute(&self.pool)
-            .await
-            .map_err(|e| ContactsError::DatabaseError(e.to_string()))?;
-        
+        sqlx::query(
+            "CREATE INDEX IF NOT EXISTS idx_contacts_display_name ON contacts (display_name)",
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| ContactsError::DatabaseError(e.to_string()))?;
+
+        sqlx::query(
+            "CREATE INDEX IF NOT EXISTS idx_contact_emails_address ON contact_emails (address)",
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| ContactsError::DatabaseError(e.to_string()))?;
+
         sqlx::query("CREATE INDEX IF NOT EXISTS idx_contacts_source ON contacts (source_type, source_account_id)")
             .execute(&self.pool)
             .await
             .map_err(|e| ContactsError::DatabaseError(e.to_string()))?;
-        
+
         Ok(())
     }
-    
+
     /// Store or update a contact
     pub async fn store_contact(&self, contact: &mut Contact) -> ContactsResult<()> {
         let (source_type, source_account_id) = match &contact.source {
@@ -311,7 +321,7 @@ impl ContactsDatabase {
             ContactSource::Outlook { account_id } => ("outlook", Some(account_id.as_str())),
             ContactSource::Local => ("local", None),
         };
-        
+
         // Insert or update contact
         let result = sqlx::query(
             r#"
@@ -350,29 +360,29 @@ impl ContactsDatabase {
         .execute(&self.pool)
         .await
         .map_err(|e| ContactsError::DatabaseError(e.to_string()))?;
-        
+
         // Get the contact ID
         let contact_id = if contact.id.is_none() {
             result.last_insert_rowid()
         } else {
             contact.id.unwrap()
         };
-        
+
         contact.id = Some(contact_id);
-        
+
         // Clear existing emails and phones
         sqlx::query("DELETE FROM contact_emails WHERE contact_id = ?")
             .bind(contact_id)
             .execute(&self.pool)
             .await
             .map_err(|e| ContactsError::DatabaseError(e.to_string()))?;
-        
+
         sqlx::query("DELETE FROM contact_phones WHERE contact_id = ?")
             .bind(contact_id)
             .execute(&self.pool)
             .await
             .map_err(|e| ContactsError::DatabaseError(e.to_string()))?;
-        
+
         // Insert emails
         for email in &contact.emails {
             sqlx::query(
@@ -386,7 +396,7 @@ impl ContactsDatabase {
             .await
             .map_err(|e| ContactsError::DatabaseError(e.to_string()))?;
         }
-        
+
         // Insert phones
         for phone in &contact.phones {
             sqlx::query(
@@ -400,12 +410,15 @@ impl ContactsDatabase {
             .await
             .map_err(|e| ContactsError::DatabaseError(e.to_string()))?;
         }
-        
+
         Ok(())
     }
-    
+
     /// Search contacts
-    pub async fn search_contacts(&self, criteria: &ContactSearchCriteria) -> ContactsResult<Vec<Contact>> {
+    pub async fn search_contacts(
+        &self,
+        criteria: &ContactSearchCriteria,
+    ) -> ContactsResult<Vec<Contact>> {
         let mut query = "SELECT c.*, 
                                GROUP_CONCAT(DISTINCT e.address || '|' || e.label || '|' || e.is_primary) as emails,
                                GROUP_CONCAT(DISTINCT p.number || '|' || p.label || '|' || p.is_primary) as phones
@@ -413,20 +426,27 @@ impl ContactsDatabase {
                         LEFT JOIN contact_emails e ON c.id = e.contact_id
                         LEFT JOIN contact_phones p ON c.id = p.contact_id
                         WHERE 1=1".to_string();
-        
+
         let mut params: Vec<String> = Vec::new();
-        
+
         if let Some(query_text) = &criteria.query {
             query.push_str(" AND (c.display_name LIKE ? OR c.first_name LIKE ? OR c.last_name LIKE ? OR c.company LIKE ?)");
             let pattern = format!("%{}%", query_text);
-            params.extend(vec![pattern.clone(), pattern.clone(), pattern.clone(), pattern]);
+            params.extend(vec![
+                pattern.clone(),
+                pattern.clone(),
+                pattern.clone(),
+                pattern,
+            ]);
         }
-        
+
         if let Some(email) = &criteria.email {
-            query.push_str(" AND c.id IN (SELECT contact_id FROM contact_emails WHERE address LIKE ?)");
+            query.push_str(
+                " AND c.id IN (SELECT contact_id FROM contact_emails WHERE address LIKE ?)",
+            );
             params.push(format!("%{}%", email));
         }
-        
+
         if let Some(source) = &criteria.source {
             match source {
                 ContactSource::Google { account_id } => {
@@ -442,32 +462,32 @@ impl ContactsDatabase {
                 }
             }
         }
-        
+
         query.push_str(" GROUP BY c.id ORDER BY c.display_name");
-        
+
         if let Some(limit) = criteria.limit {
             query.push_str(&format!(" LIMIT {}", limit));
         }
-        
+
         let mut query_builder = sqlx::query(&query);
         for param in &params {
             query_builder = query_builder.bind(param);
         }
-        
+
         let rows = query_builder
             .fetch_all(&self.pool)
             .await
             .map_err(|e| ContactsError::DatabaseError(e.to_string()))?;
-        
+
         let mut contacts = Vec::new();
         for row in rows {
             let contact = self.contact_from_row(&row)?;
             contacts.push(contact);
         }
-        
+
         Ok(contacts)
     }
-    
+
     /// Get contact by ID
     pub async fn get_contact(&self, id: i64) -> ContactsResult<Option<Contact>> {
         let query = "SELECT c.*, 
@@ -478,20 +498,20 @@ impl ContactsDatabase {
                     LEFT JOIN contact_phones p ON c.id = p.contact_id
                     WHERE c.id = ?
                     GROUP BY c.id";
-        
+
         let row = sqlx::query(query)
             .bind(id)
             .fetch_optional(&self.pool)
             .await
             .map_err(|e| ContactsError::DatabaseError(e.to_string()))?;
-        
+
         if let Some(row) = row {
             Ok(Some(self.contact_from_row(&row)?))
         } else {
             Ok(None)
         }
     }
-    
+
     /// Delete contact
     pub async fn delete_contact(&self, id: i64) -> ContactsResult<()> {
         sqlx::query("DELETE FROM contacts WHERE id = ?")
@@ -499,55 +519,65 @@ impl ContactsDatabase {
             .execute(&self.pool)
             .await
             .map_err(|e| ContactsError::DatabaseError(e.to_string()))?;
-        
+
         Ok(())
     }
-    
+
     /// Get address book statistics
     pub async fn get_stats(&self) -> ContactsResult<AddressBookStats> {
         let total_contacts: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM contacts")
             .fetch_one(&self.pool)
             .await
             .map_err(|e| ContactsError::DatabaseError(e.to_string()))?;
-        
-        let google_contacts: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM contacts WHERE source_type = 'google'")
-            .fetch_one(&self.pool)
-            .await
-            .map_err(|e| ContactsError::DatabaseError(e.to_string()))?;
-        
-        let outlook_contacts: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM contacts WHERE source_type = 'outlook'")
-            .fetch_one(&self.pool)
-            .await
-            .map_err(|e| ContactsError::DatabaseError(e.to_string()))?;
-        
-        let local_contacts: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM contacts WHERE source_type = 'local'")
-            .fetch_one(&self.pool)
-            .await
-            .map_err(|e| ContactsError::DatabaseError(e.to_string()))?;
-        
-        let contacts_with_email: i64 = sqlx::query_scalar("SELECT COUNT(DISTINCT contact_id) FROM contact_emails")
-            .fetch_one(&self.pool)
-            .await
-            .map_err(|e| ContactsError::DatabaseError(e.to_string()))?;
-        
-        let contacts_with_phone: i64 = sqlx::query_scalar("SELECT COUNT(DISTINCT contact_id) FROM contact_phones")
-            .fetch_one(&self.pool)
-            .await
-            .map_err(|e| ContactsError::DatabaseError(e.to_string()))?;
-        
+
+        let google_contacts: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM contacts WHERE source_type = 'google'")
+                .fetch_one(&self.pool)
+                .await
+                .map_err(|e| ContactsError::DatabaseError(e.to_string()))?;
+
+        let outlook_contacts: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM contacts WHERE source_type = 'outlook'")
+                .fetch_one(&self.pool)
+                .await
+                .map_err(|e| ContactsError::DatabaseError(e.to_string()))?;
+
+        let local_contacts: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM contacts WHERE source_type = 'local'")
+                .fetch_one(&self.pool)
+                .await
+                .map_err(|e| ContactsError::DatabaseError(e.to_string()))?;
+
+        let contacts_with_email: i64 =
+            sqlx::query_scalar("SELECT COUNT(DISTINCT contact_id) FROM contact_emails")
+                .fetch_one(&self.pool)
+                .await
+                .map_err(|e| ContactsError::DatabaseError(e.to_string()))?;
+
+        let contacts_with_phone: i64 =
+            sqlx::query_scalar("SELECT COUNT(DISTINCT contact_id) FROM contact_phones")
+                .fetch_one(&self.pool)
+                .await
+                .map_err(|e| ContactsError::DatabaseError(e.to_string()))?;
+
         let groups_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM contact_groups")
             .fetch_one(&self.pool)
             .await
             .map_err(|e| ContactsError::DatabaseError(e.to_string()))?;
-        
-        let last_sync: Option<String> = sqlx::query_scalar("SELECT MAX(synced_at) FROM contacts WHERE synced_at IS NOT NULL")
-            .fetch_optional(&self.pool)
-            .await
-            .map_err(|e| ContactsError::DatabaseError(e.to_string()))?
-            .flatten();
-        
-        let last_sync_parsed = last_sync.and_then(|s| DateTime::parse_from_rfc3339(&s).ok().map(|dt| dt.with_timezone(&Utc)));
-        
+
+        let last_sync: Option<String> =
+            sqlx::query_scalar("SELECT MAX(synced_at) FROM contacts WHERE synced_at IS NOT NULL")
+                .fetch_optional(&self.pool)
+                .await
+                .map_err(|e| ContactsError::DatabaseError(e.to_string()))?
+                .flatten();
+
+        let last_sync_parsed = last_sync.and_then(|s| {
+            DateTime::parse_from_rfc3339(&s)
+                .ok()
+                .map(|dt| dt.with_timezone(&Utc))
+        });
+
         Ok(AddressBookStats {
             total_contacts: total_contacts as usize,
             google_contacts: google_contacts as usize,
@@ -559,14 +589,22 @@ impl ContactsDatabase {
             last_sync: last_sync_parsed,
         })
     }
-    
+
     /// Helper method to convert row to contact
     fn contact_from_row(&self, row: &sqlx::sqlite::SqliteRow) -> ContactsResult<Contact> {
-        let id: i64 = row.try_get("id").map_err(|e| ContactsError::DatabaseError(e.to_string()))?;
-        let external_id: String = row.try_get("external_id").map_err(|e| ContactsError::DatabaseError(e.to_string()))?;
-        let source_type: String = row.try_get("source_type").map_err(|e| ContactsError::DatabaseError(e.to_string()))?;
-        let source_account_id: Option<String> = row.try_get("source_account_id").map_err(|e| ContactsError::DatabaseError(e.to_string()))?;
-        
+        let id: i64 = row
+            .try_get("id")
+            .map_err(|e| ContactsError::DatabaseError(e.to_string()))?;
+        let external_id: String = row
+            .try_get("external_id")
+            .map_err(|e| ContactsError::DatabaseError(e.to_string()))?;
+        let source_type: String = row
+            .try_get("source_type")
+            .map_err(|e| ContactsError::DatabaseError(e.to_string()))?;
+        let source_account_id: Option<String> = row
+            .try_get("source_account_id")
+            .map_err(|e| ContactsError::DatabaseError(e.to_string()))?;
+
         let source = match source_type.as_str() {
             "google" => ContactSource::Google {
                 account_id: source_account_id.unwrap_or_default(),
@@ -577,20 +615,42 @@ impl ContactsDatabase {
             "local" => ContactSource::Local,
             _ => ContactSource::Local,
         };
-        
-        let display_name: String = row.try_get("display_name").map_err(|e| ContactsError::DatabaseError(e.to_string()))?;
-        let first_name: Option<String> = row.try_get("first_name").map_err(|e| ContactsError::DatabaseError(e.to_string()))?;
-        let last_name: Option<String> = row.try_get("last_name").map_err(|e| ContactsError::DatabaseError(e.to_string()))?;
-        let company: Option<String> = row.try_get("company").map_err(|e| ContactsError::DatabaseError(e.to_string()))?;
-        let job_title: Option<String> = row.try_get("job_title").map_err(|e| ContactsError::DatabaseError(e.to_string()))?;
-        let notes: Option<String> = row.try_get("notes").map_err(|e| ContactsError::DatabaseError(e.to_string()))?;
-        let photo_url: Option<String> = row.try_get("photo_url").map_err(|e| ContactsError::DatabaseError(e.to_string()))?;
-        
-        let created_at_str: String = row.try_get("created_at").map_err(|e| ContactsError::DatabaseError(e.to_string()))?;
-        let updated_at_str: String = row.try_get("updated_at").map_err(|e| ContactsError::DatabaseError(e.to_string()))?;
-        let synced_at_str: Option<String> = row.try_get("synced_at").map_err(|e| ContactsError::DatabaseError(e.to_string()))?;
-        let etag: Option<String> = row.try_get("etag").map_err(|e| ContactsError::DatabaseError(e.to_string()))?;
-        
+
+        let display_name: String = row
+            .try_get("display_name")
+            .map_err(|e| ContactsError::DatabaseError(e.to_string()))?;
+        let first_name: Option<String> = row
+            .try_get("first_name")
+            .map_err(|e| ContactsError::DatabaseError(e.to_string()))?;
+        let last_name: Option<String> = row
+            .try_get("last_name")
+            .map_err(|e| ContactsError::DatabaseError(e.to_string()))?;
+        let company: Option<String> = row
+            .try_get("company")
+            .map_err(|e| ContactsError::DatabaseError(e.to_string()))?;
+        let job_title: Option<String> = row
+            .try_get("job_title")
+            .map_err(|e| ContactsError::DatabaseError(e.to_string()))?;
+        let notes: Option<String> = row
+            .try_get("notes")
+            .map_err(|e| ContactsError::DatabaseError(e.to_string()))?;
+        let photo_url: Option<String> = row
+            .try_get("photo_url")
+            .map_err(|e| ContactsError::DatabaseError(e.to_string()))?;
+
+        let created_at_str: String = row
+            .try_get("created_at")
+            .map_err(|e| ContactsError::DatabaseError(e.to_string()))?;
+        let updated_at_str: String = row
+            .try_get("updated_at")
+            .map_err(|e| ContactsError::DatabaseError(e.to_string()))?;
+        let synced_at_str: Option<String> = row
+            .try_get("synced_at")
+            .map_err(|e| ContactsError::DatabaseError(e.to_string()))?;
+        let etag: Option<String> = row
+            .try_get("etag")
+            .map_err(|e| ContactsError::DatabaseError(e.to_string()))?;
+
         let created_at = DateTime::parse_from_rfc3339(&created_at_str)
             .map_err(|e| ContactsError::DatabaseError(e.to_string()))?
             .with_timezone(&Utc);
@@ -602,7 +662,7 @@ impl ContactsDatabase {
             .transpose()
             .map_err(|e| ContactsError::DatabaseError(e.to_string()))?
             .map(|dt| dt.with_timezone(&Utc));
-        
+
         // Parse emails
         let emails_str: Option<String> = row.try_get("emails").ok();
         let mut emails = Vec::new();
@@ -618,7 +678,7 @@ impl ContactsDatabase {
                 }
             }
         }
-        
+
         // Parse phones
         let phones_str: Option<String> = row.try_get("phones").ok();
         let mut phones = Vec::new();
@@ -634,7 +694,7 @@ impl ContactsDatabase {
                 }
             }
         }
-        
+
         Ok(Contact {
             id: Some(id),
             external_id,

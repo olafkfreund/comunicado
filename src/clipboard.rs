@@ -14,13 +14,16 @@ impl ClipboardManager {
                 Some(cb)
             }
             Err(e) => {
-                tracing::warn!("Failed to initialize clipboard: {} - copy/paste functionality will be limited", e);
+                tracing::warn!(
+                    "Failed to initialize clipboard: {} - copy/paste functionality will be limited",
+                    e
+                );
                 None
             }
         };
         Self { clipboard }
     }
-    
+
     /// Copy text to clipboard
     pub fn copy(&mut self, text: &str) -> Result<(), Box<dyn Error>> {
         if let Some(ref mut clipboard) = self.clipboard {
@@ -31,7 +34,7 @@ impl ClipboardManager {
             Err("Clipboard not available".into())
         }
     }
-    
+
     /// Paste text from clipboard
     pub fn paste(&mut self) -> Result<String, Box<dyn Error>> {
         if let Some(ref mut clipboard) = self.clipboard {
@@ -42,7 +45,7 @@ impl ClipboardManager {
             Err("Clipboard not available".into())
         }
     }
-    
+
     /// Check if clipboard is available
     pub fn is_available(&self) -> bool {
         self.clipboard.is_some()

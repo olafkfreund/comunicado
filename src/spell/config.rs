@@ -1,6 +1,6 @@
-use std::path::PathBuf;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 use tokio::fs;
 
 /// Spell check configuration
@@ -8,34 +8,34 @@ use tokio::fs;
 pub struct SpellCheckConfig {
     /// Default language for spell checking
     pub default_language: String,
-    
+
     /// Additional languages to load
     pub additional_languages: Vec<String>,
-    
+
     /// Enable automatic language detection
     pub auto_detect_language: bool,
-    
+
     /// Check spelling as user types
     pub check_as_you_type: bool,
-    
+
     /// Underline style for misspelled words
     pub underline_style: UnderlineStyle,
-    
+
     /// Maximum number of suggestions to show
     pub max_suggestions: usize,
-    
+
     /// Ignore words in ALL CAPS
     pub ignore_all_caps: bool,
-    
+
     /// Ignore words with numbers
     pub ignore_words_with_numbers: bool,
-    
+
     /// Minimum word length to check
     pub min_word_length: usize,
-    
+
     /// Custom dictionary words
     pub custom_words: Vec<String>,
-    
+
     /// Technical terms dictionary
     pub technical_terms: Vec<String>,
 }
@@ -169,7 +169,7 @@ impl SpellCheckConfig {
     /// Load configuration from file
     pub async fn load() -> Result<Self> {
         let config_path = Self::config_file_path()?;
-        
+
         if config_path.exists() {
             let content = fs::read_to_string(&config_path).await?;
             let config: SpellCheckConfig = toml::from_str(&content)?;
@@ -185,17 +185,16 @@ impl SpellCheckConfig {
     /// Save configuration to file
     pub async fn save(&self) -> Result<()> {
         let config_path = Self::config_file_path()?;
-        
+
         if let Some(parent) = config_path.parent() {
             fs::create_dir_all(parent).await?;
         }
-        
+
         let content = toml::to_string_pretty(self)?;
         fs::write(&config_path, content).await?;
-        
+
         Ok(())
     }
-
 
     /// Get configuration file path
     fn config_file_path() -> Result<PathBuf> {

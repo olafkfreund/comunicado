@@ -1,8 +1,8 @@
-use std::time::Duration;
 use chrono::{DateTime, Local, Timelike};
 use serde::Deserialize;
+use std::time::Duration;
 
-use crate::ui::start_page::{WeatherInfo, WeatherForecast};
+use crate::ui::start_page::{WeatherForecast, WeatherInfo};
 
 /// Weather service for fetching current weather and forecasts
 pub struct WeatherService {
@@ -66,11 +66,16 @@ impl WeatherService {
     }
 
     /// Get current weather information
-    pub async fn get_weather(&mut self, location: Option<&str>) -> Result<WeatherInfo, Box<dyn std::error::Error>> {
+    pub async fn get_weather(
+        &mut self,
+        location: Option<&str>,
+    ) -> Result<WeatherInfo, Box<dyn std::error::Error>> {
         // Check if we have cached data that's still fresh
         if let Some(ref cached) = self.cached_weather {
             if let Some(last_update) = self.last_update {
-                if Local::now().signed_duration_since(last_update) < chrono::Duration::from_std(self.update_interval)? {
+                if Local::now().signed_duration_since(last_update)
+                    < chrono::Duration::from_std(self.update_interval)?
+                {
                     return Ok(cached.clone());
                 }
             }
@@ -91,8 +96,13 @@ impl WeatherService {
     }
 
     /// Fetch weather from OpenWeatherMap API
-    async fn fetch_from_api(&self, location: Option<&str>) -> Result<WeatherInfo, Box<dyn std::error::Error>> {
-        let api_key = self.api_key.as_ref()
+    async fn fetch_from_api(
+        &self,
+        location: Option<&str>,
+    ) -> Result<WeatherInfo, Box<dyn std::error::Error>> {
+        let api_key = self
+            .api_key
+            .as_ref()
             .ok_or("No API key configured for weather service")?;
 
         let location = location.unwrap_or("London");
@@ -103,10 +113,8 @@ impl WeatherService {
 
         // Use a timeout for the request
         let client = reqwest::Client::new();
-        let response = tokio::time::timeout(
-            Duration::from_secs(10),
-            client.get(&url).send()
-        ).await??;
+        let response =
+            tokio::time::timeout(Duration::from_secs(10), client.get(&url).send()).await??;
 
         if !response.status().is_success() {
             return Err(format!("Weather API returned status: {}", response.status()).into());
@@ -119,7 +127,9 @@ impl WeatherService {
         Ok(WeatherInfo {
             location: weather_data.name,
             temperature: weather_data.main.temp as i32,
-            condition: weather_data.weather.first()
+            condition: weather_data
+                .weather
+                .first()
                 .map(|w| w.main.clone())
                 .unwrap_or_else(|| "Unknown".to_string()),
             humidity: weather_data.main.humidity,
@@ -131,11 +141,11 @@ impl WeatherService {
     /// Get mock weather data for testing/fallback
     fn get_mock_weather(&self, location: Option<&str>) -> WeatherInfo {
         let location = location.unwrap_or("Local Area").to_string();
-        
+
         // Simulate realistic weather based on time of day
         let now = Local::now();
         let hour = now.hour();
-        
+
         let (temp, condition) = match hour {
             6..=11 => (18, "Partly Cloudy"),
             12..=17 => (24, "Sunny"),
@@ -190,7 +200,10 @@ impl WeatherService {
     }
 
     /// Force refresh weather data
-    pub async fn refresh(&mut self, location: Option<&str>) -> Result<WeatherInfo, Box<dyn std::error::Error>> {
+    pub async fn refresh(
+        &mut self,
+        location: Option<&str>,
+    ) -> Result<WeatherInfo, Box<dyn std::error::Error>> {
         self.last_update = None; // Force refresh
         self.get_weather(location).await
     }
@@ -199,11 +212,13 @@ impl WeatherService {
     pub async fn detect_location(&self) -> Result<String, Box<dyn std::error::Error>> {
         // Try to get location from IP geolocation service
         let client = reqwest::Client::new();
-        
+
         match tokio::time::timeout(
             Duration::from_secs(5),
-            client.get("http://ip-api.com/json/").send()
-        ).await {
+            client.get("http://ip-api.com/json/").send(),
+        )
+        .await
+        {
             Ok(Ok(response)) => {
                 if response.status().is_success() {
                     let data: serde_json::Value = response.json().await?;

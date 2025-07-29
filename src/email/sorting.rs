@@ -31,27 +31,39 @@ impl SortCriteria {
                 let a_subject = EmailThread::normalize_subject(a.subject());
                 let b_subject = EmailThread::normalize_subject(b.subject());
                 a_subject.cmp(&b_subject)
-            },
+            }
             SortCriteria::Size(_) => {
                 // For now, use content length as a proxy for size
                 a.content().len().cmp(&b.content().len())
-            },
+            }
             SortCriteria::Priority(_) => {
                 // Priority: important > unread > read
-                let a_priority = if a.is_important() { 2 } else if !a.is_read() { 1 } else { 0 };
-                let b_priority = if b.is_important() { 2 } else if !b.is_read() { 1 } else { 0 };
+                let a_priority = if a.is_important() {
+                    2
+                } else if !a.is_read() {
+                    1
+                } else {
+                    0
+                };
+                let b_priority = if b.is_important() {
+                    2
+                } else if !b.is_read() {
+                    1
+                } else {
+                    0
+                };
                 a_priority.cmp(&b_priority)
-            },
+            }
             _ => Ordering::Equal, // Thread-specific criteria don't apply to individual messages
         };
-        
+
         // Apply sort order
         match self.get_sort_order() {
             SortOrder::Ascending => ordering,
             SortOrder::Descending => ordering.reverse(),
         }
     }
-    
+
     /// Compare two email threads according to this sort criteria
     pub fn compare_threads(&self, a: &EmailThread, b: &EmailThread) -> Ordering {
         let ordering = match self {
@@ -60,38 +72,52 @@ impl SortCriteria {
             SortCriteria::Subject(_) => a.normalized_subject().cmp(&b.normalized_subject()),
             SortCriteria::Size(_) => {
                 // Compare total content size of all messages in thread
-                let a_size: usize = a.get_all_messages().iter()
+                let a_size: usize = a
+                    .get_all_messages()
+                    .iter()
                     .map(|msg| msg.content().len())
                     .sum();
-                let b_size: usize = b.get_all_messages().iter()
+                let b_size: usize = b
+                    .get_all_messages()
+                    .iter()
                     .map(|msg| msg.content().len())
                     .sum();
                 a_size.cmp(&b_size)
-            },
+            }
             SortCriteria::Priority(_) => {
                 // Thread priority: has important > has unread > all read
-                let a_priority = if a.get_all_messages().iter().any(|msg| msg.is_important()) { 2 }
-                    else if a.has_unread() { 1 } else { 0 };
-                let b_priority = if b.get_all_messages().iter().any(|msg| msg.is_important()) { 2 }
-                    else if b.has_unread() { 1 } else { 0 };
+                let a_priority = if a.get_all_messages().iter().any(|msg| msg.is_important()) {
+                    2
+                } else if a.has_unread() {
+                    1
+                } else {
+                    0
+                };
+                let b_priority = if b.get_all_messages().iter().any(|msg| msg.is_important()) {
+                    2
+                } else if b.has_unread() {
+                    1
+                } else {
+                    0
+                };
                 a_priority.cmp(&b_priority)
-            },
+            }
             SortCriteria::ThreadDepth(_) => a.depth().cmp(&b.depth()),
             SortCriteria::MessageCount(_) => a.message_count().cmp(&b.message_count()),
             SortCriteria::HasUnread(_) => {
                 let a_unread = if a.has_unread() { 1 } else { 0 };
                 let b_unread = if b.has_unread() { 1 } else { 0 };
                 a_unread.cmp(&b_unread)
-            },
+            }
         };
-        
+
         // Apply sort order
         match self.get_sort_order() {
             SortOrder::Ascending => ordering,
             SortOrder::Descending => ordering.reverse(),
         }
     }
-    
+
     /// Get the sort order for this criteria
     pub fn get_sort_order(&self) -> SortOrder {
         match self {
@@ -105,7 +131,7 @@ impl SortCriteria {
             SortCriteria::HasUnread(order) => *order,
         }
     }
-    
+
     /// Get a human-readable description of this sort criteria
     pub fn description(&self) -> String {
         let (name, order) = match self {
@@ -118,15 +144,15 @@ impl SortCriteria {
             SortCriteria::MessageCount(order) => ("Message Count", order),
             SortCriteria::HasUnread(order) => ("Unread Status", order),
         };
-        
+
         let order_str = match order {
             SortOrder::Ascending => "ascending",
             SortOrder::Descending => "descending",
         };
-        
+
         format!("{} ({})", name, order_str)
     }
-    
+
     /// Get available sort criteria for emails
     pub fn email_criteria() -> Vec<SortCriteria> {
         vec![
@@ -141,7 +167,7 @@ impl SortCriteria {
             SortCriteria::Priority(SortOrder::Descending),
         ]
     }
-    
+
     /// Get available sort criteria for threads
     pub fn thread_criteria() -> Vec<SortCriteria> {
         vec![
@@ -172,17 +198,17 @@ impl MultiCriteriaSorter {
     pub fn new(criteria: Vec<SortCriteria>) -> Self {
         Self { criteria }
     }
-    
+
     /// Add a sort criteria to the sorter
     pub fn add_criteria(&mut self, criteria: SortCriteria) {
         self.criteria.push(criteria);
     }
-    
+
     /// Remove all criteria
     pub fn clear(&mut self) {
         self.criteria.clear();
     }
-    
+
     /// Compare two email messages using all criteria
     pub fn compare_messages(&self, a: &EmailMessage, b: &EmailMessage) -> Ordering {
         for criteria in &self.criteria {
@@ -193,7 +219,7 @@ impl MultiCriteriaSorter {
         }
         Ordering::Equal
     }
-    
+
     /// Compare two email threads using all criteria
     pub fn compare_threads(&self, a: &EmailThread, b: &EmailThread) -> Ordering {
         for criteria in &self.criteria {
@@ -204,23 +230,24 @@ impl MultiCriteriaSorter {
         }
         Ordering::Equal
     }
-    
+
     /// Sort a vector of messages using all criteria
     pub fn sort_messages(&self, messages: &mut Vec<EmailMessage>) {
         messages.sort_by(|a, b| self.compare_messages(a, b));
     }
-    
+
     /// Sort a vector of threads using all criteria
     pub fn sort_threads(&self, threads: &mut Vec<EmailThread>) {
         threads.sort_by(|a, b| self.compare_threads(a, b));
     }
-    
+
     /// Get a description of all criteria
     pub fn description(&self) -> String {
         if self.criteria.is_empty() {
             "No sorting".to_string()
         } else {
-            self.criteria.iter()
+            self.criteria
+                .iter()
                 .map(|c| c.description())
                 .collect::<Vec<_>>()
                 .join(", then by ")
@@ -242,18 +269,14 @@ impl Default for MultiCriteriaSorter {
 impl SortCriteria {
     /// Most recent emails first
     pub fn newest_first() -> MultiCriteriaSorter {
-        MultiCriteriaSorter::new(vec![
-            SortCriteria::Date(SortOrder::Descending),
-        ])
+        MultiCriteriaSorter::new(vec![SortCriteria::Date(SortOrder::Descending)])
     }
-    
+
     /// Oldest emails first
     pub fn oldest_first() -> MultiCriteriaSorter {
-        MultiCriteriaSorter::new(vec![
-            SortCriteria::Date(SortOrder::Ascending),
-        ])
+        MultiCriteriaSorter::new(vec![SortCriteria::Date(SortOrder::Ascending)])
     }
-    
+
     /// Priority-based sorting (important, then unread, then date)
     pub fn priority_first() -> MultiCriteriaSorter {
         MultiCriteriaSorter::new(vec![
@@ -261,7 +284,7 @@ impl SortCriteria {
             SortCriteria::Date(SortOrder::Descending),
         ])
     }
-    
+
     /// Alphabetical by sender
     pub fn sender_alphabetical() -> MultiCriteriaSorter {
         MultiCriteriaSorter::new(vec![
@@ -269,7 +292,7 @@ impl SortCriteria {
             SortCriteria::Date(SortOrder::Descending),
         ])
     }
-    
+
     /// Alphabetical by subject
     pub fn subject_alphabetical() -> MultiCriteriaSorter {
         MultiCriteriaSorter::new(vec![
@@ -277,7 +300,7 @@ impl SortCriteria {
             SortCriteria::Date(SortOrder::Descending),
         ])
     }
-    
+
     /// Thread-optimized sorting (by activity, then size)
     pub fn thread_activity() -> MultiCriteriaSorter {
         MultiCriteriaSorter::new(vec![

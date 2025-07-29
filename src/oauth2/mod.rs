@@ -1,15 +1,16 @@
 pub mod client;
-pub mod file_import;
 pub mod providers;
 pub mod storage;
 pub mod token;
 pub mod wizard;
 
 pub use client::OAuth2Client;
-pub use file_import::OAuth2FileImporter;
 pub use providers::{OAuth2Provider, ProviderConfig, ProviderDetector};
 pub use storage::SecureStorage;
-pub use token::{TokenManager, AccessToken, RefreshToken, TokenStats, TokenDiagnosis, TokenRefreshScheduler, RefreshStats};
+pub use token::{
+    AccessToken, RefreshStats, RefreshToken, TokenDiagnosis, TokenManager, TokenRefreshScheduler,
+    TokenStats,
+};
 pub use wizard::SetupWizard;
 
 use serde::{Deserialize, Serialize};
@@ -20,34 +21,34 @@ use thiserror::Error;
 pub enum OAuth2Error {
     #[error("Invalid configuration: {0}")]
     InvalidConfig(String),
-    
+
     #[error("Authorization failed: {0}")]
     AuthorizationFailed(String),
-    
+
     #[error("Token exchange failed: {0}")]
     TokenExchangeFailed(String),
-    
+
     #[error("Token refresh failed: {0}")]
     TokenRefreshFailed(String),
-    
+
     #[error("Invalid token: {0}")]
     InvalidToken(String),
-    
+
     #[error("Network error: {0}")]
     NetworkError(#[from] reqwest::Error),
-    
+
     #[error("URL parse error: {0}")]
     UrlParseError(#[from] url::ParseError),
-    
+
     #[error("Storage error: {0}")]
     StorageError(String),
-    
+
     #[error("User cancelled authorization")]
     UserCancelled,
-    
+
     #[error("Timeout waiting for authorization")]
     AuthorizationTimeout,
-    
+
     #[error("Invalid provider: {0}")]
     InvalidProvider(String),
 }
@@ -79,28 +80,28 @@ pub enum OAuth2Scope {
     GmailReadonly,
     GmailModify,
     GmailFull,
-    
+
     // Google profile scopes
     OpenId,
     Profile,
     Email,
-    
+
     // Google Contacts scope
     GoogleContacts,
-    
+
     // Outlook scopes
     OutlookMailRead,
     OutlookMailReadWrite,
     OutlookMailSend,
     OutlookOfflineAccess,
-    
+
     // Outlook Contacts scope
     OutlookContacts,
-    
-    // Yahoo scopes  
+
+    // Yahoo scopes
     YahooMailRead,
     YahooMailWrite,
-    
+
     // Custom scope
     Custom(String),
 }
@@ -109,10 +110,10 @@ impl OAuth2Scope {
     pub fn as_str(&self) -> &str {
         match self {
             OAuth2Scope::GmailReadonly => "https://www.googleapis.com/auth/gmail.readonly",
-            OAuth2Scope::GmailModify => "https://www.googleapis.com/auth/gmail.modify", 
+            OAuth2Scope::GmailModify => "https://www.googleapis.com/auth/gmail.modify",
             OAuth2Scope::GmailFull => "https://mail.google.com/",
             OAuth2Scope::OpenId => "openid",
-            OAuth2Scope::Profile => "profile", 
+            OAuth2Scope::Profile => "profile",
             OAuth2Scope::Email => "email",
             OAuth2Scope::GoogleContacts => "https://www.googleapis.com/auth/contacts.readonly",
             OAuth2Scope::OutlookMailRead => "https://graph.microsoft.com/Mail.Read",
@@ -125,7 +126,7 @@ impl OAuth2Scope {
             OAuth2Scope::Custom(s) => s,
         }
     }
-    
+
     pub fn to_string(&self) -> String {
         self.as_str().to_string()
     }
@@ -143,7 +144,7 @@ impl PkceChallenge {
     pub fn new() -> Self {
         use rand::Rng;
         use sha2::{Digest, Sha256};
-        
+
         // Generate random code verifier (43-128 characters)
         let code_verifier: String = (0..128)
             .map(|_| {
@@ -151,15 +152,15 @@ impl PkceChallenge {
                 chars[rand::thread_rng().gen_range(0..chars.len())] as char
             })
             .collect();
-        
+
         // Generate code challenge (SHA256 hash of verifier, base64url encoded)
         let mut hasher = Sha256::new();
         hasher.update(code_verifier.as_bytes());
         let challenge_bytes = hasher.finalize();
-        
-        use base64::{Engine as _, engine::general_purpose};
+
+        use base64::{engine::general_purpose, Engine as _};
         let code_challenge = general_purpose::URL_SAFE_NO_PAD.encode(challenge_bytes);
-        
+
         Self {
             code_verifier,
             code_challenge,
@@ -218,14 +219,13 @@ pub struct AccountConfig {
 }
 
 impl AccountConfig {
-    pub fn new(
-        display_name: String,
-        email_address: String,
-        provider: String,
-    ) -> Self {
-        let account_id = format!("{}_{}", provider.to_lowercase(), 
-            email_address.replace('@', "_").replace('.', "_"));
-            
+    pub fn new(display_name: String, email_address: String, provider: String) -> Self {
+        let account_id = format!(
+            "{}_{}",
+            provider.to_lowercase(),
+            email_address.replace('@', "_").replace('.', "_")
+        );
+
         Self {
             account_id,
             display_name,
@@ -243,7 +243,7 @@ impl AccountConfig {
             scopes: Vec::new(),
         }
     }
-    
+
     pub fn is_token_expired(&self) -> bool {
         if let Some(expires_at) = self.token_expires_at {
             chrono::Utc::now() > expires_at
@@ -251,7 +251,7 @@ impl AccountConfig {
             false
         }
     }
-    
+
     pub fn needs_refresh(&self) -> bool {
         // Consider token expired if it expires within 5 minutes
         if let Some(expires_at) = self.token_expires_at {
@@ -262,20 +262,19 @@ impl AccountConfig {
             false
         }
     }
-    
+
     pub fn update_tokens(&mut self, token_response: &TokenResponse) {
         self.access_token = token_response.access_token.clone();
-        
+
         if let Some(refresh_token) = &token_response.refresh_token {
             self.refresh_token = Some(refresh_token.clone());
         }
-        
+
         if let Some(expires_in) = token_response.expires_in {
-            self.token_expires_at = Some(
-                chrono::Utc::now() + chrono::Duration::seconds(expires_in as i64)
-            );
+            self.token_expires_at =
+                Some(chrono::Utc::now() + chrono::Duration::seconds(expires_in as i64));
         }
-        
+
         if let Some(scope) = &token_response.scope {
             self.scopes = scope.split_whitespace().map(|s| s.to_string()).collect();
         }

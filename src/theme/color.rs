@@ -1,6 +1,6 @@
+use crate::theme::accessibility::ColorBlindness;
 use ratatui::style::Color;
 use serde::{Deserialize, Serialize};
-use crate::theme::accessibility::ColorBlindness;
 
 /// Professional color palette for clean, minimalistic design
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -39,7 +39,7 @@ pub struct ColorPalette {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ThemeColors {
     pub palette: ColorPalette,
-    
+
     // Component-specific colors
     pub folder_tree: FolderTreeColors,
     pub message_list: MessageListColors,
@@ -275,33 +275,33 @@ impl ThemeColors {
     pub fn gruvbox_dark() -> Self {
         let palette = ColorPalette {
             // Gruvbox dark background colors
-            background: Color::Rgb(40, 40, 40),        // #282828 - dark0
-            foreground: Color::Rgb(235, 219, 178),     // #ebdbb2 - light1
-            surface: Color::Rgb(60, 56, 54),           // #3c3836 - dark1
-            overlay: Color::Rgb(80, 73, 69),           // #504945 - dark2
+            background: Color::Rgb(40, 40, 40), // #282828 - dark0
+            foreground: Color::Rgb(235, 219, 178), // #ebdbb2 - light1
+            surface: Color::Rgb(60, 56, 54),    // #3c3836 - dark1
+            overlay: Color::Rgb(80, 73, 69),    // #504945 - dark2
 
             // Gruvbox text colors
-            text_primary: Color::Rgb(235, 219, 178),   // #ebdbb2 - light1
+            text_primary: Color::Rgb(235, 219, 178), // #ebdbb2 - light1
             text_secondary: Color::Rgb(213, 196, 161), // #d5c4a1 - light2
-            text_muted: Color::Rgb(189, 174, 147),     // #bdae93 - light3
-            text_inverse: Color::Rgb(40, 40, 40),      // #282828 - dark0
+            text_muted: Color::Rgb(189, 174, 147),   // #bdae93 - light3
+            text_inverse: Color::Rgb(40, 40, 40),    // #282828 - dark0
 
             // Gruvbox UI element colors
-            border: Color::Rgb(102, 92, 84),           // #665c54 - dark4
+            border: Color::Rgb(102, 92, 84), // #665c54 - dark4
             border_focused: Color::Rgb(131, 165, 152), // #83a598 - bright_blue
-            selection: Color::Rgb(131, 165, 152),      // #83a598 - bright_blue
-            selection_text: Color::Rgb(40, 40, 40),    // #282828 - dark0
+            selection: Color::Rgb(131, 165, 152), // #83a598 - bright_blue
+            selection_text: Color::Rgb(40, 40, 40), // #282828 - dark0
 
             // Gruvbox status colors
-            success: Color::Rgb(152, 151, 26),         // #98971a - bright_green
-            warning: Color::Rgb(215, 153, 33),         // #d79921 - bright_yellow
-            error: Color::Rgb(204, 36, 29),            // #cc241d - bright_red
-            info: Color::Rgb(131, 165, 152),           // #83a598 - bright_blue
+            success: Color::Rgb(152, 151, 26), // #98971a - bright_green
+            warning: Color::Rgb(215, 153, 33), // #d79921 - bright_yellow
+            error: Color::Rgb(204, 36, 29),    // #cc241d - bright_red
+            info: Color::Rgb(131, 165, 152),   // #83a598 - bright_blue
 
             // Gruvbox accent colors
-            accent: Color::Rgb(250, 189, 47),          // #fabd2f - bright_yellow (more vibrant)
-            highlight: Color::Rgb(211, 134, 155),      // #d3869b - bright_purple
-            disabled: Color::Rgb(146, 131, 116),       // #928374 - gray
+            accent: Color::Rgb(250, 189, 47), // #fabd2f - bright_yellow (more vibrant)
+            highlight: Color::Rgb(211, 134, 155), // #d3869b - bright_purple
+            disabled: Color::Rgb(146, 131, 116), // #928374 - gray
         };
 
         Self {
@@ -309,31 +309,31 @@ impl ThemeColors {
             folder_tree: FolderTreeColors {
                 folder_normal: palette.text_secondary,
                 folder_selected: palette.selection_text,
-                folder_unread: Color::Rgb(250, 189, 47),      // #fabd2f - bright_yellow for unread
-                count_badge: Color::Rgb(215, 153, 33),        // #d79921 - bright_yellow
+                folder_unread: Color::Rgb(250, 189, 47), // #fabd2f - bright_yellow for unread
+                count_badge: Color::Rgb(215, 153, 33),   // #d79921 - bright_yellow
                 expand_icon: palette.text_muted,
             },
             message_list: MessageListColors {
-                sender: Color::Rgb(131, 165, 152),            // #83a598 - bright_blue
+                sender: Color::Rgb(131, 165, 152), // #83a598 - bright_blue
                 subject_read: palette.text_secondary,
-                subject_unread: Color::Rgb(235, 219, 178),    // #ebdbb2 - light1 (bright for unread)
+                subject_unread: Color::Rgb(235, 219, 178), // #ebdbb2 - light1 (bright for unread)
                 date: palette.text_muted,
-                thread_indicator: Color::Rgb(142, 192, 124),  // #8ec07c - bright_aqua
-                attachment_icon: Color::Rgb(211, 134, 155),   // #d3869b - bright_purple
-                priority_high: Color::Rgb(251, 73, 52),       // #fb4934 - bright_red (more vibrant)
+                thread_indicator: Color::Rgb(142, 192, 124), // #8ec07c - bright_aqua
+                attachment_icon: Color::Rgb(211, 134, 155),  // #d3869b - bright_purple
+                priority_high: Color::Rgb(251, 73, 52),      // #fb4934 - bright_red (more vibrant)
             },
             content_preview: ContentPreviewColors {
-                header: Color::Rgb(250, 189, 47),             // #fabd2f - bright_yellow
+                header: Color::Rgb(250, 189, 47), // #fabd2f - bright_yellow
                 body: palette.text_primary,
-                quote: Color::Rgb(146, 131, 116),             // #928374 - gray for quotes
-                link: Color::Rgb(131, 165, 152),              // #83a598 - bright_blue
-                code: Color::Rgb(184, 187, 38),               // #b8bb26 - bright_green
+                quote: Color::Rgb(146, 131, 116), // #928374 - gray for quotes
+                link: Color::Rgb(131, 165, 152),  // #83a598 - bright_blue
+                code: Color::Rgb(184, 187, 38),   // #b8bb26 - bright_green
             },
             status_bar: StatusBarColors {
-                background: Color::Rgb(50, 48, 47),           // #32302f - dark0_soft
+                background: Color::Rgb(50, 48, 47), // #32302f - dark0_soft
                 text: palette.text_primary,
                 section_separator: palette.border,
-                active_indicator: Color::Rgb(250, 189, 47),   // #fabd2f - bright_yellow
+                active_indicator: Color::Rgb(250, 189, 47), // #fabd2f - bright_yellow
             },
         }
     }
@@ -342,33 +342,33 @@ impl ThemeColors {
     pub fn gruvbox_light() -> Self {
         let palette = ColorPalette {
             // Gruvbox light background colors
-            background: Color::Rgb(251, 241, 199),     // #fbf1c7 - light0
-            foreground: Color::Rgb(60, 56, 54),        // #3c3836 - dark1
-            surface: Color::Rgb(242, 229, 188),        // #f2e5bc - light1
-            overlay: Color::Rgb(235, 219, 178),        // #ebdbb2 - light2
+            background: Color::Rgb(251, 241, 199), // #fbf1c7 - light0
+            foreground: Color::Rgb(60, 56, 54),    // #3c3836 - dark1
+            surface: Color::Rgb(242, 229, 188),    // #f2e5bc - light1
+            overlay: Color::Rgb(235, 219, 178),    // #ebdbb2 - light2
 
             // Gruvbox light text colors
-            text_primary: Color::Rgb(60, 56, 54),      // #3c3836 - dark1
-            text_secondary: Color::Rgb(80, 73, 69),    // #504945 - dark2
-            text_muted: Color::Rgb(102, 92, 84),       // #665c54 - dark4
-            text_inverse: Color::Rgb(251, 241, 199),   // #fbf1c7 - light0
+            text_primary: Color::Rgb(60, 56, 54), // #3c3836 - dark1
+            text_secondary: Color::Rgb(80, 73, 69), // #504945 - dark2
+            text_muted: Color::Rgb(102, 92, 84),  // #665c54 - dark4
+            text_inverse: Color::Rgb(251, 241, 199), // #fbf1c7 - light0
 
             // Gruvbox light UI element colors
-            border: Color::Rgb(189, 174, 147),         // #bdae93 - light3
-            border_focused: Color::Rgb(7, 102, 120),   // #076678 - dark_blue
-            selection: Color::Rgb(7, 102, 120),        // #076678 - dark_blue
+            border: Color::Rgb(189, 174, 147), // #bdae93 - light3
+            border_focused: Color::Rgb(7, 102, 120), // #076678 - dark_blue
+            selection: Color::Rgb(7, 102, 120), // #076678 - dark_blue
             selection_text: Color::Rgb(251, 241, 199), // #fbf1c7 - light0
 
             // Gruvbox light status colors
-            success: Color::Rgb(121, 116, 14),         // #79740e - dark_green
-            warning: Color::Rgb(181, 118, 20),         // #b57614 - dark_yellow
-            error: Color::Rgb(157, 0, 6),              // #9d0006 - dark_red
-            info: Color::Rgb(7, 102, 120),             // #076678 - dark_blue
+            success: Color::Rgb(121, 116, 14), // #79740e - dark_green
+            warning: Color::Rgb(181, 118, 20), // #b57614 - dark_yellow
+            error: Color::Rgb(157, 0, 6),      // #9d0006 - dark_red
+            info: Color::Rgb(7, 102, 120),     // #076678 - dark_blue
 
             // Gruvbox light accent colors
-            accent: Color::Rgb(181, 118, 20),          // #b57614 - dark_yellow
-            highlight: Color::Rgb(143, 63, 113),       // #8f3f71 - dark_purple
-            disabled: Color::Rgb(146, 131, 116),       // #928374 - gray
+            accent: Color::Rgb(181, 118, 20), // #b57614 - dark_yellow
+            highlight: Color::Rgb(143, 63, 113), // #8f3f71 - dark_purple
+            disabled: Color::Rgb(146, 131, 116), // #928374 - gray
         };
 
         Self {
@@ -376,31 +376,31 @@ impl ThemeColors {
             folder_tree: FolderTreeColors {
                 folder_normal: palette.text_secondary,
                 folder_selected: palette.selection_text,
-                folder_unread: Color::Rgb(181, 118, 20),      // #b57614 - dark_yellow for unread
-                count_badge: Color::Rgb(181, 118, 20),        // #b57614 - dark_yellow
+                folder_unread: Color::Rgb(181, 118, 20), // #b57614 - dark_yellow for unread
+                count_badge: Color::Rgb(181, 118, 20),   // #b57614 - dark_yellow
                 expand_icon: palette.text_muted,
             },
             message_list: MessageListColors {
-                sender: Color::Rgb(7, 102, 120),              // #076678 - dark_blue
+                sender: Color::Rgb(7, 102, 120), // #076678 - dark_blue
                 subject_read: palette.text_secondary,
-                subject_unread: Color::Rgb(40, 40, 40),       // #282828 - dark0 (darker for unread)
+                subject_unread: Color::Rgb(40, 40, 40), // #282828 - dark0 (darker for unread)
                 date: palette.text_muted,
-                thread_indicator: Color::Rgb(66, 123, 88),    // #427b58 - dark_aqua
-                attachment_icon: Color::Rgb(143, 63, 113),    // #8f3f71 - dark_purple
-                priority_high: Color::Rgb(204, 36, 29),       // #cc241d - bright_red
+                thread_indicator: Color::Rgb(66, 123, 88), // #427b58 - dark_aqua
+                attachment_icon: Color::Rgb(143, 63, 113), // #8f3f71 - dark_purple
+                priority_high: Color::Rgb(204, 36, 29),    // #cc241d - bright_red
             },
             content_preview: ContentPreviewColors {
-                header: Color::Rgb(181, 118, 20),             // #b57614 - dark_yellow
+                header: Color::Rgb(181, 118, 20), // #b57614 - dark_yellow
                 body: palette.text_primary,
-                quote: Color::Rgb(146, 131, 116),             // #928374 - gray for quotes
-                link: Color::Rgb(7, 102, 120),                // #076678 - dark_blue
-                code: Color::Rgb(121, 116, 14),               // #79740e - dark_green
+                quote: Color::Rgb(146, 131, 116), // #928374 - gray for quotes
+                link: Color::Rgb(7, 102, 120),    // #076678 - dark_blue
+                code: Color::Rgb(121, 116, 14),   // #79740e - dark_green
             },
             status_bar: StatusBarColors {
-                background: Color::Rgb(245, 234, 193),        // #f5eac3 - light0_soft
+                background: Color::Rgb(245, 234, 193), // #f5eac3 - light0_soft
                 text: palette.text_primary,
                 section_separator: palette.border,
-                active_indicator: Color::Rgb(181, 118, 20),   // #b57614 - dark_yellow
+                active_indicator: Color::Rgb(181, 118, 20), // #b57614 - dark_yellow
             },
         }
     }
@@ -436,12 +436,12 @@ impl ThemeColors {
     pub fn validate_contrast_ratios(&self) -> Result<(), String> {
         // Simplified contrast validation
         // In a real implementation, you'd calculate actual WCAG contrast ratios
-        
+
         // Check that there's sufficient contrast between text and background
         if self.is_similar_color(self.palette.text_primary, self.palette.background) {
             return Err("Insufficient contrast between primary text and background".to_string());
         }
-        
+
         if self.is_similar_color(self.palette.text_secondary, self.palette.background) {
             return Err("Insufficient contrast between secondary text and background".to_string());
         }
@@ -455,9 +455,9 @@ impl ThemeColors {
         // In a real implementation, you'd use proper color space calculations
         match (color1, color2) {
             (Color::Rgb(r1, g1, b1), Color::Rgb(r2, g2, b2)) => {
-                let diff = ((r1 as i32 - r2 as i32).abs() + 
-                           (g1 as i32 - g2 as i32).abs() + 
-                           (b1 as i32 - b2 as i32).abs()) as f32;
+                let diff = ((r1 as i32 - r2 as i32).abs()
+                    + (g1 as i32 - g2 as i32).abs()
+                    + (b1 as i32 - b2 as i32).abs()) as f32;
                 diff < 150.0 // Arbitrary threshold
             }
             _ => false,

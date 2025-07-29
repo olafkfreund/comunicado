@@ -1,7 +1,7 @@
-use std::path::PathBuf;
-use std::collections::HashMap;
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::path::PathBuf;
 use tokio::fs;
 
 /// Dictionary file paths for a language
@@ -32,12 +32,12 @@ impl DictionaryManager {
     pub fn new() -> Result<Self> {
         let dict_dir = Self::get_dictionary_directory()?;
         let _ = std::fs::create_dir_all(&dict_dir); // Create if doesn't exist
-        
+
         let mut manager = Self {
             dict_dir,
             available_dicts: HashMap::new(),
         };
-        
+
         manager.scan_dictionaries()?;
         Ok(manager)
     }
@@ -56,7 +56,7 @@ impl DictionaryManager {
     fn scan_dictionaries(&mut self) -> Result<()> {
         // Add built-in dictionary information
         self.add_builtin_dictionaries();
-        
+
         // Scan local dictionary directory
         if self.dict_dir.exists() {
             if let Ok(entries) = std::fs::read_dir(&self.dict_dir) {
@@ -65,7 +65,7 @@ impl DictionaryManager {
                         if name.ends_with(".aff") {
                             let lang_code = name.trim_end_matches(".aff");
                             let dic_path = self.dict_dir.join(format!("{}.dic", lang_code));
-                            
+
                             if dic_path.exists() {
                                 self.mark_dictionary_installed(lang_code);
                             }
@@ -74,47 +74,146 @@ impl DictionaryManager {
                 }
             }
         }
-        
+
         Ok(())
     }
 
     /// Add information about built-in dictionaries
     fn add_builtin_dictionaries(&mut self) {
         let dictionaries = vec![
-            ("en_US", "English (United States)", "English spell checking dictionary"),
-            ("en_GB", "English (United Kingdom)", "British English spell checking dictionary"),
-            ("es_ES", "Spanish (Spain)", "Spanish spell checking dictionary"),
-            ("fr_FR", "French (France)", "French spell checking dictionary"),
-            ("de_DE", "German (Germany)", "German spell checking dictionary"),
-            ("it_IT", "Italian (Italy)", "Italian spell checking dictionary"),
-            ("pt_PT", "Portuguese (Portugal)", "Portuguese spell checking dictionary"),
-            ("ru_RU", "Russian (Russia)", "Russian spell checking dictionary"),
-            ("nl_NL", "Dutch (Netherlands)", "Dutch spell checking dictionary"),
-            ("sv_SE", "Swedish (Sweden)", "Swedish spell checking dictionary"),
-            ("da_DK", "Danish (Denmark)", "Danish spell checking dictionary"),
-            ("no_NO", "Norwegian (Norway)", "Norwegian spell checking dictionary"),
-            ("fi_FI", "Finnish (Finland)", "Finnish spell checking dictionary"),
-            ("pl_PL", "Polish (Poland)", "Polish spell checking dictionary"),
-            ("cs_CZ", "Czech (Czech Republic)", "Czech spell checking dictionary"),
-            ("hu_HU", "Hungarian (Hungary)", "Hungarian spell checking dictionary"),
-            ("ro_RO", "Romanian (Romania)", "Romanian spell checking dictionary"),
-            ("sk_SK", "Slovak (Slovakia)", "Slovak spell checking dictionary"),
-            ("sl_SI", "Slovenian (Slovenia)", "Slovenian spell checking dictionary"),
-            ("hr_HR", "Croatian (Croatia)", "Croatian spell checking dictionary"),
-            ("bg_BG", "Bulgarian (Bulgaria)", "Bulgarian spell checking dictionary"),
-            ("et_EE", "Estonian (Estonia)", "Estonian spell checking dictionary"),
-            ("lv_LV", "Latvian (Latvia)", "Latvian spell checking dictionary"),
-            ("lt_LT", "Lithuanian (Lithuania)", "Lithuanian spell checking dictionary"),
+            (
+                "en_US",
+                "English (United States)",
+                "English spell checking dictionary",
+            ),
+            (
+                "en_GB",
+                "English (United Kingdom)",
+                "British English spell checking dictionary",
+            ),
+            (
+                "es_ES",
+                "Spanish (Spain)",
+                "Spanish spell checking dictionary",
+            ),
+            (
+                "fr_FR",
+                "French (France)",
+                "French spell checking dictionary",
+            ),
+            (
+                "de_DE",
+                "German (Germany)",
+                "German spell checking dictionary",
+            ),
+            (
+                "it_IT",
+                "Italian (Italy)",
+                "Italian spell checking dictionary",
+            ),
+            (
+                "pt_PT",
+                "Portuguese (Portugal)",
+                "Portuguese spell checking dictionary",
+            ),
+            (
+                "ru_RU",
+                "Russian (Russia)",
+                "Russian spell checking dictionary",
+            ),
+            (
+                "nl_NL",
+                "Dutch (Netherlands)",
+                "Dutch spell checking dictionary",
+            ),
+            (
+                "sv_SE",
+                "Swedish (Sweden)",
+                "Swedish spell checking dictionary",
+            ),
+            (
+                "da_DK",
+                "Danish (Denmark)",
+                "Danish spell checking dictionary",
+            ),
+            (
+                "no_NO",
+                "Norwegian (Norway)",
+                "Norwegian spell checking dictionary",
+            ),
+            (
+                "fi_FI",
+                "Finnish (Finland)",
+                "Finnish spell checking dictionary",
+            ),
+            (
+                "pl_PL",
+                "Polish (Poland)",
+                "Polish spell checking dictionary",
+            ),
+            (
+                "cs_CZ",
+                "Czech (Czech Republic)",
+                "Czech spell checking dictionary",
+            ),
+            (
+                "hu_HU",
+                "Hungarian (Hungary)",
+                "Hungarian spell checking dictionary",
+            ),
+            (
+                "ro_RO",
+                "Romanian (Romania)",
+                "Romanian spell checking dictionary",
+            ),
+            (
+                "sk_SK",
+                "Slovak (Slovakia)",
+                "Slovak spell checking dictionary",
+            ),
+            (
+                "sl_SI",
+                "Slovenian (Slovenia)",
+                "Slovenian spell checking dictionary",
+            ),
+            (
+                "hr_HR",
+                "Croatian (Croatia)",
+                "Croatian spell checking dictionary",
+            ),
+            (
+                "bg_BG",
+                "Bulgarian (Bulgaria)",
+                "Bulgarian spell checking dictionary",
+            ),
+            (
+                "et_EE",
+                "Estonian (Estonia)",
+                "Estonian spell checking dictionary",
+            ),
+            (
+                "lv_LV",
+                "Latvian (Latvia)",
+                "Latvian spell checking dictionary",
+            ),
+            (
+                "lt_LT",
+                "Lithuanian (Lithuania)",
+                "Lithuanian spell checking dictionary",
+            ),
         ];
 
         for (code, name, desc) in dictionaries {
-            self.available_dicts.insert(code.to_string(), DictionaryInfo {
-                language: code.to_string(),
-                display_name: name.to_string(),
-                version: "1.0.0".to_string(),
-                description: desc.to_string(),
-                installed: false,
-            });
+            self.available_dicts.insert(
+                code.to_string(),
+                DictionaryInfo {
+                    language: code.to_string(),
+                    display_name: name.to_string(),
+                    version: "1.0.0".to_string(),
+                    description: desc.to_string(),
+                    installed: false,
+                },
+            );
         }
     }
 
@@ -128,9 +227,11 @@ impl DictionaryManager {
     /// Get dictionary paths for a language
     pub async fn get_dictionary_path(&self, language: &str) -> Result<DictionaryPaths> {
         // First check if dictionary exists in project dictionaries directory
-        let project_dict_path = std::path::Path::new("dictionaries").join(format!("{}.dic", language));
-        let project_aff_path = std::path::Path::new("dictionaries").join(format!("{}.aff", language));
-        
+        let project_dict_path =
+            std::path::Path::new("dictionaries").join(format!("{}.dic", language));
+        let project_aff_path =
+            std::path::Path::new("dictionaries").join(format!("{}.aff", language));
+
         if project_dict_path.exists() {
             // Use project dictionary if available (create dummy aff file if needed)
             let aff_path = if project_aff_path.exists() {
@@ -144,13 +245,13 @@ impl DictionaryManager {
                 }
                 user_aff_path
             };
-            
+
             return Ok(DictionaryPaths {
                 aff: aff_path,
                 dic: project_dict_path,
             });
         }
-        
+
         // Check if files exist in user directory
         let aff_path = self.dict_dir.join(format!("{}.aff", language));
         let dic_path = self.dict_dir.join(format!("{}.dic", language));
@@ -171,7 +272,10 @@ impl DictionaryManager {
                 dic: dic_path,
             })
         } else {
-            Err(anyhow!("Dictionary files not found for language: {}", language))
+            Err(anyhow!(
+                "Dictionary files not found for language: {}",
+                language
+            ))
         }
     }
 
@@ -340,14 +444,19 @@ us/M"#;
         fs::write(&aff_path, aff_content).await?;
         fs::write(&dic_path, dic_content).await?;
 
-        tracing::info!("Created minimal dictionary for {} at {:?}", language, self.dict_dir);
+        tracing::info!(
+            "Created minimal dictionary for {} at {:?}",
+            language,
+            self.dict_dir
+        );
         Ok(())
     }
 
     /// Get list of available languages
     pub fn available_languages(&self) -> Vec<String> {
-        let mut languages: std::collections::HashSet<String> = self.available_dicts.keys().cloned().collect();
-        
+        let mut languages: std::collections::HashSet<String> =
+            self.available_dicts.keys().cloned().collect();
+
         // Also scan project dictionaries directory
         if let Ok(entries) = std::fs::read_dir("dictionaries") {
             for entry in entries.flatten() {
@@ -359,7 +468,7 @@ us/M"#;
                 }
             }
         }
-        
+
         languages.into_iter().collect()
     }
 

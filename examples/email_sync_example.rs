@@ -1,18 +1,16 @@
-use comunicado::email::{EmailDatabase, SyncEngine, SyncStrategy, SyncProgress, SyncPhase};
-use comunicado::imap::{ImapClient, ImapConfig, ImapAuthMethod};
+use comunicado::email::{EmailDatabase, SyncEngine, SyncPhase, SyncProgress, SyncStrategy};
+use comunicado::imap::{ImapAuthMethod, ImapClient, ImapConfig};
 use comunicado::oauth2::TokenManager;
 use std::sync::Arc;
 use tokio::sync::mpsc;
-use tracing::{info, warn, error, Level};
+use tracing::{error, info, warn, Level};
 use tracing_subscriber;
 
 /// Example demonstrating email synchronization with the sync engine
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize logging
-    tracing_subscriber::fmt()
-        .with_max_level(Level::INFO)
-        .init();
+    tracing_subscriber::fmt().with_max_level(Level::INFO).init();
 
     info!("Starting email synchronization example");
 
@@ -33,29 +31,49 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         while let Some(progress) = progress_receiver.recv().await {
             match progress.phase {
                 SyncPhase::Initializing => {
-                    info!("📧 Starting sync for {}:{}", progress.account_id, progress.folder_name);
+                    info!(
+                        "📧 Starting sync for {}:{}",
+                        progress.account_id, progress.folder_name
+                    );
                 }
                 SyncPhase::CheckingFolders => {
-                    info!("📁 Checking folders for {}:{}", progress.account_id, progress.folder_name);
+                    info!(
+                        "📁 Checking folders for {}:{}",
+                        progress.account_id, progress.folder_name
+                    );
                 }
                 SyncPhase::FetchingHeaders => {
-                    info!("📄 Fetching headers for {}:{}", progress.account_id, progress.folder_name);
+                    info!(
+                        "📄 Fetching headers for {}:{}",
+                        progress.account_id, progress.folder_name
+                    );
                 }
                 SyncPhase::FetchingBodies => {
-                    info!("📨 Fetching message bodies ({}/{}) for {}:{}", 
-                          progress.messages_processed, progress.total_messages,
-                          progress.account_id, progress.folder_name);
+                    info!(
+                        "📨 Fetching message bodies ({}/{}) for {}:{}",
+                        progress.messages_processed,
+                        progress.total_messages,
+                        progress.account_id,
+                        progress.folder_name
+                    );
                 }
                 SyncPhase::ProcessingChanges => {
-                    info!("⚙️  Processing changes for {}:{}", progress.account_id, progress.folder_name);
+                    info!(
+                        "⚙️  Processing changes for {}:{}",
+                        progress.account_id, progress.folder_name
+                    );
                 }
                 SyncPhase::Complete => {
-                    info!("✅ Sync complete for {}:{} ({} messages processed)", 
-                          progress.account_id, progress.folder_name, progress.messages_processed);
+                    info!(
+                        "✅ Sync complete for {}:{} ({} messages processed)",
+                        progress.account_id, progress.folder_name, progress.messages_processed
+                    );
                 }
                 SyncPhase::Error(ref error) => {
-                    error!("❌ Sync error for {}:{}: {}", 
-                           progress.account_id, progress.folder_name, error);
+                    error!(
+                        "❌ Sync error for {}:{}: {}",
+                        progress.account_id, progress.folder_name, error
+                    );
                 }
             }
         }
@@ -63,13 +81,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Example 1: Gmail OAuth2 sync
     info!("\n=== Example 1: Gmail OAuth2 Sync ===");
-    
+
     let gmail_config = ImapConfig {
         hostname: "imap.gmail.com".to_string(),
         port: 993,
         username: "user@gmail.com".to_string(),
-        auth_method: ImapAuthMethod::OAuth2 { 
-            account_id: "gmail_account".to_string() 
+        auth_method: ImapAuthMethod::OAuth2 {
+            account_id: "gmail_account".to_string(),
         },
         use_tls: true,
         use_starttls: false,
@@ -83,11 +101,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Note: This would fail in real usage without valid OAuth2 tokens
     // For demonstration, we'll show the setup and catch the error
-    match sync_engine.sync_account(
-        "gmail_account".to_string(),
-        gmail_client,
-        SyncStrategy::Incremental,
-    ).await {
+    match sync_engine
+        .sync_account(
+            "gmail_account".to_string(),
+            gmail_client,
+            SyncStrategy::Incremental,
+        )
+        .await
+    {
         Ok(_) => info!("Gmail sync completed successfully"),
         Err(e) => warn!("Gmail sync failed (expected in example): {}", e),
     }
@@ -99,8 +120,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         hostname: "outlook.office365.com".to_string(),
         port: 993,
         username: "user@outlook.com".to_string(),
-        auth_method: ImapAuthMethod::OAuth2 { 
-            account_id: "outlook_account".to_string() 
+        auth_method: ImapAuthMethod::OAuth2 {
+            account_id: "outlook_account".to_string(),
         },
         use_tls: true,
         use_starttls: false,
@@ -120,11 +141,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     for (name, strategy) in strategies {
         info!("Testing {}", name);
-        match sync_engine.sync_account(
-            "outlook_account".to_string(),
-            ImapClient::new_with_oauth2(outlook_config.clone(), TokenManager::new()),
-            strategy,
-        ).await {
+        match sync_engine
+            .sync_account(
+                "outlook_account".to_string(),
+                ImapClient::new_with_oauth2(outlook_config.clone(), TokenManager::new()),
+                strategy,
+            )
+            .await
+        {
             Ok(_) => info!("{} completed", name),
             Err(e) => warn!("{} failed (expected): {}", name, e),
         }
@@ -138,11 +162,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("Active sync operations: {}", all_progress.len());
 
     for (key, progress) in all_progress {
-        info!("Sync {}: {:?} ({}/{})", 
-              key, 
-              progress.phase, 
-              progress.messages_processed, 
-              progress.total_messages);
+        info!(
+            "Sync {}: {:?} ({}/{})",
+            key, progress.phase, progress.messages_processed, progress.total_messages
+        );
     }
 
     // Example 4: Database operations
@@ -158,18 +181,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("  Size: {} bytes", stats.db_size_bytes);
 
     // Example search
-    let search_results = database.search_messages("gmail_account", "important", Some(10)).await?;
-    info!("Search results for 'important': {} messages", search_results.len());
+    let search_results = database
+        .search_messages("gmail_account", "important", Some(10))
+        .await?;
+    info!(
+        "Search results for 'important': {} messages",
+        search_results.len()
+    );
 
     // Example message retrieval
-    let inbox_messages = database.get_messages("gmail_account", "INBOX", Some(5), None).await?;
+    let inbox_messages = database
+        .get_messages("gmail_account", "INBOX", Some(5), None)
+        .await?;
     info!("Recent INBOX messages: {}", inbox_messages.len());
 
     for message in inbox_messages {
-        info!("  📧 {} from {} ({})", 
-              message.subject, 
-              message.from_addr, 
-              message.date.format("%Y-%m-%d %H:%M"));
+        info!(
+            "  📧 {} from {} ({})",
+            message.subject,
+            message.from_addr,
+            message.date.format("%Y-%m-%d %H:%M")
+        );
     }
 
     // Example 5: Conflict resolution demonstration
@@ -191,19 +223,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     use std::time::Instant;
 
     let start = Instant::now();
-    
+
     // Simulate some database operations
     for i in 0..100 {
-        let _ = database.get_messages("test_account", "INBOX", Some(1), Some(i)).await;
+        let _ = database
+            .get_messages("test_account", "INBOX", Some(1), Some(i))
+            .await;
     }
-    
+
     let duration = start.elapsed();
     info!("100 database queries took: {:?}", duration);
     info!("Average query time: {:?}", duration / 100);
 
     // Cleanup
     progress_task.abort();
-    
+
     info!("\n=== Email Sync Example Complete ===");
     info!("Database file created: {}", db_path);
     info!("To explore the database:");
@@ -215,7 +249,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 /// Helper function to create a mock stored message for testing
-pub fn create_mock_message(account_id: &str, folder: &str, uid: u32) -> comunicado::email::StoredMessage {
+pub fn create_mock_message(
+    account_id: &str,
+    folder: &str,
+    uid: u32,
+) -> comunicado::email::StoredMessage {
     use chrono::Utc;
     use uuid::Uuid;
 

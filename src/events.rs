@@ -1,6 +1,6 @@
+use crate::keyboard::{KeyboardAction, KeyboardManager};
+use crate::ui::{ComposeAction, DraftAction, FocusedPane, StartPageNavigation, UIMode, UI};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-use crate::ui::{FocusedPane, UI, UIMode, ComposeAction, DraftAction, StartPageNavigation};
-use crate::keyboard::{KeyboardManager, KeyboardAction};
 
 pub struct EventHandler {
     should_quit: bool,
@@ -13,12 +13,12 @@ pub enum EventResult {
     Continue,
     ComposeAction(ComposeAction),
     DraftAction(DraftAction),
-    AccountSwitch(String), // Account ID to switch to
-    AddAccount, // Launch account setup wizard
-    RemoveAccount(String), // Account ID to remove
+    AccountSwitch(String),  // Account ID to switch to
+    AddAccount,             // Launch account setup wizard
+    RemoveAccount(String),  // Account ID to remove
     RefreshAccount(String), // Account ID to refresh connection
-    SyncAccount(String), // Account ID to manually sync
-    FolderSelect(String), // Folder path to load messages from
+    SyncAccount(String),    // Account ID to manually sync
+    FolderSelect(String),   // Folder path to load messages from
     FolderOperation(crate::ui::folder_tree::FolderOperation), // Folder operation to execute
 }
 
@@ -29,24 +29,28 @@ impl EventHandler {
             keyboard_manager: KeyboardManager::default(),
         }
     }
-    
+
     /// Get the keyboard manager for configuration
     pub fn keyboard_manager(&self) -> &KeyboardManager {
         &self.keyboard_manager
     }
-    
+
     /// Get mutable keyboard manager for configuration
     pub fn keyboard_manager_mut(&mut self) -> &mut KeyboardManager {
         &mut self.keyboard_manager
     }
-    
+
     /// Get help text for keyboard shortcuts
     pub fn get_keyboard_help(&self) -> String {
         self.keyboard_manager.get_help_text()
     }
-    
+
     /// Handle a key event using the configurable keyboard system
-    pub async fn handle_key_event_with_config(&mut self, key: KeyEvent, ui: &mut UI) -> EventResult {
+    pub async fn handle_key_event_with_config(
+        &mut self,
+        key: KeyEvent,
+        ui: &mut UI,
+    ) -> EventResult {
         // Handle compose mode separately (these use different input handling)
         if ui.mode() == &UIMode::Compose {
             if let Some(action) = ui.handle_compose_key(key.code).await {
@@ -54,7 +58,7 @@ impl EventHandler {
             }
             return EventResult::Continue;
         }
-        
+
         // Handle draft list mode
         if ui.mode() == &UIMode::DraftList {
             if let Some(action) = ui.handle_draft_list_key(key.code).await {
@@ -62,22 +66,24 @@ impl EventHandler {
             }
             return EventResult::Continue;
         }
-        
+
         // Handle attachment viewer mode
-        if ui.focused_pane() == FocusedPane::ContentPreview && ui.content_preview().is_viewing_attachment() {
+        if ui.focused_pane() == FocusedPane::ContentPreview
+            && ui.content_preview().is_viewing_attachment()
+        {
             return self.handle_attachment_viewer_keys(key, ui).await;
         }
-        
+
         // Handle text input modes (search, folder search)
         if self.handle_text_input_modes(key, ui) {
             return EventResult::Continue;
         }
-        
+
         // Get the action from keyboard manager
         if let Some(action) = self.keyboard_manager.get_action(key.code, key.modifiers) {
             return self.execute_keyboard_action(action.clone(), ui).await;
         }
-        
+
         // Handle mode-specific keys that don't have actions
         match ui.mode() {
             UIMode::StartPage => self.handle_start_page_keys(key, ui).await,
@@ -86,7 +92,7 @@ impl EventHandler {
             _ => EventResult::Continue,
         }
     }
-    
+
     /// Handle text input modes (search, folder search, etc.)
     fn handle_text_input_modes(&mut self, key: KeyEvent, ui: &mut UI) -> bool {
         // Handle search input mode for folder tree
@@ -103,7 +109,7 @@ impl EventHandler {
                 _ => {}
             }
         }
-        
+
         // Handle search input mode for message list
         if ui.focused_pane() == FocusedPane::MessageList && ui.message_list().is_search_active() {
             match key.code {
@@ -122,12 +128,16 @@ impl EventHandler {
                 _ => {}
             }
         }
-        
+
         false
     }
-    
+
     /// Execute a keyboard action
-    async fn execute_keyboard_action(&mut self, action: KeyboardAction, ui: &mut UI) -> EventResult {
+    async fn execute_keyboard_action(
+        &mut self,
+        action: KeyboardAction,
+        ui: &mut UI,
+    ) -> EventResult {
         match action {
             // Global actions
             KeyboardAction::Quit => {
@@ -146,7 +156,7 @@ impl EventHandler {
                 ui.show_keyboard_shortcuts();
                 EventResult::Continue
             }
-            
+
             // Navigation
             KeyboardAction::NextPane => {
                 ui.next_pane();
@@ -186,11 +196,9 @@ impl EventHandler {
                 self.handle_move_up(ui);
                 EventResult::Continue
             }
-            
+
             // Selection and interaction
-            KeyboardAction::Select => {
-                self.handle_select(ui)
-            }
+            KeyboardAction::Select => self.handle_select(ui),
             KeyboardAction::Escape => {
                 self.handle_escape(ui);
                 EventResult::Continue
@@ -207,7 +215,7 @@ impl EventHandler {
                 }
                 EventResult::Continue
             }
-            
+
             // Email actions
             KeyboardAction::ComposeEmail => {
                 if !ui.is_composing() {
@@ -223,7 +231,7 @@ impl EventHandler {
                     EventResult::Continue
                 }
             }
-            
+
             // Account management
             KeyboardAction::AddAccount => EventResult::AddAccount,
             KeyboardAction::RemoveAccount => {
@@ -248,7 +256,7 @@ impl EventHandler {
                     EventResult::Continue
                 }
             }
-            
+
             // Search
             KeyboardAction::StartSearch => {
                 if let FocusedPane::MessageList = ui.focused_pane() {
@@ -266,7 +274,7 @@ impl EventHandler {
                 }
                 EventResult::Continue
             }
-            
+
             // View controls
             KeyboardAction::ToggleThreadedView => {
                 if let FocusedPane::MessageList = ui.focused_pane() {
@@ -298,30 +306,33 @@ impl EventHandler {
                 }
                 EventResult::Continue
             }
-            
+
             // Sorting
             KeyboardAction::SortByDate => {
                 if let FocusedPane::MessageList = ui.focused_pane() {
                     use crate::email::{SortCriteria, SortOrder};
-                    ui.message_list_mut().set_sort_criteria(SortCriteria::Date(SortOrder::Descending));
+                    ui.message_list_mut()
+                        .set_sort_criteria(SortCriteria::Date(SortOrder::Descending));
                 }
                 EventResult::Continue
             }
             KeyboardAction::SortBySender => {
                 if let FocusedPane::MessageList = ui.focused_pane() {
                     use crate::email::{SortCriteria, SortOrder};
-                    ui.message_list_mut().set_sort_criteria(SortCriteria::Sender(SortOrder::Ascending));
+                    ui.message_list_mut()
+                        .set_sort_criteria(SortCriteria::Sender(SortOrder::Ascending));
                 }
                 EventResult::Continue
             }
             KeyboardAction::SortBySubject => {
                 if let FocusedPane::MessageList = ui.focused_pane() {
                     use crate::email::{SortCriteria, SortOrder};
-                    ui.message_list_mut().set_sort_criteria(SortCriteria::Subject(SortOrder::Ascending));
+                    ui.message_list_mut()
+                        .set_sort_criteria(SortCriteria::Subject(SortOrder::Ascending));
                 }
                 EventResult::Continue
             }
-            
+
             // Content preview
             KeyboardAction::ScrollToTop => {
                 if let FocusedPane::ContentPreview = ui.focused_pane() {
@@ -347,7 +358,9 @@ impl EventHandler {
                 if let FocusedPane::ContentPreview = ui.focused_pane() {
                     if ui.content_preview().has_attachments() {
                         if let Some(_attachment) = ui.content_preview().get_selected_attachment() {
-                            if let Err(e) = ui.content_preview_mut().view_selected_attachment().await {
+                            if let Err(e) =
+                                ui.content_preview_mut().view_selected_attachment().await
+                            {
                                 tracing::error!("Failed to view attachment: {}", e);
                             }
                         }
@@ -359,21 +372,28 @@ impl EventHandler {
                 if let FocusedPane::ContentPreview = ui.focused_pane() {
                     if ui.content_preview().has_attachments() {
                         if let Some(_attachment) = ui.content_preview().get_selected_attachment() {
-                            if let Err(e) = ui.content_preview_mut().open_attachment_with_system().await {
-                                tracing::error!("Failed to open attachment with system application: {}", e);
+                            if let Err(e) =
+                                ui.content_preview_mut().open_attachment_with_system().await
+                            {
+                                tracing::error!(
+                                    "Failed to open attachment with system application: {}",
+                                    e
+                                );
                             }
                         }
                     }
                 }
                 EventResult::Continue
             }
-            
+
             // Folder operations
             KeyboardAction::CreateFolder => {
                 if let FocusedPane::FolderTree = ui.focused_pane() {
                     let parent_path = ui.folder_tree().selected_folder().map(|f| f.path.clone());
                     if let Some(parent_path) = parent_path {
-                        let _ = ui.folder_tree_mut().create_folder(Some(&parent_path), "New Folder".to_string());
+                        let _ = ui
+                            .folder_tree_mut()
+                            .create_folder(Some(&parent_path), "New Folder".to_string());
                     }
                 }
                 EventResult::Continue
@@ -397,43 +417,41 @@ impl EventHandler {
                 }
                 EventResult::Continue
             }
-            KeyboardAction::FolderRefresh => {
-                match ui.focused_pane() {
-                    FocusedPane::FolderTree => {
-                        if let Some(operation) = ui.folder_tree_mut().handle_function_key(KeyCode::F(5)) {
-                            EventResult::FolderOperation(operation)
-                        } else {
-                            EventResult::Continue
-                        }
+            KeyboardAction::FolderRefresh => match ui.focused_pane() {
+                FocusedPane::FolderTree => {
+                    if let Some(operation) = ui.folder_tree_mut().handle_function_key(KeyCode::F(5))
+                    {
+                        EventResult::FolderOperation(operation)
+                    } else {
+                        EventResult::Continue
                     }
-                    _ => EventResult::Continue,
                 }
-            }
-            KeyboardAction::FolderRename => {
-                match ui.focused_pane() {
-                    FocusedPane::FolderTree => {
-                        if let Some(operation) = ui.folder_tree_mut().handle_function_key(KeyCode::F(2)) {
-                            EventResult::FolderOperation(operation)
-                        } else {
-                            EventResult::Continue
-                        }
+                _ => EventResult::Continue,
+            },
+            KeyboardAction::FolderRename => match ui.focused_pane() {
+                FocusedPane::FolderTree => {
+                    if let Some(operation) = ui.folder_tree_mut().handle_function_key(KeyCode::F(2))
+                    {
+                        EventResult::FolderOperation(operation)
+                    } else {
+                        EventResult::Continue
                     }
-                    _ => EventResult::Continue,
                 }
-            }
-            KeyboardAction::FolderDelete => {
-                match ui.focused_pane() {
-                    FocusedPane::FolderTree => {
-                        if let Some(operation) = ui.folder_tree_mut().handle_function_key(KeyCode::Delete) {
-                            EventResult::FolderOperation(operation)
-                        } else {
-                            EventResult::Continue
-                        }
+                _ => EventResult::Continue,
+            },
+            KeyboardAction::FolderDelete => match ui.focused_pane() {
+                FocusedPane::FolderTree => {
+                    if let Some(operation) =
+                        ui.folder_tree_mut().handle_function_key(KeyCode::Delete)
+                    {
+                        EventResult::FolderOperation(operation)
+                    } else {
+                        EventResult::Continue
                     }
-                    _ => EventResult::Continue,
                 }
-            }
-            
+                _ => EventResult::Continue,
+            },
+
             // Copy operations
             KeyboardAction::CopyEmailContent => {
                 if matches!(ui.focused_pane(), FocusedPane::ContentPreview) {
@@ -451,21 +469,25 @@ impl EventHandler {
                 }
                 EventResult::Continue
             }
-            
+
             // Attachment navigation
             KeyboardAction::NextAttachment => {
-                if ui.focused_pane() == FocusedPane::ContentPreview && ui.content_preview().has_attachments() {
+                if ui.focused_pane() == FocusedPane::ContentPreview
+                    && ui.content_preview().has_attachments()
+                {
                     ui.content_preview_mut().next_attachment();
                 }
                 EventResult::Continue
             }
             KeyboardAction::PreviousAttachment => {
-                if ui.focused_pane() == FocusedPane::ContentPreview && ui.content_preview().has_attachments() {
+                if ui.focused_pane() == FocusedPane::ContentPreview
+                    && ui.content_preview().has_attachments()
+                {
                     ui.content_preview_mut().previous_attachment();
                 }
                 EventResult::Continue
             }
-            
+
             // Other actions that need specific handling
             _ => {
                 tracing::debug!("Unhandled keyboard action: {:?}", action);
@@ -473,7 +495,7 @@ impl EventHandler {
             }
         }
     }
-    
+
     /// Handle attachment viewer key events
     async fn handle_attachment_viewer_keys(&mut self, key: KeyEvent, ui: &mut UI) -> EventResult {
         match key.code {
@@ -498,7 +520,11 @@ impl EventHandler {
                 EventResult::Continue
             }
             KeyCode::Char(c) => {
-                if let Err(e) = ui.content_preview_mut().handle_attachment_viewer_key(c).await {
+                if let Err(e) = ui
+                    .content_preview_mut()
+                    .handle_attachment_viewer_key(c)
+                    .await
+                {
                     tracing::error!("Error handling attachment viewer key: {}", e);
                 }
                 EventResult::Continue
@@ -506,7 +532,7 @@ impl EventHandler {
             _ => EventResult::Continue,
         }
     }
-    
+
     /// Handle move down action for different panes
     fn handle_move_down(&mut self, ui: &mut UI) {
         match ui.focused_pane() {
@@ -525,7 +551,7 @@ impl EventHandler {
             _ => {}
         }
     }
-    
+
     /// Handle move up action for different panes
     fn handle_move_up(&mut self, ui: &mut UI) {
         match ui.focused_pane() {
@@ -544,7 +570,7 @@ impl EventHandler {
             _ => {}
         }
     }
-    
+
     /// Handle select action for different panes
     fn handle_select(&mut self, ui: &mut UI) -> EventResult {
         match ui.focused_pane() {
@@ -575,7 +601,7 @@ impl EventHandler {
             _ => EventResult::Continue,
         }
     }
-    
+
     /// Handle escape action for different panes
     fn handle_escape(&mut self, ui: &mut UI) {
         match ui.focused_pane() {
@@ -608,7 +634,7 @@ impl EventHandler {
             }
             return EventResult::Continue;
         }
-        
+
         // Handle draft list mode
         if ui.mode() == &UIMode::DraftList {
             if let Some(action) = ui.handle_draft_list_key(key.code).await {
@@ -616,19 +642,21 @@ impl EventHandler {
             }
             return EventResult::Continue;
         }
-        
+
         // Handle start page mode
         if ui.mode() == &UIMode::StartPage {
             return self.handle_start_page_keys(key, ui).await;
         }
-        
+
         // Handle email viewer mode
         if ui.mode() == &UIMode::EmailViewer {
             return self.handle_email_viewer_keys(key, ui).await;
         }
-        
+
         // Handle attachment viewer mode when it's active in content preview
-        if ui.focused_pane() == FocusedPane::ContentPreview && ui.content_preview().is_viewing_attachment() {
+        if ui.focused_pane() == FocusedPane::ContentPreview
+            && ui.content_preview().is_viewing_attachment()
+        {
             // Route key handling to attachment viewer
             match key.code {
                 KeyCode::Esc => {
@@ -660,7 +688,11 @@ impl EventHandler {
                     return EventResult::Continue;
                 }
                 KeyCode::Char(c) => {
-                    if let Err(e) = ui.content_preview_mut().handle_attachment_viewer_key(c).await {
+                    if let Err(e) = ui
+                        .content_preview_mut()
+                        .handle_attachment_viewer_key(c)
+                        .await
+                    {
                         tracing::error!("Error handling attachment viewer key: {}", e);
                     }
                     return EventResult::Continue;
@@ -671,7 +703,7 @@ impl EventHandler {
                 }
             }
         }
-        
+
         match key.code {
             // Global quit commands
             KeyCode::Char('q') => {
@@ -680,36 +712,48 @@ impl EventHandler {
             KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 self.should_quit = true;
             }
-            
+
             // Handle search input mode for folder tree
-            KeyCode::Char(c) if ui.focused_pane() == FocusedPane::FolderTree && ui.folder_tree().is_in_search_mode() => {
+            KeyCode::Char(c)
+                if ui.focused_pane() == FocusedPane::FolderTree
+                    && ui.folder_tree().is_in_search_mode() =>
+            {
                 ui.folder_tree_mut().handle_search_input(c);
                 return EventResult::Continue;
             }
-            KeyCode::Backspace if ui.focused_pane() == FocusedPane::FolderTree && ui.folder_tree().is_in_search_mode() => {
+            KeyCode::Backspace
+                if ui.focused_pane() == FocusedPane::FolderTree
+                    && ui.folder_tree().is_in_search_mode() =>
+            {
                 ui.folder_tree_mut().handle_search_backspace();
                 return EventResult::Continue;
             }
-            
+
             // Handle search input mode for message list
-            KeyCode::Char(c) if ui.focused_pane() == FocusedPane::MessageList && ui.message_list().is_search_active() => {
+            KeyCode::Char(c)
+                if ui.focused_pane() == FocusedPane::MessageList
+                    && ui.message_list().is_search_active() =>
+            {
                 let mut current_query = ui.message_list().search_query().to_string();
                 current_query.push(c);
                 ui.message_list_mut().update_search(current_query);
                 return EventResult::Continue;
             }
-            KeyCode::Backspace if ui.focused_pane() == FocusedPane::MessageList && ui.message_list().is_search_active() => {
+            KeyCode::Backspace
+                if ui.focused_pane() == FocusedPane::MessageList
+                    && ui.message_list().is_search_active() =>
+            {
                 let mut current_query = ui.message_list().search_query().to_string();
                 current_query.pop();
                 ui.message_list_mut().update_search(current_query);
                 return EventResult::Continue;
             }
-            
+
             // Go back to start page
             KeyCode::Char('~') => {
                 ui.show_start_page();
             }
-            
+
             // Navigation between panes
             KeyCode::Tab => {
                 ui.next_pane();
@@ -717,7 +761,7 @@ impl EventHandler {
             KeyCode::BackTab => {
                 ui.previous_pane();
             }
-            
+
             // Vim-style navigation
             KeyCode::Char('h') => {
                 match ui.focused_pane() {
@@ -757,9 +801,10 @@ impl EventHandler {
                     }
                     FocusedPane::ContentPreview => {
                         // Check if there are attachments and if any are selected
-                        if ui.content_preview().has_attachments() && 
-                           ui.content_preview().get_selected_attachment().is_some() &&
-                           key.modifiers.contains(KeyModifiers::CONTROL) {
+                        if ui.content_preview().has_attachments()
+                            && ui.content_preview().get_selected_attachment().is_some()
+                            && key.modifiers.contains(KeyModifiers::CONTROL)
+                        {
                             // Ctrl+J: Navigate to next attachment
                             ui.content_preview_mut().next_attachment();
                         } else {
@@ -795,9 +840,10 @@ impl EventHandler {
                     }
                     FocusedPane::ContentPreview => {
                         // Check if there are attachments and if any are selected
-                        if ui.content_preview().has_attachments() && 
-                           ui.content_preview().get_selected_attachment().is_some() &&
-                           key.modifiers.contains(KeyModifiers::CONTROL) {
+                        if ui.content_preview().has_attachments()
+                            && ui.content_preview().get_selected_attachment().is_some()
+                            && key.modifiers.contains(KeyModifiers::CONTROL)
+                        {
                             // Ctrl+K: Navigate to previous attachment
                             ui.content_preview_mut().previous_attachment();
                         } else {
@@ -819,7 +865,7 @@ impl EventHandler {
                     }
                 }
             }
-            
+
             // Escape key handling
             KeyCode::Esc => {
                 match ui.focused_pane() {
@@ -846,13 +892,14 @@ impl EventHandler {
                     _ => {}
                 }
             }
-            
+
             // Function keys for folder operations
             KeyCode::F(5) => {
                 // F5 - Refresh
                 match ui.focused_pane() {
                     FocusedPane::FolderTree => {
-                        if let Some(operation) = ui.folder_tree_mut().handle_function_key(key.code) {
+                        if let Some(operation) = ui.folder_tree_mut().handle_function_key(key.code)
+                        {
                             return EventResult::FolderOperation(operation);
                         }
                     }
@@ -866,7 +913,8 @@ impl EventHandler {
                 // F2 - Rename
                 match ui.focused_pane() {
                     FocusedPane::FolderTree => {
-                        if let Some(operation) = ui.folder_tree_mut().handle_function_key(key.code) {
+                        if let Some(operation) = ui.folder_tree_mut().handle_function_key(key.code)
+                        {
                             return EventResult::FolderOperation(operation);
                         }
                     }
@@ -877,14 +925,15 @@ impl EventHandler {
                 // Delete key
                 match ui.focused_pane() {
                     FocusedPane::FolderTree => {
-                        if let Some(operation) = ui.folder_tree_mut().handle_function_key(key.code) {
+                        if let Some(operation) = ui.folder_tree_mut().handle_function_key(key.code)
+                        {
                             return EventResult::FolderOperation(operation);
                         }
                     }
                     _ => {}
                 }
             }
-            
+
             // Enter key for selection
             KeyCode::Enter => {
                 match ui.focused_pane() {
@@ -925,7 +974,7 @@ impl EventHandler {
                     }
                 }
             }
-            
+
             // Threading and view mode controls
             KeyCode::Char('t') => {
                 // Toggle threaded view
@@ -951,7 +1000,7 @@ impl EventHandler {
                     ui.message_list_mut().expand_selected_thread();
                 }
             }
-            KeyCode::Char('p') | KeyCode::Char('P') => {
+            KeyCode::Char('p' | 'P') => {
                 // Open email popup viewer for reply/forward/edit actions
                 if ui.focused_pane() == FocusedPane::ContentPreview {
                     if let Some(selected_message_item) = ui.message_list().selected_message() {
@@ -963,8 +1012,8 @@ impl EventHandler {
                                 let stored_message = crate::email::StoredMessage {
                                     id: message_id,
                                     account_id: "default".to_string(), // TODO: Get actual account ID
-                                    folder_name: "INBOX".to_string(), // TODO: Get actual folder
-                                    imap_uid: 0, // TODO: Get actual UID
+                                    folder_name: "INBOX".to_string(),  // TODO: Get actual folder
+                                    imap_uid: 0,                       // TODO: Get actual UID
                                     subject: email_content.headers.subject.clone(),
                                     from_name: Some(email_content.headers.from.clone()),
                                     from_addr: email_content.headers.from.clone(),
@@ -973,13 +1022,19 @@ impl EventHandler {
                                     bcc_addrs: email_content.headers.bcc.clone(),
                                     date: chrono::Utc::now(), // TODO: Parse actual date
                                     body_text: Some(email_content.body.clone()),
-                                    body_html: if email_content.content_type == crate::ui::content_preview::ContentType::Html {
+                                    body_html: if email_content.content_type
+                                        == crate::ui::content_preview::ContentType::Html
+                                    {
                                         Some(email_content.body.clone())
                                     } else {
                                         None
                                     },
                                     attachments: Vec::new(), // TODO: Convert attachments
-                                    flags: if selected_message_item.is_read { vec!["\\Seen".to_string()] } else { Vec::new() },
+                                    flags: if selected_message_item.is_read {
+                                        vec!["\\Seen".to_string()]
+                                    } else {
+                                        Vec::new()
+                                    },
                                     labels: Vec::new(),
                                     size: None,
                                     priority: None,
@@ -1007,19 +1062,22 @@ impl EventHandler {
                     ui.message_list_mut().collapse_selected_thread();
                 }
             }
-            
+
             // Sorting controls / Attachment save
             KeyCode::Char('s') => {
                 match ui.focused_pane() {
                     FocusedPane::MessageList => {
                         // Cycle through sort modes (date, sender, subject)
                         use crate::email::{SortCriteria, SortOrder};
-                        ui.message_list_mut().set_sort_criteria(SortCriteria::Date(SortOrder::Descending));
+                        ui.message_list_mut()
+                            .set_sort_criteria(SortCriteria::Date(SortOrder::Descending));
                     }
                     FocusedPane::ContentPreview => {
                         // Save selected attachment
                         if ui.content_preview().has_attachments() {
-                            if let Some(_attachment) = ui.content_preview().get_selected_attachment() {
+                            if let Some(_attachment) =
+                                ui.content_preview().get_selected_attachment()
+                            {
                                 // In a full implementation, this would trigger an async save operation
                                 // For now, we'll just indicate that save was attempted
                                 tracing::info!("Attachment save requested");
@@ -1037,7 +1095,9 @@ impl EventHandler {
                     if ui.content_preview().has_attachments() {
                         if let Some(_attachment) = ui.content_preview().get_selected_attachment() {
                             // Open attachment viewer
-                            if let Err(e) = ui.content_preview_mut().view_selected_attachment().await {
+                            if let Err(e) =
+                                ui.content_preview_mut().view_selected_attachment().await
+                            {
                                 tracing::error!("Failed to view attachment: {}", e);
                             }
                         }
@@ -1050,8 +1110,13 @@ impl EventHandler {
                     if ui.content_preview().has_attachments() {
                         if let Some(_attachment) = ui.content_preview().get_selected_attachment() {
                             // Open attachment with xdg-open
-                            if let Err(e) = ui.content_preview_mut().open_attachment_with_system().await {
-                                tracing::error!("Failed to open attachment with system application: {}", e);
+                            if let Err(e) =
+                                ui.content_preview_mut().open_attachment_with_system().await
+                            {
+                                tracing::error!(
+                                    "Failed to open attachment with system application: {}",
+                                    e
+                                );
                             }
                         }
                     }
@@ -1061,17 +1126,19 @@ impl EventHandler {
                 // Sort by sender (only when Ctrl is not pressed)
                 if let FocusedPane::MessageList = ui.focused_pane() {
                     use crate::email::{SortCriteria, SortOrder};
-                    ui.message_list_mut().set_sort_criteria(SortCriteria::Sender(SortOrder::Ascending));
+                    ui.message_list_mut()
+                        .set_sort_criteria(SortCriteria::Sender(SortOrder::Ascending));
                 }
             }
             KeyCode::Char('u') => {
                 // Sort by subject
                 if let FocusedPane::MessageList = ui.focused_pane() {
                     use crate::email::{SortCriteria, SortOrder};
-                    ui.message_list_mut().set_sort_criteria(SortCriteria::Subject(SortOrder::Ascending));
+                    ui.message_list_mut()
+                        .set_sort_criteria(SortCriteria::Subject(SortOrder::Ascending));
                 }
             }
-            
+
             // Search functionality
             KeyCode::Char('/') => {
                 // Enter message search mode
@@ -1081,18 +1148,20 @@ impl EventHandler {
                     }
                 }
             }
-            
+
             // Search interface F-keys (when search is active)
             // TODO: These are documented but not yet implemented - the current search
             // is a simple text filter, not the advanced SearchUI with different modes
-            KeyCode::F(1) | KeyCode::F(3) | KeyCode::F(4) => {
-                if ui.focused_pane() == FocusedPane::MessageList && ui.message_list().is_search_active() {
+            KeyCode::F(1 | 3 | 4) => {
+                if ui.focused_pane() == FocusedPane::MessageList
+                    && ui.message_list().is_search_active()
+                {
                     // F1, F3, F4: Search mode switching (not yet implemented)
                     // Note: F2 is handled above for folder rename operations
                     tracing::info!("Search mode switching F-keys not yet implemented");
                 }
             }
-            
+
             // Folder management shortcuts (when folder tree is focused)
             KeyCode::Char('f') => {
                 // Enter folder search mode
@@ -1109,7 +1178,9 @@ impl EventHandler {
                     // For demo, create a sample folder
                     let parent_path = ui.folder_tree().selected_folder().map(|f| f.path.clone());
                     if let Some(parent_path) = parent_path {
-                        let _ = ui.folder_tree_mut().create_folder(Some(&parent_path), "New Folder".to_string());
+                        let _ = ui
+                            .folder_tree_mut()
+                            .create_folder(Some(&parent_path), "New Folder".to_string());
                     }
                 }
             }
@@ -1134,7 +1205,7 @@ impl EventHandler {
                     }
                 }
             }
-            
+
             // Content preview controls (when content preview is focused)
             KeyCode::Char('m') => {
                 // Toggle view mode (Raw, Formatted, Headers)
@@ -1169,8 +1240,7 @@ impl EventHandler {
                     ui.content_preview_mut().scroll_to_bottom(20); // Default height
                 }
             }
-            
-            
+
             // Compose email shortcut
             KeyCode::Char('c') if !key.modifiers.contains(KeyModifiers::CONTROL) => {
                 // Start compose mode only if we're not already in compose mode
@@ -1179,7 +1249,7 @@ impl EventHandler {
                     return EventResult::ComposeAction(ComposeAction::StartCompose);
                 }
             }
-            
+
             // Show draft list shortcut
             KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 // Ctrl+D to show draft list
@@ -1187,13 +1257,13 @@ impl EventHandler {
                     return EventResult::DraftAction(DraftAction::RefreshDrafts);
                 }
             }
-            
+
             // Add account shortcut
             KeyCode::Char('a') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 // Ctrl+A to add a new account
                 return EventResult::AddAccount;
             }
-            
+
             // Remove account shortcut (when account switcher is focused)
             KeyCode::Char('x') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 // Ctrl+X to remove the currently selected account (only when account switcher is focused)
@@ -1203,7 +1273,7 @@ impl EventHandler {
                     }
                 }
             }
-            
+
             // Refresh account connection shortcut
             KeyCode::Char('r') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 // Ctrl+R to refresh account connection and sync folders/emails
@@ -1214,7 +1284,7 @@ impl EventHandler {
                     }
                 }
             }
-            
+
             // Copy functionality
             KeyCode::Char('y') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 // Ctrl+Y to copy email content to clipboard
@@ -1232,13 +1302,13 @@ impl EventHandler {
                     }
                 }
             }
-            
+
             _ => {}
         }
-        
+
         EventResult::Continue
     }
-    
+
     /// Handle key events for start page mode
     async fn handle_start_page_keys(&mut self, key: KeyEvent, ui: &mut UI) -> EventResult {
         match key.code {
@@ -1249,7 +1319,7 @@ impl EventHandler {
             KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 self.should_quit = true;
             }
-            
+
             // Navigate between widgets on start page
             KeyCode::Left | KeyCode::Char('h') => {
                 ui.handle_start_page_navigation(StartPageNavigation::Previous);
@@ -1263,12 +1333,12 @@ impl EventHandler {
             KeyCode::BackTab => {
                 ui.handle_start_page_navigation(StartPageNavigation::Previous);
             }
-            
+
             // Switch to email interface
             KeyCode::Enter | KeyCode::Char('e') => {
                 ui.show_email_interface();
             }
-            
+
             // Quick actions from start page
             KeyCode::Char('c') => {
                 // Compose email - switch to email interface and start compose
@@ -1290,7 +1360,7 @@ impl EventHandler {
                 ui.show_email_interface();
                 // TODO: Show calendar when implemented
             }
-            
+
             // Task management on start page
             KeyCode::Char('t') => {
                 // TODO: Add new task functionality
@@ -1298,12 +1368,12 @@ impl EventHandler {
             KeyCode::Char('x') => {
                 // TODO: Mark task as complete
             }
-            
+
             // Refresh data (when not in folder tree - handled above)
             KeyCode::Char('r') if ui.focused_pane() != FocusedPane::FolderTree => {
                 // TODO: Add refresh functionality to app events
             }
-            
+
             // Folder-specific character keys (only when folder tree is focused)
             KeyCode::Char('m') if ui.focused_pane() == FocusedPane::FolderTree => {
                 if let Some(operation) = ui.folder_tree_mut().handle_char_key('m') {
@@ -1343,10 +1413,10 @@ impl EventHandler {
             KeyCode::Char('?') if ui.focused_pane() == FocusedPane::FolderTree => {
                 ui.folder_tree_mut().handle_char_key('?'); // Show context menu
             }
-            
+
             _ => {}
         }
-        
+
         EventResult::Continue
     }
 
@@ -1359,7 +1429,7 @@ impl EventHandler {
                     self.handle_email_reply(ui).await
                 }
                 crate::ui::email_viewer::EmailViewerAction::ReplyAll => {
-                    // Start reply all composition  
+                    // Start reply all composition
                     self.handle_email_reply_all(ui).await
                 }
                 crate::ui::email_viewer::EmailViewerAction::Forward => {
@@ -1403,7 +1473,9 @@ impl EventHandler {
         if let Some(message) = ui.email_viewer_mut().current_message.clone() {
             // For now, return a specific action that the main loop can handle with contacts_manager
             // TODO: This should be handled by the main app with proper contacts_manager access
-            return EventResult::ComposeAction(crate::ui::ComposeAction::StartReplyFromMessage(message));
+            return EventResult::ComposeAction(crate::ui::ComposeAction::StartReplyFromMessage(
+                message,
+            ));
         }
         EventResult::Continue
     }
@@ -1414,7 +1486,9 @@ impl EventHandler {
         if let Some(message) = ui.email_viewer_mut().current_message.clone() {
             // For now, return a specific action that the main loop can handle with contacts_manager
             // TODO: This should be handled by the main app with proper contacts_manager access
-            return EventResult::ComposeAction(crate::ui::ComposeAction::StartReplyAllFromMessage(message));
+            return EventResult::ComposeAction(crate::ui::ComposeAction::StartReplyAllFromMessage(
+                message,
+            ));
         }
         EventResult::Continue
     }
@@ -1425,7 +1499,9 @@ impl EventHandler {
         if let Some(message) = ui.email_viewer_mut().current_message.clone() {
             // For now, return a specific action that the main loop can handle with contacts_manager
             // TODO: This should be handled by the main app with proper contacts_manager access
-            return EventResult::ComposeAction(crate::ui::ComposeAction::StartForwardFromMessage(message));
+            return EventResult::ComposeAction(crate::ui::ComposeAction::StartForwardFromMessage(
+                message,
+            ));
         }
         EventResult::Continue
     }
@@ -1436,7 +1512,9 @@ impl EventHandler {
         if let Some(message) = ui.email_viewer_mut().current_message.clone() {
             // For now, return a specific action that the main loop can handle with contacts_manager
             // TODO: This should be handled by the main app with proper contacts_manager access
-            return EventResult::ComposeAction(crate::ui::ComposeAction::StartEditFromMessage(message));
+            return EventResult::ComposeAction(crate::ui::ComposeAction::StartEditFromMessage(
+                message,
+            ));
         }
         EventResult::Continue
     }
@@ -1446,7 +1524,10 @@ impl EventHandler {
         // Get current email data from email viewer
         if let Some(message) = ui.email_viewer_mut().current_message.clone() {
             // TODO: Implement actual email deletion
-            tracing::info!("Delete email action requested for message: {}", message.subject);
+            tracing::info!(
+                "Delete email action requested for message: {}",
+                message.subject
+            );
             // For now, just exit the viewer
             ui.exit_email_viewer();
             EventResult::Continue
@@ -1460,7 +1541,10 @@ impl EventHandler {
         // Get current email data from email viewer
         if let Some(message) = ui.email_viewer_mut().current_message.clone() {
             // TODO: Implement actual email archiving
-            tracing::info!("Archive email action requested for message: {}", message.subject);
+            tracing::info!(
+                "Archive email action requested for message: {}",
+                message.subject
+            );
             // For now, just exit the viewer
             ui.exit_email_viewer();
             EventResult::Continue
@@ -1474,7 +1558,10 @@ impl EventHandler {
         // Get current email data from email viewer
         if let Some(message) = ui.email_viewer_mut().current_message.clone() {
             // TODO: Implement actual mark as read
-            tracing::info!("Mark as read action requested for message: {}", message.subject);
+            tracing::info!(
+                "Mark as read action requested for message: {}",
+                message.subject
+            );
             EventResult::Continue
         } else {
             EventResult::Continue
@@ -1486,7 +1573,10 @@ impl EventHandler {
         // Get current email data from email viewer
         if let Some(message) = ui.email_viewer_mut().current_message.clone() {
             // TODO: Implement actual mark as unread
-            tracing::info!("Mark as unread action requested for message: {}", message.subject);
+            tracing::info!(
+                "Mark as unread action requested for message: {}",
+                message.subject
+            );
             EventResult::Continue
         } else {
             EventResult::Continue
@@ -1496,7 +1586,7 @@ impl EventHandler {
     pub fn should_quit(&self) -> bool {
         self.should_quit
     }
-    
+
     /// Handle keyboard shortcuts popup mode keys
     async fn handle_keyboard_shortcuts_keys(&mut self, key: KeyEvent, ui: &mut UI) -> EventResult {
         match key.code {

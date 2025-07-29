@@ -1,12 +1,12 @@
-use std::collections::{HashMap, HashSet};
 use anyhow::Result;
+use std::collections::{HashMap, HashSet};
 
-pub mod dictionary;
 pub mod config;
+pub mod dictionary;
 pub mod suggestion;
 
-use dictionary::DictionaryManager;
 use config::SpellCheckConfig;
+use dictionary::DictionaryManager;
 
 /// Spell checking service for multi-language text validation
 pub struct SpellChecker {
@@ -39,11 +39,11 @@ impl SpellChecker {
     pub fn new() -> Result<Self> {
         let config = SpellCheckConfig::default();
         let dictionary_manager = DictionaryManager::new()?;
-        
+
         // Combine custom words and technical terms from config
         let mut all_custom_words = config.custom_words.clone();
         all_custom_words.extend(config.technical_terms.clone());
-        
+
         let mut spell_checker = Self {
             dictionaries: HashMap::new(),
             dictionary_manager,
@@ -51,19 +51,18 @@ impl SpellChecker {
             current_language: "en_US".to_string(),
             custom_words: all_custom_words,
         };
-        
+
         // Load technical terms from file if it exists
         let technical_terms_path = "dictionaries/technical-terms.txt";
         if std::path::Path::new(technical_terms_path).exists() {
             if let Err(e) = tokio::task::block_in_place(|| {
-                tokio::runtime::Handle::current().block_on(
-                    spell_checker.import_technical_terms(technical_terms_path)
-                )
+                tokio::runtime::Handle::current()
+                    .block_on(spell_checker.import_technical_terms(technical_terms_path))
             }) {
                 tracing::warn!("Failed to load technical terms file: {}", e);
             }
         }
-        
+
         Ok(spell_checker)
     }
 
@@ -71,11 +70,11 @@ impl SpellChecker {
     pub fn with_config(config: SpellCheckConfig) -> Result<Self> {
         let dictionary_manager = DictionaryManager::new()?;
         let current_language = config.default_language.clone();
-        
+
         // Combine custom words and technical terms from config
         let mut all_custom_words = config.custom_words.clone();
         all_custom_words.extend(config.technical_terms.clone());
-        
+
         Ok(Self {
             dictionaries: HashMap::new(),
             dictionary_manager,
@@ -91,27 +90,34 @@ impl SpellChecker {
             return Ok(()); // Already loaded
         }
 
-        let dictionary_path = self.dictionary_manager.get_dictionary_path(language).await?;
-        
+        let dictionary_path = self
+            .dictionary_manager
+            .get_dictionary_path(language)
+            .await?;
+
         // Load dictionary from .dic file
         let dictionary_content = tokio::fs::read_to_string(&dictionary_path.dic).await?;
         let mut word_set = HashSet::new();
-        
+
         // Parse dictionary file (skip first line which contains word count)
         for (i, line) in dictionary_content.lines().enumerate() {
             if i == 0 {
                 continue; // Skip word count line
             }
-            
+
             let word = line.split('/').next().unwrap_or(line).trim().to_lowercase();
             if !word.is_empty() {
                 word_set.insert(word);
             }
         }
-        
+
         self.dictionaries.insert(language.to_string(), word_set);
-        tracing::info!("Loaded spell check dictionary for language: {} ({} words)", language, self.dictionaries[language].len());
-        
+        tracing::info!(
+            "Loaded spell check dictionary for language: {} ({} words)",
+            language,
+            self.dictionaries[language].len()
+        );
+
         Ok(())
     }
 
@@ -120,7 +126,7 @@ impl SpellChecker {
         if !self.dictionaries.contains_key(language) {
             self.load_dictionary(language).await?;
         }
-        
+
         self.current_language = language.to_string();
         Ok(())
     }
@@ -150,18 +156,18 @@ impl SpellChecker {
             }
         }
     }
-    
+
     /// Remove a custom word
     pub fn remove_custom_word(&mut self, word: &str) {
         self.custom_words.retain(|w| w != word);
         self.config.custom_words.retain(|w| w != word);
     }
-    
+
     /// Get all custom words
     pub fn get_custom_words(&self) -> &Vec<String> {
         &self.custom_words
     }
-    
+
     /// Add word to personal dictionary (triggered when user clicks "Add to Dictionary")
     pub async fn add_to_personal_dictionary(&mut self, word: String) -> Result<()> {
         self.add_custom_word(word);
@@ -169,7 +175,7 @@ impl SpellChecker {
         self.save_config().await?;
         Ok(())
     }
-    
+
     /// Import technical terms from a file
     pub async fn import_technical_terms(&mut self, file_path: &str) -> Result<()> {
         let content = tokio::fs::read_to_string(file_path).await?;
@@ -178,14 +184,14 @@ impl SpellChecker {
             .map(|line| line.trim().to_string())
             .filter(|line| !line.is_empty() && !line.starts_with('#'))
             .collect();
-        
+
         for word in words {
             if !self.config.technical_terms.contains(&word) {
                 self.config.technical_terms.push(word.clone());
                 self.custom_words.push(word);
             }
         }
-        
+
         // Save configuration
         self.save_config().await?;
         Ok(())
@@ -194,7 +200,11 @@ impl SpellChecker {
     /// Check if a word is spelled correctly
     pub fn check_word(&self, word: &str) -> bool {
         // Check custom words first
-        if self.custom_words.iter().any(|w| w.eq_ignore_ascii_case(word)) {
+        if self
+            .custom_words
+            .iter()
+            .any(|w| w.eq_ignore_ascii_case(word))
+        {
             return true;
         }
 
@@ -212,7 +222,7 @@ impl SpellChecker {
             // Simple suggestion algorithm based on edit distance
             let word_lower = word.to_lowercase();
             let mut suggestions = Vec::new();
-            
+
             // Find words with similar length and characters
             for dict_word in dictionary.iter() {
                 if self.is_similar_word(&word_lower, dict_word) {
@@ -222,7 +232,7 @@ impl SpellChecker {
                     }
                 }
             }
-            
+
             suggestions
         } else {
             Vec::new()
@@ -261,7 +271,7 @@ impl SpellChecker {
     pub async fn check_text_with_detection(&mut self, text: &str) -> Result<SpellCheckResult> {
         // Try to detect language from text
         let detected_language = self.detect_language(text).await?;
-        
+
         if detected_language != self.current_language {
             self.set_language(&detected_language).await?;
         }
@@ -291,7 +301,11 @@ impl SpellChecker {
                 }
             }
 
-            let score = if words.is_empty() { 0.0 } else { correct_words as f32 / words.len() as f32 };
+            let score = if words.is_empty() {
+                0.0
+            } else {
+                correct_words as f32 / words.len() as f32
+            };
             language_scores.insert(language, score);
         }
 
@@ -302,7 +316,8 @@ impl SpellChecker {
             .map(|(lang, score)| (lang.clone(), *score))
             .unwrap_or((self.config.default_language.clone(), 0.0));
 
-        if best_language.1 > 0.3 { // At least 30% of words recognized
+        if best_language.1 > 0.3 {
+            // At least 30% of words recognized
             Ok(best_language.0)
         } else {
             Ok(self.config.default_language.clone())
@@ -318,24 +333,24 @@ impl SpellChecker {
     pub fn update_config(&mut self, config: SpellCheckConfig) {
         self.config = config;
     }
-    
+
     /// Helper method to check word similarity for suggestions
     fn is_similar_word(&self, word1: &str, word2: &str) -> bool {
         let len_diff = (word1.len() as i32 - word2.len() as i32).abs();
         if len_diff > 2 {
             return false;
         }
-        
+
         // Simple character overlap check
         let chars1: std::collections::HashSet<char> = word1.chars().collect();
         let chars2: std::collections::HashSet<char> = word2.chars().collect();
         let intersection = chars1.intersection(&chars2).count();
         let union = chars1.union(&chars2).count();
-        
+
         if union == 0 {
             return false;
         }
-        
+
         let similarity = intersection as f32 / union as f32;
         similarity > 0.6
     }

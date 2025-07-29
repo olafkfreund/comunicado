@@ -1,13 +1,13 @@
+use chrono::Utc;
 use comunicado::email::{
-    EmailDatabase, SyncEngine, SyncStrategy, SyncProgress, SyncPhase, 
-    ConflictResolution, StoredMessage
+    ConflictResolution, EmailDatabase, StoredMessage, SyncEngine, SyncPhase, SyncProgress,
+    SyncStrategy,
 };
-use comunicado::imap::{ImapClient, ImapConfig, ImapAuthMethod, ImapCapability};
+use comunicado::imap::{ImapAuthMethod, ImapCapability, ImapClient, ImapConfig};
 use comunicado::oauth2::TokenManager;
 use std::sync::Arc;
-use tokio::sync::mpsc;
 use tempfile::tempdir;
-use chrono::Utc;
+use tokio::sync::mpsc;
 use uuid::Uuid;
 
 /// Test complete sync engine workflow
@@ -42,11 +42,9 @@ async fn test_sync_engine_workflow() {
     let client = ImapClient::new(config);
 
     // Try to sync (will fail due to mock server, but we test the progress flow)
-    let result = sync_engine.sync_account(
-        "test_account".to_string(),
-        client,
-        SyncStrategy::Full,
-    ).await;
+    let result = sync_engine
+        .sync_account("test_account".to_string(), client, SyncStrategy::Full)
+        .await;
 
     // Should fail due to mock server
     assert!(result.is_err());
@@ -82,11 +80,9 @@ async fn test_sync_strategies() {
         let client = ImapClient::new(config);
 
         // Each sync attempt should fail (mock server), but we test the strategy handling
-        let result = sync_engine.sync_account(
-            "test_account".to_string(),
-            client,
-            strategy,
-        ).await;
+        let result = sync_engine
+            .sync_account("test_account".to_string(), client, strategy)
+            .await;
 
         assert!(result.is_err()); // Expected to fail with mock server
     }
@@ -112,13 +108,16 @@ async fn test_conflict_resolution() {
 
     for strategy in strategies {
         sync_engine.set_conflict_resolution(strategy.clone());
-        
+
         // Create and store a test message
         let message = create_test_message("test_account", "INBOX", 1);
         database.store_message(&message).await.unwrap();
 
         // Verify message was stored
-        let retrieved = database.get_message_by_uid("test_account", "INBOX", 1).await.unwrap();
+        let retrieved = database
+            .get_message_by_uid("test_account", "INBOX", 1)
+            .await
+            .unwrap();
         assert!(retrieved.is_some());
     }
 }
@@ -150,15 +149,20 @@ async fn test_progress_tracking() {
     // Check that progress was sent
     let received_progress = tokio::time::timeout(
         std::time::Duration::from_millis(100),
-        progress_receiver.recv()
-    ).await.unwrap().unwrap();
+        progress_receiver.recv(),
+    )
+    .await
+    .unwrap()
+    .unwrap();
 
     assert_eq!(received_progress.account_id, "test_account");
     assert_eq!(received_progress.folder_name, "INBOX");
     assert_eq!(received_progress.phase, SyncPhase::Initializing);
 
     // Check that progress is stored internally
-    let stored_progress = sync_engine.get_folder_sync_progress("test_account", "INBOX").await;
+    let stored_progress = sync_engine
+        .get_folder_sync_progress("test_account", "INBOX")
+        .await;
     assert!(stored_progress.is_some());
     assert_eq!(stored_progress.unwrap().total_messages, 100);
 
@@ -198,8 +202,11 @@ async fn test_sync_cancellation() {
     // Check for cancellation notification
     let cancelled_progress = tokio::time::timeout(
         std::time::Duration::from_millis(100),
-        progress_receiver.recv()
-    ).await.unwrap().unwrap();
+        progress_receiver.recv(),
+    )
+    .await
+    .unwrap()
+    .unwrap();
 
     match cancelled_progress.phase {
         SyncPhase::Error(ref msg) => {
@@ -223,11 +230,17 @@ async fn test_database_integration() {
     }
 
     // Verify messages were stored
-    let messages = database.get_messages("test_account", "INBOX", None, None).await.unwrap();
+    let messages = database
+        .get_messages("test_account", "INBOX", None, None)
+        .await
+        .unwrap();
     assert_eq!(messages.len(), 10);
 
     // Test search functionality
-    let search_results = database.search_messages("test_account", "Test", None).await.unwrap();
+    let search_results = database
+        .search_messages("test_account", "Test", None)
+        .await
+        .unwrap();
     assert_eq!(search_results.len(), 10); // All messages should match "Test"
 
     // Test folder sync state
@@ -243,9 +256,15 @@ async fn test_database_integration() {
         sync_status: comunicado::email::SyncStatus::Complete,
     };
 
-    database.update_folder_sync_state(&sync_state).await.unwrap();
+    database
+        .update_folder_sync_state(&sync_state)
+        .await
+        .unwrap();
 
-    let retrieved_state = database.get_folder_sync_state("test_account", "INBOX").await.unwrap();
+    let retrieved_state = database
+        .get_folder_sync_state("test_account", "INBOX")
+        .await
+        .unwrap();
     assert!(retrieved_state.is_some());
     let state = retrieved_state.unwrap();
     assert_eq!(state.uid_validity, 12345);
@@ -268,8 +287,8 @@ async fn test_oauth2_integration() {
         hostname: "imap.gmail.com".to_string(),
         port: 993,
         username: "test@gmail.com".to_string(),
-        auth_method: ImapAuthMethod::OAuth2 { 
-            account_id: "gmail_test".to_string() 
+        auth_method: ImapAuthMethod::OAuth2 {
+            account_id: "gmail_test".to_string(),
         },
         use_tls: true,
         use_starttls: false,
@@ -281,11 +300,9 @@ async fn test_oauth2_integration() {
     let client = ImapClient::new_with_oauth2(config, token_manager);
 
     // Try to sync (will fail without valid tokens, but tests the setup)
-    let result = sync_engine.sync_account(
-        "gmail_test".to_string(),
-        client,
-        SyncStrategy::Incremental,
-    ).await;
+    let result = sync_engine
+        .sync_account("gmail_test".to_string(), client, SyncStrategy::Incremental)
+        .await;
 
     // Should fail due to lack of valid OAuth2 tokens
     assert!(result.is_err());
@@ -303,11 +320,11 @@ async fn test_concurrent_syncs() {
 
     // Spawn multiple sync tasks
     let mut handles = Vec::new();
-    
+
     for i in 0..3 {
         let sync_engine_clone = Arc::clone(&sync_engine);
         let account_id = format!("account_{}", i);
-        
+
         let handle = tokio::spawn(async move {
             let config = ImapConfig::new(
                 "mock.server.com".to_string(),
@@ -317,13 +334,11 @@ async fn test_concurrent_syncs() {
             );
             let client = ImapClient::new(config);
 
-            sync_engine_clone.sync_account(
-                account_id,
-                client,
-                SyncStrategy::Incremental,
-            ).await
+            sync_engine_clone
+                .sync_account(account_id, client, SyncStrategy::Incremental)
+                .await
         });
-        
+
         handles.push(handle);
     }
 
@@ -371,34 +386,46 @@ async fn test_sync_performance() {
 
     // Store many messages for performance testing
     let start = std::time::Instant::now();
-    
+
     for i in 1..=1000 {
         let message = create_test_message("perf_account", "INBOX", i);
         database.store_message(&message).await.unwrap();
     }
-    
+
     let store_duration = start.elapsed();
     println!("Stored 1000 messages in: {:?}", store_duration);
 
     // Test retrieval performance
     let start = std::time::Instant::now();
-    let messages = database.get_messages("perf_account", "INBOX", Some(100), None).await.unwrap();
+    let messages = database
+        .get_messages("perf_account", "INBOX", Some(100), None)
+        .await
+        .unwrap();
     let retrieve_duration = start.elapsed();
-    
+
     assert_eq!(messages.len(), 100);
     println!("Retrieved 100 messages in: {:?}", retrieve_duration);
 
     // Test search performance
     let start = std::time::Instant::now();
-    let search_results = database.search_messages("perf_account", "Test", Some(50)).await.unwrap();
+    let search_results = database
+        .search_messages("perf_account", "Test", Some(50))
+        .await
+        .unwrap();
     let search_duration = start.elapsed();
-    
+
     assert_eq!(search_results.len(), 50);
     println!("Searched 1000 messages in: {:?}", search_duration);
 
     // Performance assertions
-    assert!(store_duration.as_millis() < 5000, "Storing 1000 messages took too long");
-    assert!(retrieve_duration.as_millis() < 100, "Retrieving 100 messages took too long");
+    assert!(
+        store_duration.as_millis() < 5000,
+        "Storing 1000 messages took too long"
+    );
+    assert!(
+        retrieve_duration.as_millis() < 100,
+        "Retrieving 100 messages took too long"
+    );
     assert!(search_duration.as_millis() < 100, "Searching took too long");
 }
 

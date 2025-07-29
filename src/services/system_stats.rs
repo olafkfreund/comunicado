@@ -1,6 +1,6 @@
+use chrono::Local;
 use std::fs;
 use std::time::Duration;
-use chrono::Local;
 use sysinfo::System;
 
 use crate::ui::start_page::SystemStats;
@@ -31,7 +31,7 @@ impl SystemStatsService {
     pub fn get_stats(&mut self) -> SystemStats {
         // Check if we should refresh
         let should_refresh = if let Some(last_update) = self.last_update {
-            Local::now().signed_duration_since(last_update) 
+            Local::now().signed_duration_since(last_update)
                 >= chrono::Duration::from_std(self.update_interval).unwrap_or_default()
         } else {
             true
@@ -61,9 +61,13 @@ impl SystemStatsService {
         self.system.refresh_memory();
 
         // Calculate CPU usage (average across all cores)
-        let cpu_usage = self.system.cpus().iter()
+        let cpu_usage = self
+            .system
+            .cpus()
+            .iter()
             .map(|cpu| cpu.cpu_usage())
-            .sum::<f32>() / self.system.cpus().len() as f32;
+            .sum::<f32>()
+            / self.system.cpus().len() as f32;
 
         // Calculate memory usage
         let total_memory = self.system.total_memory();
@@ -114,7 +118,7 @@ impl SystemStatsService {
         // Fallback: use sysinfo boot_time if available
         let boot_time = System::boot_time();
         let current_time = chrono::Utc::now().timestamp() as u64;
-        
+
         if current_time > boot_time {
             chrono::Duration::seconds((current_time - boot_time) as i64)
         } else {
@@ -125,12 +129,12 @@ impl SystemStatsService {
     /// Get detailed CPU information
     pub fn get_cpu_info(&mut self) -> Vec<(String, f32)> {
         self.system.refresh_cpu();
-        
-        self.system.cpus().iter()
+
+        self.system
+            .cpus()
+            .iter()
             .enumerate()
-            .map(|(i, cpu)| {
-                (format!("CPU {}", i), cpu.cpu_usage())
-            })
+            .map(|(i, cpu)| (format!("CPU {}", i), cpu.cpu_usage()))
             .collect()
     }
 
@@ -177,7 +181,7 @@ impl SystemStatsService {
     pub fn get_temperature(&mut self) -> Vec<(String, f32)> {
         // Try to read from thermal zones (Linux)
         let mut temperatures = Vec::new();
-        
+
         if let Ok(entries) = fs::read_dir("/sys/class/thermal") {
             for entry in entries.flatten() {
                 let path = entry.path();
@@ -194,7 +198,7 @@ impl SystemStatsService {
                 }
             }
         }
-        
+
         temperatures
     }
 

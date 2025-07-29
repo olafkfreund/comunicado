@@ -1,12 +1,12 @@
 pub mod database;
-pub mod providers;
 pub mod manager;
+pub mod providers;
 pub mod sync;
 pub mod ui;
 
-pub use database::{ContactsDatabase, Contact, ContactEmail, ContactPhone, ContactGroup};
-pub use providers::{ContactsProvider, GoogleContactsProvider, OutlookContactsProvider};
+pub use database::{Contact, ContactEmail, ContactGroup, ContactPhone, ContactsDatabase};
 pub use manager::ContactsManager;
+pub use providers::{ContactsProvider, GoogleContactsProvider, OutlookContactsProvider};
 pub use sync::{ContactsSyncEngine, SyncProgress as ContactsSyncProgress};
 
 use serde::{Deserialize, Serialize};
@@ -17,22 +17,22 @@ use thiserror::Error;
 pub enum ContactsError {
     #[error("Database error: {0}")]
     DatabaseError(String),
-    
+
     #[error("API error: {0}")]
     ApiError(String),
-    
+
     #[error("Sync error: {0}")]
     SyncError(String),
-    
+
     #[error("Authentication error: {0}")]
     AuthError(String),
-    
+
     #[error("Invalid contact data: {0}")]
     InvalidData(String),
-    
+
     #[error("Network error: {0}")]
     NetworkError(#[from] reqwest::Error),
-    
+
     #[error("JSON parsing error: {0}")]
     JsonError(#[from] serde_json::Error),
 }
@@ -55,7 +55,7 @@ impl ContactSource {
             ContactSource::Local => None,
         }
     }
-    
+
     pub fn provider_name(&self) -> &str {
         match self {
             ContactSource::Google { .. } => "Google",
@@ -89,22 +89,22 @@ impl ContactSearchCriteria {
             limit: Some(50),
         }
     }
-    
+
     pub fn with_query(mut self, query: String) -> Self {
         self.query = Some(query);
         self
     }
-    
+
     pub fn with_email(mut self, email: String) -> Self {
         self.email = Some(email);
         self
     }
-    
+
     pub fn with_source(mut self, source: ContactSource) -> Self {
         self.source = Some(source);
         self
     }
-    
+
     pub fn with_limit(mut self, limit: usize) -> Self {
         self.limit = Some(limit);
         self

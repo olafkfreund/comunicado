@@ -1,5 +1,5 @@
 use chrono::{DateTime, Utc};
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 /// IMAP folder/mailbox information
@@ -30,15 +30,15 @@ impl ImapFolder {
             uid_next: None,
         }
     }
-    
+
     pub fn is_selectable(&self) -> bool {
         !self.attributes.contains(&FolderAttribute::Noselect)
     }
-    
+
     pub fn has_children(&self) -> bool {
         self.attributes.contains(&FolderAttribute::HasChildren)
     }
-    
+
     pub fn is_inbox(&self) -> bool {
         self.full_name.to_uppercase() == "INBOX"
     }
@@ -112,23 +112,23 @@ impl ImapMessage {
             body: None,
         }
     }
-    
+
     pub fn is_seen(&self) -> bool {
         self.flags.contains(&MessageFlag::Seen)
     }
-    
+
     pub fn is_flagged(&self) -> bool {
         self.flags.contains(&MessageFlag::Flagged)
     }
-    
+
     pub fn is_deleted(&self) -> bool {
         self.flags.contains(&MessageFlag::Deleted)
     }
-    
+
     pub fn is_draft(&self) -> bool {
         self.flags.contains(&MessageFlag::Draft)
     }
-    
+
     pub fn is_recent(&self) -> bool {
         self.flags.contains(&MessageFlag::Recent)
     }
@@ -158,7 +158,7 @@ impl MessageFlag {
             _ => MessageFlag::Custom(flag.to_string()),
         }
     }
-    
+
     pub fn to_string(&self) -> String {
         match self {
             MessageFlag::Seen => "\\Seen".to_string(),
@@ -228,12 +228,12 @@ impl Address {
             host: Some(host),
         }
     }
-    
+
     pub fn with_name(mut self, name: String) -> Self {
         self.name = Some(name);
         self
     }
-    
+
     pub fn email_address(&self) -> Option<String> {
         if let (Some(mailbox), Some(host)) = (&self.mailbox, &self.host) {
             Some(format!("{}@{}", mailbox, host))
@@ -241,7 +241,7 @@ impl Address {
             None
         }
     }
-    
+
     pub fn display_name(&self) -> String {
         if let Some(name) = &self.name {
             if let Some(email) = self.email_address() {
@@ -250,7 +250,8 @@ impl Address {
                 name.clone()
             }
         } else {
-            self.email_address().unwrap_or_else(|| "Unknown".to_string())
+            self.email_address()
+                .unwrap_or_else(|| "Unknown".to_string())
         }
     }
 }
@@ -281,26 +282,25 @@ impl BodyStructure {
             parts: Vec::new(),
         }
     }
-    
+
     pub fn is_text(&self) -> bool {
         self.media_type.to_lowercase() == "text"
     }
-    
+
     pub fn is_html(&self) -> bool {
         self.is_text() && self.media_subtype.to_lowercase() == "html"
     }
-    
+
     pub fn is_plain_text(&self) -> bool {
         self.is_text() && self.media_subtype.to_lowercase() == "plain"
     }
-    
+
     pub fn is_multipart(&self) -> bool {
         self.media_type.to_lowercase() == "multipart"
     }
-    
+
     pub fn is_attachment(&self) -> bool {
-        self.parameters.get("name").is_some() || 
-        self.content_id.is_some()
+        self.parameters.get("name").is_some() || self.content_id.is_some()
     }
 }
 
@@ -360,7 +360,9 @@ impl SearchCriteria {
             SearchCriteria::Not(criteria) => format!("NOT {}", criteria.to_imap_string()),
             SearchCriteria::Old => "OLD".to_string(),
             SearchCriteria::On(date) => format!("ON \"{}\"", date.format("%d-%b-%Y")),
-            SearchCriteria::Or(c1, c2) => format!("OR {} {}", c1.to_imap_string(), c2.to_imap_string()),
+            SearchCriteria::Or(c1, c2) => {
+                format!("OR {} {}", c1.to_imap_string(), c2.to_imap_string())
+            }
             SearchCriteria::Recent => "RECENT".to_string(),
             SearchCriteria::Seen => "SEEN".to_string(),
             SearchCriteria::Since(date) => format!("SINCE \"{}\"", date.format("%d-%b-%Y")),

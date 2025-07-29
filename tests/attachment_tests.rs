@@ -7,7 +7,7 @@
 //! - Safety validation for potentially dangerous files
 //! - Performance with large attachments
 
-use comunicado::email::{AttachmentType, AttachmentInfo, AttachmentViewer, StoredAttachment};
+use comunicado::email::{AttachmentInfo, AttachmentType, AttachmentViewer, StoredAttachment};
 use comunicado::mime::decode_mime_header;
 use std::collections::HashMap;
 use tokio_test;
@@ -51,18 +51,17 @@ fn create_test_attachments() -> Vec<TestAttachment> {
             is_viewable: true,
             provider: "Gmail",
         },
-        
         // Outlook Word document
         TestAttachment {
             filename: "report.docx".to_string(),
-            content_type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document".to_string(),
+            content_type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                .to_string(),
             size: 1024 * 200, // 200KB
             data: create_word_test_data(),
             expected_type: AttachmentType::Word,
             is_viewable: true,
             provider: "Outlook",
         },
-        
         // Yahoo JPEG image
         TestAttachment {
             filename: "photo.jpg".to_string(),
@@ -73,7 +72,6 @@ fn create_test_attachments() -> Vec<TestAttachment> {
             is_viewable: true,
             provider: "Yahoo",
         },
-        
         // Generic IMAP PNG image
         TestAttachment {
             filename: "screenshot.png".to_string(),
@@ -84,7 +82,6 @@ fn create_test_attachments() -> Vec<TestAttachment> {
             is_viewable: true,
             provider: "Generic IMAP",
         },
-        
         // ProtonMail text file
         TestAttachment {
             filename: "notes.txt".to_string(),
@@ -95,7 +92,6 @@ fn create_test_attachments() -> Vec<TestAttachment> {
             is_viewable: true,
             provider: "ProtonMail",
         },
-        
         // Gmail ZIP archive
         TestAttachment {
             filename: "files.zip".to_string(),
@@ -106,35 +102,35 @@ fn create_test_attachments() -> Vec<TestAttachment> {
             is_viewable: true,
             provider: "Gmail",
         },
-        
         // Outlook Excel spreadsheet
         TestAttachment {
             filename: "data.xlsx".to_string(),
-            content_type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet".to_string(),
+            content_type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                .to_string(),
             size: 1024 * 150, // 150KB
             data: create_excel_test_data(),
             expected_type: AttachmentType::Excel,
             is_viewable: true,
             provider: "Outlook",
         },
-        
         // Potentially dangerous executable (should be marked unsafe)
         TestAttachment {
             filename: "malware.exe".to_string(),
             content_type: "application/octet-stream".to_string(),
-            size: 1024 * 10, // 10KB
+            size: 1024 * 10,                                                  // 10KB
             data: b"MZ\x90\x00".repeat(2560).into_iter().flatten().collect(), // Fake PE header
             expected_type: AttachmentType::Unknown,
             is_viewable: false,
             provider: "Unknown",
         },
-        
         // MIME-encoded filename test (common in international emails)
         TestAttachment {
             filename: "=?UTF-8?B?44OG44K544OI44OV44Kh44Kk44OrLnR4dA==?=".to_string(), // テストファイル.txt in base64
             content_type: "text/plain; charset=UTF-8".to_string(),
             size: 512,
-            data: "テスト内容です。\nThis is test content in Japanese.".as_bytes().to_vec(),
+            data: "テスト内容です。\nThis is test content in Japanese."
+                .as_bytes()
+                .to_vec(),
             expected_type: AttachmentType::Text,
             is_viewable: true,
             provider: "International",
@@ -209,26 +205,25 @@ fn create_excel_test_data() -> Vec<u8> {
 #[tokio::test]
 async fn test_attachment_type_detection() {
     let test_attachments = create_test_attachments();
-    
+
     for test_attachment in &test_attachments {
         // Test content type detection
         let type_from_content = AttachmentType::from_content_type(&test_attachment.content_type);
         assert_eq!(
-            type_from_content, 
-            test_attachment.expected_type,
+            type_from_content, test_attachment.expected_type,
             "Content type detection failed for {} from {}",
-            test_attachment.filename,
-            test_attachment.provider
+            test_attachment.filename, test_attachment.provider
         );
-        
+
         // Test filename detection
         let decoded_filename = decode_mime_header(&test_attachment.filename);
         let type_from_filename = AttachmentType::from_filename(&decoded_filename);
-        
+
         // For most cases, both should match, except for generic content types
         if test_attachment.content_type != "application/octet-stream" {
             assert!(
-                type_from_filename == test_attachment.expected_type || type_from_content == test_attachment.expected_type,
+                type_from_filename == test_attachment.expected_type
+                    || type_from_content == test_attachment.expected_type,
                 "Neither filename nor content type detection worked for {} from {}",
                 test_attachment.filename,
                 test_attachment.provider
@@ -240,15 +235,18 @@ async fn test_attachment_type_detection() {
 #[tokio::test]
 async fn test_attachment_info_creation() {
     let test_attachments = create_test_attachments();
-    
+
     for test_attachment in &test_attachments {
         let stored = test_attachment.to_stored_attachment();
         let attachment_info = AttachmentInfo::from_stored(stored);
-        
+
         // Verify basic properties
-        assert_eq!(attachment_info.attachment_type, test_attachment.expected_type);
+        assert_eq!(
+            attachment_info.attachment_type,
+            test_attachment.expected_type
+        );
         assert_eq!(attachment_info.stored.size as usize, test_attachment.size);
-        
+
         // Test display name (should decode MIME if needed)
         let expected_display_name = if test_attachment.filename.contains("=?") {
             decode_mime_header(&test_attachment.filename)
@@ -256,12 +254,16 @@ async fn test_attachment_info_creation() {
             test_attachment.filename.clone()
         };
         assert_eq!(attachment_info.display_name, expected_display_name);
-        
+
         // Test size formatting
         let formatted_size = attachment_info.format_size();
         assert!(!formatted_size.is_empty());
-        assert!(formatted_size.contains("KB") || formatted_size.contains("MB") || formatted_size.contains("B"));
-        
+        assert!(
+            formatted_size.contains("KB")
+                || formatted_size.contains("MB")
+                || formatted_size.contains("B")
+        );
+
         // Test safety classification
         let is_safe_expected = !test_attachment.filename.ends_with(".exe");
         assert_eq!(attachment_info.is_safe, is_safe_expected);
@@ -272,57 +274,95 @@ async fn test_attachment_info_creation() {
 async fn test_attachment_viewer_functionality() {
     let mut viewer = AttachmentViewer::default();
     let test_attachments = create_test_attachments();
-    
+
     for test_attachment in &test_attachments {
         let stored = test_attachment.to_stored_attachment();
         let attachment_info = AttachmentInfo::from_stored(stored);
-        
+
         // Test viewing the attachment
-        let view_result = viewer.view_attachment(&attachment_info, &test_attachment.data).await;
-        
+        let view_result = viewer
+            .view_attachment(&attachment_info, &test_attachment.data)
+            .await;
+
         match view_result {
             comunicado::email::ViewResult::Content(lines) => {
-                assert!(!lines.is_empty(), "Viewer should produce content for {}", test_attachment.filename);
-                
+                assert!(
+                    !lines.is_empty(),
+                    "Viewer should produce content for {}",
+                    test_attachment.filename
+                );
+
                 // Verify that the content contains expected elements
-                let content_text = lines.iter()
-                    .map(|line| line.spans.iter().map(|span| span.content.as_ref()).collect::<String>())
+                let content_text = lines
+                    .iter()
+                    .map(|line| {
+                        line.spans
+                            .iter()
+                            .map(|span| span.content.as_ref())
+                            .collect::<String>()
+                    })
                     .collect::<Vec<_>>()
                     .join("\n");
-                
+
                 // Should contain file information
-                assert!(content_text.contains(&test_attachment.filename) || 
-                       content_text.contains(&attachment_info.display_name),
-                       "Content should contain filename for {}", test_attachment.filename);
-                
+                assert!(
+                    content_text.contains(&test_attachment.filename)
+                        || content_text.contains(&attachment_info.display_name),
+                    "Content should contain filename for {}",
+                    test_attachment.filename
+                );
+
                 // Should contain type information
-                assert!(content_text.contains(test_attachment.expected_type.description()),
-                       "Content should contain type description for {}", test_attachment.filename);
+                assert!(
+                    content_text.contains(test_attachment.expected_type.description()),
+                    "Content should contain type description for {}",
+                    test_attachment.filename
+                );
             }
             comunicado::email::ViewResult::ExternalViewer(_) => {
                 // Some files might require external viewers
-                assert!(!test_attachment.is_viewable, 
-                       "File {} should be viewable internally but requires external viewer", 
-                       test_attachment.filename);
+                assert!(
+                    !test_attachment.is_viewable,
+                    "File {} should be viewable internally but requires external viewer",
+                    test_attachment.filename
+                );
             }
             comunicado::email::ViewResult::NotSupported(reason) => {
-                assert!(!test_attachment.is_viewable,
-                       "File {} should be viewable but got not supported: {}", 
-                       test_attachment.filename, reason);
+                assert!(
+                    !test_attachment.is_viewable,
+                    "File {} should be viewable but got not supported: {}",
+                    test_attachment.filename, reason
+                );
             }
             comunicado::email::ViewResult::Error(error) => {
-                panic!("Unexpected error viewing {}: {}", test_attachment.filename, error);
+                panic!(
+                    "Unexpected error viewing {}: {}",
+                    test_attachment.filename, error
+                );
             }
         }
-        
+
         // Test that viewer state is properly updated
-        assert!(viewer.has_content(), "Viewer should have content after viewing {}", test_attachment.filename);
-        assert!(viewer.current_attachment().is_some(), "Viewer should track current attachment");
-        
+        assert!(
+            viewer.has_content(),
+            "Viewer should have content after viewing {}",
+            test_attachment.filename
+        );
+        assert!(
+            viewer.current_attachment().is_some(),
+            "Viewer should track current attachment"
+        );
+
         // Test clearing
         viewer.clear();
-        assert!(!viewer.has_content(), "Viewer should be clear after clearing");
-        assert!(viewer.current_attachment().is_none(), "Viewer should not track attachment after clearing");
+        assert!(
+            !viewer.has_content(),
+            "Viewer should be clear after clearing"
+        );
+        assert!(
+            viewer.current_attachment().is_none(),
+            "Viewer should not track attachment after clearing"
+        );
     }
 }
 
@@ -330,19 +370,28 @@ async fn test_attachment_viewer_functionality() {
 async fn test_mime_header_decoding() {
     let test_cases = vec![
         // UTF-8 Base64 encoded
-        ("=?UTF-8?B?44OG44K544OI44OV44Kh44Kk44OrLnR4dA==?=", "テストファイル.txt"),
+        (
+            "=?UTF-8?B?44OG44K544OI44OV44Kh44Kk44OrLnR4dA==?=",
+            "テストファイル.txt",
+        ),
         // UTF-8 Quoted-Printable
-        ("=?UTF-8?Q?test_file_with_spaces.txt?=", "test_file_with_spaces.txt"),
+        (
+            "=?UTF-8?Q?test_file_with_spaces.txt?=",
+            "test_file_with_spaces.txt",
+        ),
         // ISO-8859-1 encoded
         ("=?ISO-8859-1?Q?caf=E9.txt?=", "café.txt"),
         // Multiple encoded words
-        ("=?UTF-8?B?44OG44K544OI?= =?UTF-8?B?44OV44Kh44Kk44Or?=.txt", "テストファイル.txt"),
+        (
+            "=?UTF-8?B?44OG44K544OI?= =?UTF-8?B?44OV44Kh44Kk44Or?=.txt",
+            "テストファイル.txt",
+        ),
         // Plain ASCII (should pass through unchanged)
         ("document.pdf", "document.pdf"),
         // Empty string
         ("", ""),
     ];
-    
+
     for (encoded, expected) in test_cases {
         let decoded = decode_mime_header(encoded);
         assert_eq!(decoded, expected, "MIME decoding failed for: {}", encoded);
@@ -360,16 +409,44 @@ async fn test_attachment_type_properties() {
         (AttachmentType::Text, false, false, false, true),
         (AttachmentType::Unknown, false, false, false, false),
     ];
-    
+
     for (attachment_type, is_image, is_document, is_archive, is_previewable) in test_cases {
-        assert_eq!(attachment_type.is_image(), is_image, "{:?} image classification", attachment_type);
-        assert_eq!(attachment_type.is_document(), is_document, "{:?} document classification", attachment_type);
-        assert_eq!(attachment_type.is_archive(), is_archive, "{:?} archive classification", attachment_type);
-        assert_eq!(attachment_type.is_previewable(), is_previewable, "{:?} previewable classification", attachment_type);
-        
+        assert_eq!(
+            attachment_type.is_image(),
+            is_image,
+            "{:?} image classification",
+            attachment_type
+        );
+        assert_eq!(
+            attachment_type.is_document(),
+            is_document,
+            "{:?} document classification",
+            attachment_type
+        );
+        assert_eq!(
+            attachment_type.is_archive(),
+            is_archive,
+            "{:?} archive classification",
+            attachment_type
+        );
+        assert_eq!(
+            attachment_type.is_previewable(),
+            is_previewable,
+            "{:?} previewable classification",
+            attachment_type
+        );
+
         // Verify each type has a non-empty description and icon
-        assert!(!attachment_type.description().is_empty(), "{:?} should have description", attachment_type);
-        assert!(!attachment_type.icon().is_empty(), "{:?} should have icon", attachment_type);
+        assert!(
+            !attachment_type.description().is_empty(),
+            "{:?} should have description",
+            attachment_type
+        );
+        assert!(
+            !attachment_type.icon().is_empty(),
+            "{:?} should have icon",
+            attachment_type
+        );
     }
 }
 
@@ -386,25 +463,34 @@ async fn test_large_attachment_handling() {
         is_viewable: true,
         provider: "Test",
     };
-    
+
     let stored = large_attachment.to_stored_attachment();
     let attachment_info = AttachmentInfo::from_stored(stored);
-    
+
     let mut viewer = AttachmentViewer::default();
-    
+
     // This should complete within a reasonable time and not crash
     let start = std::time::Instant::now();
-    let view_result = viewer.view_attachment(&attachment_info, &large_attachment.data).await;
+    let view_result = viewer
+        .view_attachment(&attachment_info, &large_attachment.data)
+        .await;
     let duration = start.elapsed();
-    
+
     // Should complete within 5 seconds even for large files
-    assert!(duration.as_secs() < 5, "Large attachment viewing took too long: {:?}", duration);
-    
+    assert!(
+        duration.as_secs() < 5,
+        "Large attachment viewing took too long: {:?}",
+        duration
+    );
+
     match view_result {
         comunicado::email::ViewResult::Content(lines) => {
             assert!(!lines.is_empty(), "Large attachment should produce content");
             // Content should be truncated if too large for preview
-            assert!(lines.len() <= 1100, "Content should be truncated for large files"); // ~1000 lines + headers
+            assert!(
+                lines.len() <= 1100,
+                "Content should be truncated for large files"
+            ); // ~1000 lines + headers
         }
         _ => panic!("Large text attachment should be viewable"),
     }
@@ -419,7 +505,7 @@ async fn test_security_validation() {
         ("trojan.scr", "application/octet-stream"),
         ("payload.jar", "application/java-archive"),
     ];
-    
+
     for (filename, content_type) in dangerous_files {
         let dangerous_attachment = TestAttachment {
             filename: filename.to_string(),
@@ -430,27 +516,44 @@ async fn test_security_validation() {
             is_viewable: false,
             provider: "Security Test",
         };
-        
+
         let stored = dangerous_attachment.to_stored_attachment();
         let attachment_info = AttachmentInfo::from_stored(stored);
-        
+
         // Should be marked as unsafe
-        assert!(!attachment_info.is_safe, "File {} should be marked as unsafe", filename);
-        
+        assert!(
+            !attachment_info.is_safe,
+            "File {} should be marked as unsafe",
+            filename
+        );
+
         // Viewer should still handle it but with warnings
         let mut viewer = AttachmentViewer::default();
-        let view_result = viewer.view_attachment(&attachment_info, &dangerous_attachment.data).await;
-        
+        let view_result = viewer
+            .view_attachment(&attachment_info, &dangerous_attachment.data)
+            .await;
+
         match view_result {
             comunicado::email::ViewResult::Content(lines) => {
-                let content_text = lines.iter()
-                    .map(|line| line.spans.iter().map(|span| span.content.as_ref()).collect::<String>())
+                let content_text = lines
+                    .iter()
+                    .map(|line| {
+                        line.spans
+                            .iter()
+                            .map(|span| span.content.as_ref())
+                            .collect::<String>()
+                    })
                     .collect::<Vec<_>>()
                     .join("\n");
-                
+
                 // Should contain safety warnings
-                assert!(content_text.contains("unsafe") || content_text.contains("⚠️") || content_text.contains("Potentially unsafe"),
-                       "Content should contain safety warning for {}", filename);
+                assert!(
+                    content_text.contains("unsafe")
+                        || content_text.contains("⚠️")
+                        || content_text.contains("Potentially unsafe"),
+                    "Content should contain safety warning for {}",
+                    filename
+                );
             }
             _ => {} // Other results are also acceptable for unsafe files
         }
@@ -460,27 +563,28 @@ async fn test_security_validation() {
 #[cfg(test)]
 mod provider_specific_tests {
     use super::*;
-    
+
     #[tokio::test]
     async fn test_gmail_attachment_parsing() {
         // Gmail typically uses standard MIME types but may have specific encoding
         let gmail_attachment = TestAttachment {
             filename: "=?UTF-8?B?UmVwb3J0X1E0XzIwMjQuZG9jeA==?=".to_string(), // Report_Q4_2024.docx
-            content_type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document".to_string(),
+            content_type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                .to_string(),
             size: 1024 * 300,
             data: create_word_test_data(),
             expected_type: AttachmentType::Word,
             is_viewable: true,
             provider: "Gmail",
         };
-        
+
         let stored = gmail_attachment.to_stored_attachment();
         let attachment_info = AttachmentInfo::from_stored(stored);
-        
+
         assert_eq!(attachment_info.display_name, "Report_Q4_2024.docx");
         assert_eq!(attachment_info.attachment_type, AttachmentType::Word);
     }
-    
+
     #[tokio::test]
     async fn test_outlook_attachment_parsing() {
         // Outlook may use different MIME encoding
@@ -493,10 +597,10 @@ mod provider_specific_tests {
             is_viewable: true,
             provider: "Outlook",
         };
-        
+
         let stored = outlook_attachment.to_stored_attachment();
         let attachment_info = AttachmentInfo::from_stored(stored);
-        
+
         // Should correctly parse content type even with parameters
         assert_eq!(attachment_info.attachment_type, AttachmentType::Pdf);
         assert!(attachment_info.is_safe);

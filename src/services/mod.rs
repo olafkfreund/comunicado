@@ -1,15 +1,15 @@
 //! Services module for Comunicado
-//! 
+//!
 //! This module contains various services that provide data and functionality
 //! for the start page dashboard and other application features.
 
-pub mod weather;
 pub mod system_stats;
 pub mod tasks;
+pub mod weather;
 
-pub use weather::WeatherService;
 pub use system_stats::SystemStatsService;
 pub use tasks::TaskService;
+pub use weather::WeatherService;
 
 /// Service manager that coordinates all services
 pub struct ServiceManager {

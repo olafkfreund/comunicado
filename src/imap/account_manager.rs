@@ -1,8 +1,8 @@
-use crate::imap::{ImapClient, ImapConfig, ImapResult, ImapError, ImapAuthMethod};
-use crate::oauth2::{TokenManager, SecureStorage, AccountConfig as OAuth2AccountConfig};
+use crate::imap::{ImapAuthMethod, ImapClient, ImapConfig, ImapError, ImapResult};
+use crate::oauth2::{AccountConfig as OAuth2AccountConfig, SecureStorage, TokenManager};
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::{RwLock, Mutex};
+use tokio::sync::{Mutex, RwLock};
 
 /// IMAP account information
 #[derive(Debug, Clone)]
@@ -32,7 +32,7 @@ impl ImapAccount {
             last_sync: None,
         }
     }
-    
+
     /// Create account from OAuth2 account config
     pub fn from_oauth2_config(oauth2_config: &OAuth2AccountConfig) -> Self {
         let config = match oauth2_config.provider.as_str() {
@@ -55,7 +55,7 @@ impl ImapAccount {
                 oauth2_config.account_id.clone(),
             ),
         };
-        
+
         Self::new(
             oauth2_config.account_id.clone(),
             oauth2_config.display_name.clone(),
@@ -63,13 +63,13 @@ impl ImapAccount {
             config,
         )
     }
-    
+
     /// Mark as default account
     pub fn set_default(mut self, is_default: bool) -> Self {
         self.is_default = is_default;
         self
     }
-    
+
     /// Update last sync time
     pub fn update_last_sync(&mut self) {
         self.last_sync = Some(chrono::Utc::now());
@@ -89,7 +89,7 @@ impl ConnectionPool {
             max_connections,
         }
     }
-    
+
     async fn get_or_create_client(
         &mut self,
         account: &ImapAccount,
@@ -103,28 +103,28 @@ impl ConnectionPool {
                     self.clients.remove(&oldest_id);
                 }
             }
-            
+
             let client = match &account.config.auth_method {
                 ImapAuthMethod::OAuth2 { .. } => {
-                    let token_manager = token_manager
-                        .ok_or_else(|| ImapError::authentication("Token manager required for OAuth2"))?;
+                    let token_manager = token_manager.ok_or_else(|| {
+                        ImapError::authentication("Token manager required for OAuth2")
+                    })?;
                     ImapClient::new_with_oauth2(account.config.clone(), token_manager.clone())
                 }
-                ImapAuthMethod::Password(_) => {
-                    ImapClient::new(account.config.clone())
-                }
+                ImapAuthMethod::Password(_) => ImapClient::new(account.config.clone()),
             };
-            
-            self.clients.insert(account.account_id.clone(), Arc::new(Mutex::new(client)));
+
+            self.clients
+                .insert(account.account_id.clone(), Arc::new(Mutex::new(client)));
         }
-        
+
         Ok(self.clients.get(&account.account_id).unwrap().clone())
     }
-    
+
     fn disconnect_account(&mut self, account_id: &str) {
         self.clients.remove(account_id);
     }
-    
+
     fn disconnect_all(&mut self) {
         self.clients.clear();
     }
@@ -144,7 +144,7 @@ impl ImapAccountManager {
     pub fn new() -> ImapResult<Self> {
         let storage = SecureStorage::new("comunicado".to_string())
             .map_err(|e| ImapError::storage(&format!("Failed to create secure storage: {}", e)))?;
-        
+
         Ok(Self {
             accounts: Arc::new(RwLock::new(HashMap::new())),
             connection_pool: Arc::new(RwLock::new(ConnectionPool::new(10))), // Max 10 connections
@@ -153,88 +153,84 @@ impl ImapAccountManager {
             default_account: None,
         })
     }
-    
+
     /// Create account manager with OAuth2 token manager
     pub fn new_with_oauth2(token_manager: TokenManager) -> ImapResult<Self> {
         let mut manager = Self::new()?;
         manager.token_manager = Some(token_manager);
         Ok(manager)
     }
-    
+
     /// Load accounts from storage
     pub async fn load_accounts(&mut self) -> ImapResult<()> {
         // Load OAuth2 accounts
-        let oauth2_accounts = self.storage.load_all_accounts()
+        let oauth2_accounts = self
+            .storage
+            .load_all_accounts()
             .map_err(|e| ImapError::storage(&format!("Failed to load OAuth2 accounts: {}", e)))?;
-        
+
         let mut accounts = self.accounts.write().await;
-        
+
         for oauth2_config in oauth2_accounts {
             let account = ImapAccount::from_oauth2_config(&oauth2_config);
-            
+
             // Set first account as default if none exists
             let is_default = self.default_account.is_none();
             if is_default {
                 self.default_account = Some(account.account_id.clone());
             }
-            
-            accounts.insert(
-                account.account_id.clone(),
-                account.set_default(is_default),
-            );
+
+            accounts.insert(account.account_id.clone(), account.set_default(is_default));
         }
-        
+
         Ok(())
     }
-    
+
     /// Add a new account
     pub async fn add_account(&mut self, account: ImapAccount) -> ImapResult<()> {
         let mut accounts = self.accounts.write().await;
-        
+
         // Set as default if it's the first account
         let is_default = accounts.is_empty();
         if is_default {
             self.default_account = Some(account.account_id.clone());
         }
-        
-        accounts.insert(
-            account.account_id.clone(),
-            account.set_default(is_default),
-        );
-        
+
+        accounts.insert(account.account_id.clone(), account.set_default(is_default));
+
         Ok(())
     }
-    
+
     /// Remove an account
     pub async fn remove_account(&mut self, account_id: &str) -> ImapResult<()> {
         let mut accounts = self.accounts.write().await;
-        
+
         if accounts.remove(account_id).is_some() {
             // Disconnect the account
             let mut pool = self.connection_pool.write().await;
             pool.disconnect_account(account_id);
-            
+
             // Update default account if necessary
             if self.default_account.as_ref() == Some(&account_id.to_string()) {
                 self.default_account = accounts.keys().next().cloned();
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// Get account by ID
     pub async fn get_account(&self, account_id: &str) -> Option<ImapAccount> {
         let accounts = self.accounts.read().await;
         accounts.get(account_id).cloned()
     }
-    
+
     /// Get all accounts
     pub async fn get_all_accounts(&self) -> Vec<ImapAccount> {
         let accounts = self.accounts.read().await;
         accounts.values().cloned().collect()
     }
-    
+
     /// Get default account
     pub async fn get_default_account(&self) -> Option<ImapAccount> {
         if let Some(default_id) = &self.default_account {
@@ -243,51 +239,66 @@ impl ImapAccountManager {
             None
         }
     }
-    
+
     /// Set default account
     pub async fn set_default_account(&mut self, account_id: &str) -> ImapResult<()> {
         let mut accounts = self.accounts.write().await;
-        
+
         if accounts.contains_key(account_id) {
             // Remove default flag from all accounts
             for account in accounts.values_mut() {
                 account.is_default = false;
             }
-            
+
             // Set new default
             if let Some(account) = accounts.get_mut(account_id) {
                 account.is_default = true;
                 self.default_account = Some(account_id.to_string());
             }
-            
+
             Ok(())
         } else {
-            Err(ImapError::not_found(&format!("Account {} not found", account_id)))
+            Err(ImapError::not_found(&format!(
+                "Account {} not found",
+                account_id
+            )))
         }
     }
-    
+
     /// Get IMAP client for account
     pub async fn get_client(&self, account_id: &str) -> ImapResult<Arc<Mutex<ImapClient>>> {
         tracing::debug!("Getting IMAP client for account: '{}'", account_id);
-        
+
         tracing::debug!("About to acquire accounts.read() lock");
         let accounts = self.accounts.read().await;
-        tracing::debug!("Acquired accounts.read() lock, {} accounts available", accounts.len());
-        tracing::debug!("IMAP AccountManager has {} accounts: {:?}", accounts.len(), accounts.keys().collect::<Vec<_>>());
-        
-        let account = accounts.get(account_id)
-            .ok_or_else(|| {
-                tracing::error!("Account '{}' not found in IMAP manager. Available accounts: {:?}", account_id, accounts.keys().collect::<Vec<_>>());
-                ImapError::not_found(&format!("Account {} not found", account_id))
-            })?;
-        
+        tracing::debug!(
+            "Acquired accounts.read() lock, {} accounts available",
+            accounts.len()
+        );
+        tracing::debug!(
+            "IMAP AccountManager has {} accounts: {:?}",
+            accounts.len(),
+            accounts.keys().collect::<Vec<_>>()
+        );
+
+        let account = accounts.get(account_id).ok_or_else(|| {
+            tracing::error!(
+                "Account '{}' not found in IMAP manager. Available accounts: {:?}",
+                account_id,
+                accounts.keys().collect::<Vec<_>>()
+            );
+            ImapError::not_found(&format!("Account {} not found", account_id))
+        })?;
+
         tracing::debug!("Found account, about to acquire connection_pool.write() lock");
         let mut pool = self.connection_pool.write().await;
         tracing::debug!("Acquired connection_pool.write() lock");
         tracing::debug!("About to call pool.get_or_create_client()");
-        let client_arc = pool.get_or_create_client(account, self.token_manager.as_ref()).await?;
+        let client_arc = pool
+            .get_or_create_client(account, self.token_manager.as_ref())
+            .await?;
         tracing::debug!("Got client_arc from pool, about to ensure connection/auth");
-        
+
         // Ensure client is connected and authenticated
         {
             tracing::debug!("About to acquire client.lock()");
@@ -296,17 +307,19 @@ impl ImapAccountManager {
             if !client.is_connected() {
                 tracing::debug!("Client not connected, attempting connection...");
                 tracing::info!("Connecting to IMAP server for account: {}", account_id);
-                
+
                 // Add timeout to connection attempt
-                let connection_result = tokio::time::timeout(
-                    std::time::Duration::from_secs(30),
-                    client.connect()
-                ).await;
-                
+                let connection_result =
+                    tokio::time::timeout(std::time::Duration::from_secs(30), client.connect())
+                        .await;
+
                 match connection_result {
                     Ok(Ok(())) => {
                         tracing::debug!("Connection successful");
-                        tracing::info!("Successfully connected to IMAP server for account: {}", account_id);
+                        tracing::info!(
+                            "Successfully connected to IMAP server for account: {}",
+                            account_id
+                        );
                     }
                     Ok(Err(e)) => {
                         tracing::debug!("Connection failed: {}", e);
@@ -318,25 +331,31 @@ impl ImapAccountManager {
                     }
                 }
             }
-            
+
             if !client.is_authenticated() {
                 tracing::debug!("Client not authenticated, attempting authentication...");
                 tracing::info!("Authenticating IMAP connection for account: {}", account_id);
-                
+
                 // Add timeout to authentication attempt
-                let auth_result = tokio::time::timeout(
-                    std::time::Duration::from_secs(30),
-                    client.authenticate()
-                ).await;
-                
+                let auth_result =
+                    tokio::time::timeout(std::time::Duration::from_secs(30), client.authenticate())
+                        .await;
+
                 match auth_result {
                     Ok(Ok(())) => {
                         tracing::debug!("Authentication successful");
-                        tracing::info!("Successfully authenticated IMAP connection for account: {}", account_id);
+                        tracing::info!(
+                            "Successfully authenticated IMAP connection for account: {}",
+                            account_id
+                        );
                     }
                     Ok(Err(e)) => {
                         tracing::debug!("Authentication failed: {}", e);
-                        tracing::error!("IMAP authentication failed for account {}: {}", account_id, e);
+                        tracing::error!(
+                            "IMAP authentication failed for account {}: {}",
+                            account_id,
+                            e
+                        );
                         return Err(e);
                     }
                     Err(_) => {
@@ -346,10 +365,10 @@ impl ImapAccountManager {
                 }
             }
         }
-        
+
         Ok(client_arc)
     }
-    
+
     /// Test connection for an account
     pub async fn test_connection(&self, account_id: &str) -> ImapResult<bool> {
         match self.get_client(account_id).await {
@@ -364,35 +383,35 @@ impl ImapAccountManager {
             Err(_) => Ok(false),
         }
     }
-    
+
     /// Sync all accounts
     pub async fn sync_all_accounts(&mut self) -> ImapResult<Vec<(String, Result<(), ImapError>)>> {
         let account_ids: Vec<String> = {
             let accounts = self.accounts.read().await;
             accounts.keys().cloned().collect()
         };
-        
+
         let mut results = Vec::new();
-        
+
         for account_id in account_ids {
             let result = self.sync_account(&account_id).await;
             results.push((account_id, result));
         }
-        
+
         Ok(results)
     }
-    
+
     /// Sync a specific account
     pub async fn sync_account(&mut self, account_id: &str) -> ImapResult<()> {
         // Get client and perform basic sync operations
         let client_arc = self.get_client(account_id).await?;
-        
+
         // List folders to verify connection
         {
             let mut client = client_arc.lock().await;
             let _folders = client.list_folders("", "*").await?;
         }
-        
+
         // Update last sync time
         {
             let mut accounts = self.accounts.write().await;
@@ -400,27 +419,28 @@ impl ImapAccountManager {
                 account.update_last_sync();
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// Disconnect all accounts
     pub async fn disconnect_all(&mut self) -> ImapResult<()> {
         let mut pool = self.connection_pool.write().await;
         pool.disconnect_all();
         Ok(())
     }
-    
+
     /// Get account statistics
     pub async fn get_statistics(&self) -> AccountManagerStats {
         let accounts = self.accounts.read().await;
         let total_accounts = accounts.len();
-        let oauth2_accounts = accounts.values()
+        let oauth2_accounts = accounts
+            .values()
             .filter(|a| matches!(a.config.auth_method, ImapAuthMethod::OAuth2 { .. }))
             .count();
         let password_accounts = total_accounts - oauth2_accounts;
         let connected_accounts = 0; // TODO: Track connected accounts
-        
+
         AccountManagerStats {
             total_accounts,
             oauth2_accounts,
@@ -429,7 +449,7 @@ impl ImapAccountManager {
             default_account: self.default_account.clone(),
         }
     }
-    
+
     /// Fetch attachment data from IMAP server
     pub async fn fetch_attachment_data(
         &self,
@@ -438,27 +458,40 @@ impl ImapAccountManager {
         message_uid: u32,
         attachment_part: &str,
     ) -> ImapResult<Vec<u8>> {
-        tracing::debug!("Fetching attachment data for account {} folder {} message {} part {}", 
-                       account_id, folder_name, message_uid, attachment_part);
-        
+        tracing::debug!(
+            "Fetching attachment data for account {} folder {} message {} part {}",
+            account_id,
+            folder_name,
+            message_uid,
+            attachment_part
+        );
+
         let client = self.get_client(account_id).await?;
         let mut client_guard = client.lock().await;
-        
+
         // Select the folder
         client_guard.select_folder(folder_name).await?;
-        
+
         // Fetch the specific body part containing the attachment
         let fetch_item = format!("BODY[{}]", attachment_part);
         let fetch_items = &[fetch_item.as_str()];
-        let messages = client_guard.uid_fetch_messages(&message_uid.to_string(), fetch_items).await?;
-        
+        let messages = client_guard
+            .uid_fetch_messages(&message_uid.to_string(), fetch_items)
+            .await?;
+
         if let Some(message) = messages.first() {
             // Extract the body content from the message
             if let Some(body_content) = &message.body {
                 // The body content might be base64 encoded
-                match base64::Engine::decode(&base64::engine::general_purpose::STANDARD, body_content.trim()) {
+                match base64::Engine::decode(
+                    &base64::engine::general_purpose::STANDARD,
+                    body_content.trim(),
+                ) {
                     Ok(decoded) => {
-                        tracing::debug!("Successfully decoded attachment data: {} bytes", decoded.len());
+                        tracing::debug!(
+                            "Successfully decoded attachment data: {} bytes",
+                            decoded.len()
+                        );
                         Ok(decoded)
                     }
                     Err(_) => {
@@ -471,7 +504,9 @@ impl ImapAccountManager {
                 Err(ImapError::protocol("No body content found for attachment"))
             }
         } else {
-            Err(ImapError::protocol("Message not found for attachment fetch"))
+            Err(ImapError::protocol(
+                "Message not found for attachment fetch",
+            ))
         }
     }
 }
@@ -495,21 +530,21 @@ pub struct AccountManagerStats {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[tokio::test]
     async fn test_account_manager_creation() {
         let manager = ImapAccountManager::new().unwrap();
         let stats = manager.get_statistics().await;
-        
+
         assert_eq!(stats.total_accounts, 0);
         assert_eq!(stats.oauth2_accounts, 0);
         assert_eq!(stats.password_accounts, 0);
     }
-    
+
     #[tokio::test]
     async fn test_add_account() {
         let mut manager = ImapAccountManager::new().unwrap();
-        
+
         let config = ImapConfig::gmail("test@gmail.com".to_string(), "password".to_string());
         let account = ImapAccount::new(
             "test-account".to_string(),
@@ -517,22 +552,22 @@ mod tests {
             "test@gmail.com".to_string(),
             config,
         );
-        
+
         manager.add_account(account).await.unwrap();
-        
+
         let stats = manager.get_statistics().await;
         assert_eq!(stats.total_accounts, 1);
         assert_eq!(stats.password_accounts, 1);
-        
+
         let retrieved = manager.get_account("test-account").await;
         assert!(retrieved.is_some());
         assert!(retrieved.unwrap().is_default);
     }
-    
+
     #[tokio::test]
     async fn test_default_account_management() {
         let mut manager = ImapAccountManager::new().unwrap();
-        
+
         // Add first account - should be default
         let config1 = ImapConfig::gmail("test1@gmail.com".to_string(), "password".to_string());
         let account1 = ImapAccount::new(
@@ -542,7 +577,7 @@ mod tests {
             config1,
         );
         manager.add_account(account1).await.unwrap();
-        
+
         // Add second account - should not be default
         let config2 = ImapConfig::outlook("test2@outlook.com".to_string(), "password".to_string());
         let account2 = ImapAccount::new(
@@ -552,17 +587,17 @@ mod tests {
             config2,
         );
         manager.add_account(account2).await.unwrap();
-        
+
         // First account should be default
         let default = manager.get_default_account().await.unwrap();
         assert_eq!(default.account_id, "account1");
-        
+
         // Change default
         manager.set_default_account("account2").await.unwrap();
         let default = manager.get_default_account().await.unwrap();
         assert_eq!(default.account_id, "account2");
     }
-    
+
     #[test]
     fn test_imap_account_from_oauth2() {
         let oauth2_config = OAuth2AccountConfig::new(
@@ -570,11 +605,14 @@ mod tests {
             "test@gmail.com".to_string(),
             "gmail".to_string(),
         );
-        
+
         let account = ImapAccount::from_oauth2_config(&oauth2_config);
-        
+
         assert_eq!(account.email_address, "test@gmail.com");
         assert_eq!(account.display_name, "Test User");
-        assert!(matches!(account.config.auth_method, ImapAuthMethod::OAuth2 { .. }));
+        assert!(matches!(
+            account.config.auth_method,
+            ImapAuthMethod::OAuth2 { .. }
+        ));
     }
 }

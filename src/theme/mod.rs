@@ -1,15 +1,15 @@
-pub mod color;
-pub mod style;
-pub mod config;
 pub mod accessibility;
+pub mod color;
+pub mod config;
+pub mod style;
 
 use ratatui::style::Style;
 use serde::{Deserialize, Serialize};
 
-pub use color::{ColorPalette, ThemeColors};
-pub use style::{ComponentStyle, StyleSet};
-pub use config::{ThemeConfig, UserPreferences};
 pub use accessibility::{AccessibilityOptions, ColorBlindness};
+pub use color::{ColorPalette, ThemeColors};
+pub use config::{ThemeConfig, UserPreferences};
+pub use style::{ComponentStyle, StyleSet};
 
 /// Main theme management structure
 #[derive(Debug, Clone, Serialize, Deserialize)]

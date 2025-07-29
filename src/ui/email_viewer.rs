@@ -9,7 +9,7 @@ use ratatui::{
 
 use crate::email::StoredMessage;
 use crate::theme::Theme;
-use crate::ui::content_preview::{EmailContent, EmailHeader, ViewMode, ContentType};
+use crate::ui::content_preview::{ContentType, EmailContent, EmailHeader, ViewMode};
 
 /// Email viewer actions
 #[derive(Debug, Clone, PartialEq)]
@@ -110,7 +110,11 @@ impl EmailViewer {
     }
 
     /// Get current scroll information for display
-    pub fn get_scroll_info(&self, total_lines: usize, visible_height: usize) -> (usize, usize, bool, bool) {
+    pub fn get_scroll_info(
+        &self,
+        total_lines: usize,
+        visible_height: usize,
+    ) -> (usize, usize, bool, bool) {
         let max_scroll = total_lines.saturating_sub(visible_height);
         let current_scroll = self.scroll_position.min(max_scroll);
         let can_scroll_up = current_scroll > 0;
@@ -157,7 +161,11 @@ impl EmailViewer {
     }
 
     /// Handle key input with viewport height for proper page scrolling
-    pub fn handle_key_with_viewport(&mut self, key: crossterm::event::KeyCode, viewport_height: usize) -> Option<EmailViewerAction> {
+    pub fn handle_key_with_viewport(
+        &mut self,
+        key: crossterm::event::KeyCode,
+        viewport_height: usize,
+    ) -> Option<EmailViewerAction> {
         use crossterm::event::KeyCode;
 
         match key {
@@ -243,9 +251,9 @@ impl EmailViewer {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(3),  // Header bar
-                Constraint::Min(0),     // Email content
-                Constraint::Length(3),  // Status/instructions bar
+                Constraint::Length(3), // Header bar
+                Constraint::Min(0),    // Email content
+                Constraint::Length(3), // Status/instructions bar
             ])
             .split(area);
 
@@ -257,10 +265,7 @@ impl EmailViewer {
             // Split content area for actions panel
             let content_chunks = Layout::default()
                 .direction(Direction::Horizontal)
-                .constraints([
-                    Constraint::Percentage(70),
-                    Constraint::Percentage(30),
-                ])
+                .constraints([Constraint::Percentage(70), Constraint::Percentage(30)])
                 .split(chunks[1]);
 
             self.render_email_content(frame, content_chunks[0], theme);
@@ -290,11 +295,17 @@ impl EmailViewer {
         let header_text = format!("{} {}", title, view_mode_text);
 
         let header = Paragraph::new(header_text)
-            .block(Block::default()
-                .title("Email Viewer")
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(theme.colors.palette.accent)))
-            .style(Style::default().fg(theme.colors.palette.accent).add_modifier(Modifier::BOLD))
+            .block(
+                Block::default()
+                    .title("Email Viewer")
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(theme.colors.palette.accent)),
+            )
+            .style(
+                Style::default()
+                    .fg(theme.colors.palette.accent)
+                    .add_modifier(Modifier::BOLD),
+            )
             .alignment(Alignment::Center);
 
         frame.render_widget(header, area);
@@ -340,13 +351,14 @@ impl EmailViewer {
 
         // Create scroll indicator in the title
         let scroll_info = if lines.len() > content_height {
-            let (current, max, can_up, can_down) = self.get_scroll_info(lines.len(), content_height);
+            let (current, max, can_up, can_down) =
+                self.get_scroll_info(lines.len(), content_height);
             let percentage = if max > 0 {
                 ((current as f64 / max as f64) * 100.0).round() as usize
             } else {
                 0
             };
-            
+
             let up_arrow = if can_up { "↑" } else { " " };
             let down_arrow = if can_down { "↓" } else { " " };
             format!(" [{}{} {}%]", up_arrow, down_arrow, percentage)
@@ -355,12 +367,14 @@ impl EmailViewer {
         };
 
         let title = format!("Email Content{}", scroll_info);
-        
+
         let content_paragraph = Paragraph::new(visible_lines)
-            .block(Block::default()
-                .title(title)
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(theme.colors.palette.border)))
+            .block(
+                Block::default()
+                    .title(title)
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(theme.colors.palette.border)),
+            )
             .wrap(Wrap { trim: true });
 
         frame.render_widget(content_paragraph, area);
@@ -369,19 +383,22 @@ impl EmailViewer {
     fn render_actions_panel(&self, frame: &mut Frame, area: Rect, theme: &Theme) {
         let mut action_lines = Vec::new();
 
-        action_lines.push(Line::from(vec![
-            Span::styled("Actions", Style::default()
+        action_lines.push(Line::from(vec![Span::styled(
+            "Actions",
+            Style::default()
                 .fg(theme.colors.palette.accent)
-                .add_modifier(Modifier::BOLD | Modifier::UNDERLINED))
-        ]));
+                .add_modifier(Modifier::BOLD | Modifier::UNDERLINED),
+        )]));
         action_lines.push(Line::from(""));
 
         for (i, action) in self.actions.iter().enumerate() {
             let is_selected = i == self.selected_action;
             let prefix = if is_selected { "► " } else { "  " };
-            
+
             let style = if is_selected {
-                Style::default().fg(theme.colors.palette.accent).add_modifier(Modifier::BOLD)
+                Style::default()
+                    .fg(theme.colors.palette.accent)
+                    .add_modifier(Modifier::BOLD)
             } else {
                 Style::default().fg(theme.colors.content_preview.body)
             };
@@ -405,10 +422,12 @@ impl EmailViewer {
         }
 
         let actions_paragraph = Paragraph::new(action_lines)
-            .block(Block::default()
-                .title("Actions")
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(theme.colors.palette.accent)))
+            .block(
+                Block::default()
+                    .title("Actions")
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(theme.colors.palette.accent)),
+            )
             .wrap(Wrap { trim: true });
 
         frame.render_widget(actions_paragraph, area);
@@ -430,7 +449,10 @@ impl EmailViewer {
         frame.render_widget(footer, area);
     }
 
-    fn render_formatted_email_static<'a>(email: &'a EmailContent, theme: &'a Theme) -> Vec<Line<'a>> {
+    fn render_formatted_email_static<'a>(
+        email: &'a EmailContent,
+        theme: &'a Theme,
+    ) -> Vec<Line<'a>> {
         let mut lines = Vec::new();
 
         // Modern sender box
@@ -440,27 +462,36 @@ impl EmailViewer {
         // Subject
         if !email.headers.subject.is_empty() {
             lines.push(Line::from(vec![
-                Span::styled("📧 Subject: ", Style::default().fg(theme.colors.palette.accent).add_modifier(Modifier::BOLD)),
-                Span::styled(email.headers.subject.clone(), Style::default().fg(theme.colors.palette.accent)),
+                Span::styled(
+                    "📧 Subject: ",
+                    Style::default()
+                        .fg(theme.colors.palette.accent)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    email.headers.subject.clone(),
+                    Style::default().fg(theme.colors.palette.accent),
+                ),
             ]));
             lines.push(Line::from(""));
         }
 
         // Content separator
-        lines.push(Line::from(vec![
-            Span::styled("─".repeat(80), Style::default().fg(theme.colors.palette.border))
-        ]));
+        lines.push(Line::from(vec![Span::styled(
+            "─".repeat(80),
+            Style::default().fg(theme.colors.palette.border),
+        )]));
         lines.push(Line::from(""));
 
         // Email body - render properly based on content type with aggressive header filtering
         let cleaned_body = Self::filter_email_headers_and_metadata(&email.body);
-        
+
         match email.content_type {
             ContentType::Html => {
                 // Use HTML renderer to convert to plain text for terminal display
                 let html_renderer = crate::html::HtmlRenderer::new(80);
                 let plain_text = html_renderer.html_to_plain_text(&cleaned_body);
-                
+
                 // Further clean the rendered text of any remaining headers
                 for line in plain_text.lines() {
                     let trimmed_line = line.trim();
@@ -480,7 +511,7 @@ impl EmailViewer {
                     } else {
                         line.to_string()
                     };
-                    
+
                     let trimmed_line = cleaned_line.trim();
                     if !trimmed_line.is_empty() && Self::is_content_line(trimmed_line) {
                         lines.push(Line::from(trimmed_line.to_string()));
@@ -496,7 +527,7 @@ impl EmailViewer {
 
     fn render_raw_email_static<'a>(email: &'a EmailContent, _theme: &'a Theme) -> Vec<Line<'a>> {
         let mut lines = Vec::new();
-        
+
         // Raw headers
         lines.push(Line::from(format!("From: {}", email.headers.from)));
         lines.push(Line::from(format!("To: {}", email.headers.to.join(", "))));
@@ -524,25 +555,30 @@ impl EmailViewer {
             Span::raw(email.headers.from.clone()),
         ]));
         lines.push(Line::from(vec![
-            Span::styled("Subject: ", Style::default().fg(theme.colors.palette.accent)),
+            Span::styled(
+                "Subject: ",
+                Style::default().fg(theme.colors.palette.accent),
+            ),
             Span::raw(email.headers.subject.clone()),
         ]));
         lines.push(Line::from(""));
 
         // Render HTML content with enhanced rendering and header filtering
         let cleaned_body = Self::filter_email_headers_and_metadata(&email.body);
-        
+
         if email.content_type == ContentType::Html || crate::html::is_html_content(&cleaned_body) {
             let mut html_renderer = crate::html::HtmlRenderer::new(80);
             let rendered_text = html_renderer.render_html(&cleaned_body);
-            
+
             // Convert ratatui Text to Lines for display with additional filtering
             for line in rendered_text.lines {
                 // Check if the rendered line contains actual content
-                let line_text = line.spans.iter()
+                let line_text = line
+                    .spans
+                    .iter()
                     .map(|span| span.content.as_ref())
                     .collect::<String>();
-                    
+
                 if Self::is_content_line(&line_text) {
                     lines.push(line);
                 }
@@ -567,59 +603,138 @@ impl EmailViewer {
         let lines: Vec<&str> = content.lines().collect();
         let mut filtered_lines: Vec<&str> = Vec::new();
         let mut found_body_start = false;
-        
+
         // Enhanced patterns for email headers and technical content to filter out
         let header_patterns = [
-            "from:", "to:", "cc:", "bcc:", "subject:", "date:", "reply-to:", "sender:",
-            "message-id:", "in-reply-to:", "references:", "mime-version:",
-            "content-type:", "content-transfer-encoding:", "content-disposition:",
-            "delivered-to:", "received:", "return-path:", "envelope-to:",
-            "authentication-results:", "received-spf:", "dkim-signature:", "dkim-filter:",
-            "x-received:", "x-google-smtp-source:", "x-gm-message-state:",
-            "x-ms-exchange-", "x-originating-ip:", "x-microsoft-", "x-ms-",
-            "x-mailer:", "x-apple-", "--apple-mail", "apple-mail",
-            "list-id:", "list-unsubscribe:", "list-archive:", "list-post:",
-            "spf=pass", "dkim=pass", "dmarc=pass", "smtp.mailfrom=", "smtp.helo=",
-            "arc-authentication-results:", "arc-message-signature:", "arc-seal:",
-            "received-by:", "received-from:", "thread-topic:", "thread-index:",
-            "importance:", "priority:", "x-priority:", "x-msmail-priority:",
-            "x-mimeole:", "x-ms-has-attach:", "x-ms-tnef-correlator:",
-            "organization:", "user-agent:", "x-user-agent:", "x-newsreader:",
-            "x-spam-", "x-virus-", "x-ham-report:", "x-barracuda-",
-            "<html", "</html>", "<head", "</head>", "<body", "</body>",
-            "<!doctype", "<meta", "content=\"text/html", "charset=",
+            "from:",
+            "to:",
+            "cc:",
+            "bcc:",
+            "subject:",
+            "date:",
+            "reply-to:",
+            "sender:",
+            "message-id:",
+            "in-reply-to:",
+            "references:",
+            "mime-version:",
+            "content-type:",
+            "content-transfer-encoding:",
+            "content-disposition:",
+            "delivered-to:",
+            "received:",
+            "return-path:",
+            "envelope-to:",
+            "authentication-results:",
+            "received-spf:",
+            "dkim-signature:",
+            "dkim-filter:",
+            "x-received:",
+            "x-google-smtp-source:",
+            "x-gm-message-state:",
+            "x-ms-exchange-",
+            "x-originating-ip:",
+            "x-microsoft-",
+            "x-ms-",
+            "x-mailer:",
+            "x-apple-",
+            "--apple-mail",
+            "apple-mail",
+            "list-id:",
+            "list-unsubscribe:",
+            "list-archive:",
+            "list-post:",
+            "spf=pass",
+            "dkim=pass",
+            "dmarc=pass",
+            "smtp.mailfrom=",
+            "smtp.helo=",
+            "arc-authentication-results:",
+            "arc-message-signature:",
+            "arc-seal:",
+            "received-by:",
+            "received-from:",
+            "thread-topic:",
+            "thread-index:",
+            "importance:",
+            "priority:",
+            "x-priority:",
+            "x-msmail-priority:",
+            "x-mimeole:",
+            "x-ms-has-attach:",
+            "x-ms-tnef-correlator:",
+            "organization:",
+            "user-agent:",
+            "x-user-agent:",
+            "x-newsreader:",
+            "x-spam-",
+            "x-virus-",
+            "x-ham-report:",
+            "x-barracuda-",
+            "<html",
+            "</html>",
+            "<head",
+            "</head>",
+            "<body",
+            "</body>",
+            "<!doctype",
+            "<meta",
+            "content=\"text/html",
+            "charset=",
         ];
-        
+
         // HTML tag patterns to strip
         let html_tag_patterns = [
-            "<div", "</div>", "<span", "</span>", "<table", "</table>",
-            "<tr", "</tr>", "<td", "</td>", "<th", "</th>",
-            "<p>", "</p>", "<br", "<hr", "<img", "<a ", "</a>",
-            "<font", "</font>", "<style", "</style>", "<script", "</script>",
+            "<div",
+            "</div>",
+            "<span",
+            "</span>",
+            "<table",
+            "</table>",
+            "<tr",
+            "</tr>",
+            "<td",
+            "</td>",
+            "<th",
+            "</th>",
+            "<p>",
+            "</p>",
+            "<br",
+            "<hr",
+            "<img",
+            "<a ",
+            "</a>",
+            "<font",
+            "</font>",
+            "<style",
+            "</style>",
+            "<script",
+            "</script>",
         ];
-        
+
         for line in lines {
             let line_lower = line.to_lowercase();
             let line_trimmed = line.trim();
-            
+
             // Skip completely empty lines before finding body
             if line_trimmed.is_empty() && !found_body_start {
                 continue;
             }
-            
+
             // Check if this line looks like a header or technical metadata
             let is_header = header_patterns.iter().any(|&pattern| {
-                line_lower.starts_with(pattern) || 
-                line_lower.contains(pattern) ||
-                (pattern.contains(":") && line_lower.starts_with(&pattern[..pattern.len()-1]))
+                line_lower.starts_with(pattern)
+                    || line_lower.contains(pattern)
+                    || (pattern.contains(":")
+                        && line_lower.starts_with(&pattern[..pattern.len() - 1]))
             });
-            
+
             // Check for HTML tags that should be stripped
-            let has_html_tags = html_tag_patterns.iter().any(|&pattern| {
-                line_lower.contains(pattern)
-            });
-            
-            // Skip lines that look like encoded content, boundaries, or technical metadata  
+            let has_html_tags = html_tag_patterns
+                .iter()
+                .any(|&pattern| line_lower.contains(pattern));
+
+            // Skip lines that look like encoded content, boundaries, or technical metadata
             let is_technical = line_trimmed.starts_with('=') ||
                 line_trimmed.starts_with("--") ||
                 line_trimmed.contains("boundary=") ||
@@ -632,11 +747,15 @@ impl EmailViewer {
                 (line_trimmed.len() > 60 && line_trimmed.chars().filter(|c| c.is_ascii_alphanumeric()).count() > line_trimmed.len() * 3 / 4) ||
                 // Lines that are mostly special characters and numbers (encoded content)
                 (line_trimmed.len() > 40 && line_trimmed.chars().all(|c| c.is_ascii_alphanumeric() || "=+-/".contains(c)));
-            
+
             // Skip lines that contain only HTML tags or look like HTML structure
-            let is_html_structure = has_html_tags && 
-                line_trimmed.chars().filter(|&c| c == '<' || c == '>').count() >= 2;
-            
+            let is_html_structure = has_html_tags
+                && line_trimmed
+                    .chars()
+                    .filter(|&c| c == '<' || c == '>')
+                    .count()
+                    >= 2;
+
             // Allow the line if it's not a header, not technical, and not HTML structure
             if !is_header && !is_technical && !is_html_structure {
                 // Clean any remaining HTML tags from the line
@@ -650,16 +769,16 @@ impl EmailViewer {
                 filtered_lines.push(line);
             }
         }
-        
+
         filtered_lines.join("\n")
     }
-    
+
     /// Strip HTML tags from a single line
     fn strip_html_tags_from_line(line: &str) -> String {
         let mut result = String::new();
         let mut in_tag = false;
         let mut tag_name = String::new();
-        
+
         for ch in line.chars() {
             match ch {
                 '<' => {
@@ -669,9 +788,11 @@ impl EmailViewer {
                 '>' => {
                     in_tag = false;
                     // Don't add space for self-closing tags or common inline tags
-                    if !tag_name.is_empty() && 
-                       !["br", "hr", "img", "input", "meta", "link"].contains(&tag_name.to_lowercase().as_str()) &&
-                       !tag_name.starts_with('/') {
+                    if !tag_name.is_empty()
+                        && !["br", "hr", "img", "input", "meta", "link"]
+                            .contains(&tag_name.to_lowercase().as_str())
+                        && !tag_name.starts_with('/')
+                    {
                         result.push(' ');
                     }
                 }
@@ -684,97 +805,164 @@ impl EmailViewer {
                 _ => {}
             }
         }
-        
+
         // Clean up excessive whitespace
         result.split_whitespace().collect::<Vec<_>>().join(" ")
     }
-    
+
     /// Check if a line contains actual email content (not headers or metadata) - enhanced version
     fn is_content_line(line: &str) -> bool {
         let line_lower = line.to_lowercase();
         let line_trimmed = line.trim();
-        
+
         // Skip empty lines
         if line_trimmed.is_empty() {
             return true; // Allow empty lines for formatting
         }
-        
+
         // Enhanced header patterns - more comprehensive
         let header_prefixes = [
-            "from:", "to:", "cc:", "bcc:", "subject:", "date:", "reply-to:", "sender:",
-            "message-id:", "in-reply-to:", "references:", "mime-version:",
-            "content-type:", "content-transfer-encoding:", "content-disposition:",
-            "delivered-to:", "received:", "return-path:", "envelope-to:",
-            "authentication-results:", "received-spf:", "dkim-signature:", "dkim-filter:",
-            "x-received:", "x-google-smtp-source:", "x-gm-message-state:",
-            "x-ms-exchange-", "x-originating-ip:", "x-microsoft-", "x-ms-",
-            "x-mailer:", "x-apple-", "x-", "arc-", "thread-",
-            "list-id:", "list-unsubscribe:", "list-archive:", "list-post:",
-            "organization:", "user-agent:", "importance:", "priority:",
+            "from:",
+            "to:",
+            "cc:",
+            "bcc:",
+            "subject:",
+            "date:",
+            "reply-to:",
+            "sender:",
+            "message-id:",
+            "in-reply-to:",
+            "references:",
+            "mime-version:",
+            "content-type:",
+            "content-transfer-encoding:",
+            "content-disposition:",
+            "delivered-to:",
+            "received:",
+            "return-path:",
+            "envelope-to:",
+            "authentication-results:",
+            "received-spf:",
+            "dkim-signature:",
+            "dkim-filter:",
+            "x-received:",
+            "x-google-smtp-source:",
+            "x-gm-message-state:",
+            "x-ms-exchange-",
+            "x-originating-ip:",
+            "x-microsoft-",
+            "x-ms-",
+            "x-mailer:",
+            "x-apple-",
+            "x-",
+            "arc-",
+            "thread-",
+            "list-id:",
+            "list-unsubscribe:",
+            "list-archive:",
+            "list-post:",
+            "organization:",
+            "user-agent:",
+            "importance:",
+            "priority:",
         ];
-        
+
         // Check for header patterns
         for prefix in &header_prefixes {
             if line_lower.starts_with(prefix) {
                 return false;
             }
         }
-        
+
         // Skip lines that contain mostly technical patterns
         let technical_patterns = [
-            "spf=pass", "dkim=pass", "dmarc=pass", "smtp.mailfrom=", "smtp.helo=",
-            "boundary=", "charset=", "encoding=", "content=\"text/html",
-            "<!doctype", "<html", "</html>", "<head", "</head>", "<body", "</body>",
-            "<meta", "<style", "</style>", "<script", "</script>",
+            "spf=pass",
+            "dkim=pass",
+            "dmarc=pass",
+            "smtp.mailfrom=",
+            "smtp.helo=",
+            "boundary=",
+            "charset=",
+            "encoding=",
+            "content=\"text/html",
+            "<!doctype",
+            "<html",
+            "</html>",
+            "<head",
+            "</head>",
+            "<body",
+            "</body>",
+            "<meta",
+            "<style",
+            "</style>",
+            "<script",
+            "</script>",
         ];
-        
+
         for pattern in &technical_patterns {
             if line_lower.contains(pattern) {
                 return false;
             }
         }
-        
+
         // Skip encoded content patterns
-        if line_trimmed.starts_with('=') ||
-           line_trimmed.starts_with("--") ||
-           line_trimmed.starts_with("Message-ID:") ||
-           line_trimmed.starts_with("MIME-Version") {
+        if line_trimmed.starts_with('=')
+            || line_trimmed.starts_with("--")
+            || line_trimmed.starts_with("Message-ID:")
+            || line_trimmed.starts_with("MIME-Version")
+        {
             return false;
         }
-        
+
         // Skip long strings that look like encoded content or IDs
         if line_trimmed.len() > 60 {
             // Check if it's mostly alphanumeric (encoded content)
-            let alphanumeric_count = line_trimmed.chars().filter(|c| c.is_ascii_alphanumeric()).count();
+            let alphanumeric_count = line_trimmed
+                .chars()
+                .filter(|c| c.is_ascii_alphanumeric())
+                .count();
             if alphanumeric_count > line_trimmed.len() * 3 / 4 {
                 return false;
             }
-            
+
             // Check if it's mostly base64-like characters
-            if line_trimmed.chars().all(|c| c.is_ascii_alphanumeric() || "=+-/".contains(c)) {
+            if line_trimmed
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || "=+-/".contains(c))
+            {
                 return false;
             }
         }
-        
+
         // Skip lines that are just HTML tags
-        if line_trimmed.starts_with('<') && line_trimmed.ends_with('>') && 
-           !line_trimmed.contains(' ') && line_trimmed.len() < 50 {
+        if line_trimmed.starts_with('<')
+            && line_trimmed.ends_with('>')
+            && !line_trimmed.contains(' ')
+            && line_trimmed.len() < 50
+        {
             return false;
         }
-        
+
         // Skip lines that look like HTML attribute declarations
-        if line_trimmed.contains('=') && line_trimmed.contains('"') && 
-           (line_trimmed.contains("style=") || line_trimmed.contains("class=") || 
-            line_trimmed.contains("id=") || line_trimmed.contains("href=")) {
+        if line_trimmed.contains('=')
+            && line_trimmed.contains('"')
+            && (line_trimmed.contains("style=")
+                || line_trimmed.contains("class=")
+                || line_trimmed.contains("id=")
+                || line_trimmed.contains("href="))
+        {
             return false;
         }
-        
+
         // Skip lines that are mostly punctuation or special characters
-        let punct_count = line_trimmed.chars().filter(|c| c.is_ascii_punctuation()).count();
+        let punct_count = line_trimmed
+            .chars()
+            .filter(|c| c.is_ascii_punctuation())
+            .count();
         if punct_count > line_trimmed.len() / 2 && line_trimmed.len() > 10 {
             return false;
         }
-        
+
         // Accept the line as content
         true
     }
@@ -782,11 +970,12 @@ impl EmailViewer {
     fn render_headers_email_static<'a>(email: &'a EmailContent, theme: &'a Theme) -> Vec<Line<'a>> {
         let mut lines = Vec::new();
 
-        lines.push(Line::from(vec![
-            Span::styled("Email Headers", Style::default()
+        lines.push(Line::from(vec![Span::styled(
+            "Email Headers",
+            Style::default()
                 .fg(theme.colors.palette.accent)
-                .add_modifier(Modifier::BOLD | Modifier::UNDERLINED))
-        ]));
+                .add_modifier(Modifier::BOLD | Modifier::UNDERLINED),
+        )]));
         lines.push(Line::from(""));
 
         // All headers
@@ -798,14 +987,14 @@ impl EmailViewer {
             Span::styled("To: ", Style::default().fg(theme.colors.palette.accent)),
             Span::raw(email.headers.to.join(", ")),
         ]));
-        
+
         if !email.headers.cc.is_empty() {
             lines.push(Line::from(vec![
                 Span::styled("CC: ", Style::default().fg(theme.colors.palette.accent)),
                 Span::raw(email.headers.cc.join(", ")),
             ]));
         }
-        
+
         if !email.headers.bcc.is_empty() {
             lines.push(Line::from(vec![
                 Span::styled("BCC: ", Style::default().fg(theme.colors.palette.accent)),
@@ -814,31 +1003,43 @@ impl EmailViewer {
         }
 
         lines.push(Line::from(vec![
-            Span::styled("Subject: ", Style::default().fg(theme.colors.palette.accent)),
+            Span::styled(
+                "Subject: ",
+                Style::default().fg(theme.colors.palette.accent),
+            ),
             Span::raw(email.headers.subject.clone()),
         ]));
         lines.push(Line::from(vec![
             Span::styled("Date: ", Style::default().fg(theme.colors.palette.accent)),
             Span::raw(email.headers.date.clone()),
         ]));
-        
+
         if !email.headers.message_id.is_empty() {
             lines.push(Line::from(vec![
-                Span::styled("Message-ID: ", Style::default().fg(theme.colors.palette.accent)),
+                Span::styled(
+                    "Message-ID: ",
+                    Style::default().fg(theme.colors.palette.accent),
+                ),
                 Span::raw(email.headers.message_id.clone()),
             ]));
         }
 
         if let Some(ref reply_to) = email.headers.reply_to {
             lines.push(Line::from(vec![
-                Span::styled("Reply-To: ", Style::default().fg(theme.colors.palette.accent)),
+                Span::styled(
+                    "Reply-To: ",
+                    Style::default().fg(theme.colors.palette.accent),
+                ),
                 Span::raw(reply_to.clone()),
             ]));
         }
 
         if let Some(ref in_reply_to) = email.headers.in_reply_to {
             lines.push(Line::from(vec![
-                Span::styled("In-Reply-To: ", Style::default().fg(theme.colors.palette.accent)),
+                Span::styled(
+                    "In-Reply-To: ",
+                    Style::default().fg(theme.colors.palette.accent),
+                ),
                 Span::raw(in_reply_to.clone()),
             ]));
         }
@@ -856,8 +1057,16 @@ impl EmailViewer {
         // Top border
         lines.push(Line::from(vec![
             Span::styled("┌─", Style::default().fg(theme.colors.palette.border)),
-            Span::styled(" From ", Style::default().fg(theme.colors.palette.accent).add_modifier(Modifier::BOLD)),
-            Span::styled("─".repeat(box_width - 8), Style::default().fg(theme.colors.palette.border)),
+            Span::styled(
+                " From ",
+                Style::default()
+                    .fg(theme.colors.palette.accent)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                "─".repeat(box_width - 8),
+                Style::default().fg(theme.colors.palette.border),
+            ),
             Span::styled("┐", Style::default().fg(theme.colors.palette.border)),
         ]));
 
@@ -873,9 +1082,12 @@ impl EmailViewer {
 
             lines.push(Line::from(vec![
                 Span::styled("│ ", Style::default().fg(theme.colors.palette.border)),
-                Span::styled(truncated_name, Style::default()
-                    .fg(theme.colors.palette.accent)
-                    .add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    truncated_name,
+                    Style::default()
+                        .fg(theme.colors.palette.accent)
+                        .add_modifier(Modifier::BOLD),
+                ),
                 Span::styled(" ".repeat(padding), Style::default()),
                 Span::styled(" │", Style::default().fg(theme.colors.palette.border)),
             ]));
@@ -894,7 +1106,10 @@ impl EmailViewer {
 
             lines.push(Line::from(vec![
                 Span::styled("│ ", Style::default().fg(theme.colors.palette.border)),
-                Span::styled(truncated_email, Style::default().fg(theme.colors.palette.text_muted)),
+                Span::styled(
+                    truncated_email,
+                    Style::default().fg(theme.colors.palette.text_muted),
+                ),
                 Span::styled(" ".repeat(padding), Style::default()),
                 Span::styled(" │", Style::default().fg(theme.colors.palette.border)),
             ]));
@@ -910,7 +1125,10 @@ impl EmailViewer {
             lines.push(Line::from(vec![
                 Span::styled("│ ", Style::default().fg(theme.colors.palette.border)),
                 Span::styled("📅 ", Style::default().fg(theme.colors.palette.info)),
-                Span::styled(formatted_date, Style::default().fg(theme.colors.content_preview.body)),
+                Span::styled(
+                    formatted_date,
+                    Style::default().fg(theme.colors.content_preview.body),
+                ),
                 Span::styled(" ".repeat(padding.saturating_sub(2)), Style::default()),
                 Span::styled(" │", Style::default().fg(theme.colors.palette.border)),
             ]));
@@ -919,13 +1137,15 @@ impl EmailViewer {
         // Bottom border
         lines.push(Line::from(vec![
             Span::styled("└", Style::default().fg(theme.colors.palette.border)),
-            Span::styled("─".repeat(box_width - 2), Style::default().fg(theme.colors.palette.border)),
+            Span::styled(
+                "─".repeat(box_width - 2),
+                Style::default().fg(theme.colors.palette.border),
+            ),
             Span::styled("┘", Style::default().fg(theme.colors.palette.border)),
         ]));
 
         lines
     }
-
 
     fn parse_sender_info_static(from: &str) -> (String, String) {
         // Simple parsing of "Name <email>" format
@@ -936,11 +1156,10 @@ impl EmailViewer {
                 return (name, email);
             }
         }
-        
+
         // Fallback: treat entire string as email
         ("".to_string(), from.to_string())
     }
-
 
     fn format_date_static(date_str: &str) -> String {
         // Try to parse and format the date

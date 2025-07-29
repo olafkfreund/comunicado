@@ -1,7 +1,7 @@
+use crate::theme::accessibility::AccessibilityOptions;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
-use crate::theme::accessibility::AccessibilityOptions;
 
 /// Theme configuration for persistence
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -83,7 +83,7 @@ impl ThemeConfig {
     /// Load theme configuration from file
     pub fn load() -> Result<Self, Box<dyn std::error::Error>> {
         let config_path = Self::config_file_path()?;
-        
+
         if !config_path.exists() {
             return Ok(Self::default());
         }
@@ -96,7 +96,7 @@ impl ThemeConfig {
     /// Save theme configuration to file
     pub fn save(&self) -> Result<(), Box<dyn std::error::Error>> {
         let config_path = Self::config_file_path()?;
-        
+
         // Create parent directories if they don't exist
         if let Some(parent) = config_path.parent() {
             fs::create_dir_all(parent)?;
@@ -173,12 +173,9 @@ impl ThemeConfig {
             return Err("Invalid hex color format".to_string());
         }
 
-        let r = u8::from_str_radix(&hex[1..3], 16)
-            .map_err(|_| "Invalid red component")?;
-        let g = u8::from_str_radix(&hex[3..5], 16)
-            .map_err(|_| "Invalid green component")?;
-        let b = u8::from_str_radix(&hex[5..7], 16)
-            .map_err(|_| "Invalid blue component")?;
+        let r = u8::from_str_radix(&hex[1..3], 16).map_err(|_| "Invalid red component")?;
+        let g = u8::from_str_radix(&hex[3..5], 16).map_err(|_| "Invalid green component")?;
+        let b = u8::from_str_radix(&hex[5..7], 16).map_err(|_| "Invalid blue component")?;
 
         Ok((r, g, b))
     }
@@ -188,7 +185,10 @@ impl ThemeConfig {
         // Apply high contrast if requested
         if self.user_preferences.high_contrast {
             theme.accessibility.high_contrast = true;
-            *theme = theme.clone().with_accessibility(theme.accessibility.clone()).clone();
+            *theme = theme
+                .clone()
+                .with_accessibility(theme.accessibility.clone())
+                .clone();
         }
 
         // Apply custom color overrides
