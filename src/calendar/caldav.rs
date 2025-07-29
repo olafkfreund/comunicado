@@ -316,7 +316,6 @@ impl CalDAVClient {
             }
             
             if line == "END:VEVENT" {
-                in_vevent = false;
                 break;
             }
             

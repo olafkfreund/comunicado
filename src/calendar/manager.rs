@@ -14,6 +14,7 @@ use crate::oauth2::token::TokenManager;
 /// Calendar manager for coordinating all calendar operations
 pub struct CalendarManager {
     database: Arc<CalendarDatabase>,
+    #[allow(dead_code)]
     token_manager: Arc<TokenManager>,
     caldav_clients: RwLock<HashMap<String, Arc<CalDAVClient>>>,
     google_client: Arc<GoogleCalendarClient>,

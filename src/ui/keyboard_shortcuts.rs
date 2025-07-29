@@ -10,14 +10,12 @@ use crate::theme::Theme;
 
 pub struct KeyboardShortcutsUI {
     scroll_offset: usize,
-    max_visible_items: usize,
 }
 
 impl KeyboardShortcutsUI {
     pub fn new() -> Self {
         Self {
             scroll_offset: 0,
-            max_visible_items: 20,
         }
     }
 

@@ -46,6 +46,7 @@ struct CachedAnimation {
 #[derive(Debug)]
 struct AnimationState {
     current_frame: u32,
+    #[allow(dead_code)]
     start_time: Instant,
     last_frame_time: Instant,
     is_playing: bool,
@@ -57,6 +58,7 @@ pub struct AnimationManager {
     image_manager: Arc<ImageManager>,
     cache: Arc<RwLock<HashMap<String, CachedAnimation>>>,
     animations: Arc<RwLock<HashMap<String, AnimationState>>>,
+    #[allow(dead_code)]
     frame_sender: Option<mpsc::UnboundedSender<AnimationCommand>>,
     max_frame_rate: u32, // Maximum FPS to prevent terminal overload
 }
