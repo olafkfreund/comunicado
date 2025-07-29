@@ -9,7 +9,7 @@ use ratatui::{
 
 use crate::email::StoredMessage;
 use crate::theme::Theme;
-use crate::ui::content_preview::{EmailContent, EmailHeader, ViewMode};
+use crate::ui::content_preview::{EmailContent, EmailHeader, ViewMode, ContentType};
 
 /// Email viewer actions
 #[derive(Debug, Clone, PartialEq)]
@@ -452,9 +452,43 @@ impl EmailViewer {
         ]));
         lines.push(Line::from(""));
 
-        // Email body
-        for line in email.body.lines() {
-            lines.push(Line::from(line.to_string()));
+        // Email body - render properly based on content type with aggressive header filtering
+        let cleaned_body = Self::filter_email_headers_and_metadata(&email.body);
+        
+        match email.content_type {
+            ContentType::Html => {
+                // Use HTML renderer to convert to plain text for terminal display
+                let html_renderer = crate::html::HtmlRenderer::new(80);
+                let plain_text = html_renderer.html_to_plain_text(&cleaned_body);
+                
+                // Further clean the rendered text of any remaining headers
+                for line in plain_text.lines() {
+                    let trimmed_line = line.trim();
+                    if !trimmed_line.is_empty() && Self::is_content_line(trimmed_line) {
+                        lines.push(Line::from(trimmed_line.to_string()));
+                    } else if trimmed_line.is_empty() {
+                        lines.push(Line::from(""));
+                    }
+                }
+            }
+            _ => {
+                // Plain text - display as is but clean up any residual HTML and headers
+                for line in cleaned_body.lines() {
+                    let cleaned_line = if crate::html::is_html_content(line) {
+                        let html_renderer = crate::html::HtmlRenderer::new(80);
+                        html_renderer.html_to_plain_text(line)
+                    } else {
+                        line.to_string()
+                    };
+                    
+                    let trimmed_line = cleaned_line.trim();
+                    if !trimmed_line.is_empty() && Self::is_content_line(trimmed_line) {
+                        lines.push(Line::from(trimmed_line.to_string()));
+                    } else if trimmed_line.is_empty() {
+                        lines.push(Line::from(""));
+                    }
+                }
+            }
         }
 
         lines
@@ -495,20 +529,114 @@ impl EmailViewer {
         ]));
         lines.push(Line::from(""));
 
-        // Try to render HTML content
-        if crate::html::is_html_content(&email.body) {
-            // TODO: Fix HTML renderer integration 
-            lines.push(Line::from("HTML content (renderer integration needed)"));
-            for line in email.body.lines() {
-                lines.push(Line::from(line.to_string()));
+        // Render HTML content with enhanced rendering and header filtering
+        let cleaned_body = Self::filter_email_headers_and_metadata(&email.body);
+        
+        if email.content_type == ContentType::Html || crate::html::is_html_content(&cleaned_body) {
+            let mut html_renderer = crate::html::HtmlRenderer::new(80);
+            let rendered_text = html_renderer.render_html(&cleaned_body);
+            
+            // Convert ratatui Text to Lines for display with additional filtering
+            for line in rendered_text.lines {
+                // Check if the rendered line contains actual content
+                let line_text = line.spans.iter()
+                    .map(|span| span.content.as_ref())
+                    .collect::<String>();
+                    
+                if Self::is_content_line(&line_text) {
+                    lines.push(line);
+                }
             }
         } else {
-            for line in email.body.lines() {
-                lines.push(Line::from(line.to_string()));
+            // Plain text content with header filtering
+            for line in cleaned_body.lines() {
+                let trimmed_line = line.trim();
+                if !trimmed_line.is_empty() && Self::is_content_line(trimmed_line) {
+                    lines.push(Line::from(trimmed_line.to_string()));
+                } else if trimmed_line.is_empty() {
+                    lines.push(Line::from(""));
+                }
             }
         }
 
         lines
+    }
+
+    /// Filter out email headers and technical metadata from content
+    fn filter_email_headers_and_metadata(content: &str) -> String {
+        let lines: Vec<&str> = content.lines().collect();
+        let mut filtered_lines: Vec<&str> = Vec::new();
+        let mut in_content = false;
+        
+        // Patterns for email headers and technical content to filter out
+        let header_patterns = [
+            "from:", "to:", "cc:", "bcc:", "subject:", "date:", "reply-to:", "sender:",
+            "message-id:", "in-reply-to:", "references:", "mime-version:",
+            "content-type:", "content-transfer-encoding:", "content-disposition:",
+            "delivered-to:", "received:", "return-path:", "envelope-to:",
+            "authentication-results:", "received-spf:", "dkim-signature:", "dkim-filter:",
+            "x-received:", "x-google-smtp-source:", "x-gm-message-state:",
+            "x-ms-exchange-", "x-originating-ip:", "x-microsoft-", "x-ms-",
+            "x-mailer:", "x-apple-", "--apple-mail", "apple-mail",
+            "list-id:", "list-unsubscribe:", "list-archive:", "list-post:",
+            "spf=pass", "dkim=pass", "dmarc=pass", "smtp.mailfrom=", "smtp.helo=",
+        ];
+        
+        for line in lines {
+            let line_lower = line.to_lowercase();
+            let line_trimmed = line.trim();
+            
+            // Skip empty lines at the start
+            if line_trimmed.is_empty() && !in_content {
+                continue;
+            }
+            
+            // Check if this line looks like a header
+            let is_header = header_patterns.iter().any(|&pattern| {
+                line_lower.starts_with(pattern) || line_lower.contains(pattern)
+            });
+            
+            // Skip lines that look like encoded content or technical metadata
+            let is_technical = line_trimmed.starts_with('=') ||
+                line_trimmed.contains("boundary=") ||
+                line_trimmed.contains("charset=") ||
+                line_trimmed.starts_with("--") ||
+                (line_trimmed.len() > 50 && line_trimmed.chars().all(|c| c.is_ascii_alphanumeric() || "=+-/".contains(c)));
+            
+            if !is_header && !is_technical {
+                filtered_lines.push(line);
+                in_content = true;
+            }
+        }
+        
+        filtered_lines.join("\n")
+    }
+    
+    /// Check if a line contains actual email content (not headers or metadata)
+    fn is_content_line(line: &str) -> bool {
+        let line_lower = line.to_lowercase();
+        let line_trimmed = line.trim();
+        
+        // Skip obvious header patterns
+        if line_lower.starts_with("from:") || line_lower.starts_with("to:") ||
+           line_lower.starts_with("subject:") || line_lower.starts_with("date:") ||
+           line_lower.starts_with("message-id:") || line_lower.starts_with("content-") ||
+           line_lower.starts_with("delivered-to:") || line_lower.starts_with("received:") ||
+           line_lower.starts_with("authentication-results:") || line_lower.starts_with("dkim-") ||
+           line_lower.starts_with("x-") {
+            return false;
+        }
+        
+        // Skip encoded content or long strings that look like IDs
+        if line_trimmed.starts_with('=') ||
+           line_trimmed.contains("boundary=") ||
+           line_trimmed.contains("charset=") ||
+           (line_trimmed.len() > 50 && line_trimmed.chars().all(|c| c.is_ascii_alphanumeric() || "=+-/".contains(c))) {
+            return false;
+        }
+        
+        // Accept the line as content
+        true
     }
 
     fn render_headers_email_static<'a>(email: &'a EmailContent, theme: &'a Theme) -> Vec<Line<'a>> {
