@@ -208,7 +208,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_notification_manager_creation() {
-        let database = Arc::new(CalendarDatabase::new_in_memory());
+        let database = Arc::new(CalendarDatabase::new_in_memory().await.unwrap());
         let manager = CalendarNotificationManager::new(database);
 
         // Test that we can get a sender
@@ -220,7 +220,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_notification_broadcast() {
-        let database = Arc::new(CalendarDatabase::new_in_memory());
+        let database = Arc::new(CalendarDatabase::new_in_memory().await.unwrap());
         let manager = CalendarNotificationManager::new(database);
 
         // Start the notification processing

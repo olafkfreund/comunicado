@@ -317,6 +317,7 @@ impl MaildirHandler {
         // Parse headers and body
         let mut in_headers = true;
         let mut body_lines = Vec::new();
+        let mut header_found = false;
 
         for line in content.lines() {
             if in_headers {
@@ -325,21 +326,31 @@ impl MaildirHandler {
                     continue;
                 }
 
-                // Parse common headers
-                if let Some(value) = line.strip_prefix("Subject: ") {
-                    message.subject = value.to_string();
-                } else if let Some(value) = line.strip_prefix("From: ") {
-                    // Simple from parsing - real implementation would be more robust
-                    message.from_addr = value.to_string();
-                } else if let Some(value) = line.strip_prefix("To: ") {
-                    message.to_addrs = vec![value.to_string()];
-                } else if let Some(value) = line.strip_prefix("Date: ") {
-                    // Parse date - using current time as fallback
-                    if let Ok(parsed_date) = DateTime::parse_from_rfc2822(value) {
-                        message.date = parsed_date.with_timezone(&Utc);
+                // Check if this looks like a header line (contains colon)
+                if line.contains(": ") {
+                    header_found = true;
+                    
+                    // Parse common headers
+                    if let Some(value) = line.strip_prefix("Subject: ") {
+                        message.subject = value.to_string();
+                    } else if let Some(value) = line.strip_prefix("From: ") {
+                        // Simple from parsing - real implementation would be more robust
+                        message.from_addr = value.to_string();
+                    } else if let Some(value) = line.strip_prefix("To: ") {
+                        message.to_addrs = vec![value.to_string()];
+                    } else if let Some(value) = line.strip_prefix("Date: ") {
+                        // Parse date - using current time as fallback
+                        if let Ok(parsed_date) = DateTime::parse_from_rfc2822(value) {
+                            message.date = parsed_date.with_timezone(&Utc);
+                        }
+                    } else if let Some(value) = line.strip_prefix("Message-ID: ") {
+                        message.message_id = Some(value.to_string());
                     }
-                } else if let Some(value) = line.strip_prefix("Message-ID: ") {
-                    message.message_id = Some(value.to_string());
+                } else if !header_found {
+                    // If we haven't found any headers yet and this doesn't look like a header,
+                    // treat everything as body
+                    in_headers = false;
+                    body_lines.push(line);
                 }
             } else {
                 body_lines.push(line);
@@ -514,6 +525,7 @@ pub struct MaildirFolderStats {
 mod tests {
     use super::*;
     use tempfile::TempDir;
+    use std::fs;
 
     #[test]
     fn test_maildir_handler_creation() {
@@ -561,5 +573,196 @@ mod tests {
         let flags = vec!["\\Draft".to_string(), "\\Answered".to_string()];
         let result = handler.format_maildir_flags(&flags);
         assert_eq!(result, "DR"); // Sorted: Draft, Replied
+    }
+
+    #[test]
+    fn test_is_maildir_folder_valid() {
+        let temp_dir = TempDir::new().unwrap();
+        let handler = MaildirHandler::new(temp_dir.path());
+        let maildir_path = temp_dir.path().join("valid_maildir");
+
+        // Create proper maildir structure
+        handler.ensure_maildir_structure(&maildir_path).unwrap();
+
+        assert!(handler.is_maildir_folder(&maildir_path));
+    }
+
+    #[test]
+    fn test_is_maildir_folder_invalid() {
+        let temp_dir = TempDir::new().unwrap();
+        let handler = MaildirHandler::new(temp_dir.path());
+        let invalid_path = temp_dir.path().join("invalid_maildir");
+
+        // Create directory without proper maildir structure
+        fs::create_dir_all(&invalid_path).unwrap();
+        fs::create_dir_all(invalid_path.join("new")).unwrap();
+        // Missing cur/ and tmp/ directories
+
+        assert!(!handler.is_maildir_folder(&invalid_path));
+    }
+
+    #[test]
+    fn test_is_maildir_folder_nonexistent() {
+        let temp_dir = TempDir::new().unwrap();
+        let handler = MaildirHandler::new(temp_dir.path());
+        let nonexistent_path = temp_dir.path().join("does_not_exist");
+
+        assert!(!handler.is_maildir_folder(&nonexistent_path));
+    }
+
+    #[test]
+    fn test_path_to_folder_name() {
+        let handler = MaildirHandler::new("/tmp");
+        
+        let path = std::path::Path::new("/some/path/INBOX__Subfolder");
+        let result = handler.path_to_folder_name(path).unwrap();
+        assert_eq!(result, "INBOX/Subfolder");
+
+        let path = std::path::Path::new("/some/path/INBOX");
+        let result = handler.path_to_folder_name(path).unwrap();
+        assert_eq!(result, "INBOX");
+    }
+
+    #[test]
+    fn test_path_to_folder_name_invalid() {
+        let handler = MaildirHandler::new("/tmp");
+        
+        // Path with no filename
+        let path = std::path::Path::new("/");
+        let result = handler.path_to_folder_name(path);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_sanitize_folder_name_special_characters() {
+        let handler = MaildirHandler::new("/tmp");
+
+        // Test various special characters that need sanitization
+        assert_eq!(handler.sanitize_folder_name("Folder/With\\Slash"), "Folder__With__Slash");
+        assert_eq!(handler.sanitize_folder_name("Folder:With*Special?Chars"), "Folder_With_Special_Chars");
+        assert_eq!(handler.sanitize_folder_name("Folder\"With<More>Chars|"), "Folder_With_More_Chars_");
+    }
+
+    #[test]
+    fn test_format_maildir_flags_comprehensive() {
+        let handler = MaildirHandler::new("/tmp");
+
+        // Test all supported flags
+        let flags = vec![
+            "\\Draft".to_string(),
+            "\\Flagged".to_string(), 
+            "\\Answered".to_string(),
+            "\\Seen".to_string(),
+            "\\Deleted".to_string(),
+        ];
+        let result = handler.format_maildir_flags(&flags);
+        assert_eq!(result, "DFRST"); // Sorted alphabetically
+
+        // Test empty flags
+        let flags = vec![];
+        let result = handler.format_maildir_flags(&flags);
+        assert_eq!(result, "");
+
+        // Test unsupported flags (should be ignored)
+        let flags = vec!["\\CustomFlag".to_string(), "\\Seen".to_string()];
+        let result = handler.format_maildir_flags(&flags);
+        assert_eq!(result, "S");
+    }
+
+    #[test]
+    fn test_maildir_validation_with_subdirectories() {
+        let temp_dir = TempDir::new().unwrap();
+        let handler = MaildirHandler::new(temp_dir.path());
+        
+        // Create nested maildir structure
+        let inbox_path = temp_dir.path().join("INBOX");
+        let subfolder_path = temp_dir.path().join("INBOX__Subfolder");
+        
+        handler.ensure_maildir_structure(&inbox_path).unwrap();
+        handler.ensure_maildir_structure(&subfolder_path).unwrap();
+
+        assert!(handler.is_maildir_folder(&inbox_path));
+        assert!(handler.is_maildir_folder(&subfolder_path));
+    }
+
+    #[test]
+    fn test_message_parsing_basic_headers() {
+        let handler = MaildirHandler::new("/tmp");
+        let content = r#"Subject: Test Subject
+From: test@example.com
+To: recipient@example.com
+Date: Wed, 01 Jan 2020 12:00:00 +0000
+Message-ID: <test@example.com>
+
+This is the body of the email."#;
+
+        let message = handler.parse_message_content(content, "test_account", "INBOX", false).unwrap();
+        
+        assert_eq!(message.subject, "Test Subject");
+        assert_eq!(message.from_addr, "test@example.com");
+        assert_eq!(message.to_addrs, vec!["recipient@example.com"]);
+        assert_eq!(message.message_id, Some("<test@example.com>".to_string()));
+        assert_eq!(message.body_text, Some("This is the body of the email.".to_string()));
+    }
+
+    #[test]
+    fn test_message_parsing_no_headers() {
+        let handler = MaildirHandler::new("/tmp");
+        let content = "Just a body with no headers";
+
+        let message = handler.parse_message_content(content, "test_account", "INBOX", false).unwrap();
+        
+        assert_eq!(message.subject, "");
+        assert_eq!(message.from_addr, "");
+        assert!(message.to_addrs.is_empty());
+        assert_eq!(message.message_id, None);
+        assert_eq!(message.body_text, Some("Just a body with no headers".to_string()));
+    }
+
+    #[test]
+    fn test_format_message_as_email() {
+        let handler = MaildirHandler::new("/tmp");
+        let message = StoredMessage {
+            id: Uuid::new_v4(),
+            account_id: "test_account".to_string(),
+            folder_name: "INBOX".to_string(),
+            imap_uid: 123,
+            message_id: Some("<test@example.com>".to_string()),
+            thread_id: None,
+            in_reply_to: None,
+            references: vec!["<ref1@example.com>".to_string(), "<ref2@example.com>".to_string()],
+            subject: "Test Subject".to_string(),
+            from_addr: "sender@example.com".to_string(),
+            from_name: None,
+            to_addrs: vec!["recipient@example.com".to_string()],
+            cc_addrs: vec!["cc@example.com".to_string()],
+            bcc_addrs: vec![],
+            reply_to: Some("reply@example.com".to_string()),
+            date: DateTime::parse_from_rfc3339("2020-01-01T12:00:00Z").unwrap().with_timezone(&Utc),
+            body_text: Some("This is the email body".to_string()),
+            body_html: None,
+            attachments: vec![],
+            flags: vec![],
+            labels: vec![],
+            size: Some(100),
+            priority: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+            last_synced: Utc::now(),
+            sync_version: 1,
+            is_draft: false,
+            is_deleted: false,
+        };
+
+        let email_content = handler.format_message_as_email(&message).unwrap();
+        
+        assert!(email_content.contains("Message-ID: <test@example.com>"));
+        assert!(email_content.contains("Subject: Test Subject"));
+        assert!(email_content.contains("From: sender@example.com"));
+        assert!(email_content.contains("To: recipient@example.com"));
+        assert!(email_content.contains("Cc: cc@example.com"));
+        assert!(email_content.contains("Reply-To: reply@example.com"));
+        assert!(email_content.contains("References: <ref1@example.com> <ref2@example.com>"));
+        assert!(email_content.contains("This is the email body"));
     }
 }

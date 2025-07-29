@@ -3,7 +3,9 @@ pub mod attachments;
 pub mod database;
 pub mod desktop_notifications;
 pub mod filters;
+pub mod folder_hierarchy;
 pub mod maildir;
+pub mod maildir_mapper;
 pub mod maildir_ui;
 pub mod message;
 pub mod notifications;
@@ -11,6 +13,7 @@ pub mod sorting;
 pub mod sync_engine;
 pub mod thread;
 pub mod threading_engine;
+pub mod timestamp_utils;
 
 pub use attachment_viewer::{AttachmentViewer, ViewResult, ViewerMode};
 pub use attachments::{AttachmentInfo, AttachmentManager, AttachmentType};
@@ -23,7 +26,14 @@ pub use filters::{
     EmailFilter, FilterAction, FilterCondition, FilterEngine, FilterField, FilterOperator,
     FilterResult, FilterTemplates,
 };
+pub use folder_hierarchy::{
+    FolderHierarchy, FolderHierarchyError, FolderHierarchyMapper, FolderHierarchyResult,
+};
 pub use maildir::{MaildirError, MaildirFolderStats, MaildirHandler, MaildirResult, MaildirStats};
+pub use maildir_mapper::{
+    FlagMapping, MaildirFilenameInfo, MaildirMapper, MaildirMapperError, MaildirMapperResult,
+    MaildirMessageMetadata,
+};
 pub use maildir_ui::{MaildirExportPreview, MaildirImportFolder, MaildirImportPreview, MaildirUI};
 pub use message::{EmailMessage, MessageId};
 pub use notifications::{
@@ -35,3 +45,4 @@ pub use sync_engine::{
 };
 pub use thread::{EmailThread, ThreadStatistics};
 pub use threading_engine::{ThreadingAlgorithm, ThreadingEngine};
+pub use timestamp_utils::{TimestampError, TimestampPreserver, TimestampResult, TimestampUtils};

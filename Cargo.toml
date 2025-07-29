@@ -91,6 +91,12 @@ sysinfo = "0.30"
 # Hostname for Maildir unique IDs
 hostname = "0.3"
 
+# Maildir support
+maildir = "0.6"
+walkdir = "2.5"
+indicatif = "0.17"
+filetime = "0.2"
+
 # Spell checking dependencies removed - implementing custom solution
 
 # Full-text search and indexing  
