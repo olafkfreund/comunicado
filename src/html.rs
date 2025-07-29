@@ -653,7 +653,7 @@ mod tests {
 
     #[test]
     fn test_html_to_plain_text() {
-        let mut renderer = HtmlRenderer::new(80);
+        let renderer = HtmlRenderer::new(80);
         let html = "<p>Hello <strong>world</strong>!</p><p>Second paragraph.</p>";
         let result = renderer.html_to_plain_text(html);
         
