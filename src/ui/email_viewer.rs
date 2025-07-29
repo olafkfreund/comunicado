@@ -562,13 +562,13 @@ impl EmailViewer {
         lines
     }
 
-    /// Filter out email headers and technical metadata from content
+    /// Filter out email headers and technical metadata from content (aggressive cleaning)
     fn filter_email_headers_and_metadata(content: &str) -> String {
         let lines: Vec<&str> = content.lines().collect();
         let mut filtered_lines: Vec<&str> = Vec::new();
-        let mut in_content = false;
+        let mut found_body_start = false;
         
-        // Patterns for email headers and technical content to filter out
+        // Enhanced patterns for email headers and technical content to filter out
         let header_patterns = [
             "from:", "to:", "cc:", "bcc:", "subject:", "date:", "reply-to:", "sender:",
             "message-id:", "in-reply-to:", "references:", "mime-version:",
@@ -580,58 +580,198 @@ impl EmailViewer {
             "x-mailer:", "x-apple-", "--apple-mail", "apple-mail",
             "list-id:", "list-unsubscribe:", "list-archive:", "list-post:",
             "spf=pass", "dkim=pass", "dmarc=pass", "smtp.mailfrom=", "smtp.helo=",
+            "arc-authentication-results:", "arc-message-signature:", "arc-seal:",
+            "received-by:", "received-from:", "thread-topic:", "thread-index:",
+            "importance:", "priority:", "x-priority:", "x-msmail-priority:",
+            "x-mimeole:", "x-ms-has-attach:", "x-ms-tnef-correlator:",
+            "organization:", "user-agent:", "x-user-agent:", "x-newsreader:",
+            "x-spam-", "x-virus-", "x-ham-report:", "x-barracuda-",
+            "<html", "</html>", "<head", "</head>", "<body", "</body>",
+            "<!doctype", "<meta", "content=\"text/html", "charset=",
+        ];
+        
+        // HTML tag patterns to strip
+        let html_tag_patterns = [
+            "<div", "</div>", "<span", "</span>", "<table", "</table>",
+            "<tr", "</tr>", "<td", "</td>", "<th", "</th>",
+            "<p>", "</p>", "<br", "<hr", "<img", "<a ", "</a>",
+            "<font", "</font>", "<style", "</style>", "<script", "</script>",
         ];
         
         for line in lines {
             let line_lower = line.to_lowercase();
             let line_trimmed = line.trim();
             
-            // Skip empty lines at the start
-            if line_trimmed.is_empty() && !in_content {
+            // Skip completely empty lines before finding body
+            if line_trimmed.is_empty() && !found_body_start {
                 continue;
             }
             
-            // Check if this line looks like a header
+            // Check if this line looks like a header or technical metadata
             let is_header = header_patterns.iter().any(|&pattern| {
-                line_lower.starts_with(pattern) || line_lower.contains(pattern)
+                line_lower.starts_with(pattern) || 
+                line_lower.contains(pattern) ||
+                (pattern.contains(":") && line_lower.starts_with(&pattern[..pattern.len()-1]))
             });
             
-            // Skip lines that look like encoded content or technical metadata
+            // Check for HTML tags that should be stripped
+            let has_html_tags = html_tag_patterns.iter().any(|&pattern| {
+                line_lower.contains(pattern)
+            });
+            
+            // Skip lines that look like encoded content, boundaries, or technical metadata  
             let is_technical = line_trimmed.starts_with('=') ||
+                line_trimmed.starts_with("--") ||
                 line_trimmed.contains("boundary=") ||
                 line_trimmed.contains("charset=") ||
-                line_trimmed.starts_with("--") ||
-                (line_trimmed.len() > 50 && line_trimmed.chars().all(|c| c.is_ascii_alphanumeric() || "=+-/".contains(c)));
+                line_trimmed.contains("encoding=") ||
+                line_trimmed.contains("Content-") ||
+                line_trimmed.contains("MIME-Version") ||
+                line_trimmed.starts_with("Message-ID:") ||
+                // Long strings of alphanumeric characters (likely encoded content)
+                (line_trimmed.len() > 60 && line_trimmed.chars().filter(|c| c.is_ascii_alphanumeric()).count() > line_trimmed.len() * 3 / 4) ||
+                // Lines that are mostly special characters and numbers (encoded content)
+                (line_trimmed.len() > 40 && line_trimmed.chars().all(|c| c.is_ascii_alphanumeric() || "=+-/".contains(c)));
             
-            if !is_header && !is_technical {
+            // Skip lines that contain only HTML tags or look like HTML structure
+            let is_html_structure = has_html_tags && 
+                line_trimmed.chars().filter(|&c| c == '<' || c == '>').count() >= 2;
+            
+            // Allow the line if it's not a header, not technical, and not HTML structure
+            if !is_header && !is_technical && !is_html_structure {
+                // Clean any remaining HTML tags from the line
+                let cleaned_line = Self::strip_html_tags_from_line(line);
+                if !cleaned_line.trim().is_empty() {
+                    filtered_lines.push(line);
+                    found_body_start = true;
+                }
+            } else if found_body_start && line_trimmed.is_empty() {
+                // Preserve empty lines within content for formatting
                 filtered_lines.push(line);
-                in_content = true;
             }
         }
         
         filtered_lines.join("\n")
     }
     
-    /// Check if a line contains actual email content (not headers or metadata)
+    /// Strip HTML tags from a single line
+    fn strip_html_tags_from_line(line: &str) -> String {
+        let mut result = String::new();
+        let mut in_tag = false;
+        let mut tag_name = String::new();
+        
+        for ch in line.chars() {
+            match ch {
+                '<' => {
+                    in_tag = true;
+                    tag_name.clear();
+                }
+                '>' => {
+                    in_tag = false;
+                    // Don't add space for self-closing tags or common inline tags
+                    if !tag_name.is_empty() && 
+                       !["br", "hr", "img", "input", "meta", "link"].contains(&tag_name.to_lowercase().as_str()) &&
+                       !tag_name.starts_with('/') {
+                        result.push(' ');
+                    }
+                }
+                _ if in_tag => {
+                    if ch.is_ascii_alphabetic() {
+                        tag_name.push(ch);
+                    }
+                }
+                _ if !in_tag => result.push(ch),
+                _ => {}
+            }
+        }
+        
+        // Clean up excessive whitespace
+        result.split_whitespace().collect::<Vec<_>>().join(" ")
+    }
+    
+    /// Check if a line contains actual email content (not headers or metadata) - enhanced version
     fn is_content_line(line: &str) -> bool {
         let line_lower = line.to_lowercase();
         let line_trimmed = line.trim();
         
-        // Skip obvious header patterns
-        if line_lower.starts_with("from:") || line_lower.starts_with("to:") ||
-           line_lower.starts_with("subject:") || line_lower.starts_with("date:") ||
-           line_lower.starts_with("message-id:") || line_lower.starts_with("content-") ||
-           line_lower.starts_with("delivered-to:") || line_lower.starts_with("received:") ||
-           line_lower.starts_with("authentication-results:") || line_lower.starts_with("dkim-") ||
-           line_lower.starts_with("x-") {
+        // Skip empty lines
+        if line_trimmed.is_empty() {
+            return true; // Allow empty lines for formatting
+        }
+        
+        // Enhanced header patterns - more comprehensive
+        let header_prefixes = [
+            "from:", "to:", "cc:", "bcc:", "subject:", "date:", "reply-to:", "sender:",
+            "message-id:", "in-reply-to:", "references:", "mime-version:",
+            "content-type:", "content-transfer-encoding:", "content-disposition:",
+            "delivered-to:", "received:", "return-path:", "envelope-to:",
+            "authentication-results:", "received-spf:", "dkim-signature:", "dkim-filter:",
+            "x-received:", "x-google-smtp-source:", "x-gm-message-state:",
+            "x-ms-exchange-", "x-originating-ip:", "x-microsoft-", "x-ms-",
+            "x-mailer:", "x-apple-", "x-", "arc-", "thread-",
+            "list-id:", "list-unsubscribe:", "list-archive:", "list-post:",
+            "organization:", "user-agent:", "importance:", "priority:",
+        ];
+        
+        // Check for header patterns
+        for prefix in &header_prefixes {
+            if line_lower.starts_with(prefix) {
+                return false;
+            }
+        }
+        
+        // Skip lines that contain mostly technical patterns
+        let technical_patterns = [
+            "spf=pass", "dkim=pass", "dmarc=pass", "smtp.mailfrom=", "smtp.helo=",
+            "boundary=", "charset=", "encoding=", "content=\"text/html",
+            "<!doctype", "<html", "</html>", "<head", "</head>", "<body", "</body>",
+            "<meta", "<style", "</style>", "<script", "</script>",
+        ];
+        
+        for pattern in &technical_patterns {
+            if line_lower.contains(pattern) {
+                return false;
+            }
+        }
+        
+        // Skip encoded content patterns
+        if line_trimmed.starts_with('=') ||
+           line_trimmed.starts_with("--") ||
+           line_trimmed.starts_with("Message-ID:") ||
+           line_trimmed.starts_with("MIME-Version") {
             return false;
         }
         
-        // Skip encoded content or long strings that look like IDs
-        if line_trimmed.starts_with('=') ||
-           line_trimmed.contains("boundary=") ||
-           line_trimmed.contains("charset=") ||
-           (line_trimmed.len() > 50 && line_trimmed.chars().all(|c| c.is_ascii_alphanumeric() || "=+-/".contains(c))) {
+        // Skip long strings that look like encoded content or IDs
+        if line_trimmed.len() > 60 {
+            // Check if it's mostly alphanumeric (encoded content)
+            let alphanumeric_count = line_trimmed.chars().filter(|c| c.is_ascii_alphanumeric()).count();
+            if alphanumeric_count > line_trimmed.len() * 3 / 4 {
+                return false;
+            }
+            
+            // Check if it's mostly base64-like characters
+            if line_trimmed.chars().all(|c| c.is_ascii_alphanumeric() || "=+-/".contains(c)) {
+                return false;
+            }
+        }
+        
+        // Skip lines that are just HTML tags
+        if line_trimmed.starts_with('<') && line_trimmed.ends_with('>') && 
+           !line_trimmed.contains(' ') && line_trimmed.len() < 50 {
+            return false;
+        }
+        
+        // Skip lines that look like HTML attribute declarations
+        if line_trimmed.contains('=') && line_trimmed.contains('"') && 
+           (line_trimmed.contains("style=") || line_trimmed.contains("class=") || 
+            line_trimmed.contains("id=") || line_trimmed.contains("href=")) {
+            return false;
+        }
+        
+        // Skip lines that are mostly punctuation or special characters
+        let punct_count = line_trimmed.chars().filter(|c| c.is_ascii_punctuation()).count();
+        if punct_count > line_trimmed.len() / 2 && line_trimmed.len() > 10 {
             return false;
         }
         

@@ -76,26 +76,94 @@ impl HtmlRenderer {
         Text::from(lines)
     }
     
-    /// Clean and sanitize HTML content (like w3m preprocessing)
+    /// Clean and sanitize HTML content (like w3m preprocessing) - enhanced version
     pub fn clean_and_sanitize_html(&self, html: &str) -> String {
+        // First, strip out email headers that might be mixed with HTML
+        let content_without_headers = self.strip_email_headers_from_html(html);
+        
         // Use ammonia to clean HTML and remove dangerous/unnecessary elements
-        let clean_html = clean(html);
+        let clean_html = clean(&content_without_headers);
         
         // Additional cleaning for email-specific issues
         let mut cleaned = clean_html
             // Remove script and style content completely
             .replace(r#"<script[^>]*>.*?</script>"#, "")
             .replace(r#"<style[^>]*>.*?</style>"#, "")
+            // Remove email-specific metadata that might be in HTML
+            .replace(r#"<meta[^>]*>"#, "")
+            .replace(r#"<!DOCTYPE[^>]*>"#, "")
+            // Remove empty HTML structure tags
+            .replace("<html>", "")
+            .replace("</html>", "")
+            .replace("<head>", "")
+            .replace("</head>", "")
+            .replace("<body>", "")
+            .replace("</body>", "")
             // Normalize whitespace
             .trim()
             .to_string();
         
         // If the content doesn't look like proper HTML, wrap it
-        if !cleaned.starts_with('<') && !cleaned.contains("<html") && !cleaned.contains("<body") {
+        if !cleaned.starts_with('<') && !cleaned.contains("<html") && !cleaned.contains("<body") && !cleaned.is_empty() {
             cleaned = format!("<div>{}</div>", cleaned);
         }
         
         cleaned
+    }
+    
+    /// Strip email headers that might be mixed in with HTML content
+    fn strip_email_headers_from_html(&self, content: &str) -> String {
+        let lines: Vec<&str> = content.lines().collect();
+        let mut filtered_lines: Vec<&str> = Vec::new();
+        let mut found_html_start = false;
+        
+        // Email header patterns to remove
+        let header_patterns = [
+            "from:", "to:", "cc:", "bcc:", "subject:", "date:", "reply-to:", "sender:",
+            "message-id:", "in-reply-to:", "references:", "mime-version:",
+            "content-type:", "content-transfer-encoding:", "content-disposition:",
+            "delivered-to:", "received:", "return-path:", "envelope-to:",
+            "authentication-results:", "received-spf:", "dkim-signature:", "dkim-filter:",
+            "x-received:", "x-google-smtp-source:", "x-gm-message-state:",
+            "x-ms-exchange-", "x-originating-ip:", "x-microsoft-", "x-ms-",
+            "x-mailer:", "x-apple-", "x-", "arc-", "thread-",
+            "list-id:", "list-unsubscribe:", "organization:", "user-agent:",
+        ];
+        
+        for line in lines {
+            let line_lower = line.to_lowercase();
+            let line_trimmed = line.trim();
+            
+            // Skip email headers at the beginning
+            let is_header = header_patterns.iter().any(|&pattern| {
+                line_lower.starts_with(pattern)
+            });
+            
+            // Skip encoded content lines
+            let is_encoded = line_trimmed.starts_with('=') ||
+                line_trimmed.starts_with("--") ||
+                (line_trimmed.len() > 60 && line_trimmed.chars().all(|c| c.is_ascii_alphanumeric() || "=+-/".contains(c)));
+            
+            // Look for HTML content start
+            if line_trimmed.contains('<') && (line_trimmed.contains("html") || line_trimmed.contains("div") || line_trimmed.contains("<p")) {
+                found_html_start = true;
+            }
+            
+            // Include line if it's not a header and not encoded content
+            if !is_header && !is_encoded {
+                // If we haven't found HTML start yet, but this line has HTML tags, start including
+                if !found_html_start && (line_trimmed.contains('<') || line_trimmed.contains('>')) {
+                    found_html_start = true;
+                }
+                
+                // Include content lines or lines after HTML start
+                if found_html_start || (!line_trimmed.is_empty() && !is_header) {
+                    filtered_lines.push(line);
+                }
+            }
+        }
+        
+        filtered_lines.join("\n")
     }
     
     /// Enhanced HTML renderer (w3m/lynx style)
