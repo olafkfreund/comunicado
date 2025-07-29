@@ -1123,9 +1123,76 @@ impl App {
         // First sync folders
         self.sync_folders_from_imap(account_id).await?;
 
-        // Then sync messages for INBOX (or first available folder)
-        self.fetch_messages_from_imap(account_id, "INBOX").await?;
+        // Get all folders for this account from database
+        let database = self
+            .database
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("Database not initialized"))?;
 
+        let folders: Vec<String> = sqlx::query("SELECT name FROM folders WHERE account_id = ? ORDER BY name")
+            .bind(account_id)
+            .fetch_all(&database.pool)
+            .await?
+            .into_iter()
+            .map(|row| row.get::<String, _>("name"))
+            .collect();
+
+        // Define important folders that should always be synced
+        let important_folders = ["INBOX", "Sent", "Drafts", "Trash", "Spam", "Junk", "Sent Items", "Sent Mail"];
+        
+        // Separate important folders from others
+        let mut priority_folders = Vec::new();
+        let mut other_folders = Vec::new();
+        
+        for folder in &folders {
+            let folder_lower = folder.to_lowercase();
+            if important_folders.iter().any(|&important| folder_lower.contains(&important.to_lowercase())) {
+                priority_folders.push(folder.clone());
+            } else {
+                other_folders.push(folder.clone());
+            }
+        }
+
+        tracing::info!("Syncing messages for {} priority folders and {} other folders in account: {}", 
+                      priority_folders.len(), other_folders.len(), account_id);
+
+        // First, fetch messages from important folders
+        for folder_name in &priority_folders {
+            tracing::debug!("Fetching messages from priority folder: {} in account: {}", folder_name, account_id);
+            match self.fetch_messages_from_imap(account_id, folder_name).await {
+                Ok(()) => {
+                    tracing::debug!("Successfully fetched messages from priority folder: {}", folder_name);
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to fetch messages from priority folder {}: {}. Continuing with other folders.", folder_name, e);
+                    // Continue with other folders even if one fails
+                }
+            }
+        }
+
+        // Then fetch from other folders (with a limit to avoid performance issues)
+        let max_other_folders = 5; // Limit to avoid performance issues
+        let folders_to_sync = other_folders.iter().take(max_other_folders);
+        
+        for folder_name in folders_to_sync {
+            tracing::debug!("Fetching messages from folder: {} in account: {}", folder_name, account_id);
+            match self.fetch_messages_from_imap(account_id, folder_name).await {
+                Ok(()) => {
+                    tracing::debug!("Successfully fetched messages from folder: {}", folder_name);
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to fetch messages from folder {}: {}. Continuing with other folders.", folder_name, e);
+                    // Continue with other folders even if one fails
+                }
+            }
+        }
+
+        if other_folders.len() > max_other_folders {
+            tracing::info!("Synced {} of {} other folders. Use manual folder refresh for remaining folders.", 
+                          max_other_folders, other_folders.len());
+        }
+
+        tracing::info!("Completed IMAP sync for account: {} ({} folders processed)", account_id, folders.len());
         Ok(())
     }
 
