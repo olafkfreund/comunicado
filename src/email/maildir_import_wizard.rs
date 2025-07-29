@@ -1,6 +1,6 @@
 use crate::email::{EmailDatabase, MaildirImporter, ImportConfig, ImportStats, MaildirImportError};
 use anyhow::Result;
-use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{Event, KeyCode, KeyEvent};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Margin, Rect},
     style::{Color, Modifier, Style},

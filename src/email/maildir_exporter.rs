@@ -1,6 +1,6 @@
 use crate::email::{
     EmailDatabase, FolderHierarchyMapper, MaildirErrorHandler, MaildirMapper, 
-    MaildirOperationContext, MaildirOperationError, StoredMessage, TimestampUtils,
+    MaildirOperationContext, StoredMessage, TimestampUtils,
 };
 use anyhow::Result;
 use indicatif::{ProgressBar, ProgressStyle};
@@ -134,8 +134,10 @@ pub struct MaildirExporter {
     /// Cancellation flag
     cancelled: Arc<std::sync::atomic::AtomicBool>,
     /// Error handler for robust error handling
+    #[allow(dead_code)]
     error_handler: MaildirErrorHandler,
     /// Operation context for detailed error reporting
+    #[allow(dead_code)]
     operation_context: MaildirOperationContext,
 }
 
@@ -514,7 +516,7 @@ impl MaildirExporter {
     /// Validate that the export directory has sufficient space
     pub async fn check_disk_space<P: AsRef<Path>>(
         output_path: P,
-        estimated_size: u64,
+        _estimated_size: u64,
     ) -> MaildirExportResult<bool> {
         // This is a simplified check - in production, you'd use system calls
         // to check actual disk space

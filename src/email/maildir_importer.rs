@@ -1,6 +1,6 @@
 use crate::email::{
     EmailDatabase, FolderHierarchyMapper, MaildirErrorHandler, MaildirMapper, 
-    MaildirOperationContext, MaildirOperationError, StoredMessage, TimestampUtils,
+    MaildirOperationContext, StoredMessage, TimestampUtils,
 };
 use anyhow::Result;
 use indicatif::{ProgressBar, ProgressStyle};
@@ -123,6 +123,7 @@ pub struct MaildirImporter {
     /// Error handler for robust error handling
     error_handler: MaildirErrorHandler,
     /// Operation context for detailed error reporting
+    #[allow(dead_code)]
     operation_context: MaildirOperationContext,
 }
 
@@ -605,14 +606,14 @@ impl MaildirImporter {
     }
 
     /// Check if a message already exists in the database
-    async fn message_exists(&self, account_id: &str, message_id: &str) -> MaildirImportResult<bool> {
+    async fn message_exists(&self, _account_id: &str, _message_id: &str) -> MaildirImportResult<bool> {
         // This would need to be implemented in EmailDatabase
         // For now, return false (assume no duplicates)
         Ok(false)
     }
 
     /// Ensure folder exists in database
-    async fn ensure_folder_exists(&self, account_id: &str, folder_name: &str) -> MaildirImportResult<()> {
+    async fn ensure_folder_exists(&self, _account_id: &str, _folder_name: &str) -> MaildirImportResult<()> {
         // This would need to be implemented to create folder if it doesn't exist
         // For now, assume folder exists
         Ok(())
@@ -686,7 +687,7 @@ impl MaildirImporter {
         &self,
         maildir_path: P,
         account_id: &str,
-        checkpoint_file: P,
+        _checkpoint_file: P,
     ) -> MaildirImportResult<ImportStats> {
         // Implementation would load previous progress and continue from there
         // For now, this is a placeholder - would read checkpoint file and skip already processed folders
@@ -705,8 +706,10 @@ struct MaildirFolderInfo {
     /// Total message count
     message_count: usize,
     /// Messages in new/ directory
+    #[allow(dead_code)]
     new_messages: usize,
     /// Messages in cur/ directory
+    #[allow(dead_code)]
     cur_messages: usize,
 }
 

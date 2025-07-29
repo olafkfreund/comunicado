@@ -5,7 +5,7 @@
 
 use crate::email::{EmailDatabase, MaildirExporter, ExportConfig, ExportStats, MaildirExportError};
 use anyhow::Result;
-use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{Event, KeyCode, KeyEvent};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
@@ -254,12 +254,12 @@ impl ExportWizard {
             
             // Start export task
             let database = self.database.clone();
-            let account_id = self.account_id.clone();
-            let destination = destination.clone();
+            let _account_id = self.account_id.clone();
+            let _destination = destination.clone();
             let config = self.state.export_config.clone();
             
             let handle = tokio::spawn(async move {
-                let exporter = MaildirExporter::with_config(database, config);
+                let _exporter = MaildirExporter::with_config(database, config);
                 
                 // This is a simplified version - a real implementation would:
                 // 1. Get the list of folders from the database

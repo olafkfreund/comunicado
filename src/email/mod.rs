@@ -9,6 +9,7 @@ pub mod maildir_exporter;
 pub mod maildir_export_wizard;
 pub mod maildir_importer;
 pub mod maildir_import_wizard;
+#[cfg(test)]
 pub mod maildir_integration_tests;
 pub mod maildir_error_handling;
 pub mod maildir_mapper;
@@ -52,6 +53,7 @@ pub use maildir_import_wizard::{
     DirectoryEntry, ImportProgress, ImportWizard, ImportWizardError, ImportWizardResult,
     ImportWizardState, MaildirFolderEntry, WizardStep,
 };
+#[cfg(test)]
 pub use maildir_integration_tests::MaildirTestEnvironment;
 pub use maildir_error_handling::{
     MaildirErrorHandler, MaildirOperationContext, MaildirOperationError,

@@ -29,7 +29,7 @@ These are the tasks to be completed for the spec detailed in @.agent-os/specs/20
 - [x] 3. Integrate Progress Manager with App Initialization
   - [x] 3.1 Write tests for App integration with progress manager
   - [x] 3.2 Add StartupProgressManager field to App struct
-  - [ ] 3.3 Modify main.rs to use progress-aware initialization flow
+  - [x] 3.3 Modify main.rs to use progress-aware initialization flow
   - [x] 3.4 Update App::initialize_database to report progress updates
   - [x] 3.5 Update App::initialize_imap_manager to report progress and handle timeouts
   - [x] 3.6 Update App::check_accounts_and_setup to report progress updates

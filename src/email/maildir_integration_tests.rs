@@ -315,7 +315,7 @@ mod integration_tests {
         match export_result {
             Ok(export_stats) => {
                 // Verify export completed successfully
-                assert!(export_stats.messages_exported >= 0); // Allow 0 messages if database method not implemented
+                // Verify export completed successfully - messages_exported is always non-negative (usize)
                 assert_eq!(export_stats.messages_failed, 0);
                 assert!(export_path.exists());
                 
@@ -331,7 +331,7 @@ mod integration_tests {
                         .unwrap();
                     
                     // Verify import completed successfully
-                    assert!(import_stats.messages_imported >= 0);
+                    // Verify import completed successfully - messages_imported is always non-negative (usize)
                     
                     // Step 3: Verify data integrity (basic check)
                     // In a complete implementation, exported messages should equal imported ones

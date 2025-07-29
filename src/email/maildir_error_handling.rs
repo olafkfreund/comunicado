@@ -7,7 +7,6 @@ use std::fmt;
 use std::io;
 use std::path::{Path, PathBuf};
 use thiserror::Error;
-use tokio::fs;
 
 /// Enhanced error types with detailed context and recovery suggestions
 #[derive(Error, Debug)]
@@ -414,7 +413,7 @@ impl MaildirErrorHandler {
     }
     
     /// Check available disk space
-    async fn check_disk_space(&self, path: &Path) -> (u64, u64) {
+    async fn check_disk_space(&self, _path: &Path) -> (u64, u64) {
         // This would use platform-specific APIs to check disk space
         // For now, return placeholder values
         (0, 1024 * 1024 * 100) // 0 available, 100MB required

@@ -5,7 +5,6 @@ use comunicado::cli::{Cli, CliHandler};
 use comunicado::startup::{StartupProgressManager, StartupProgressScreen};
 use comunicado::theme::Theme;
 use crossterm::{
-    event::{self, Event, KeyCode},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     tty::IsTty,
