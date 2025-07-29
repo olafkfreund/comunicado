@@ -22,22 +22,23 @@ pub enum TerminalProtocol {
 #[derive(Debug, Clone)]
 struct CachedImage {
     data: Vec<u8>,
-    #[allow(dead_code)]
+    #[allow(dead_code)] // Used for metadata and potential future features
     format: ImageFormat,
-    #[allow(dead_code)]
+    #[allow(dead_code)] // Used for metadata and potential future features
     width: u32,
-    #[allow(dead_code)]
+    #[allow(dead_code)] // Used for metadata and potential future features
     height: u32,
     encoded_data: Option<String>, // Pre-encoded for terminal display
 }
 
 /// Image display manager for terminal graphics
+#[derive(Clone)]
 pub struct ImageManager {
     cache: Arc<RwLock<HashMap<String, CachedImage>>>,
     protocol: TerminalProtocol,
     max_width: u32,
     max_height: u32,
-    #[allow(dead_code)]
+    #[allow(dead_code)] // Directory for persistent cache storage
     cache_dir: PathBuf,
 }
 

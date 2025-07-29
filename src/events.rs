@@ -1,8 +1,10 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use crate::ui::{FocusedPane, UI, UIMode, ComposeAction, DraftAction, StartPageNavigation};
+use crate::keyboard::{KeyboardManager, KeyboardAction};
 
 pub struct EventHandler {
     should_quit: bool,
+    keyboard_manager: KeyboardManager,
 }
 
 /// Result of handling a key event
@@ -24,6 +26,577 @@ impl EventHandler {
     pub fn new() -> Self {
         Self {
             should_quit: false,
+            keyboard_manager: KeyboardManager::default(),
+        }
+    }
+    
+    /// Get the keyboard manager for configuration
+    pub fn keyboard_manager(&self) -> &KeyboardManager {
+        &self.keyboard_manager
+    }
+    
+    /// Get mutable keyboard manager for configuration
+    pub fn keyboard_manager_mut(&mut self) -> &mut KeyboardManager {
+        &mut self.keyboard_manager
+    }
+    
+    /// Get help text for keyboard shortcuts
+    pub fn get_keyboard_help(&self) -> String {
+        self.keyboard_manager.get_help_text()
+    }
+    
+    /// Handle a key event using the configurable keyboard system
+    pub async fn handle_key_event_with_config(&mut self, key: KeyEvent, ui: &mut UI) -> EventResult {
+        // Handle compose mode separately (these use different input handling)
+        if ui.mode() == &UIMode::Compose {
+            if let Some(action) = ui.handle_compose_key(key.code).await {
+                return EventResult::ComposeAction(action);
+            }
+            return EventResult::Continue;
+        }
+        
+        // Handle draft list mode
+        if ui.mode() == &UIMode::DraftList {
+            if let Some(action) = ui.handle_draft_list_key(key.code).await {
+                return EventResult::DraftAction(action);
+            }
+            return EventResult::Continue;
+        }
+        
+        // Handle attachment viewer mode
+        if ui.focused_pane() == FocusedPane::ContentPreview && ui.content_preview().is_viewing_attachment() {
+            return self.handle_attachment_viewer_keys(key, ui).await;
+        }
+        
+        // Handle text input modes (search, folder search)
+        if self.handle_text_input_modes(key, ui) {
+            return EventResult::Continue;
+        }
+        
+        // Get the action from keyboard manager
+        if let Some(action) = self.keyboard_manager.get_action(key.code, key.modifiers) {
+            return self.execute_keyboard_action(action.clone(), ui).await;
+        }
+        
+        // Handle mode-specific keys that don't have actions
+        match ui.mode() {
+            UIMode::StartPage => self.handle_start_page_keys(key, ui).await,
+            UIMode::EmailViewer => self.handle_email_viewer_keys(key, ui).await,
+            UIMode::KeyboardShortcuts => self.handle_keyboard_shortcuts_keys(key, ui).await,
+            _ => EventResult::Continue,
+        }
+    }
+    
+    /// Handle text input modes (search, folder search, etc.)
+    fn handle_text_input_modes(&mut self, key: KeyEvent, ui: &mut UI) -> bool {
+        // Handle search input mode for folder tree
+        if ui.focused_pane() == FocusedPane::FolderTree && ui.folder_tree().is_in_search_mode() {
+            match key.code {
+                KeyCode::Char(c) => {
+                    ui.folder_tree_mut().handle_search_input(c);
+                    return true;
+                }
+                KeyCode::Backspace => {
+                    ui.folder_tree_mut().handle_search_backspace();
+                    return true;
+                }
+                _ => {}
+            }
+        }
+        
+        // Handle search input mode for message list
+        if ui.focused_pane() == FocusedPane::MessageList && ui.message_list().is_search_active() {
+            match key.code {
+                KeyCode::Char(c) => {
+                    let mut current_query = ui.message_list().search_query().to_string();
+                    current_query.push(c);
+                    ui.message_list_mut().update_search(current_query);
+                    return true;
+                }
+                KeyCode::Backspace => {
+                    let mut current_query = ui.message_list().search_query().to_string();
+                    current_query.pop();
+                    ui.message_list_mut().update_search(current_query);
+                    return true;
+                }
+                _ => {}
+            }
+        }
+        
+        false
+    }
+    
+    /// Execute a keyboard action
+    async fn execute_keyboard_action(&mut self, action: KeyboardAction, ui: &mut UI) -> EventResult {
+        match action {
+            // Global actions
+            KeyboardAction::Quit => {
+                self.should_quit = true;
+                EventResult::Continue
+            }
+            KeyboardAction::ForceQuit => {
+                self.should_quit = true;
+                EventResult::Continue
+            }
+            KeyboardAction::ShowStartPage => {
+                ui.show_start_page();
+                EventResult::Continue
+            }
+            KeyboardAction::ShowKeyboardShortcuts => {
+                ui.show_keyboard_shortcuts();
+                EventResult::Continue
+            }
+            
+            // Navigation
+            KeyboardAction::NextPane => {
+                ui.next_pane();
+                EventResult::Continue
+            }
+            KeyboardAction::PreviousPane => {
+                ui.previous_pane();
+                EventResult::Continue
+            }
+            KeyboardAction::VimMoveLeft => {
+                match ui.focused_pane() {
+                    FocusedPane::FolderTree => {
+                        ui.folder_tree_mut().handle_left();
+                    }
+                    _ => {
+                        ui.previous_pane();
+                    }
+                }
+                EventResult::Continue
+            }
+            KeyboardAction::VimMoveRight => {
+                match ui.focused_pane() {
+                    FocusedPane::FolderTree => {
+                        ui.folder_tree_mut().handle_right();
+                    }
+                    _ => {
+                        ui.next_pane();
+                    }
+                }
+                EventResult::Continue
+            }
+            KeyboardAction::VimMoveDown | KeyboardAction::MoveDown => {
+                self.handle_move_down(ui);
+                EventResult::Continue
+            }
+            KeyboardAction::VimMoveUp | KeyboardAction::MoveUp => {
+                self.handle_move_up(ui);
+                EventResult::Continue
+            }
+            
+            // Selection and interaction
+            KeyboardAction::Select => {
+                self.handle_select(ui)
+            }
+            KeyboardAction::Escape => {
+                self.handle_escape(ui);
+                EventResult::Continue
+            }
+            KeyboardAction::ToggleExpanded => {
+                match ui.focused_pane() {
+                    FocusedPane::AccountSwitcher => {
+                        ui.account_switcher_mut().toggle_expanded();
+                    }
+                    FocusedPane::MessageList => {
+                        ui.message_list_mut().toggle_selected_thread();
+                    }
+                    _ => {}
+                }
+                EventResult::Continue
+            }
+            
+            // Email actions
+            KeyboardAction::ComposeEmail => {
+                if !ui.is_composing() {
+                    EventResult::ComposeAction(ComposeAction::StartCompose)
+                } else {
+                    EventResult::Continue
+                }
+            }
+            KeyboardAction::ShowDraftList => {
+                if !ui.is_draft_list_visible() && !ui.is_composing() {
+                    EventResult::DraftAction(DraftAction::RefreshDrafts)
+                } else {
+                    EventResult::Continue
+                }
+            }
+            
+            // Account management
+            KeyboardAction::AddAccount => EventResult::AddAccount,
+            KeyboardAction::RemoveAccount => {
+                if matches!(ui.focused_pane(), FocusedPane::AccountSwitcher) {
+                    if let Some(account_id) = ui.account_switcher().get_current_account_id() {
+                        EventResult::RemoveAccount(account_id.clone())
+                    } else {
+                        EventResult::Continue
+                    }
+                } else {
+                    EventResult::Continue
+                }
+            }
+            KeyboardAction::RefreshAccount => {
+                if matches!(ui.focused_pane(), FocusedPane::AccountSwitcher) {
+                    if let Some(account_id) = ui.account_switcher().get_current_account_id() {
+                        EventResult::RefreshAccount(account_id.clone())
+                    } else {
+                        EventResult::Continue
+                    }
+                } else {
+                    EventResult::Continue
+                }
+            }
+            
+            // Search
+            KeyboardAction::StartSearch => {
+                if let FocusedPane::MessageList = ui.focused_pane() {
+                    if !ui.message_list().is_search_active() {
+                        ui.message_list_mut().start_search();
+                    }
+                }
+                EventResult::Continue
+            }
+            KeyboardAction::StartFolderSearch => {
+                if let FocusedPane::FolderTree = ui.focused_pane() {
+                    if !ui.folder_tree().is_in_search_mode() {
+                        ui.folder_tree_mut().enter_search_mode();
+                    }
+                }
+                EventResult::Continue
+            }
+            
+            // View controls
+            KeyboardAction::ToggleThreadedView => {
+                if let FocusedPane::MessageList = ui.focused_pane() {
+                    ui.message_list_mut().toggle_view_mode();
+                }
+                EventResult::Continue
+            }
+            KeyboardAction::ExpandThread => {
+                if let FocusedPane::MessageList = ui.focused_pane() {
+                    ui.message_list_mut().expand_selected_thread();
+                }
+                EventResult::Continue
+            }
+            KeyboardAction::CollapseThread => {
+                if let FocusedPane::MessageList = ui.focused_pane() {
+                    ui.message_list_mut().collapse_selected_thread();
+                }
+                EventResult::Continue
+            }
+            KeyboardAction::ToggleViewMode => {
+                if let FocusedPane::ContentPreview = ui.focused_pane() {
+                    ui.content_preview_mut().toggle_view_mode();
+                }
+                EventResult::Continue
+            }
+            KeyboardAction::ToggleHeaders => {
+                if let FocusedPane::ContentPreview = ui.focused_pane() {
+                    ui.content_preview_mut().toggle_headers();
+                }
+                EventResult::Continue
+            }
+            
+            // Sorting
+            KeyboardAction::SortByDate => {
+                if let FocusedPane::MessageList = ui.focused_pane() {
+                    use crate::email::{SortCriteria, SortOrder};
+                    ui.message_list_mut().set_sort_criteria(SortCriteria::Date(SortOrder::Descending));
+                }
+                EventResult::Continue
+            }
+            KeyboardAction::SortBySender => {
+                if let FocusedPane::MessageList = ui.focused_pane() {
+                    use crate::email::{SortCriteria, SortOrder};
+                    ui.message_list_mut().set_sort_criteria(SortCriteria::Sender(SortOrder::Ascending));
+                }
+                EventResult::Continue
+            }
+            KeyboardAction::SortBySubject => {
+                if let FocusedPane::MessageList = ui.focused_pane() {
+                    use crate::email::{SortCriteria, SortOrder};
+                    ui.message_list_mut().set_sort_criteria(SortCriteria::Subject(SortOrder::Ascending));
+                }
+                EventResult::Continue
+            }
+            
+            // Content preview
+            KeyboardAction::ScrollToTop => {
+                if let FocusedPane::ContentPreview = ui.focused_pane() {
+                    ui.content_preview_mut().scroll_to_top();
+                }
+                EventResult::Continue
+            }
+            KeyboardAction::ScrollToBottom => {
+                if let FocusedPane::ContentPreview = ui.focused_pane() {
+                    ui.content_preview_mut().scroll_to_bottom(20);
+                }
+                EventResult::Continue
+            }
+            KeyboardAction::SelectFirstAttachment => {
+                if let FocusedPane::ContentPreview = ui.focused_pane() {
+                    if ui.content_preview().has_attachments() {
+                        ui.content_preview_mut().select_first_attachment();
+                    }
+                }
+                EventResult::Continue
+            }
+            KeyboardAction::ViewAttachment => {
+                if let FocusedPane::ContentPreview = ui.focused_pane() {
+                    if ui.content_preview().has_attachments() {
+                        if let Some(_attachment) = ui.content_preview().get_selected_attachment() {
+                            if let Err(e) = ui.content_preview_mut().view_selected_attachment().await {
+                                tracing::error!("Failed to view attachment: {}", e);
+                            }
+                        }
+                    }
+                }
+                EventResult::Continue
+            }
+            KeyboardAction::OpenAttachmentWithSystem => {
+                if let FocusedPane::ContentPreview = ui.focused_pane() {
+                    if ui.content_preview().has_attachments() {
+                        if let Some(_attachment) = ui.content_preview().get_selected_attachment() {
+                            if let Err(e) = ui.content_preview_mut().open_attachment_with_system().await {
+                                tracing::error!("Failed to open attachment with system application: {}", e);
+                            }
+                        }
+                    }
+                }
+                EventResult::Continue
+            }
+            
+            // Folder operations
+            KeyboardAction::CreateFolder => {
+                if let FocusedPane::FolderTree = ui.focused_pane() {
+                    let parent_path = ui.folder_tree().selected_folder().map(|f| f.path.clone());
+                    if let Some(parent_path) = parent_path {
+                        let _ = ui.folder_tree_mut().create_folder(Some(&parent_path), "New Folder".to_string());
+                    }
+                }
+                EventResult::Continue
+            }
+            KeyboardAction::DeleteFolder => {
+                if matches!(ui.focused_pane(), FocusedPane::FolderTree) {
+                    let folder_path = ui.folder_tree().selected_folder().map(|f| f.path.clone());
+                    if let Some(path) = folder_path {
+                        let _ = ui.folder_tree_mut().delete_folder(&path);
+                    }
+                }
+                EventResult::Continue
+            }
+            KeyboardAction::RefreshFolder => {
+                if let FocusedPane::FolderTree = ui.focused_pane() {
+                    let folder_path = ui.folder_tree().selected_folder().map(|f| f.path.clone());
+                    if let Some(path) = folder_path {
+                        ui.folder_tree_mut().refresh_folder(&path);
+                        ui.folder_tree_mut().mark_folder_synced(&path, 0, 42);
+                    }
+                }
+                EventResult::Continue
+            }
+            KeyboardAction::FolderRefresh => {
+                match ui.focused_pane() {
+                    FocusedPane::FolderTree => {
+                        if let Some(operation) = ui.folder_tree_mut().handle_function_key(KeyCode::F(5)) {
+                            EventResult::FolderOperation(operation)
+                        } else {
+                            EventResult::Continue
+                        }
+                    }
+                    _ => EventResult::Continue,
+                }
+            }
+            KeyboardAction::FolderRename => {
+                match ui.focused_pane() {
+                    FocusedPane::FolderTree => {
+                        if let Some(operation) = ui.folder_tree_mut().handle_function_key(KeyCode::F(2)) {
+                            EventResult::FolderOperation(operation)
+                        } else {
+                            EventResult::Continue
+                        }
+                    }
+                    _ => EventResult::Continue,
+                }
+            }
+            KeyboardAction::FolderDelete => {
+                match ui.focused_pane() {
+                    FocusedPane::FolderTree => {
+                        if let Some(operation) = ui.folder_tree_mut().handle_function_key(KeyCode::Delete) {
+                            EventResult::FolderOperation(operation)
+                        } else {
+                            EventResult::Continue
+                        }
+                    }
+                    _ => EventResult::Continue,
+                }
+            }
+            
+            // Copy operations
+            KeyboardAction::CopyEmailContent => {
+                if matches!(ui.focused_pane(), FocusedPane::ContentPreview) {
+                    if let Err(e) = ui.content_preview_mut().copy_email_content() {
+                        tracing::error!("Failed to copy email content: {}", e);
+                    }
+                }
+                EventResult::Continue
+            }
+            KeyboardAction::CopyAttachmentInfo => {
+                if matches!(ui.focused_pane(), FocusedPane::ContentPreview) {
+                    if let Err(e) = ui.content_preview_mut().copy_attachment_info() {
+                        tracing::error!("Failed to copy attachment info: {}", e);
+                    }
+                }
+                EventResult::Continue
+            }
+            
+            // Attachment navigation
+            KeyboardAction::NextAttachment => {
+                if ui.focused_pane() == FocusedPane::ContentPreview && ui.content_preview().has_attachments() {
+                    ui.content_preview_mut().next_attachment();
+                }
+                EventResult::Continue
+            }
+            KeyboardAction::PreviousAttachment => {
+                if ui.focused_pane() == FocusedPane::ContentPreview && ui.content_preview().has_attachments() {
+                    ui.content_preview_mut().previous_attachment();
+                }
+                EventResult::Continue
+            }
+            
+            // Other actions that need specific handling
+            _ => {
+                tracing::debug!("Unhandled keyboard action: {:?}", action);
+                EventResult::Continue
+            }
+        }
+    }
+    
+    /// Handle attachment viewer key events
+    async fn handle_attachment_viewer_keys(&mut self, key: KeyEvent, ui: &mut UI) -> EventResult {
+        match key.code {
+            KeyCode::Esc => {
+                ui.content_preview_mut().close_attachment_viewer();
+                EventResult::Continue
+            }
+            KeyCode::Up | KeyCode::Char('k') => {
+                ui.content_preview_mut().handle_up();
+                EventResult::Continue
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                ui.content_preview_mut().handle_down();
+                EventResult::Continue
+            }
+            KeyCode::Home => {
+                ui.content_preview_mut().scroll_to_top();
+                EventResult::Continue
+            }
+            KeyCode::End => {
+                ui.content_preview_mut().scroll_to_bottom(20);
+                EventResult::Continue
+            }
+            KeyCode::Char(c) => {
+                if let Err(e) = ui.content_preview_mut().handle_attachment_viewer_key(c).await {
+                    tracing::error!("Error handling attachment viewer key: {}", e);
+                }
+                EventResult::Continue
+            }
+            _ => EventResult::Continue,
+        }
+    }
+    
+    /// Handle move down action for different panes
+    fn handle_move_down(&mut self, ui: &mut UI) {
+        match ui.focused_pane() {
+            FocusedPane::AccountSwitcher => {
+                ui.account_switcher_mut().next_account();
+            }
+            FocusedPane::FolderTree => {
+                ui.folder_tree_mut().handle_down();
+            }
+            FocusedPane::MessageList => {
+                ui.message_list_mut().handle_down();
+            }
+            FocusedPane::ContentPreview => {
+                ui.content_preview_mut().handle_down();
+            }
+            _ => {}
+        }
+    }
+    
+    /// Handle move up action for different panes
+    fn handle_move_up(&mut self, ui: &mut UI) {
+        match ui.focused_pane() {
+            FocusedPane::AccountSwitcher => {
+                ui.account_switcher_mut().previous_account();
+            }
+            FocusedPane::FolderTree => {
+                ui.folder_tree_mut().handle_up();
+            }
+            FocusedPane::MessageList => {
+                ui.message_list_mut().handle_up();
+            }
+            FocusedPane::ContentPreview => {
+                ui.content_preview_mut().handle_up();
+            }
+            _ => {}
+        }
+    }
+    
+    /// Handle select action for different panes
+    fn handle_select(&mut self, ui: &mut UI) -> EventResult {
+        match ui.focused_pane() {
+            FocusedPane::AccountSwitcher => {
+                if let Some(account_id) = ui.account_switcher_mut().select_current() {
+                    tracing::info!("Account selected: {}", account_id);
+                    EventResult::AccountSwitch(account_id)
+                } else {
+                    EventResult::Continue
+                }
+            }
+            FocusedPane::FolderTree => {
+                if ui.folder_tree().is_in_search_mode() {
+                    ui.folder_tree_mut().exit_search_mode(true);
+                    EventResult::Continue
+                } else {
+                    if let Some(folder_path) = ui.folder_tree_mut().handle_enter() {
+                        EventResult::FolderSelect(folder_path)
+                    } else {
+                        EventResult::Continue
+                    }
+                }
+            }
+            FocusedPane::MessageList => {
+                ui.message_list_mut().handle_enter();
+                EventResult::Continue
+            }
+            _ => EventResult::Continue,
+        }
+    }
+    
+    /// Handle escape action for different panes
+    fn handle_escape(&mut self, ui: &mut UI) {
+        match ui.focused_pane() {
+            FocusedPane::FolderTree => {
+                if ui.folder_tree().is_in_search_mode() {
+                    ui.folder_tree_mut().exit_search_mode(false);
+                } else {
+                    ui.folder_tree_mut().handle_escape();
+                }
+            }
+            FocusedPane::MessageList => {
+                if ui.message_list().is_search_active() {
+                    ui.message_list_mut().end_search();
+                }
+            }
+            FocusedPane::ContentPreview => {
+                if ui.content_preview().is_viewing_attachment() {
+                    ui.content_preview_mut().close_attachment_viewer();
+                }
+            }
+            _ => {}
         }
     }
 
@@ -922,6 +1495,28 @@ impl EventHandler {
 
     pub fn should_quit(&self) -> bool {
         self.should_quit
+    }
+    
+    /// Handle keyboard shortcuts popup mode keys
+    async fn handle_keyboard_shortcuts_keys(&mut self, key: KeyEvent, ui: &mut UI) -> EventResult {
+        match key.code {
+            KeyCode::Char('?') | KeyCode::Esc => {
+                // Close keyboard shortcuts popup
+                ui.show_email_interface();
+                EventResult::Continue
+            }
+            KeyCode::Up | KeyCode::Char('k') => {
+                // Scroll up in shortcuts list
+                ui.keyboard_shortcuts_ui_mut().scroll_up();
+                EventResult::Continue
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                // Scroll down in shortcuts list
+                ui.keyboard_shortcuts_ui_mut().scroll_down();
+                EventResult::Continue
+            }
+            _ => EventResult::Continue,
+        }
     }
 }
 

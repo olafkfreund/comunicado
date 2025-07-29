@@ -174,6 +174,30 @@ impl Default for PkceChallenge {
     }
 }
 
+/// OAuth2 client configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OAuthConfig {
+    pub client_id: String,
+    pub client_secret: String,
+    pub redirect_uri: String,
+    pub scopes: Vec<String>,
+}
+
+/// Authentication type for accounts
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum AuthType {
+    OAuth2,
+    Password,
+}
+
+/// Security type for connections
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum SecurityType {
+    None,
+    StartTLS,
+    SSL,
+}
+
 /// Account configuration after OAuth2 setup
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AccountConfig {
@@ -181,10 +205,12 @@ pub struct AccountConfig {
     pub display_name: String,
     pub email_address: String,
     pub provider: String,
+    pub auth_type: AuthType,
     pub imap_server: String,
     pub imap_port: u16,
     pub smtp_server: String,
     pub smtp_port: u16,
+    pub security: SecurityType,
     pub access_token: String,
     pub refresh_token: Option<String>,
     pub token_expires_at: Option<chrono::DateTime<chrono::Utc>>,
@@ -205,10 +231,12 @@ impl AccountConfig {
             display_name,
             email_address,
             provider,
+            auth_type: AuthType::OAuth2,
             imap_server: String::new(),
             imap_port: 993,
             smtp_server: String::new(),
             smtp_port: 587,
+            security: SecurityType::SSL,
             access_token: String::new(),
             refresh_token: None,
             token_expires_at: None,

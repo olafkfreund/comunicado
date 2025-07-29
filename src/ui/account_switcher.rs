@@ -69,8 +69,6 @@ pub struct AccountSwitcher {
     state: ListState,
     current_account_id: Option<String>,
     is_expanded: bool,
-    #[allow(dead_code)]
-    max_display_accounts: usize,
 }
 
 impl AccountSwitcher {
@@ -83,7 +81,6 @@ impl AccountSwitcher {
             state,
             current_account_id: None,
             is_expanded: false,
-            max_display_accounts: 5,
         }
     }
     

@@ -16,7 +16,7 @@ use sqlx::Row;
 
 use crate::events::{EventHandler, EventResult};
 use crate::ui::{UI, ComposeAction, DraftAction};
-use crate::email::{EmailDatabase, EmailNotificationManager};
+use crate::email::{EmailDatabase, EmailNotificationManager, DesktopNotificationService};
 use crate::oauth2::{SetupWizard, SecureStorage, AccountConfig, TokenManager};
 use crate::imap::ImapAccountManager;
 use crate::smtp::{SmtpService, SmtpServiceBuilder};
@@ -36,6 +36,7 @@ pub struct App {
     smtp_service: Option<SmtpService>,
     contacts_manager: Option<Arc<ContactsManager>>,
     services: Option<ServiceManager>,
+    desktop_notification_service: Option<DesktopNotificationService>,
     // Auto-sync functionality
     last_auto_sync: Instant,
     auto_sync_interval: Duration,
@@ -61,6 +62,7 @@ impl App {
             smtp_service: None,
             contacts_manager: None,
             services: None,
+            desktop_notification_service: None,
             // Initialize auto-sync with 3 minute interval
             last_auto_sync: Instant::now(),
             auto_sync_interval: Duration::from_secs(3 * 60), // 3 minutes
@@ -97,12 +99,25 @@ impl App {
         // Start the notification processing
         notification_manager.start().await;
         
+        // Initialize desktop notification service
+        let desktop_notification_service = if DesktopNotificationService::is_supported() {
+            tracing::info!("Desktop notifications are supported and enabled");
+            let service = DesktopNotificationService::new();
+            let receiver = notification_manager.subscribe();
+            service.start(receiver).await;
+            Some(service)
+        } else {
+            tracing::warn!("Desktop notifications are not supported on this system");
+            Some(DesktopNotificationService::disabled())
+        };
+        
         // Set database and notification manager in UI
         self.ui.set_database(database_arc.clone());
         self.ui.set_notification_manager(notification_manager.clone());
         
         self.database = Some(database_arc);
         self.notification_manager = Some(notification_manager);
+        self.desktop_notification_service = desktop_notification_service;
         
         Ok(())
     }
@@ -110,6 +125,21 @@ impl App {
     /// Get database reference for maintenance operations
     pub fn get_database(&self) -> Option<&Arc<EmailDatabase>> {
         self.database.as_ref()
+    }
+    
+    /// Enable or disable desktop notifications
+    pub fn set_desktop_notifications_enabled(&mut self, enabled: bool) {
+        if let Some(service) = &mut self.desktop_notification_service {
+            service.set_enabled(enabled);
+            tracing::info!("Desktop notifications {}", if enabled { "enabled" } else { "disabled" });
+        }
+    }
+    
+    /// Send a test desktop notification
+    pub async fn send_test_notification(&self) {
+        if self.desktop_notification_service.is_some() {
+            DesktopNotificationService::send_test_notification().await;
+        }
     }
     
     /// Set deferred initialization flag
@@ -1034,20 +1064,8 @@ impl App {
         let mut last_tick = Instant::now();
         let tick_rate = Duration::from_millis(50);
         let mut previous_selection: Option<usize> = None;
-        let mut initialization_started = false;
 
         loop {
-            // Start deferred initialization on first loop iteration (synchronously but with short timeouts)
-            if self.deferred_initialization && !initialization_started && !self.initialization_in_progress {
-                initialization_started = true;
-                tracing::info!("Starting deferred initialization in main loop...");
-                
-                // Initialize with very short timeouts to prevent hanging
-                if let Err(e) = self.perform_deferred_initialization().await {
-                    tracing::error!("Deferred initialization failed: {}", e);
-                    // Continue running UI even if initialization fails
-                }
-            }
             // Check for auto-sync (every 3 minutes)
             if self.last_auto_sync.elapsed() >= self.auto_sync_interval {
                 self.perform_auto_sync().await;

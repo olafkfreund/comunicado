@@ -5,6 +5,7 @@ pub mod google;
 pub mod invitation;
 pub mod invitation_manager;
 pub mod manager;
+pub mod notifications;
 pub mod sync;
 pub mod ui;
 pub mod event_form;
@@ -19,6 +20,7 @@ pub use ui::{CalendarUI, CalendarAction, CalendarViewMode};
 pub use event_form::{EventFormUI, EventFormAction, EventFormMode, EventFormField};
 pub use invitation::{MeetingInvitation, InvitationMethod, RSVPResponse, InvitationProcessor};
 pub use invitation_manager::{InvitationManager, InvitationStatistics};
+pub use notifications::{CalendarNotification, CalendarNotificationManager};
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;

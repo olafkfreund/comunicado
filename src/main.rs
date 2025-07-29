@@ -1,36 +1,20 @@
 use anyhow::Result;
+use clap::Parser;
 use comunicado::app::App;
+use comunicado::cli::{Cli, CliHandler};
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Check for command line arguments
-    let args: Vec<String> = std::env::args().collect();
+    let cli = Cli::parse();
     
-    // Handle help flag
-    if args.contains(&"--help".to_string()) || args.contains(&"-h".to_string()) {
-        println!("Comunicado - Modern TUI Email and Calendar Client");
-        println!("");
-        println!("USAGE:");
-        println!("    comunicado [OPTIONS]");
-        println!("");
-        println!("OPTIONS:");
-        println!("    --debug              Enable debug logging (verbose output to comunicado.log)");
-        println!("    --clean-content      Clean existing database content (remove HTML/headers)");
-        println!("    -h, --help           Show this help message");
-        println!("");
-        println!("KEYBOARD SHORTCUTS:");
-        println!("    Ctrl+R              Refresh account connection");
-        println!("    F5 / R              Refresh folder (when folder tree focused)");
-        println!("    /                   Search messages");
-        println!("    c                   Compose new email");
-        println!("    Tab                 Switch between panes");
-        println!("");
-        println!("Debug logs are written to: comunicado.log");
-        return Ok(());
+    // Handle CLI commands
+    if let Some(command) = cli.command {
+        let cli_handler = CliHandler::new(cli.config_dir).await?;
+        return cli_handler.handle_command(command, cli.dry_run).await;
     }
     
-    // Check for debug flag
-    let debug_mode = args.contains(&"--debug".to_string());
+    // Continue with normal TUI application
+    let debug_mode = cli.debug;
     
     // Initialize tracing for logging - write to file to avoid interfering with TUI
     let log_file = std::fs::OpenOptions::new()
@@ -62,7 +46,8 @@ async fn main() -> Result<()> {
     // Initialize database connection
     app.initialize_database().await?;
     
-    // Check for --clean-content flag to reprocess database content
+    // Check for --clean-content flag to reprocess database content (raw args check)
+    let args: Vec<String> = std::env::args().collect();
     if args.contains(&"--clean-content".to_string()) {
         println!("🧹 Starting database content cleaning...");
         
@@ -87,11 +72,83 @@ async fn main() -> Result<()> {
         return Ok(());
     }
     
-    // Set initialization flag to defer heavy initialization until after UI starts
-    tracing::info!("Starting application with deferred initialization...");
-    app.set_deferred_initialization(true);
+    // Initialize IMAP account manager with reduced timeout
+    tracing::info!("Initializing IMAP account manager with reduced timeout...");
+    match tokio::time::timeout(
+        std::time::Duration::from_secs(10), // Reduced from default
+        app.initialize_imap_manager()
+    ).await {
+        Ok(Ok(())) => {
+            tracing::info!("IMAP account manager initialized successfully");
+        }
+        Ok(Err(e)) => {
+            tracing::error!("Failed to initialize IMAP account manager: {}", e);
+            // Continue without IMAP manager
+        }
+        Err(_) => {
+            tracing::error!("IMAP account manager initialization timed out after 10 seconds");
+            // Continue without IMAP manager
+        }
+    }
     
-    // Run the application - initialization will happen in background after UI starts
+    // Check for existing accounts and run setup wizard if needed (with timeout)
+    tracing::info!("Checking accounts and setup with timeout...");
+    match tokio::time::timeout(
+        std::time::Duration::from_secs(15),
+        app.check_accounts_and_setup()
+    ).await {
+        Ok(Ok(())) => {
+            tracing::info!("Account check and setup completed");
+        }
+        Ok(Err(e)) => {
+            tracing::error!("Failed to check accounts and setup: {}", e);
+            // Continue - UI will show setup wizard if needed
+        }
+        Err(_) => {
+            tracing::error!("Account check and setup timed out after 15 seconds");
+            // Continue - UI will show setup wizard if needed
+        }
+    }
+    
+    // Initialize other services quickly (with short timeout)
+    tracing::info!("Initializing services with timeout...");
+    match tokio::time::timeout(
+        std::time::Duration::from_secs(5),
+        app.initialize_services()
+    ).await {
+        Ok(Ok(())) => {
+            tracing::info!("Services initialized successfully");
+        }
+        Ok(Err(e)) => {
+            tracing::error!("Failed to initialize services: {}", e);
+            // Continue without some services
+        }
+        Err(_) => {
+            tracing::error!("Service initialization timed out after 5 seconds");
+            // Continue without some services
+        }
+    }
+    
+    // Initialize dashboard services (non-critical, short timeout)
+    tracing::info!("Initializing dashboard services with timeout...");
+    match tokio::time::timeout(
+        std::time::Duration::from_secs(3),
+        app.initialize_dashboard_services()
+    ).await {
+        Ok(Ok(())) => {
+            tracing::info!("Dashboard services initialized successfully");
+        }
+        Ok(Err(e)) => {
+            tracing::error!("Failed to initialize dashboard services: {}", e);
+            // Continue without dashboard services
+        }
+        Err(_) => {
+            tracing::error!("Dashboard service initialization timed out after 3 seconds");
+            // Continue without dashboard services
+        }
+    }
+    
+    // Run the application
     tracing::info!("Starting application main loop...");
     app.run().await?;
 

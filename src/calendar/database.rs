@@ -26,6 +26,9 @@ pub enum CalendarDatabaseError {
     
     #[error("Date parsing error: {0}")]
     DateParse(#[from] chrono::ParseError),
+    
+    #[error("Parse error: {0}")]
+    ParseError(String),
 }
 
 pub type CalendarDatabaseResult<T> = Result<T, CalendarDatabaseError>;
@@ -594,7 +597,17 @@ impl CalendarDatabase {
         };
         
         let recurrence = row.get::<Option<String>, _>("recurrence_rule")
-            .map(|json| serde_json::from_str::<EventRecurrence>(&json))
+            .map(|rule_string| {
+                // Try parsing as RRULE first (starts with FREQ= or RRULE:)
+                if rule_string.starts_with("FREQ=") || rule_string.starts_with("RRULE:") {
+                    EventRecurrence::from_icalendar(&rule_string)
+                        .map_err(|e| CalendarDatabaseError::ParseError(format!("Failed to parse RRULE: {}", e)))
+                } else {
+                    // Try parsing as JSON for backward compatibility
+                    serde_json::from_str::<EventRecurrence>(&rule_string)
+                        .map_err(|e| CalendarDatabaseError::ParseError(format!("Failed to parse recurrence JSON: {}", e)))
+                }
+            })
             .transpose()?;
         
         let start_time: DateTime<Utc> = DateTime::parse_from_rfc3339(row.get("start_time"))?.into();

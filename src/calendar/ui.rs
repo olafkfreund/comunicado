@@ -70,7 +70,7 @@ pub struct CalendarUI {
     current_view: CalendarViewMode,
     current_date: DateTime<Local>,
     selected_date: NaiveDate,
-    #[allow(dead_code)]
+    #[allow(dead_code)] // Used through get_selected_event_id() method
     selected_event_id: Option<String>,
     
     // Data
@@ -89,11 +89,7 @@ pub struct CalendarUI {
     is_focused: bool,
     focused_pane: CalendarPane,
     
-    // Search
-    #[allow(dead_code)]
-    search_query: String,
-    #[allow(dead_code)]
-    search_results: Vec<Event>,
+    // Search functionality placeholder
     
     // Event details
     selected_event: Option<Event>,
@@ -134,8 +130,6 @@ impl CalendarUI {
             show_calendar_list: false,
             is_focused: true,
             focused_pane: CalendarPane::Calendar,
-            search_query: String::new(),
-            search_results: Vec::new(),
             selected_event: None,
             show_delete_confirmation: false,
             event_to_delete: None,

@@ -10,9 +10,12 @@ pub mod contacts;
 pub mod smtp;
 pub mod html;
 pub mod images;
+pub mod animation;
 pub mod mime;
 pub mod services;
 pub mod spell;
 pub mod calendar;
+pub mod cli;
+pub mod keyboard;
 
 pub use app::App;

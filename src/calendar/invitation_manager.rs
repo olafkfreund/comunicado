@@ -7,6 +7,7 @@ use crate::calendar::database::CalendarDatabase;
 use crate::calendar::event::AttendeeStatus;
 use crate::calendar::CalendarError;
 use crate::email::StoredMessage;
+use crate::smtp::SmtpService;
 
 /// Meeting invitation manager for processing invitations and handling RSVP responses
 pub struct InvitationManager {
@@ -16,8 +17,8 @@ pub struct InvitationManager {
     /// Calendar database for storing accepted events
     database: CalendarDatabase,
     
-    /// SMTP manager for sending RSVP responses (placeholder for future implementation)
-    _smtp_manager: Option<()>,
+    /// SMTP service for sending RSVP responses
+    smtp_service: Option<std::sync::Arc<SmtpService>>,
     
     /// Cache of processed invitations
     invitation_cache: RwLock<HashMap<String, MeetingInvitation>>,
@@ -34,7 +35,7 @@ impl InvitationManager {
     pub fn new(
         user_emails: Vec<String>,
         database: CalendarDatabase,
-        _smtp_manager: Option<()>,
+        smtp_service: Option<std::sync::Arc<SmtpService>>,
         primary_calendar_id: String,
     ) -> Self {
         let processor = InvitationProcessor::new(user_emails.clone());
@@ -42,7 +43,7 @@ impl InvitationManager {
         Self {
             processor,
             database,
-            _smtp_manager,
+            smtp_service,
             invitation_cache: RwLock::new(HashMap::new()),
             primary_calendar_id,
             user_emails,
@@ -80,7 +81,7 @@ impl InvitationManager {
         &self, 
         invitation_uid: &str, 
         response: RSVPResponse,
-        _comment: Option<String>
+        comment: Option<String>
     ) -> InvitationResult<()> {
         let invitation = {
             let cache = self.invitation_cache.read().await;
@@ -122,10 +123,20 @@ impl InvitationManager {
             }
         }
         
-        // Send RSVP email response if SMTP is configured (placeholder)
-        // TODO: Implement actual SMTP sending when SMTP module is available
-        if self._smtp_manager.is_some() {
-            tracing::info!("Would send RSVP response via SMTP");
+        // Send RSVP email response if SMTP is configured
+        if let Some(smtp_service) = &self.smtp_service {
+            if let Err(e) = self.send_rsvp_email_response(
+                smtp_service,
+                &invitation,
+                &user_email,
+                response,
+                comment.clone(),
+            ).await {
+                tracing::error!("Failed to send RSVP email response: {}", e);
+                // Don't fail the whole operation if email sending fails
+            }
+        } else {
+            tracing::info!("SMTP service not configured, skipping RSVP email response");
         }
         
         // Update cache
@@ -195,16 +206,90 @@ impl InvitationManager {
         Err(InvitationError::EmailError("User not found in invitation attendees".to_string()))
     }
     
-    /// Send RSVP response email (placeholder implementation)
-    async fn _send_rsvp_response(
+    /// Send RSVP response email
+    async fn send_rsvp_email_response(
         &self,
-        _invitation: &MeetingInvitation,
-        _response: RSVPResponse,
-        _comment: Option<String>
+        smtp_service: &SmtpService,
+        invitation: &MeetingInvitation,
+        user_email: &str,
+        response: RSVPResponse,
+        comment: Option<String>,
     ) -> InvitationResult<()> {
-        // TODO: Implement actual SMTP sending when SMTP module is available
-        tracing::info!("RSVP response would be sent via email");
-        Ok(())
+        // Convert RSVPResponse to string format expected by SMTP service
+        let response_str = match response {
+            RSVPResponse::Accept => "ACCEPTED",
+            RSVPResponse::Decline => "DECLINED",
+            RSVPResponse::Tentative => "TENTATIVE",
+            RSVPResponse::NeedsAction => "NEEDS-ACTION",
+        };
+
+        // Try to find which account this user email belongs to
+        let account_id = self.find_account_for_email(user_email).await;
+        if account_id.is_none() {
+            tracing::warn!("No account configured for email {}, cannot send RSVP", user_email);
+            return Err(InvitationError::EmailError(format!("No account configured for email: {}", user_email)));
+        }
+        let account_id = account_id.unwrap();
+
+        // Get organizer email, handle Option<EventAttendee>
+        let organizer_email = invitation.organizer
+            .as_ref()
+            .map(|org| &org.email)
+            .ok_or_else(|| InvitationError::EmailError("No organizer found in invitation".to_string()))?;
+
+        // Send RSVP response via SMTP
+        match smtp_service.send_rsvp_response(
+            &account_id,
+            user_email,
+            organizer_email,
+            &invitation.title,
+            &invitation.uid,
+            response_str,
+            comment,
+            &invitation.icalendar_data, // Include original iCalendar data
+        ).await {
+            Ok(send_result) => {
+                if send_result.is_success() {
+                    tracing::info!("RSVP response sent successfully for invitation: {}", invitation.uid);
+                    Ok(())
+                } else {
+                    let error_msg = format!("RSVP response failed: {:?}", send_result);
+                    tracing::error!("{}", error_msg);
+                    Err(InvitationError::EmailError(error_msg))
+                }
+            }
+            Err(e) => {
+                let error_msg = format!("Failed to send RSVP response: {}", e);
+                tracing::error!("{}", error_msg);
+                Err(InvitationError::EmailError(error_msg))
+            }
+        }
+    }
+
+    /// Find which account ID corresponds to a user email address
+    async fn find_account_for_email(&self, email: &str) -> Option<String> {
+        // For now, use a simple approach - if SMTP service is configured for any account
+        // that matches this email domain or the email itself, use that account
+        // This is a simplified implementation - in practice, we'd want more sophisticated
+        // account mapping
+        
+        if let Some(smtp_service) = &self.smtp_service {
+            let accounts = smtp_service.get_configured_accounts().await;
+            for account_id in &accounts {
+                // Simple heuristic: if the account ID contains the email or domain, use it
+                if account_id.contains(email) || email.contains(account_id) {
+                    return Some(account_id.clone());
+                }
+            }
+            // If no exact match, return the first available account
+            // This is not ideal but provides a fallback
+            if !accounts.is_empty() {
+                tracing::warn!("No exact account match for email {}, using first available account: {}", 
+                              email, accounts[0]);
+                return Some(accounts[0].clone());
+            }
+        }
+        None
     }
     
     

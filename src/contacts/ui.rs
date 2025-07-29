@@ -11,6 +11,12 @@ use ratatui::{
 };
 use std::sync::Arc;
 
+/// Actions that can be triggered from the address book
+#[derive(Debug, Clone)]
+pub enum AddressBookAction {
+    ComposeEmail { to: String, name: String },
+}
+
 /// Address book UI state and components
 pub struct AddressBookUI {
     manager: Arc<ContactsManager>,
@@ -30,8 +36,6 @@ pub struct AddressBookUI {
     ui_mode: AddressBookMode,
     
     // Search and filters
-    #[allow(dead_code)]
-    current_search: ContactSearchCriteria,
     is_searching: bool,
 }
 
@@ -67,7 +71,6 @@ impl AddressBookUI {
             selected_contact: None,
             stats: None,
             ui_mode: AddressBookMode::Browse,
-            current_search: ContactSearchCriteria::new(),
             is_searching: false,
         }
     }
@@ -565,7 +568,7 @@ impl AddressBookUI {
     }
     
     /// Handle keyboard input
-    pub async fn handle_key(&mut self, key: crossterm::event::KeyCode) -> bool {
+    pub async fn handle_key(&mut self, key: crossterm::event::KeyCode) -> (bool, Option<AddressBookAction>) {
         use crossterm::event::KeyCode;
         
         match self.ui_mode {
@@ -588,7 +591,7 @@ impl AddressBookUI {
                     },
                     KeyCode::Char('d') => self.delete_selected_contact().await,
                     KeyCode::Char('s') => self.sync_contacts().await,
-                    KeyCode::Esc => return false, // Exit address book
+                    KeyCode::Esc => return (false, None), // Exit address book
                     _ => {},
                 }
             },
@@ -601,8 +604,19 @@ impl AddressBookUI {
                         self.ui_mode = AddressBookMode::Browse;
                     },
                     KeyCode::Enter => {
-                        // TODO: Compose email to this contact
-                        self.ui_mode = AddressBookMode::Browse;
+                        // Compose email to this contact
+                        if let Some(contact) = &self.selected_contact {
+                            if let Some(primary_email) = contact.primary_email() {
+                                tracing::info!("Initiating email composition to contact: {} <{}>", 
+                                              contact.display_name, primary_email.address);
+                                self.ui_mode = AddressBookMode::Browse;
+                                return (true, Some(AddressBookAction::ComposeEmail {
+                                    to: primary_email.address.clone(),
+                                    name: contact.display_name.clone(),
+                                }));
+                            }
+                            self.ui_mode = AddressBookMode::Browse;
+                        }
                     },
                     _ => {},
                 }
@@ -636,7 +650,7 @@ impl AddressBookUI {
             }
         }
         
-        true
+        (true, None)
     }
     
     // Navigation methods

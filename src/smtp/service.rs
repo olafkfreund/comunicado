@@ -186,6 +186,33 @@ impl SmtpService {
         self.send_message(account_id, &forward_message).await
     }
     
+    /// Send RSVP response for calendar invitation
+    pub async fn send_rsvp_response(
+        &self,
+        account_id: &str,
+        from_address: &str,
+        organizer_email: &str,
+        meeting_title: &str,
+        meeting_uid: &str,
+        response: &str, // "ACCEPTED", "DECLINED", "TENTATIVE"
+        comment: Option<String>,
+        original_request_ical: &str,
+    ) -> SmtpResult<SendResult> {
+        // Create RSVP response email
+        let rsvp_message = EmailMessage::create_rsvp_response(
+            from_address.to_string(),
+            organizer_email.to_string(),
+            meeting_title,
+            meeting_uid,
+            response,
+            comment,
+            original_request_ical,
+        )?;
+        
+        // Send the RSVP response
+        self.send_message(account_id, &rsvp_message).await
+    }
+    
     /// Test SMTP connection for an account
     pub async fn test_connection(&self, account_id: &str) -> SmtpResult<()> {
         let clients = self.clients.read().await;

@@ -14,6 +14,7 @@ pub mod email_viewer;
 pub mod invitation_viewer;
 pub mod search;
 pub mod time_picker;
+pub mod keyboard_shortcuts;
 
 use ratatui::{
     layout::Rect,
@@ -25,6 +26,7 @@ use crate::email::{EmailDatabase, EmailNotificationManager, UIEmailUpdater, Emai
 use chrono::Duration as ChronoDuration;
 use tokio::time::{Duration, Instant};
 use std::sync::Arc;
+use crate::keyboard::KeyboardManager;
 
 use self::{
     folder_tree::FolderTree,
@@ -37,6 +39,7 @@ use self::{
     account_switcher::AccountSwitcher,
     start_page::StartPage,
     draft_list::DraftListUI,
+    keyboard_shortcuts::KeyboardShortcutsUI,
 };
 
 // Re-export compose and draft types for external use
@@ -87,6 +90,7 @@ pub enum UIMode {
     EmailViewer,
     InvitationViewer,
     Search,
+    KeyboardShortcuts,
 }
 
 pub struct UI {
@@ -110,6 +114,7 @@ pub struct UI {
     invitation_viewer: InvitationViewer,
     search_ui: SearchUI,
     search_engine: Option<SearchEngine>,
+    keyboard_shortcuts_ui: KeyboardShortcutsUI,
     // Notification system
     notification_message: Option<String>,
     notification_expires_at: Option<tokio::time::Instant>,
@@ -138,6 +143,7 @@ impl UI {
             invitation_viewer: InvitationViewer::new(),
             search_ui: SearchUI::new(),
             search_engine: None,
+            keyboard_shortcuts_ui: KeyboardShortcutsUI::new(),
             // Initialize notification system
             notification_message: None,
             notification_expires_at: None,
@@ -191,6 +197,10 @@ impl UI {
     }
 
     pub fn render(&mut self, frame: &mut Frame) {
+        self.render_with_keyboard_manager(frame, &KeyboardManager::default())
+    }
+    
+    pub fn render_with_keyboard_manager(&mut self, frame: &mut Frame, keyboard_manager: &KeyboardManager) {
         let size = frame.size();
         
         match self.mode {
@@ -271,6 +281,25 @@ impl UI {
                 // Render search UI on top
                 let theme = self.theme_manager.current_theme();
                 self.search_ui.render(frame, size, theme);
+            }
+            UIMode::KeyboardShortcuts => {
+                // Render keyboard shortcuts over the normal interface
+                let chunks = self.layout.calculate_layout(size);
+
+                // Render normal interface in background
+                self.render_account_switcher(frame, chunks[0]);
+                self.render_folder_tree(frame, chunks[1]);
+                self.render_message_list(frame, chunks[2]);
+                self.render_content_preview(frame, chunks[3]);
+                
+                // Render the status bar
+                if chunks.len() > 4 {
+                    self.render_status_bar(frame, chunks[4]);
+                }
+                
+                // Render keyboard shortcuts UI on top
+                let theme = self.theme_manager.current_theme();
+                self.keyboard_shortcuts_ui.render(frame, size, theme, keyboard_manager);
             }
         }
     }
@@ -428,6 +457,10 @@ impl UI {
         &self.content_preview
     }
     
+    pub fn keyboard_shortcuts_ui_mut(&mut self) -> &mut KeyboardShortcutsUI {
+        &mut self.keyboard_shortcuts_ui
+    }
+    
     pub fn account_switcher(&self) -> &AccountSwitcher {
         &self.account_switcher
     }
@@ -476,6 +509,7 @@ impl UI {
             UIMode::EmailViewer => "Email Viewer",
             UIMode::InvitationViewer => "Meeting Invitation",
             UIMode::Search => "Search",
+            UIMode::KeyboardShortcuts => "Keyboard Shortcuts",
         };
         
         let nav_segment = NavigationHintsSegment {
@@ -607,6 +641,11 @@ impl UI {
                 ("Tab".to_string(), "Search Mode".to_string()),
                 ("F1-F4".to_string(), "Quick Mode".to_string()),
                 ("Esc".to_string(), "Close Search".to_string()),
+            ],
+            UIMode::KeyboardShortcuts => vec![
+                ("↑↓/j/k".to_string(), "Scroll".to_string()),
+                ("?".to_string(), "Close".to_string()),
+                ("Esc".to_string(), "Close".to_string()),
             ],
         }
     }
@@ -1229,6 +1268,11 @@ impl UI {
     pub fn show_start_page(&mut self) {
         self.mode = UIMode::StartPage;
         self.focused_pane = FocusedPane::StartPage;
+    }
+    
+    /// Show keyboard shortcuts popup
+    pub fn show_keyboard_shortcuts(&mut self) {
+        self.mode = UIMode::KeyboardShortcuts;
     }
     
     /// Switch to normal email mode

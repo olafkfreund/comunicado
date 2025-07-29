@@ -84,9 +84,16 @@ just check         # Run all checks
 
 ## Project Status
 
-🚧 **Early Development** - This is the foundational TUI interface implementation.
+🚀 **Advanced Development** - Feature-complete email and calendar client with comprehensive functionality.
 
-See the [roadmap](.agent-os/product/roadmap.md) for planned features and current progress.
+### Current Capabilities
+- ✅ **Full Email Management** - IMAP/SMTP with HTML rendering, attachments, and threading
+- ✅ **Calendar Integration** - CalDAV sync, Google Calendar API, RSVP handling
+- ✅ **Contact Management** - Address book with autocomplete and provider sync
+- ✅ **Advanced Features** - Search, filtering, multiple accounts, OAuth2 authentication
+- ✅ **Modern TUI** - Vim-style navigation, terminal graphics, optimized performance
+
+See the [roadmap](.agent-os/product/roadmap.md) for detailed progress and upcoming features.
 
 ## Contributing
 

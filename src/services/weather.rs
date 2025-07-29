@@ -30,7 +30,7 @@ struct OpenWeatherMain {
 #[derive(Debug, Deserialize)]
 struct OpenWeatherCondition {
     main: String,
-    #[allow(dead_code)]
+    #[allow(dead_code)] // Contains detailed weather description from API
     description: String,
 }
 

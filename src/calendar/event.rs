@@ -136,6 +136,31 @@ impl Event {
         self.sequence += 1;
     }
     
+    /// Check if this event has recurrence rules
+    pub fn is_recurring(&self) -> bool {
+        self.recurrence.is_some()
+    }
+    
+    /// Get the recurrence pattern as an RRULE string
+    pub fn get_rrule(&self) -> Option<String> {
+        self.recurrence.as_ref().map(|r| r.to_icalendar())
+    }
+    
+    /// Set recurrence from an RRULE string
+    pub fn set_rrule(&mut self, rrule: &str) -> Result<(), String> {
+        self.recurrence = Some(EventRecurrence::from_icalendar(rrule)?);
+        self.updated_at = Utc::now();
+        self.sequence += 1;
+        Ok(())
+    }
+    
+    /// Clear recurrence rules
+    pub fn clear_recurrence(&mut self) {
+        self.recurrence = None;
+        self.updated_at = Utc::now();
+        self.sequence += 1;
+    }
+    
     /// Convert to iCalendar format
     pub fn to_icalendar(&self) -> String {
         let mut ical = String::new();
@@ -432,6 +457,158 @@ impl EventRecurrence {
         
         rrule
     }
+    
+    /// Parse an RRULE string into EventRecurrence
+    pub fn from_icalendar(rrule: &str) -> Result<Self, String> {
+        // Remove "RRULE:" prefix if present
+        let rrule = rrule.strip_prefix("RRULE:").unwrap_or(rrule);
+        
+        let mut recurrence = EventRecurrence {
+            frequency: RecurrenceFrequency::Daily, // Default, will be overridden
+            interval: 1,
+            count: None,
+            until: None,
+            by_day: Vec::new(),
+            by_month_day: Vec::new(),
+            by_month: Vec::new(),
+            by_week_no: Vec::new(),
+            by_year_day: Vec::new(),
+            week_start: RecurrenceDay::Monday,
+        };
+        
+        // Parse key-value pairs separated by semicolons
+        for part in rrule.split(';') {
+            let part = part.trim();
+            if part.is_empty() {
+                continue;
+            }
+            
+            if let Some((key, value)) = part.split_once('=') {
+                match key.to_uppercase().as_str() {
+                    "FREQ" => {
+                        recurrence.frequency = RecurrenceFrequency::from_icalendar(value)?;
+                    }
+                    "INTERVAL" => {
+                        recurrence.interval = value.parse()
+                            .map_err(|_| format!("Invalid INTERVAL value: {}", value))?;
+                    }
+                    "COUNT" => {
+                        recurrence.count = Some(value.parse()
+                            .map_err(|_| format!("Invalid COUNT value: {}", value))?);
+                    }
+                    "UNTIL" => {
+                        recurrence.until = Some(Self::parse_icalendar_datetime(value)?);
+                    }
+                    "BYDAY" => {
+                        recurrence.by_day = Self::parse_by_day(value)?;
+                    }
+                    "BYMONTHDAY" => {
+                        recurrence.by_month_day = Self::parse_by_month_day(value)?;
+                    }
+                    "BYMONTH" => {
+                        recurrence.by_month = Self::parse_by_month(value)?;
+                    }
+                    "BYWEEKNO" => {
+                        recurrence.by_week_no = Self::parse_by_week_no(value)?;
+                    }
+                    "BYYEARDAY" => {
+                        recurrence.by_year_day = Self::parse_by_year_day(value)?;
+                    }
+                    "WKST" => {
+                        recurrence.week_start = RecurrenceDay::from_icalendar(value)?;
+                    }
+                    _ => {
+                        // Ignore unknown properties for forward compatibility
+                        tracing::debug!("Ignoring unknown RRULE property: {}", key);
+                    }
+                }
+            } else {
+                return Err(format!("Invalid RRULE format: {}", part));
+            }
+        }
+        
+        Ok(recurrence)
+    }
+    
+    /// Parse iCalendar datetime format (YYYYMMDDTHHMMSSZ or YYYYMMDD)
+    fn parse_icalendar_datetime(value: &str) -> Result<DateTime<Utc>, String> {
+        use chrono::{NaiveDateTime, NaiveDate};
+        
+        if value.ends_with('Z') {
+            // Full datetime format: YYYYMMDDTHHMMSSZ
+            let datetime_str = &value[..value.len()-1]; // Remove 'Z'
+            NaiveDateTime::parse_from_str(datetime_str, "%Y%m%dT%H%M%S")
+                .map(|dt| dt.and_utc())
+                .map_err(|_| format!("Invalid datetime format: {}", value))
+        } else if value.len() == 8 {
+            // Date-only format: YYYYMMDD
+            NaiveDate::parse_from_str(value, "%Y%m%d")
+                .map(|date| date.and_hms_opt(0, 0, 0).unwrap().and_utc())
+                .map_err(|_| format!("Invalid date format: {}", value))
+        } else {
+            Err(format!("Unsupported datetime format: {}", value))
+        }
+    }
+    
+    /// Parse BYDAY values (e.g., "MO,WE,FR" or "1MO,2TU")
+    fn parse_by_day(value: &str) -> Result<Vec<RecurrenceDay>, String> {
+        let mut days = Vec::new();
+        
+        for day_spec in value.split(',') {
+            let day_spec = day_spec.trim();
+            
+            // Handle prefixed numbers (e.g., "1MO", "-1FR")
+            let day_code = if day_spec.len() > 2 {
+                // Extract the last 2 characters as the day code
+                &day_spec[day_spec.len()-2..]
+            } else {
+                day_spec
+            };
+            
+            days.push(RecurrenceDay::from_icalendar(day_code)?);
+        }
+        
+        Ok(days)
+    }
+    
+    /// Parse BYMONTHDAY values (e.g., "1,15,-1")
+    fn parse_by_month_day(value: &str) -> Result<Vec<i8>, String> {
+        value.split(',')
+            .map(|s| s.trim().parse::<i8>()
+                .map_err(|_| format!("Invalid BYMONTHDAY value: {}", s)))
+            .collect()
+    }
+    
+    /// Parse BYMONTH values (e.g., "1,3,5")
+    fn parse_by_month(value: &str) -> Result<Vec<u8>, String> {
+        value.split(',')
+            .map(|s| {
+                let month = s.trim().parse::<u8>()
+                    .map_err(|_| format!("Invalid BYMONTH value: {}", s))?;
+                if month >= 1 && month <= 12 {
+                    Ok(month)
+                } else {
+                    Err(format!("BYMONTH value out of range (1-12): {}", month))
+                }
+            })
+            .collect()
+    }
+    
+    /// Parse BYWEEKNO values (e.g., "1,10,-1")
+    fn parse_by_week_no(value: &str) -> Result<Vec<i8>, String> {
+        value.split(',')
+            .map(|s| s.trim().parse::<i8>()
+                .map_err(|_| format!("Invalid BYWEEKNO value: {}", s)))
+            .collect()
+    }
+    
+    /// Parse BYYEARDAY values (e.g., "1,100,-1")
+    fn parse_by_year_day(value: &str) -> Result<Vec<i16>, String> {
+        value.split(',')
+            .map(|s| s.trim().parse::<i16>()
+                .map_err(|_| format!("Invalid BYYEARDAY value: {}", s)))
+            .collect()
+    }
 }
 
 /// Recurrence frequency
@@ -458,6 +635,19 @@ impl RecurrenceFrequency {
             RecurrenceFrequency::Yearly => "YEARLY",
         }
     }
+    
+    pub fn from_icalendar(value: &str) -> Result<Self, String> {
+        match value.to_uppercase().as_str() {
+            "SECONDLY" => Ok(RecurrenceFrequency::Secondly),
+            "MINUTELY" => Ok(RecurrenceFrequency::Minutely),
+            "HOURLY" => Ok(RecurrenceFrequency::Hourly),
+            "DAILY" => Ok(RecurrenceFrequency::Daily),
+            "WEEKLY" => Ok(RecurrenceFrequency::Weekly),
+            "MONTHLY" => Ok(RecurrenceFrequency::Monthly),
+            "YEARLY" => Ok(RecurrenceFrequency::Yearly),
+            _ => Err(format!("Invalid frequency: {}", value)),
+        }
+    }
 }
 
 /// Day of week for recurrence
@@ -482,6 +672,19 @@ impl RecurrenceDay {
             RecurrenceDay::Thursday => "TH",
             RecurrenceDay::Friday => "FR",
             RecurrenceDay::Saturday => "SA",
+        }
+    }
+    
+    pub fn from_icalendar(value: &str) -> Result<Self, String> {
+        match value.to_uppercase().as_str() {
+            "SU" => Ok(RecurrenceDay::Sunday),
+            "MO" => Ok(RecurrenceDay::Monday),
+            "TU" => Ok(RecurrenceDay::Tuesday),
+            "WE" => Ok(RecurrenceDay::Wednesday),
+            "TH" => Ok(RecurrenceDay::Thursday),
+            "FR" => Ok(RecurrenceDay::Friday),
+            "SA" => Ok(RecurrenceDay::Saturday),
+            _ => Err(format!("Invalid day: {}", value)),
         }
     }
 }
@@ -555,7 +758,7 @@ impl ReminderAction {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::TimeZone;
+    use chrono::{TimeZone, Datelike, Timelike};
     
     #[test]
     fn test_event_creation() {
@@ -680,5 +883,160 @@ mod tests {
         assert!(rrule.contains("FREQ=WEEKLY"));
         assert!(rrule.contains("INTERVAL=2"));
         assert!(rrule.contains("BYDAY=MO,FR"));
+    }
+    
+    #[test]
+    fn test_rrule_parsing_basic() {
+        // Test basic daily recurrence
+        let rrule = "FREQ=DAILY;INTERVAL=2";
+        let recurrence = EventRecurrence::from_icalendar(rrule).unwrap();
+        
+        assert_eq!(recurrence.frequency, RecurrenceFrequency::Daily);
+        assert_eq!(recurrence.interval, 2);
+        assert!(recurrence.count.is_none());
+        assert!(recurrence.until.is_none());
+        
+        // Test roundtrip conversion
+        let regenerated = recurrence.to_icalendar();
+        assert!(regenerated.contains("FREQ=DAILY"));
+        assert!(regenerated.contains("INTERVAL=2"));
+    }
+    
+    #[test]
+    fn test_rrule_parsing_with_count() {
+        let rrule = "FREQ=WEEKLY;INTERVAL=1;COUNT=10;BYDAY=MO,WE,FR";
+        let recurrence = EventRecurrence::from_icalendar(rrule).unwrap();
+        
+        assert_eq!(recurrence.frequency, RecurrenceFrequency::Weekly);
+        assert_eq!(recurrence.interval, 1);
+        assert_eq!(recurrence.count, Some(10));
+        assert_eq!(recurrence.by_day.len(), 3);
+        assert!(recurrence.by_day.contains(&RecurrenceDay::Monday));
+        assert!(recurrence.by_day.contains(&RecurrenceDay::Wednesday));
+        assert!(recurrence.by_day.contains(&RecurrenceDay::Friday));
+    }
+    
+    #[test]
+    fn test_rrule_parsing_with_until() {
+        let rrule = "FREQ=MONTHLY;UNTIL=20251231T235959Z";
+        let recurrence = EventRecurrence::from_icalendar(rrule).unwrap();
+        
+        assert_eq!(recurrence.frequency, RecurrenceFrequency::Monthly);
+        assert!(recurrence.until.is_some());
+        
+        let until = recurrence.until.unwrap();
+        assert_eq!(until.year(), 2025);
+        assert_eq!(until.month(), 12);
+        assert_eq!(until.day(), 31);
+        assert_eq!(until.hour(), 23);
+        assert_eq!(until.minute(), 59);
+        assert_eq!(until.second(), 59);
+    }
+    
+    #[test]
+    fn test_rrule_parsing_with_bymonthday() {
+        let rrule = "FREQ=MONTHLY;BYMONTHDAY=1,15,-1";
+        let recurrence = EventRecurrence::from_icalendar(rrule).unwrap();
+        
+        assert_eq!(recurrence.frequency, RecurrenceFrequency::Monthly);
+        assert_eq!(recurrence.by_month_day, vec![1, 15, -1]);
+    }
+    
+    #[test]
+    fn test_rrule_parsing_with_bymonth() {
+        let rrule = "FREQ=YEARLY;BYMONTH=1,6,12";
+        let recurrence = EventRecurrence::from_icalendar(rrule).unwrap();
+        
+        assert_eq!(recurrence.frequency, RecurrenceFrequency::Yearly);
+        assert_eq!(recurrence.by_month, vec![1, 6, 12]);
+    }
+    
+    #[test]
+    fn test_rrule_parsing_complex() {
+        let rrule = "FREQ=MONTHLY;INTERVAL=2;BYDAY=1MO,3WE;BYMONTH=1,3,5,7,9,11;WKST=SU";
+        let recurrence = EventRecurrence::from_icalendar(rrule).unwrap();
+        
+        assert_eq!(recurrence.frequency, RecurrenceFrequency::Monthly);
+        assert_eq!(recurrence.interval, 2);
+        assert_eq!(recurrence.by_day.len(), 2);
+        assert!(recurrence.by_day.contains(&RecurrenceDay::Monday));
+        assert!(recurrence.by_day.contains(&RecurrenceDay::Wednesday));
+        assert_eq!(recurrence.by_month, vec![1, 3, 5, 7, 9, 11]);
+        assert_eq!(recurrence.week_start, RecurrenceDay::Sunday);
+    }
+    
+    #[test]
+    fn test_rrule_parsing_with_prefix() {
+        let rrule = "RRULE:FREQ=DAILY;INTERVAL=3";
+        let recurrence = EventRecurrence::from_icalendar(rrule).unwrap();
+        
+        assert_eq!(recurrence.frequency, RecurrenceFrequency::Daily);
+        assert_eq!(recurrence.interval, 3);
+    }
+    
+    #[test]
+    fn test_rrule_parsing_errors() {
+        // Invalid frequency
+        assert!(EventRecurrence::from_icalendar("FREQ=INVALID").is_err());
+        
+        // Invalid interval
+        assert!(EventRecurrence::from_icalendar("FREQ=DAILY;INTERVAL=abc").is_err());
+        
+        // Invalid count
+        assert!(EventRecurrence::from_icalendar("FREQ=DAILY;COUNT=xyz").is_err());
+        
+        // Invalid day
+        assert!(EventRecurrence::from_icalendar("FREQ=WEEKLY;BYDAY=XX").is_err());
+        
+        // Invalid month
+        assert!(EventRecurrence::from_icalendar("FREQ=YEARLY;BYMONTH=13").is_err());
+        
+        // Invalid format
+        assert!(EventRecurrence::from_icalendar("FREQ_DAILY").is_err());
+    }
+    
+    #[test]
+    fn test_frequency_conversion() {
+        assert_eq!(RecurrenceFrequency::from_icalendar("DAILY").unwrap(), RecurrenceFrequency::Daily);
+        assert_eq!(RecurrenceFrequency::from_icalendar("weekly").unwrap(), RecurrenceFrequency::Weekly);
+        assert_eq!(RecurrenceFrequency::from_icalendar("MONTHLY").unwrap(), RecurrenceFrequency::Monthly);
+        assert_eq!(RecurrenceFrequency::from_icalendar("YEARLY").unwrap(), RecurrenceFrequency::Yearly);
+        
+        assert!(RecurrenceFrequency::from_icalendar("INVALID").is_err());
+    }
+    
+    #[test]
+    fn test_day_conversion() {
+        assert_eq!(RecurrenceDay::from_icalendar("MO").unwrap(), RecurrenceDay::Monday);
+        assert_eq!(RecurrenceDay::from_icalendar("tu").unwrap(), RecurrenceDay::Tuesday);
+        assert_eq!(RecurrenceDay::from_icalendar("WE").unwrap(), RecurrenceDay::Wednesday);
+        assert_eq!(RecurrenceDay::from_icalendar("SA").unwrap(), RecurrenceDay::Saturday);
+        
+        assert!(RecurrenceDay::from_icalendar("XX").is_err());
+    }
+    
+    #[test]
+    fn test_datetime_parsing() {
+        // Full datetime with Z suffix
+        let dt = EventRecurrence::parse_icalendar_datetime("20250128T143000Z").unwrap();
+        assert_eq!(dt.year(), 2025);
+        assert_eq!(dt.month(), 1);
+        assert_eq!(dt.day(), 28);
+        assert_eq!(dt.hour(), 14);
+        assert_eq!(dt.minute(), 30);
+        assert_eq!(dt.second(), 0);
+        
+        // Date only format
+        let dt = EventRecurrence::parse_icalendar_datetime("20250315").unwrap();
+        assert_eq!(dt.year(), 2025);
+        assert_eq!(dt.month(), 3);
+        assert_eq!(dt.day(), 15);
+        assert_eq!(dt.hour(), 0);
+        assert_eq!(dt.minute(), 0);
+        assert_eq!(dt.second(), 0);
+        
+        // Invalid formats
+        assert!(EventRecurrence::parse_icalendar_datetime("invalid").is_err());
+        assert!(EventRecurrence::parse_icalendar_datetime("2025-01-28").is_err());
     }
 }

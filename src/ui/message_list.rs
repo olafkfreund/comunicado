@@ -6,7 +6,7 @@ use ratatui::{
     Frame,
 };
 use crate::theme::Theme;
-use crate::email::{EmailThread, SortCriteria, MultiCriteriaSorter, ThreadingEngine, ThreadingAlgorithm, EmailDatabase, StoredMessage};
+use crate::email::{EmailThread, SortCriteria, MultiCriteriaSorter, ThreadingEngine, ThreadingAlgorithm, EmailDatabase, StoredMessage, EmailMessage, MessageId};
 use std::sync::Arc;
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
@@ -431,6 +431,14 @@ impl MessageList {
         self.view_mode
     }
     
+    /// Get view mode display string for UI status indicators
+    pub fn get_view_mode_display(&self) -> &'static str {
+        match self.view_mode {
+            ViewMode::List => "[Flat]",
+            ViewMode::Threaded => "[Threaded]",
+        }
+    }
+    
     pub fn set_sort_criteria(&mut self, criteria: SortCriteria) {
         self.sorter = MultiCriteriaSorter::new(vec![criteria]);
         self.rebuild_view();
@@ -527,9 +535,8 @@ impl MessageList {
             self.initialize_sample_threaded_messages();
         } else {
             tracing::info!("Using real messages for threaded view, {} messages available", self.messages.len());
-            // TODO: Implement proper threading for real messages
-            // For now, just keep the real messages as-is
-            // In the future, this would group messages by thread and build the hierarchy
+            // Apply threading algorithm to real messages
+            self.apply_threading_to_real_messages();
         }
     }
     
@@ -863,6 +870,202 @@ impl MessageList {
             self.state.select(Some(message_count - 1));
         } else {
             self.state.select(None);
+        }
+    }
+    
+    /// Apply threading algorithm to real messages loaded from the database
+    fn apply_threading_to_real_messages(&mut self) {
+        tracing::info!("Applying threading algorithm to {} real messages", self.messages.len());
+        
+        // Step 1: Convert MessageItems back to stored messages and then to EmailMessages
+        // We need the stored messages to get threading information
+        if let Some(ref database) = self.database {
+            if let (Some(ref account_id), Some(ref folder_name)) = 
+                (self.current_account.as_ref(), self.current_folder.as_ref()) {
+                
+                // Load stored messages from database to get threading info
+                let stored_messages_result = tokio::task::block_in_place(|| {
+                    tokio::runtime::Handle::current().block_on(async {
+                        database.get_messages(account_id, folder_name, Some(1000), None).await
+                    })
+                });
+                
+                match stored_messages_result {
+                    Ok(stored_messages) => {
+                        tracing::info!("Retrieved {} stored messages for threading", stored_messages.len());
+                        
+                        // Convert to EmailMessage objects
+                        let email_messages: Vec<EmailMessage> = stored_messages.iter()
+                            .filter_map(|stored| Self::stored_message_to_email_message(stored))
+                            .collect();
+                        
+                        tracing::info!("Converted {} stored messages to EmailMessage objects", email_messages.len());
+                        
+                        // Apply threading algorithm using the ThreadingEngine
+                        let threads = self.threading_engine.thread_messages(email_messages);
+                        tracing::info!("Threading algorithm produced {} threads", threads.len());
+                        
+                        // Convert threads back to MessageItems for display
+                        self.messages = Self::threads_to_message_items(threads, &stored_messages);
+                        tracing::info!("Converted threads to {} MessageItems for display", self.messages.len());
+                        
+                        // Sort threads by latest message date (newest first)
+                        self.messages.sort_by(|a, b| b.date.cmp(&a.date));
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to load stored messages for threading: {}", e);
+                        // Fall back to flat view
+                        self.messages.sort_by(|a, b| b.date.cmp(&a.date));
+                    }
+                }
+            }
+        }
+    }
+    
+    /// Convert StoredMessage to EmailMessage for threading
+    fn stored_message_to_email_message(stored: &StoredMessage) -> Option<EmailMessage> {
+        // Create MessageId from stored message_id
+        let message_id = stored.message_id.as_ref()
+            .and_then(|id| MessageId::parse(id).ok())
+            .unwrap_or_else(|| MessageId::new(format!("local-{}", stored.id)));
+        
+        // Determine sender name/address
+        let sender = if let Some(ref name) = stored.from_name {
+            format!("{} <{}>", name, stored.from_addr)
+        } else {
+            stored.from_addr.clone()
+        };
+        
+        // Get recipients
+        let mut recipients = stored.to_addrs.clone();
+        recipients.extend(stored.cc_addrs.clone());
+        
+        // Get content (prefer text over HTML for threading purposes)
+        let content = stored.body_text.as_ref()
+            .or(stored.body_html.as_ref())
+            .map(|s| s.clone())
+            .unwrap_or_default();
+        
+        // Create EmailMessage
+        let mut email_message = EmailMessage::new(
+            message_id,
+            stored.subject.clone(),
+            sender,
+            recipients,
+            content,
+            stored.date,
+        );
+        
+        // Set threading information
+        if let Some(ref in_reply_to) = stored.in_reply_to {
+            if let Ok(reply_to_id) = MessageId::parse(in_reply_to) {
+                email_message.set_in_reply_to(reply_to_id);
+            }
+        }
+        
+        if !stored.references.is_empty() {
+            let references_str = stored.references.join(" ");
+            email_message.set_references(references_str);
+        }
+        
+        // Set message state
+        email_message.set_read(stored.flags.contains(&"\\Seen".to_string()));
+        email_message.set_important(stored.flags.contains(&"\\Flagged".to_string()));
+        email_message.set_attachments(!stored.attachments.is_empty());
+        
+        Some(email_message)
+    }
+    
+    /// Convert threads back to MessageItems for display
+    fn threads_to_message_items(threads: Vec<EmailThread>, stored_messages: &[StoredMessage]) -> Vec<MessageItem> {
+        let mut message_items = Vec::new();
+        
+        // Create a lookup map for stored messages by message ID
+        let stored_lookup: std::collections::HashMap<String, &StoredMessage> = stored_messages.iter()
+            .filter_map(|stored| {
+                stored.message_id.as_ref().map(|id| (id.clone(), stored))
+            })
+            .collect();
+        
+        for thread in threads {
+            Self::add_thread_to_message_items(&thread, &mut message_items, &stored_lookup, 0, true);
+        }
+        
+        message_items
+    }
+    
+    /// Recursively add thread messages to MessageItems list
+    fn add_thread_to_message_items(
+        thread: &EmailThread, 
+        items: &mut Vec<MessageItem>, 
+        stored_lookup: &std::collections::HashMap<String, &StoredMessage>,
+        depth: usize,
+        is_root: bool
+    ) {
+        let root_message = thread.root_message();
+        let message_id_str = root_message.message_id().as_str();
+        
+        // Find corresponding stored message for additional data
+        if let Some(stored) = stored_lookup.get(message_id_str) {
+            let date_str = MessageItem::format_message_date(stored.date);
+            let sender = if let Some(ref name) = stored.from_name {
+                name.clone()
+            } else {
+                stored.from_addr.clone()
+            };
+            
+            let thread_id = stored.thread_id.clone()
+                .unwrap_or_else(|| format!("thread-{}", stored.id));
+            
+            let mut message_item = if depth == 0 {
+                // Root message
+                MessageItem::new_threaded(
+                    stored.subject.clone(),
+                    sender,
+                    date_str,
+                    depth,
+                    thread_id.clone(),
+                )
+                .with_thread_count(thread.message_count())
+                .as_thread_root()
+            } else {
+                // Child message
+                MessageItem::new_threaded(
+                    stored.subject.clone(),
+                    sender,
+                    date_str,
+                    depth,
+                    thread_id.clone(),
+                )
+            };
+            
+            // Set message state
+            if !stored.flags.contains(&"\\Seen".to_string()) {
+                message_item = message_item.unread();
+            }
+            if stored.flags.contains(&"\\Flagged".to_string()) {
+                message_item = message_item.important();
+            }
+            if !stored.attachments.is_empty() {
+                message_item = message_item.with_attachments();
+            }
+            
+            // For root messages with children, expand by default
+            if is_root && thread.has_children() {
+                message_item = message_item.expanded();
+            }
+            
+            // Set database ID for message loading
+            message_item.message_id = Some(stored.id);
+            
+            items.push(message_item);
+            
+            // Add children if thread is expanded (or if we're showing all for now)
+            if is_root && thread.has_children() {
+                for child_thread in thread.children() {
+                    Self::add_thread_to_message_items(child_thread, items, stored_lookup, depth + 1, false);
+                }
+            }
         }
     }
 }

@@ -398,6 +398,113 @@ impl EmailMessage {
         recipients
     }
     
+    /// Create RSVP response email for calendar invitations
+    pub fn create_rsvp_response(
+        from_address: String,
+        organizer_email: String,
+        meeting_title: &str,
+        meeting_uid: &str,
+        response: &str, // "ACCEPTED", "DECLINED", "TENTATIVE"
+        comment: Option<String>,
+        original_request_ical: &str,
+    ) -> SmtpResult<Self> {
+        // Validate response type
+        let response_upper = response.to_uppercase();
+        if !["ACCEPTED", "DECLINED", "TENTATIVE"].contains(&response_upper.as_str()) {
+            return Err(SmtpError::MessageFormatError(format!("Invalid RSVP response: {}", response)));
+        }
+        
+        // Create subject line
+        let subject = match response_upper.as_str() {
+            "ACCEPTED" => format!("Accepted: {}", meeting_title),
+            "DECLINED" => format!("Declined: {}", meeting_title),
+            "TENTATIVE" => format!("Tentative: {}", meeting_title),
+            _ => format!("Response: {}", meeting_title),
+        };
+        
+        // Create body text
+        let body_text = format!(
+            "This is an automated response to your meeting invitation.\n\n\
+            Meeting: {}\n\
+            Response: {}\n\
+            {}\n\n\
+            This message was sent automatically by Comunicado.",
+            meeting_title,
+            response_upper,
+            comment.as_deref().unwrap_or("")
+        );
+        
+        // Create iCalendar REPLY content
+        let reply_ical = Self::create_ical_reply(
+            meeting_uid,
+            &from_address,
+            &response_upper,
+            original_request_ical,
+        )?;
+        
+        // Create the message with iCalendar attachment
+        let mut message = Self {
+            from: from_address,
+            to: vec![organizer_email],
+            cc: Vec::new(),
+            bcc: Vec::new(),
+            subject,
+            body_text,
+            body_html: None,
+            message_id: None,
+            in_reply_to: None,
+            references: None,
+            created_at: chrono::Utc::now(),
+        };
+        
+        // Generate a unique message ID
+        message.generate_message_id("comunicado.local");
+        
+        // For now, include the iCalendar in the body - later we can add proper attachment support
+        message.body_text = format!("{}\n\n--- iCalendar Reply ---\n{}", message.body_text, reply_ical);
+        
+        Ok(message)
+    }
+    
+    /// Create iCalendar REPLY content for RSVP
+    fn create_ical_reply(
+        meeting_uid: &str,
+        attendee_email: &str,
+        response: &str, // "ACCEPTED", "DECLINED", "TENTATIVE"
+        _original_request_ical: &str,
+    ) -> SmtpResult<String> {
+        let now = chrono::Utc::now();
+        let timestamp = now.format("%Y%m%dT%H%M%SZ").to_string();
+        
+        // Map response to iCalendar PARTSTAT
+        let partstat = match response {
+            "ACCEPTED" => "ACCEPTED",
+            "DECLINED" => "DECLINED", 
+            "TENTATIVE" => "TENTATIVE",
+            _ => "NEEDS-ACTION",
+        };
+        
+        // Create basic iCalendar REPLY
+        let ical_reply = format!(
+            "BEGIN:VCALENDAR\r\n\
+            VERSION:2.0\r\n\
+            PRODID:-//Comunicado//Calendar//EN\r\n\
+            METHOD:REPLY\r\n\
+            BEGIN:VEVENT\r\n\
+            UID:{}\r\n\
+            DTSTAMP:{}\r\n\
+            ATTENDEE;PARTSTAT={}:mailto:{}\r\n\
+            END:VEVENT\r\n\
+            END:VCALENDAR\r\n",
+            meeting_uid,
+            timestamp,
+            partstat,
+            attendee_email
+        );
+        
+        Ok(ical_reply)
+    }
+    
     /// Validate the message
     pub fn validate(&self) -> SmtpResult<()> {
         if self.from.is_empty() {

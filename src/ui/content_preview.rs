@@ -9,6 +9,7 @@ use crate::theme::Theme;
 use crate::clipboard::ClipboardManager;
 use crate::email::{EmailDatabase, StoredMessage, AttachmentViewer, AttachmentInfo};
 use crate::images::{ImageManager, extract_images_from_html};
+use crate::animation::AnimationManager;
 use regex::Regex;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -96,7 +97,9 @@ pub struct ContentPreview {
     loading: bool,
     html_renderer: crate::html::HtmlRenderer,
     image_manager: ImageManager,
+    animation_manager: Option<Arc<AnimationManager>>,
     processed_images: HashMap<String, String>, // URL -> rendered content
+    active_animations: HashMap<String, String>, // Animation ID -> display content
     selected_attachment: Option<usize>, // Index of selected attachment
     attachment_viewer: AttachmentViewer,
     is_viewing_attachment: bool,
@@ -122,7 +125,9 @@ impl ContentPreview {
             loading: false,
             html_renderer: crate::html::HtmlRenderer::new(80),
             image_manager: ImageManager::new().unwrap_or_default(),
+            animation_manager: None, // Will be initialized later
             processed_images: HashMap::new(),
+            active_animations: HashMap::new(),
             selected_attachment: None,
             attachment_viewer: AttachmentViewer::default(),
             is_viewing_attachment: false,
@@ -2013,6 +2018,186 @@ This is a sample email showcasing the modern email display format.".to_string();
     /// Check if clipboard is available
     pub fn is_clipboard_available(&self) -> bool {
         self.clipboard_manager.is_available()
+    }
+    
+    /// Initialize animation manager
+    pub fn initialize_animation_manager(&mut self) {
+        if self.animation_manager.is_none() {
+            let image_manager = Arc::new(self.image_manager.clone());
+            self.animation_manager = Some(Arc::new(AnimationManager::new(image_manager)));
+        }
+    }
+    
+    /// Load and start playing a GIF animation from URL
+    pub async fn load_and_play_gif_animation(&mut self, url: &str) -> Result<(), Box<dyn std::error::Error>> {
+        self.initialize_animation_manager();
+        
+        if let Some(ref animation_manager) = self.animation_manager {
+            // Load the GIF animation
+            let animation_id = animation_manager.load_gif_from_url(url).await?;
+            
+            // Start playing the animation
+            let mut receiver = animation_manager.play_animation(&animation_id, true).await?;
+            
+            // Spawn a task to handle animation frames
+            let active_animations = Arc::new(tokio::sync::RwLock::new(self.active_animations.clone()));
+            let animation_id_clone = animation_id.clone();
+            
+            tokio::spawn(async move {
+                while let Some(result) = receiver.recv().await {
+                    match result {
+                        crate::animation::AnimationResult::Frame { id: _, frame_data, frame_index: _ } => {
+                            let mut animations = active_animations.write().await;
+                            animations.insert(animation_id_clone.clone(), frame_data);
+                        }
+                        crate::animation::AnimationResult::Finished { id: _ } => {
+                            tracing::info!("Animation finished: {}", animation_id_clone);
+                            break;
+                        }
+                        crate::animation::AnimationResult::Error { id: _, error } => {
+                            tracing::error!("Animation error: {}", error);
+                            break;
+                        }
+                    }
+                }
+            });
+            
+            tracing::info!("Started GIF animation: {}", animation_id);
+        }
+        
+        Ok(())
+    }
+    
+    /// Load and start playing a GIF animation from base64 data
+    pub async fn load_and_play_gif_base64(&mut self, data: &str) -> Result<(), Box<dyn std::error::Error>> {
+        self.initialize_animation_manager();
+        
+        if let Some(ref animation_manager) = self.animation_manager {
+            // Load the GIF animation from base64
+            let animation_id = animation_manager.load_gif_from_base64(data).await?;
+            
+            // Start playing the animation
+            let mut receiver = animation_manager.play_animation(&animation_id, true).await?;
+            
+            // Spawn a task to handle animation frames
+            let active_animations = Arc::new(tokio::sync::RwLock::new(self.active_animations.clone()));
+            let animation_id_clone = animation_id.clone();
+            
+            tokio::spawn(async move {
+                while let Some(result) = receiver.recv().await {
+                    match result {
+                        crate::animation::AnimationResult::Frame { id: _, frame_data, frame_index: _ } => {
+                            let mut animations = active_animations.write().await;
+                            animations.insert(animation_id_clone.clone(), frame_data);
+                        }
+                        crate::animation::AnimationResult::Finished { id: _ } => {
+                            tracing::info!("Animation finished: {}", animation_id_clone);
+                            break;
+                        }
+                        crate::animation::AnimationResult::Error { id: _, error } => {
+                            tracing::error!("Animation error: {}", error);
+                            break;
+                        }
+                    }
+                }
+            });
+            
+            tracing::info!("Started GIF animation from base64 data: {}", animation_id);
+        }
+        
+        Ok(())
+    }
+    
+    /// Stop a playing animation
+    pub async fn stop_animation(&mut self, animation_id: &str) -> Result<(), Box<dyn std::error::Error>> {
+        if let Some(ref animation_manager) = self.animation_manager {
+            animation_manager.stop_animation(animation_id).await?;
+            self.active_animations.remove(animation_id);
+            tracing::info!("Stopped animation: {}", animation_id);
+        }
+        Ok(())
+    }
+    
+    /// Get the current frame data for an active animation
+    pub fn get_animation_frame(&self, animation_id: &str) -> Option<&String> {
+        self.active_animations.get(animation_id)
+    }
+    
+    /// Clear all active animations
+    pub async fn clear_all_animations(&mut self) {
+        if let Some(ref animation_manager) = self.animation_manager {
+            for animation_id in self.active_animations.keys() {
+                let _ = animation_manager.stop_animation(animation_id).await;
+            }
+        }
+        self.active_animations.clear();
+        tracing::info!("Cleared all active animations");
+    }
+    
+    /// Process HTML content and automatically load GIF animations
+    pub async fn process_html_animations(&mut self, html_content: &str) -> Result<(), Box<dyn std::error::Error>> {
+        use crate::images::extract_images_from_html;
+        
+        let images = extract_images_from_html(html_content);
+        
+        for image_ref in images {
+            // Check if it's a GIF image
+            if image_ref.src.to_lowercase().contains(".gif") {
+                if image_ref.is_http_url() {
+                    // Load GIF from URL
+                    if let Err(e) = self.load_and_play_gif_animation(&image_ref.src).await {
+                        tracing::warn!("Failed to load GIF animation from {}: {}", image_ref.src, e);
+                    }
+                } else if image_ref.is_data_url() {
+                    // Load GIF from data URL
+                    if let Some((data, mime_type)) = image_ref.parse_data_url() {
+                        if mime_type.as_deref() == Some("image/gif") {
+                            if let Err(e) = self.load_and_play_gif_base64(&data).await {
+                                tracing::warn!("Failed to load GIF animation from data URL: {}", e);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        Ok(())
+    }
+    
+    /// Check if animations are supported in the current terminal
+    pub fn animations_supported(&self) -> bool {
+        if let Some(ref animation_manager) = self.animation_manager {
+            animation_manager.supports_animations()
+        } else {
+            false
+        }
+    }
+    
+    /// Replace GIF placeholders in rendered content with animation frames
+    pub fn render_animations_in_content(&self, content: &str) -> String {
+        if self.active_animations.is_empty() {
+            return content.to_string();
+        }
+        
+        let mut rendered_content = content.to_string();
+        
+        // Replace GIF placeholders with current animation frames
+        for (animation_id, frame_data) in &self.active_animations {
+            // Look for placeholder patterns that might contain this animation
+            let placeholder_patterns = [
+                format!("[GIF: {}]", animation_id),
+                format!("[Loading GIF: {}]", animation_id),
+                format!("[Animation: {}]", animation_id),
+            ];
+            
+            for pattern in &placeholder_patterns {
+                if rendered_content.contains(pattern) {
+                    rendered_content = rendered_content.replace(pattern, frame_data);
+                }
+            }
+        }
+        
+        rendered_content
     }
     
 }

@@ -1775,3 +1775,261 @@ mod tests {
         assert_eq!(results.len(), 1);
     }
 }
+
+// CLI Support Methods
+impl EmailDatabase {
+    
+    /// Check database integrity
+    pub async fn check_integrity(&self) -> DatabaseResult<bool> {
+        let integrity_check: String = sqlx::query_scalar("PRAGMA integrity_check")
+            .fetch_one(&self.pool)
+            .await?;
+            
+        Ok(integrity_check == "ok")
+    }
+    
+    /// Repair database issues
+    pub async fn repair_database(&self) -> DatabaseResult<()> {
+        // Run database repair operations
+        sqlx::query("PRAGMA optimize")
+            .execute(&self.pool)
+            .await?;
+            
+        sqlx::query("VACUUM")
+            .execute(&self.pool)
+            .await?;
+            
+        Ok(())
+    }
+    
+    /// Clean up database (remove orphaned data)
+    pub async fn cleanup_database(&self) -> DatabaseResult<CleanupResult> {
+        let mut tx = self.pool.begin().await?;
+        
+        // Remove orphaned attachments
+        let orphaned_attachments = sqlx::query(
+            "DELETE FROM attachments WHERE message_id NOT IN (SELECT id FROM messages)"
+        )
+        .execute(&mut *tx)
+        .await?
+        .rows_affected();
+        
+        // Remove duplicate messages (same message_id in same folder)
+        let duplicate_messages = sqlx::query(r#"
+            DELETE FROM messages 
+            WHERE id NOT IN (
+                SELECT MIN(id) 
+                FROM messages 
+                GROUP BY account_id, folder_name, message_id
+            )
+        "#)
+        .execute(&mut *tx)
+        .await?
+        .rows_affected();
+        
+        tx.commit().await?;
+        
+        // Run VACUUM to reclaim space
+        let size_before = self.get_database_size().await?;
+        sqlx::query("VACUUM").execute(&self.pool).await?;
+        let size_after = self.get_database_size().await?;
+        
+        let freed_space_mb = if size_before > size_after {
+            (size_before - size_after) / (1024 * 1024)
+        } else {
+            0
+        };
+        
+        Ok(CleanupResult {
+            orphaned_attachments: orphaned_attachments as u32,
+            duplicate_messages: duplicate_messages as u32,
+            freed_space_mb: freed_space_mb as u32,
+        })
+    }
+    
+    /// Rebuild database indexes
+    pub async fn rebuild_indexes(&self) -> DatabaseResult<()> {
+        // Drop and recreate indexes
+        let indexes = [
+            "DROP INDEX IF EXISTS idx_messages_account_folder",
+            "DROP INDEX IF EXISTS idx_messages_date",
+            "DROP INDEX IF EXISTS idx_messages_thread",
+            "DROP INDEX IF EXISTS idx_messages_flags",
+            "DROP INDEX IF EXISTS idx_attachments_message",
+            "DROP INDEX IF EXISTS idx_folders_account",
+            
+            "CREATE INDEX idx_messages_account_folder ON messages(account_id, folder_name)",
+            "CREATE INDEX idx_messages_date ON messages(date)",
+            "CREATE INDEX idx_messages_thread ON messages(thread_id)",
+            "CREATE INDEX idx_messages_flags ON messages(flags)",
+            "CREATE INDEX idx_attachments_message ON attachments(message_id)",
+            "CREATE INDEX idx_folders_account ON folders(account_id)",
+        ];
+        
+        for index_sql in &indexes {
+            sqlx::query(index_sql).execute(&self.pool).await?;
+        }
+        
+        Ok(())
+    }
+    
+    /// Rebuild search index
+    pub async fn rebuild_search_index(&self) -> DatabaseResult<()> {
+        // Drop and recreate FTS table
+        sqlx::query("DROP TABLE IF EXISTS messages_fts").execute(&self.pool).await?;
+        
+        sqlx::query(r#"
+            CREATE VIRTUAL TABLE messages_fts USING fts5(
+                id,
+                subject,
+                from_addr,
+                to_addrs,
+                body_text,
+                content='messages',
+                content_rowid='rowid'
+            )
+        "#).execute(&self.pool).await?;
+        
+        // Populate FTS table
+        sqlx::query(r#"
+            INSERT INTO messages_fts(id, subject, from_addr, to_addrs, body_text)
+            SELECT id, subject, from_addr, to_addrs, body_text
+            FROM messages
+            WHERE body_text IS NOT NULL
+        "#).execute(&self.pool).await?;
+        
+        Ok(())
+    }
+    
+    /// Create database backup
+    pub async fn create_backup(&self, output_path: &std::path::Path, compress: bool) -> DatabaseResult<BackupResult> {
+        use std::fs;
+        use std::process::Command;
+        
+        // Get current database path
+        let db_url = std::env::var("DATABASE_URL").unwrap_or_else(|_| {
+            dirs::config_dir()
+                .unwrap()
+                .join("comunicado")
+                .join("databases")
+                .join("email.db")
+                .to_string_lossy()
+                .to_string()
+        });
+        
+        let db_path = db_url.strip_prefix("sqlite://").unwrap_or(&db_url);
+        
+        if compress {
+            // Create compressed backup
+            let output = Command::new("gzip")
+                .arg("-c")
+                .arg(db_path)
+                .output()
+                .map_err(|e| DatabaseError::Query(format!("Backup compression failed: {}", e)))?;
+                
+            fs::write(output_path, output.stdout)
+                .map_err(|e| DatabaseError::Query(format!("Failed to write backup: {}", e)))?;
+        } else {
+            // Simple file copy
+            fs::copy(db_path, output_path)
+                .map_err(|e| DatabaseError::Query(format!("Failed to copy database: {}", e)))?;
+        }
+        
+        let stats = self.get_stats().await?;
+        let backup_size = fs::metadata(output_path)
+            .map_err(|e| DatabaseError::Query(format!("Failed to get backup size: {}", e)))?
+            .len() / (1024 * 1024);
+        
+        Ok(BackupResult {
+            size_mb: backup_size as u32,
+            message_count: stats.message_count,
+        })
+    }
+    
+    /// Restore database from backup
+    pub async fn restore_backup(&self, input_path: &std::path::Path) -> DatabaseResult<RestoreResult> {
+        use std::fs;
+        use std::process::Command;
+        
+        // Get current database path
+        let db_url = std::env::var("DATABASE_URL").unwrap_or_else(|_| {
+            dirs::config_dir()
+                .unwrap()
+                .join("comunicado")
+                .join("databases")
+                .join("email.db")
+                .to_string_lossy()
+                .to_string()
+        });
+        
+        let db_path = db_url.strip_prefix("sqlite://").unwrap_or(&db_url);
+        
+        // Check if backup is compressed
+        let is_compressed = input_path.extension()
+            .and_then(|ext| ext.to_str())
+            .map(|ext| ext == "gz")
+            .unwrap_or(false);
+        
+        if is_compressed {
+            // Decompress and restore
+            let output = Command::new("gunzip")
+                .arg("-c")
+                .arg(input_path)
+                .output()
+                .map_err(|e| DatabaseError::Query(format!("Backup decompression failed: {}", e)))?;
+                
+            fs::write(db_path, output.stdout)
+                .map_err(|e| DatabaseError::Query(format!("Failed to restore database: {}", e)))?;
+        } else {
+            // Simple file copy
+            fs::copy(input_path, db_path)
+                .map_err(|e| DatabaseError::Query(format!("Failed to restore database: {}", e)))?;
+        }
+        
+        // Recreate connection pool with restored database
+        drop(self.pool.clone()); // Close existing connections
+        
+        // Get stats from restored database
+        let new_db = EmailDatabase::new(&db_path).await?;
+        let stats = new_db.get_stats().await?;
+        
+        Ok(RestoreResult {
+            message_count: stats.message_count,
+            folder_count: stats.folder_count,
+        })
+    }
+    
+    /// Get database size in bytes
+    async fn get_database_size(&self) -> DatabaseResult<u64> {
+        let page_count: i64 = sqlx::query_scalar("PRAGMA page_count")
+            .fetch_one(&self.pool)
+            .await?;
+        let page_size: i64 = sqlx::query_scalar("PRAGMA page_size")
+            .fetch_one(&self.pool)
+            .await?;
+            
+        Ok((page_count * page_size) as u64)
+    }
+}
+
+/// Structure for cleanup results
+#[derive(Debug)]
+pub struct CleanupResult {
+    pub orphaned_attachments: u32,
+    pub duplicate_messages: u32,
+    pub freed_space_mb: u32,
+}
+
+/// Structure for backup results  
+#[derive(Debug)]
+pub struct BackupResult {
+    pub size_mb: u32,
+    pub message_count: u32,
+}
+
+/// Structure for restore results
+#[derive(Debug)]
+pub struct RestoreResult {
+    pub message_count: u32,
+    pub folder_count: u32,
+}

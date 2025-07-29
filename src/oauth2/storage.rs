@@ -154,10 +154,12 @@ impl SecureStorage {
             display_name: config_without_tokens.display_name,
             email_address: config_without_tokens.email_address,
             provider: config_without_tokens.provider,
+            auth_type: crate::oauth2::AuthType::OAuth2, // Default to OAuth2
             imap_server: config_without_tokens.imap_server,
             imap_port: config_without_tokens.imap_port,
             smtp_server: config_without_tokens.smtp_server,
             smtp_port: config_without_tokens.smtp_port,
+            security: crate::oauth2::SecurityType::SSL, // Default to SSL
             access_token,
             refresh_token,
             token_expires_at: config_without_tokens.token_expires_at,
@@ -682,6 +684,42 @@ impl SecureStorage {
         self.delete_refresh_token(account_id)?;
         
         tracing::info!("Account {} removed from secure storage", account_id);
+        Ok(())
+    }
+    
+    
+    /// List all stored accounts (CLI compatibility)
+    pub fn list_accounts(&self) -> OAuth2Result<Vec<AccountConfig>> {
+        self.load_all_accounts()
+    }
+    
+    /// Get password for account (CLI compatibility)
+    pub fn get_password(&self, email: &str) -> OAuth2Result<String> {
+        // For CLI compatibility, try to find account by email and return access token
+        let accounts = self.load_all_accounts()?;
+        for account in accounts {
+            if account.email_address == email {
+                if !account.access_token.is_empty() {
+                    return Ok(account.access_token);
+                }
+            }
+        }
+        Err(OAuth2Error::StorageError(format!("No password/token found for {}", email)))
+    }
+    
+    /// Store OAuth2 configuration (CLI compatibility)
+    pub fn store_oauth_config(&self, provider: &str, config: &crate::oauth2::OAuthConfig) -> OAuth2Result<()> {
+        // Store OAuth config as a provider configuration
+        let provider_config = format!("{}_{}", provider, "oauth_config");
+        self.store_credential_to_file(&provider_config, "client_id", &config.client_id)?;
+        self.store_credential_to_file(&provider_config, "client_secret", &config.client_secret)?;
+        self.store_credential_to_file(&provider_config, "redirect_uri", &config.redirect_uri)?;
+        
+        // Store scopes as JSON
+        let scopes_json = serde_json::to_string(&config.scopes)
+            .map_err(|e| OAuth2Error::StorageError(format!("Failed to serialize scopes: {}", e)))?;
+        self.store_credential_to_file(&provider_config, "scopes", &scopes_json)?;
+        
         Ok(())
     }
 }
