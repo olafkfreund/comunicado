@@ -5,6 +5,12 @@ pub mod desktop_notifications;
 pub mod filters;
 pub mod folder_hierarchy;
 pub mod maildir;
+pub mod maildir_exporter;
+pub mod maildir_export_wizard;
+pub mod maildir_importer;
+pub mod maildir_import_wizard;
+pub mod maildir_integration_tests;
+pub mod maildir_error_handling;
 pub mod maildir_mapper;
 pub mod maildir_ui;
 pub mod message;
@@ -30,6 +36,26 @@ pub use folder_hierarchy::{
     FolderHierarchy, FolderHierarchyError, FolderHierarchyMapper, FolderHierarchyResult,
 };
 pub use maildir::{MaildirError, MaildirFolderStats, MaildirHandler, MaildirResult, MaildirStats};
+pub use maildir_exporter::{
+    ExportConfig, ExportStats, MaildirExportError, MaildirExporter, MaildirExportResult,
+    ExportProgressCallback,
+};
+pub use maildir_export_wizard::{
+    ExportProgress, ExportWizard, ExportWizardError, ExportWizardResult, ExportWizardState,
+    ExportWizardStep,
+};
+pub use maildir_importer::{
+    ImportConfig, ImportStats, MaildirImportError, MaildirImporter, MaildirImportResult,
+    ProgressCallback,
+};
+pub use maildir_import_wizard::{
+    DirectoryEntry, ImportProgress, ImportWizard, ImportWizardError, ImportWizardResult,
+    ImportWizardState, MaildirFolderEntry, WizardStep,
+};
+pub use maildir_integration_tests::MaildirTestEnvironment;
+pub use maildir_error_handling::{
+    MaildirErrorHandler, MaildirOperationContext, MaildirOperationError,
+};
 pub use maildir_mapper::{
     FlagMapping, MaildirFilenameInfo, MaildirMapper, MaildirMapperError, MaildirMapperResult,
     MaildirMessageMetadata,
