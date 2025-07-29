@@ -19,6 +19,7 @@ use crate::notifications::{NotificationConfig, UnifiedNotificationManager};
 use crate::oauth2::{AccountConfig, SecureStorage, SetupWizard, TokenManager};
 use crate::services::ServiceManager;
 use crate::smtp::{SmtpService, SmtpServiceBuilder};
+use crate::startup::StartupProgressManager;
 use crate::ui::{ComposeAction, DraftAction, UI};
 
 pub struct App {
@@ -42,6 +43,8 @@ pub struct App {
     deferred_initialization: bool,
     initialization_complete: bool,
     initialization_in_progress: bool,
+    // Startup progress tracking
+    startup_progress_manager: StartupProgressManager,
 }
 
 impl App {
@@ -68,63 +71,93 @@ impl App {
             deferred_initialization: false,
             initialization_complete: false,
             initialization_in_progress: false,
+            // Startup progress tracking
+            startup_progress_manager: StartupProgressManager::new(),
         })
+    }
+
+    /// Get reference to the startup progress manager
+    pub fn startup_progress_manager(&self) -> &StartupProgressManager {
+        &self.startup_progress_manager
+    }
+
+    /// Get mutable reference to the startup progress manager
+    pub fn startup_progress_manager_mut(&mut self) -> &mut StartupProgressManager {
+        &mut self.startup_progress_manager
     }
 
     /// Initialize the database connection
     pub async fn initialize_database(&mut self) -> Result<()> {
-        // Create database path in user's data directory
-        let data_dir = dirs::data_dir()
-            .unwrap_or_else(|| std::path::PathBuf::from("."))
-            .join("comunicado");
+        // Start database initialization phase
+        self.startup_progress_manager.start_phase("Database").map_err(|e| anyhow::anyhow!("Progress manager error: {}", e))?;
+        
+        // Perform database initialization with error handling
+        let result: Result<()> = async {
+            // Create database path in user's data directory
+            let data_dir = dirs::data_dir()
+                .unwrap_or_else(|| std::path::PathBuf::from("."))
+                .join("comunicado");
 
-        // Create directory if it doesn't exist
-        std::fs::create_dir_all(&data_dir)?;
+            // Create directory if it doesn't exist
+            std::fs::create_dir_all(&data_dir)?;
 
-        let db_path = data_dir.join("messages.db");
-        let db_path_str = db_path
-            .to_str()
-            .ok_or_else(|| anyhow::anyhow!("Invalid database path"))?;
+            let db_path = data_dir.join("messages.db");
+            let db_path_str = db_path
+                .to_str()
+                .ok_or_else(|| anyhow::anyhow!("Invalid database path"))?;
 
-        // Create database connection
-        let database = EmailDatabase::new(db_path_str)
-            .await
-            .map_err(|e| anyhow::anyhow!("Failed to initialize database: {}", e))?;
+            // Create database connection
+            let database = EmailDatabase::new(db_path_str)
+                .await
+                .map_err(|e| anyhow::anyhow!("Failed to initialize database: {}", e))?;
 
-        let database_arc = Arc::new(database);
+            let database_arc = Arc::new(database);
 
-        // Create notification manager
-        let notification_manager = Arc::new(EmailNotificationManager::new(database_arc.clone()));
+            // Create notification manager
+            let notification_manager = Arc::new(EmailNotificationManager::new(database_arc.clone()));
 
-        // Start the notification processing
-        notification_manager.start().await;
+            // Start the notification processing
+            notification_manager.start().await;
 
-        // Initialize unified notification manager with desktop notifications
-        let notification_config = NotificationConfig::default();
-        let unified_notification_manager = Arc::new(
-            UnifiedNotificationManager::new().with_desktop_notifications(notification_config),
-        );
+            // Initialize unified notification manager with desktop notifications
+            let notification_config = NotificationConfig::default();
+            let unified_notification_manager = Arc::new(
+                UnifiedNotificationManager::new().with_desktop_notifications(notification_config),
+            );
 
-        // Connect email notifications to the unified manager
-        let email_receiver = notification_manager.subscribe();
-        unified_notification_manager.connect_email_notifications(email_receiver);
+            // Connect email notifications to the unified manager
+            let email_receiver = notification_manager.subscribe();
+            unified_notification_manager.connect_email_notifications(email_receiver);
 
-        // TODO: Connect calendar notifications when calendar system is implemented
-        // let calendar_receiver = calendar_manager.subscribe();
-        // unified_notification_manager.connect_calendar_notifications(calendar_receiver);
+            // TODO: Connect calendar notifications when calendar system is implemented
+            // let calendar_receiver = calendar_manager.subscribe();
+            // unified_notification_manager.connect_calendar_notifications(calendar_receiver);
 
-        tracing::info!("Unified notification system initialized successfully");
+            tracing::info!("Unified notification system initialized successfully");
 
-        // Set database and notification manager in UI
-        self.ui.set_database(database_arc.clone());
-        self.ui
-            .set_notification_manager(notification_manager.clone());
+            // Set database and notification manager in UI
+            self.ui.set_database(database_arc.clone());
+            self.ui
+                .set_notification_manager(notification_manager.clone());
 
-        self.database = Some(database_arc);
-        self.notification_manager = Some(notification_manager);
-        self.unified_notification_manager = Some(unified_notification_manager);
+            self.database = Some(database_arc);
+            self.notification_manager = Some(notification_manager);
+            self.unified_notification_manager = Some(unified_notification_manager);
 
-        Ok(())
+            Ok(())
+        }.await;
+
+        // Report success or failure to progress manager
+        match result {
+            Ok(()) => {
+                self.startup_progress_manager.complete_phase("Database").map_err(|e| anyhow::anyhow!("Progress manager error: {}", e))?;
+                Ok(())
+            }
+            Err(e) => {
+                self.startup_progress_manager.fail_phase("Database", e.to_string()).map_err(|pe| anyhow::anyhow!("Progress manager error: {}", pe))?;
+                Err(e)
+            }
+        }
     }
 
     /// Get database reference for maintenance operations
@@ -263,7 +296,12 @@ impl App {
 
     /// Initialize dashboard services for start page
     pub async fn initialize_dashboard_services(&mut self) -> Result<()> {
-        tracing::debug!("Initializing dashboard services");
+        // Start dashboard services initialization phase
+        self.startup_progress_manager.start_phase("Dashboard Services").map_err(|e| anyhow::anyhow!("Progress manager error: {}", e))?;
+        
+        // Perform dashboard services initialization with error handling
+        let result: Result<()> = async {
+            tracing::debug!("Initializing dashboard services");
 
         let dashboard_init_result = tokio::time::timeout(
             std::time::Duration::from_secs(10), // 10 second timeout for dashboard init
@@ -295,7 +333,20 @@ impl App {
             }
         }
 
-        Ok(())
+            Ok(())
+        }.await;
+
+        // Report success or failure to progress manager
+        match result {
+            Ok(()) => {
+                self.startup_progress_manager.complete_phase("Dashboard Services").map_err(|e| anyhow::anyhow!("Progress manager error: {}", e))?;
+                Ok(())
+            }
+            Err(e) => {
+                self.startup_progress_manager.fail_phase("Dashboard Services", e.to_string()).map_err(|pe| anyhow::anyhow!("Progress manager error: {}", pe))?;
+                Err(e)
+            }
+        }
     }
 
     /// Update start page with fresh data
@@ -349,11 +400,16 @@ impl App {
 
     /// Initialize IMAP account manager with OAuth2 support
     pub async fn initialize_imap_manager(&mut self) -> Result<()> {
-        // Create token manager for OAuth2 authentication with storage backend
-        let token_manager = TokenManager::new_with_storage(Arc::new(self.storage.clone()));
+        // Start IMAP manager initialization phase
+        self.startup_progress_manager.start_phase("IMAP Manager").map_err(|e| anyhow::anyhow!("Progress manager error: {}", e))?;
+        
+        // Perform IMAP manager initialization with error handling
+        let result: Result<()> = async {
+            // Create token manager for OAuth2 authentication with storage backend
+            let token_manager = TokenManager::new_with_storage(Arc::new(self.storage.clone()));
 
-        // Create IMAP account manager with OAuth2 support
-        let mut imap_manager = ImapAccountManager::new_with_oauth2(token_manager.clone())
+            // Create IMAP account manager with OAuth2 support
+            let mut imap_manager = ImapAccountManager::new_with_oauth2(token_manager.clone())
             .map_err(|e| anyhow::anyhow!("Failed to create IMAP account manager: {}", e))?;
 
         // Load existing accounts from OAuth2 storage
@@ -442,10 +498,23 @@ impl App {
             .content_preview_mut()
             .set_imap_manager(imap_manager_arc.clone());
 
-        self.token_manager = Some(token_manager);
-        self.imap_manager = Some(imap_manager_arc);
+            self.token_manager = Some(token_manager);
+            self.imap_manager = Some(imap_manager_arc);
 
-        Ok(())
+            Ok(())
+        }.await;
+
+        // Report success or failure to progress manager
+        match result {
+            Ok(()) => {
+                self.startup_progress_manager.complete_phase("IMAP Manager").map_err(|e| anyhow::anyhow!("Progress manager error: {}", e))?;
+                Ok(())
+            }
+            Err(e) => {
+                self.startup_progress_manager.fail_phase("IMAP Manager", e.to_string()).map_err(|pe| anyhow::anyhow!("Progress manager error: {}", pe))?;
+                Err(e)
+            }
+        }
     }
 
     /// Load OAuth2 tokens from storage into the TokenManager
@@ -532,7 +601,12 @@ impl App {
 
     /// Check for existing accounts and run setup wizard if needed
     pub async fn check_accounts_and_setup(&mut self) -> Result<()> {
-        tracing::debug!("Starting account check and setup process");
+        // Start account setup phase
+        self.startup_progress_manager.start_phase("Account Setup").map_err(|e| anyhow::anyhow!("Progress manager error: {}", e))?;
+        
+        // Perform account setup with error handling
+        let result: Result<()> = async {
+            tracing::debug!("Starting account check and setup process");
 
         let account_ids = self
             .storage
@@ -572,8 +646,21 @@ impl App {
             }
         }
 
-        tracing::debug!("Account check and setup process completed");
-        Ok(())
+            tracing::debug!("Account check and setup process completed");
+            Ok(())
+        }.await;
+
+        // Report success or failure to progress manager
+        match result {
+            Ok(()) => {
+                self.startup_progress_manager.complete_phase("Account Setup").map_err(|e| anyhow::anyhow!("Progress manager error: {}", e))?;
+                Ok(())
+            }
+            Err(e) => {
+                self.startup_progress_manager.fail_phase("Account Setup", e.to_string()).map_err(|pe| anyhow::anyhow!("Progress manager error: {}", pe))?;
+                Err(e)
+            }
+        }
     }
 
     /// Run the OAuth2 setup wizard
@@ -1279,7 +1366,12 @@ impl App {
 
     /// Initialize SMTP service and contacts manager
     pub async fn initialize_services(&mut self) -> Result<()> {
-        tracing::debug!("Starting service initialization");
+        // Start services initialization phase
+        self.startup_progress_manager.start_phase("Services").map_err(|e| anyhow::anyhow!("Progress manager error: {}", e))?;
+        
+        // Perform services initialization with error handling
+        let result: Result<()> = async {
+            tracing::debug!("Starting service initialization");
 
         // Initialize token manager if not already done
         if self.token_manager.is_none() {
@@ -1387,8 +1479,21 @@ impl App {
             }
         }
 
-        tracing::info!("Services initialized successfully");
-        Ok(())
+            tracing::info!("Services initialized successfully");
+            Ok(())
+        }.await;
+
+        // Report success or failure to progress manager
+        match result {
+            Ok(()) => {
+                self.startup_progress_manager.complete_phase("Services").map_err(|e| anyhow::anyhow!("Progress manager error: {}", e))?;
+                Ok(())
+            }
+            Err(e) => {
+                self.startup_progress_manager.fail_phase("Services", e.to_string()).map_err(|pe| anyhow::anyhow!("Progress manager error: {}", pe))?;
+                Err(e)
+            }
+        }
     }
 
     /// Handle compose actions (send, save draft, cancel)
@@ -3066,5 +3171,48 @@ impl App {
 impl Default for App {
     fn default() -> Self {
         Self::new().expect("Failed to create default App")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_startup_progress_manager_integration() {
+        let mut app = App::new().unwrap();
+        
+        // Test that the progress manager is initialized
+        assert_eq!(app.startup_progress_manager().phases().len(), 5);
+        assert!(!app.startup_progress_manager().is_complete());
+        assert_eq!(app.startup_progress_manager().overall_progress_percentage(), 0.0);
+        
+        // Test that we can get a mutable reference
+        let progress_manager = app.startup_progress_manager_mut();
+        progress_manager.start_phase("Database").unwrap();
+        
+        // Test that the phase is now started
+        assert!(progress_manager.current_phase().unwrap().status().is_in_progress());
+    }
+
+    #[tokio::test]
+    async fn test_database_initialization_with_progress() {
+        let mut app = App::new().unwrap();
+        
+        // Initialize database should update progress
+        let result = app.initialize_database().await;
+        
+        match result {
+            Ok(()) => {
+                // Database phase should be completed
+                let phases = app.startup_progress_manager().phases();
+                assert!(phases[0].status().is_completed());
+            }
+            Err(_) => {
+                // Database phase should be failed
+                let phases = app.startup_progress_manager().phases();
+                assert!(phases[0].status().is_failed());
+            }
+        }
     }
 }

@@ -17,6 +17,7 @@ pub mod oauth2;
 pub mod services;
 pub mod smtp;
 pub mod spell;
+pub mod startup;
 pub mod theme;
 pub mod ui;
 
