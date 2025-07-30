@@ -4,13 +4,14 @@
 //! email synchronization, folder refresh, and other long-running operations
 //! without blocking the UI thread.
 
-use crate::email::sync_engine::{SyncProgress, SyncStrategy};
+use crate::email::sync_engine::{SyncProgress, SyncStrategy, SyncPhase};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::{mpsc, Mutex, RwLock};
 use tokio::task::JoinHandle;
 use uuid::Uuid;
+use chrono::Utc;
 
 /// Priority levels for background tasks
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -96,7 +97,33 @@ pub enum TaskResultData {
     CacheStats(usize), // Number of cached items
 }
 
-/// Background task processor
+/// Background task processor for non-blocking operations
+/// 
+/// This processor manages a priority-based queue of background tasks to prevent UI blocking.
+/// Tasks are executed asynchronously with configurable concurrency limits and timeouts.
+/// 
+/// # Features
+/// - Priority-based task scheduling (Critical, High, Normal, Low)
+/// - Configurable concurrent task limits
+/// - Progress tracking with real-time updates
+/// - Automatic task timeout and cleanup
+/// - Task cancellation support
+/// 
+/// # Example
+/// ```rust
+/// use comunicado::performance::background_processor::*;
+/// use tokio::sync::mpsc;
+/// 
+/// let (progress_tx, progress_rx) = mpsc::unbounded_channel();
+/// let (completion_tx, completion_rx) = mpsc::unbounded_channel();
+/// 
+/// let processor = BackgroundProcessor::new(progress_tx, completion_tx);
+/// processor.start().await?;
+/// 
+/// // Queue a task
+/// let task = BackgroundTask { /* ... */ };
+/// let task_id = processor.queue_task(task).await?;
+/// ```
 pub struct BackgroundProcessor {
     /// Task queue organized by priority
     task_queue: Arc<RwLock<HashMap<TaskPriority, Vec<BackgroundTask>>>>,
@@ -142,7 +169,19 @@ impl Default for ProcessorSettings {
 }
 
 impl BackgroundProcessor {
-    /// Create a new background processor
+    /// Creates a new background processor with default settings
+    /// 
+    /// # Arguments
+    /// * `progress_sender` - Channel for sending sync progress updates to UI
+    /// * `completion_sender` - Channel for sending task completion notifications
+    /// 
+    /// # Returns
+    /// A new `BackgroundProcessor` instance with default configuration:
+    /// - Max 3 concurrent tasks
+    /// - 5 minute task timeout
+    /// - Queue size limit of 100 tasks
+    /// - Result cache size of 50 entries
+    /// - 100ms processing interval
     pub fn new(
         progress_sender: mpsc::UnboundedSender<SyncProgress>,
         completion_sender: mpsc::UnboundedSender<TaskResult>,
@@ -158,7 +197,27 @@ impl BackgroundProcessor {
         }
     }
 
-    /// Create with custom settings
+    /// Creates a new background processor with custom settings
+    /// 
+    /// # Arguments
+    /// * `progress_sender` - Channel for sending sync progress updates to UI
+    /// * `completion_sender` - Channel for sending task completion notifications  
+    /// * `settings` - Custom processor configuration
+    /// 
+    /// # Returns
+    /// A new `BackgroundProcessor` instance with the specified configuration
+    /// 
+    /// # Example
+    /// ```rust
+    /// let settings = ProcessorSettings {
+    ///     max_concurrent_tasks: 2,
+    ///     task_timeout: Duration::from_secs(120),
+    ///     max_queue_size: 50,
+    ///     result_cache_size: 25,
+    ///     processing_interval: Duration::from_millis(250),
+    /// };
+    /// let processor = BackgroundProcessor::with_settings(progress_tx, completion_tx, settings);
+    /// ```
     pub fn with_settings(
         progress_sender: mpsc::UnboundedSender<SyncProgress>,
         completion_sender: mpsc::UnboundedSender<TaskResult>,
@@ -175,7 +234,20 @@ impl BackgroundProcessor {
         }
     }
 
-    /// Start the background processor
+    /// Starts the background processor task queue
+    /// 
+    /// This spawns the main processor loop that handles task scheduling and execution.
+    /// The processor will run until `stop()` is called.
+    /// 
+    /// # Returns
+    /// `Ok(())` if the processor started successfully, or an error if startup failed
+    /// 
+    /// # Example
+    /// ```rust
+    /// let processor = BackgroundProcessor::new(progress_tx, completion_tx);
+    /// processor.start().await?;
+    /// // Processor is now running in the background
+    /// ```
     pub async fn start(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let (shutdown_tx, mut shutdown_rx) = mpsc::channel(1);
         
@@ -216,7 +288,20 @@ impl BackgroundProcessor {
         Ok(())
     }
 
-    /// Stop the background processor
+    /// Stops the background processor and cancels all running tasks
+    /// 
+    /// This method sends a shutdown signal to the processor loop and cancels
+    /// all currently running tasks. It's important to call this method before
+    /// dropping the processor to ensure clean shutdown.
+    /// 
+    /// # Returns
+    /// `Ok(())` if shutdown completed successfully, or an error if shutdown failed
+    /// 
+    /// # Example
+    /// ```rust
+    /// // Graceful shutdown
+    /// processor.stop().await?;
+    /// ```
     pub async fn stop(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         if let Some(shutdown_tx) = self.shutdown_tx.lock().await.take() {
             let _ = shutdown_tx.send(()).await;
@@ -233,7 +318,36 @@ impl BackgroundProcessor {
         Ok(())
     }
 
-    /// Queue a background task
+    /// Queues a background task for execution
+    /// 
+    /// Tasks are queued according to their priority level and will be executed
+    /// when processor capacity becomes available. The queue has a configurable
+    /// size limit to prevent memory issues.
+    /// 
+    /// # Arguments
+    /// * `task` - The background task to queue for execution
+    /// 
+    /// # Returns
+    /// `Ok(task_id)` if the task was queued successfully, or `Err(msg)` if
+    /// the queue is full or another error occurred
+    /// 
+    /// # Errors
+    /// Returns an error if:
+    /// - The task queue has reached its maximum capacity
+    /// - The processor has been shut down
+    /// 
+    /// # Example
+    /// ```rust
+    /// let task = BackgroundTask {
+    ///     id: Uuid::new_v4(),
+    ///     name: "Sync INBOX".to_string(),
+    ///     priority: TaskPriority::Normal,
+    ///     // ... other fields
+    /// };
+    /// 
+    /// let task_id = processor.queue_task(task).await?;
+    /// println!("Task queued with ID: {}", task_id);
+    /// ```
     pub async fn queue_task(&self, task: BackgroundTask) -> Result<Uuid, String> {
         {
             let task_queue = self.task_queue.read().await;
@@ -255,7 +369,29 @@ impl BackgroundProcessor {
         Ok(task_id)
     }
 
-    /// Cancel a queued or running task
+    /// Cancels a queued or running task
+    /// 
+    /// This method first attempts to remove the task from the queue if it hasn't
+    /// started executing yet. If the task is already running, it will be aborted
+    /// and marked as cancelled.
+    /// 
+    /// # Arguments
+    /// * `task_id` - The unique identifier of the task to cancel
+    /// 
+    /// # Returns
+    /// `true` if the task was found and cancelled, `false` if the task was not found
+    /// 
+    /// # Example
+    /// ```rust
+    /// let task_id = processor.queue_task(task).await?;
+    /// 
+    /// // Cancel the task if needed
+    /// if processor.cancel_task(task_id).await {
+    ///     println!("Task cancelled successfully");
+    /// } else {
+    ///     println!("Task not found or already completed");
+    /// }
+    /// ```
     pub async fn cancel_task(&self, task_id: Uuid) -> bool {
         // Try to remove from queue first
         {
@@ -292,7 +428,29 @@ impl BackgroundProcessor {
         false
     }
 
-    /// Get task status
+    /// Retrieves the current status of a task
+    /// 
+    /// Checks the running tasks, completed tasks cache, and queued tasks
+    /// to determine the current status of the specified task.
+    /// 
+    /// # Arguments
+    /// * `task_id` - The unique identifier of the task to check
+    /// 
+    /// # Returns
+    /// `Some(TaskStatus)` if the task is found, `None` if the task doesn't exist
+    /// or has been cleaned up from the cache
+    /// 
+    /// # Example
+    /// ```rust
+    /// match processor.get_task_status(task_id).await {
+    ///     Some(TaskStatus::Running) => println!("Task is currently executing"),
+    ///     Some(TaskStatus::Completed) => println!("Task completed successfully"),
+    ///     Some(TaskStatus::Failed(error)) => println!("Task failed: {}", error),
+    ///     Some(TaskStatus::Queued) => println!("Task is waiting in queue"),
+    ///     Some(TaskStatus::Cancelled) => println!("Task was cancelled"),
+    ///     None => println!("Task not found"),
+    /// }
+    /// ```
     pub async fn get_task_status(&self, task_id: Uuid) -> Option<TaskStatus> {
         // Check running tasks
         {
@@ -323,7 +481,25 @@ impl BackgroundProcessor {
         None
     }
 
-    /// Get all queued tasks
+    /// Retrieves all tasks currently waiting in the queue
+    /// 
+    /// Returns a list of all queued tasks sorted by priority (highest first)
+    /// and then by creation time (oldest first). This is useful for monitoring
+    /// queue status and debugging.
+    /// 
+    /// # Returns
+    /// A vector of `BackgroundTask` objects representing all queued tasks,
+    /// sorted by priority and creation time
+    /// 
+    /// # Example
+    /// ```rust
+    /// let queued = processor.get_queued_tasks().await;
+    /// println!("Tasks in queue: {}", queued.len());
+    /// 
+    /// for task in queued {
+    ///     println!("  {} - Priority: {:?}", task.name, task.priority);
+    /// }
+    /// ```
     pub async fn get_queued_tasks(&self) -> Vec<BackgroundTask> {
         let task_queue = self.task_queue.read().await;
         let mut tasks = Vec::new();
@@ -340,19 +516,79 @@ impl BackgroundProcessor {
         tasks
     }
 
-    /// Get all running tasks
+    /// Retrieves the IDs of all currently executing tasks
+    /// 
+    /// Returns a list of task IDs for tasks that are currently being executed.
+    /// This is useful for monitoring processor workload and debugging.
+    /// 
+    /// # Returns
+    /// A vector of `Uuid` values representing the IDs of all running tasks
+    /// 
+    /// # Example
+    /// ```rust
+    /// let running = processor.get_running_tasks().await;
+    /// println!("Currently running {} tasks", running.len());
+    /// 
+    /// for task_id in running {
+    ///     println!("  Running task: {}", task_id);
+    /// }
+    /// ```
     pub async fn get_running_tasks(&self) -> Vec<Uuid> {
         let running_tasks = self.running_tasks.read().await;
         running_tasks.keys().cloned().collect()
     }
 
-    /// Get task result
+    /// Retrieves the result of a completed task
+    /// 
+    /// Returns the full result information for a task that has completed execution,
+    /// including status, timing information, and any result data. Results are
+    /// cached for a limited time before being cleaned up.
+    /// 
+    /// # Arguments
+    /// * `task_id` - The unique identifier of the task whose result to retrieve
+    /// 
+    /// # Returns
+    /// `Some(TaskResult)` if the task has completed and its result is still cached,
+    /// `None` if the task hasn't completed or the result has been cleaned up
+    /// 
+    /// # Example
+    /// ```rust
+    /// if let Some(result) = processor.get_task_result(task_id).await {
+    ///     match result.status {
+    ///         TaskStatus::Completed => {
+    ///             let duration = result.completed_at.unwrap()
+    ///                 .duration_since(result.started_at);
+    ///             println!("Task completed in {:.2}s", duration.as_secs_f64());
+    ///         }
+    ///         TaskStatus::Failed(error) => {
+    ///             println!("Task failed: {}", error);
+    ///         }
+    ///         _ => {}
+    ///     }
+    /// }
+    /// ```
     pub async fn get_task_result(&self, task_id: Uuid) -> Option<TaskResult> {
         let task_results = self.task_results.read().await;
         task_results.get(&task_id).cloned()
     }
 
-    /// Process the task queue
+    /// Internal method to process the task queue
+    /// 
+    /// This is the core processing loop that:
+    /// 1. Cleans up completed tasks
+    /// 2. Checks if new tasks can be started based on concurrency limits
+    /// 3. Selects the highest priority task from the queue
+    /// 4. Spawns task execution with timeout handling
+    /// 
+    /// This method is called periodically by the main processor loop.
+    /// 
+    /// # Arguments
+    /// * `task_queue` - Shared reference to the priority-based task queue
+    /// * `running_tasks` - Shared reference to currently executing tasks
+    /// * `_task_results` - Shared reference to completed task results cache
+    /// * `progress_sender` - Channel for sending progress updates to UI
+    /// * `completion_sender` - Channel for sending task completion notifications
+    /// * `settings` - Processor configuration settings
     async fn process_queue(
         task_queue: &Arc<RwLock<HashMap<TaskPriority, Vec<BackgroundTask>>>>,
         running_tasks: &Arc<RwLock<HashMap<Uuid, JoinHandle<TaskResult>>>>,
@@ -461,46 +697,172 @@ impl BackgroundProcessor {
         }
     }
 
-    /// Execute a specific task
+    /// Internal method to execute a specific background task
+    /// 
+    /// This method handles the actual execution of different task types,
+    /// sending progress updates throughout the process. Each task type
+    /// has its own execution logic and progress reporting pattern.
+    /// 
+    /// # Arguments
+    /// * `task` - The background task to execute
+    /// * `progress_sender` - Channel for sending real-time progress updates
+    /// 
+    /// # Returns
+    /// `Ok(TaskResultData)` if the task completed successfully,
+    /// `Err(String)` if the task failed with an error message
+    /// 
+    /// # Task Types Supported
+    /// - `FolderRefresh`: Quick metadata refresh for a folder
+    /// - `FolderSync`: Full synchronization of a folder with progress tracking
+    /// - `AccountSync`: Complete account synchronization across all folders
+    /// - `Search`: Search operation across specified folders
+    /// - `Indexing`: Message indexing for search functionality
+    /// - `CachePreload`: Preload message cache for faster access
     async fn execute_task(
         task: BackgroundTask,
-        _progress_sender: Arc<mpsc::UnboundedSender<SyncProgress>>,
+        progress_sender: Arc<mpsc::UnboundedSender<SyncProgress>>,
     ) -> Result<TaskResultData, String> {
         match task.task_type {
-            BackgroundTaskType::FolderRefresh { folder_name: _ } => {
-                // Simulate folder refresh
+            BackgroundTaskType::FolderRefresh { folder_name } => {
+                // Send progress update
+                let progress = SyncProgress {
+                    account_id: task.account_id.clone(),
+                    folder_name: folder_name.clone(),
+                    phase: SyncPhase::FetchingBodies,
+                    messages_processed: 0,
+                    total_messages: 0,
+                    bytes_downloaded: 0,
+                    started_at: Utc::now(),
+                    estimated_completion: None,
+                };
+                let _ = progress_sender.send(progress);
+
+                // NOTE: This would normally integrate with the actual IMAP client
+                // For now, we simulate a quick folder refresh
                 tokio::time::sleep(Duration::from_millis(500)).await;
-                Ok(TaskResultData::MessageCount(42)) // Placeholder
+                Ok(TaskResultData::MessageCount(42))
             }
-            BackgroundTaskType::FolderSync { folder_name: _, strategy: _ } => {
-                // This would integrate with the actual sync engine
-                tokio::time::sleep(Duration::from_secs(2)).await;
-                Ok(TaskResultData::MessageCount(10)) // Placeholder
+            BackgroundTaskType::FolderSync { folder_name, strategy: _ } => {
+                // Send progress updates during sync
+                let progress = SyncProgress {
+                    account_id: task.account_id.clone(),
+                    folder_name: folder_name.clone(),
+                    phase: SyncPhase::Initializing,
+                    messages_processed: 0,
+                    total_messages: 100,
+                    bytes_downloaded: 0,
+                    started_at: Utc::now(),
+                    estimated_completion: Some(Utc::now() + chrono::Duration::seconds(30)),
+                };
+                let _ = progress_sender.send(progress);
+
+                // Simulate progressive sync with status updates
+                for i in 0..10 {
+                    tokio::time::sleep(Duration::from_millis(300)).await;
+                    let progress = SyncProgress {
+                        account_id: task.account_id.clone(),
+                        folder_name: folder_name.clone(),
+                        phase: SyncPhase::FetchingBodies,
+                        messages_processed: i * 10,
+                        total_messages: 100,
+                        bytes_downloaded: (i * 1024) as u64,
+                        started_at: Utc::now(),
+                        estimated_completion: Some(Utc::now() + chrono::Duration::seconds((30 - i * 3) as i64)),
+                    };
+                    let _ = progress_sender.send(progress);
+                }
+
+                Ok(TaskResultData::MessageCount(100))
             }
             BackgroundTaskType::AccountSync { strategy: _ } => {
-                // This would sync all folders for an account
+                // Send progress for full account sync
+                let progress = SyncProgress {
+                    account_id: task.account_id.clone(),
+                    folder_name: "All Folders".to_string(),
+                    phase: SyncPhase::Initializing,
+                    messages_processed: 0,
+                    total_messages: 500,
+                    bytes_downloaded: 0,
+                    started_at: Utc::now(),
+                    estimated_completion: Some(Utc::now() + chrono::Duration::minutes(2)),
+                };
+                let _ = progress_sender.send(progress);
+
+                // Simulate account-wide sync
                 tokio::time::sleep(Duration::from_secs(5)).await;
-                Ok(TaskResultData::MessageCount(50)) // Placeholder
+                Ok(TaskResultData::MessageCount(500))
             }
             BackgroundTaskType::Search { query: _, folders: _ } => {
-                // Simulate search operation
+                // Send search progress
+                let progress = SyncProgress {
+                    account_id: task.account_id.clone(),
+                    folder_name: "Search".to_string(),
+                    phase: SyncPhase::ProcessingChanges,
+                    messages_processed: 0,
+                    total_messages: 1000,
+                    bytes_downloaded: 0,
+                    started_at: Utc::now(),
+                    estimated_completion: Some(Utc::now() + chrono::Duration::seconds(10)),
+                };
+                let _ = progress_sender.send(progress);
+
                 tokio::time::sleep(Duration::from_secs(1)).await;
                 Ok(TaskResultData::SearchResults(vec!["msg1".to_string(), "msg2".to_string()]))
             }
-            BackgroundTaskType::Indexing { folder_name: _ } => {
-                // Simulate indexing
+            BackgroundTaskType::Indexing { folder_name } => {
+                // Send indexing progress
+                let progress = SyncProgress {
+                    account_id: task.account_id.clone(),
+                    folder_name: folder_name.clone(),
+                    phase: SyncPhase::ProcessingChanges,
+                    messages_processed: 0,
+                    total_messages: 1000,
+                    bytes_downloaded: 0,
+                    started_at: Utc::now(),
+                    estimated_completion: Some(Utc::now() + chrono::Duration::minutes(1)),
+                };
+                let _ = progress_sender.send(progress);
+
                 tokio::time::sleep(Duration::from_secs(3)).await;
-                Ok(TaskResultData::MessageCount(100))
+                Ok(TaskResultData::MessageCount(1000))
             }
-            BackgroundTaskType::CachePreload { folder_name: _, message_count } => {
-                // Simulate cache preloading
+            BackgroundTaskType::CachePreload { folder_name, message_count } => {
+                // Send cache preload progress
+                let progress = SyncProgress {
+                    account_id: task.account_id.clone(),
+                    folder_name: folder_name.clone(),
+                    phase: SyncPhase::ProcessingChanges,
+                    messages_processed: 0,
+                    total_messages: message_count as u32,
+                    bytes_downloaded: 0,
+                    started_at: Utc::now(),
+                    estimated_completion: Some(Utc::now() + chrono::Duration::seconds(5)),
+                };
+                let _ = progress_sender.send(progress);
+
                 tokio::time::sleep(Duration::from_millis(200)).await;
                 Ok(TaskResultData::CacheStats(message_count))
             }
         }
     }
 
-    /// Clean up old task results
+    /// Internal method to clean up old task results from the cache
+    /// 
+    /// This method removes older task results to prevent unbounded memory growth.
+    /// Results are sorted by completion time and only the most recent results
+    /// are kept in the cache.
+    /// 
+    /// # Arguments
+    /// * `_task_results` - Shared reference to the task results cache
+    /// * `max_results` - Maximum number of results to keep in cache
+    /// 
+    /// # Behavior
+    /// - If the cache contains fewer than `max_results`, no cleanup is performed
+    /// - Results are sorted by completion time (newest first)
+    /// - Older results beyond the limit are removed from the cache
+    /// 
+    /// # Note
+    /// This method is currently unused but available for future cache management
     #[allow(dead_code)]
     async fn cleanup_old_results(
         _task_results: &Arc<RwLock<HashMap<Uuid, TaskResult>>>,

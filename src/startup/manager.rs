@@ -9,6 +9,8 @@ pub struct StartupProgressManager {
     started_at: Instant,
     is_visible: bool,
     error_states: HashMap<String, StartupError>,
+    phase_logs: HashMap<String, Vec<String>>,
+    current_phase_progress: f64,
 }
 
 impl StartupProgressManager {
@@ -42,6 +44,8 @@ impl StartupProgressManager {
             started_at: Instant::now(),
             is_visible: true,
             error_states: HashMap::new(),
+            phase_logs: HashMap::new(),
+            current_phase_progress: 0.0,
         }
     }
 
@@ -54,6 +58,13 @@ impl StartupProgressManager {
                 started_at: Instant::now(),
             };
             self.current_phase = phase_index;
+            self.current_phase_progress = 0.0;
+            
+            // Initialize logs for this phase
+            self.phase_logs.insert(phase_name.to_string(), vec![
+                format!("🔄 Starting {}", phase_name)
+            ]);
+            
             Ok(())
         } else {
             Err(format!("Phase {} not found", phase_name))
@@ -154,10 +165,19 @@ impl StartupProgressManager {
 
         let in_progress_weight = if self.current_phase < self.phases.len() {
             match self.phases[self.current_phase].status() {
-                PhaseStatus::InProgress { started_at } => {
-                    let elapsed = started_at.elapsed();
-                    let timeout = self.phases[self.current_phase].timeout();
-                    (elapsed.as_secs_f64() / timeout.as_secs_f64()).min(0.8) // Max 80% for in-progress
+                PhaseStatus::InProgress { .. } => {
+                    // Use current phase progress if available, otherwise fall back to time-based
+                    if self.current_phase_progress > 0.0 {
+                        (self.current_phase_progress / 100.0).min(0.95) // Max 95% for in-progress
+                    } else {
+                        let started_at = match self.phases[self.current_phase].status() {
+                            PhaseStatus::InProgress { started_at } => *started_at,
+                            _ => Instant::now(),
+                        };
+                        let elapsed = started_at.elapsed();
+                        let timeout = self.phases[self.current_phase].timeout();
+                        (elapsed.as_secs_f64() / timeout.as_secs_f64()).min(0.8) // Max 80% for time-based
+                    }
                 }
                 _ => 0.0,
             }
@@ -268,6 +288,48 @@ impl StartupProgressManager {
         } else {
             Err(format!("Phase {} not found", phase_name))
         }
+    }
+
+    /// Update progress for the current phase
+    pub fn update_phase_progress(&mut self, phase_name: &str, progress: f64, log_message: Option<String>) -> Result<(), String> {
+        let phase_index = self.find_phase_by_name(phase_name)?;
+        
+        if phase_index == self.current_phase {
+            self.current_phase_progress = progress.clamp(0.0, 100.0);
+            
+            // Add log message if provided
+            if let Some(message) = log_message {
+                self.phase_logs.entry(phase_name.to_string())
+                    .or_insert_with(Vec::new)
+                    .push(message);
+            }
+            
+            Ok(())
+        } else {
+            Err(format!("Cannot update progress for non-current phase {}", phase_name))
+        }
+    }
+    
+    /// Add a log message to a specific phase
+    pub fn add_phase_log(&mut self, phase_name: &str, message: String) {
+        self.phase_logs.entry(phase_name.to_string())
+            .or_insert_with(Vec::new)
+            .push(message);
+    }
+    
+    /// Get logs for a specific phase
+    pub fn get_phase_logs(&self, phase_name: &str) -> Vec<String> {
+        self.phase_logs.get(phase_name).cloned().unwrap_or_default()
+    }
+    
+    /// Get current phase progress (0-100)
+    pub fn current_phase_progress(&self) -> f64 {
+        self.current_phase_progress
+    }
+    
+    /// Get current phase name
+    pub fn current_phase_name(&self) -> Option<String> {
+        self.current_phase().map(|phase| phase.name().to_string())
     }
 
     fn find_phase_by_name(&self, phase_name: &str) -> Result<usize, String> {

@@ -744,6 +744,14 @@ impl MessageList {
                 .get_messages(&account_id, &folder_name, Some(100), None)
                 .await?;
             tracing::info!("Loaded {} messages from database", stored_messages.len());
+            
+            // If no messages in database for this folder, it means it hasn't been synced yet
+            // This happens for non-inbox folders that user is accessing for the first time
+            if stored_messages.is_empty() {
+                tracing::info!("No cached messages for folder '{}'. User can press 'R' to fetch from IMAP.", folder_name);
+                // Note: The force refresh functionality (Ctrl+R) will fetch messages from IMAP
+                // This provides the user control over when to sync folders
+            }
 
             // Convert stored messages to MessageItems
             self.messages = stored_messages

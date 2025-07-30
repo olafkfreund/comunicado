@@ -76,7 +76,7 @@ async fn main() -> Result<()> {
     let mut app = App::new()?;
 
     // Helper function to update progress display
-    let update_progress = |progress_manager: &StartupProgressManager, terminal: &mut Option<Terminal<CrosstermBackend<std::io::Stdout>>>| -> Result<()> {
+    let mut update_progress = |progress_manager: &StartupProgressManager, terminal: &mut Option<Terminal<CrosstermBackend<std::io::Stdout>>>| -> Result<()> {
         if let Some(ref mut term) = terminal {
             term.draw(|frame| {
                 let area = frame.size();
@@ -143,7 +143,7 @@ async fn main() -> Result<()> {
     // Phases 2-5: Initialize services with reduced timeouts for faster startup
     tracing::info!("Starting optimized initialization of optional services...");
     
-    // Helper macro to avoid repetitive error handling
+    // Helper macro to avoid repetitive error handling with real-time progress updates
     macro_rules! init_phase {
         ($phase_name:expr, $timeout_secs:expr, $init_fn:expr) => {
             if let Err(e) = progress_manager.start_phase($phase_name) {
@@ -151,26 +151,61 @@ async fn main() -> Result<()> {
             }
             update_progress(&progress_manager, &mut terminal)?;
             
-            match tokio::time::timeout(
-                std::time::Duration::from_secs($timeout_secs),
-                $init_fn
-            ).await {
-                Ok(Ok(())) => {
-                    tracing::info!("{} initialized successfully", $phase_name);
-                    if let Err(e) = progress_manager.complete_phase($phase_name) {
-                        tracing::warn!("Failed to complete {} phase: {}", $phase_name, e);
+            // Add initial progress log
+            progress_manager.add_phase_log($phase_name, format!("📡 Connecting to services..."));
+            update_progress(&progress_manager, &mut terminal)?;
+            
+            // Spawn a task to provide progress updates during initialization
+            let mut progress_interval = tokio::time::interval(std::time::Duration::from_millis(500));
+            let mut progress_value = 10.0;
+            
+            let init_future = $init_fn;
+            tokio::pin!(init_future);
+            
+            loop {
+                tokio::select! {
+                    result = &mut init_future => {
+                        match result {
+                            Ok(()) => {
+                                tracing::info!("{} initialized successfully", $phase_name);
+                                progress_manager.update_phase_progress($phase_name, 100.0, Some("✅ Initialization complete".to_string())).ok();
+                                update_progress(&progress_manager, &mut terminal)?;
+                                tokio::time::sleep(std::time::Duration::from_millis(200)).await; // Brief pause to show completion
+                                if let Err(e) = progress_manager.complete_phase($phase_name) {
+                                    tracing::warn!("Failed to complete {} phase: {}", $phase_name, e);
+                                }
+                            }
+                            Err(e) => {
+                                tracing::error!("Failed to initialize {}: {}", $phase_name, e);
+                                progress_manager.add_phase_log($phase_name, format!("❌ Error: {}", e));
+                                update_progress(&progress_manager, &mut terminal)?;
+                                if let Err(err) = progress_manager.fail_phase($phase_name, format!("{} initialization failed: {}", $phase_name, e)) {
+                                    tracing::warn!("Failed to mark {} phase as failed: {}", $phase_name, err);
+                                }
+                            }
+                        }
+                        break;
                     }
-                }
-                Ok(Err(e)) => {
-                    tracing::error!("Failed to initialize {}: {}", $phase_name, e);
-                    if let Err(err) = progress_manager.fail_phase($phase_name, format!("{} initialization failed: {}", $phase_name, e)) {
-                        tracing::warn!("Failed to mark {} phase as failed: {}", $phase_name, err);
+                    _ = progress_interval.tick() => {
+                        progress_value = (progress_value + 15.0).min(90.0); // Increment progress but cap at 90%
+                        let log_messages = [
+                            "🔗 Establishing connections...",
+                            "🔍 Verifying configurations...", 
+                            "⚙️ Loading components...",
+                            "🎯 Finalizing setup..."
+                        ];
+                        let log_index = ((progress_value / 25.0) as usize).min(log_messages.len() - 1);
+                        let _ = progress_manager.update_phase_progress($phase_name, progress_value, Some(log_messages[log_index].to_string()));
+                        update_progress(&progress_manager, &mut terminal)?;
                     }
-                }
-                Err(_) => {
-                    tracing::error!("{} initialization timed out after {} seconds", $phase_name, $timeout_secs);
-                    if let Err(e) = progress_manager.timeout_phase($phase_name) {
-                        tracing::warn!("Failed to mark {} phase as timed out: {}", $phase_name, e);
+                    _ = tokio::time::sleep(std::time::Duration::from_secs($timeout_secs)) => {
+                        tracing::error!("{} initialization timed out after {} seconds", $phase_name, $timeout_secs);
+                        progress_manager.add_phase_log($phase_name, format!("⏰ Timeout after {}s", $timeout_secs));
+                        update_progress(&progress_manager, &mut terminal)?;
+                        if let Err(e) = progress_manager.timeout_phase($phase_name) {
+                            tracing::warn!("Failed to mark {} phase as timed out: {}", $phase_name, e);
+                        }
+                        break;
                     }
                 }
             }

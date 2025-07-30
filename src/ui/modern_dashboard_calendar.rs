@@ -210,11 +210,19 @@ impl ModernDashboard {
                 format!("{}", day_number - days_in_month as i32)
             };
 
+            // Create a block for previous/next month days as well
+            let prev_next_block = Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(theme.colors.palette.text_muted));
+
+            let inner_area = prev_next_block.inner(area);
+            f.render_widget(prev_next_block, area);
+
             let day_paragraph = Paragraph::new(day_text)
                 .style(Style::default().fg(theme.colors.palette.text_muted))
                 .alignment(Alignment::Center);
 
-            f.render_widget(day_paragraph, area);
+            f.render_widget(day_paragraph, inner_area);
         } else {
             // Current month days
             let day_date = current_month.with_day(day_number as u32).unwrap().date_naive();
@@ -270,10 +278,24 @@ impl ModernDashboard {
                 ]));
             }
 
+            // Create a block for each day to give it proper borders
+            let day_block = Block::default()
+                .borders(Borders::ALL)
+                .border_style(if is_today {
+                    Style::default().fg(theme.colors.palette.accent).add_modifier(Modifier::BOLD)
+                } else if is_selected {
+                    Style::default().fg(theme.colors.palette.accent)
+                } else {
+                    Style::default().fg(theme.colors.palette.border)
+                });
+
+            let inner_area = day_block.inner(area);
+            f.render_widget(day_block, area);
+
             let day_paragraph = Paragraph::new(day_content)
                 .alignment(Alignment::Center);
 
-            f.render_widget(day_paragraph, area);
+            f.render_widget(day_paragraph, inner_area);
         }
     }
 

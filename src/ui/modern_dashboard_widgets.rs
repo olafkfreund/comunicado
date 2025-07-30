@@ -444,6 +444,49 @@ impl ModernDashboard {
         f.render_widget(stats_paragraph, inner);
     }
 
+    /// Render compact system monitor for header
+    pub fn render_compact_system_monitor(&self, f: &mut Frame<'_>, area: Rect, theme: &Theme) {
+        let block = Block::default()
+            .title("📊 System")
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(theme.colors.palette.border));
+
+        let inner = block.inner(area);
+        f.render_widget(block, area);
+
+        let compact_lines = vec![
+            Line::from(vec![
+                Span::styled("CPU: ", Style::default().fg(theme.colors.palette.text_muted)),
+                Span::styled(
+                    format!("{:.1}%", self.system_monitor.cpu_usage),
+                    Style::default().fg(self.get_usage_color(self.system_monitor.cpu_usage, theme))
+                )
+            ]),
+            Line::from(vec![
+                Span::styled("RAM: ", Style::default().fg(theme.colors.palette.text_muted)),
+                Span::styled(
+                    format!("{:.1}%", self.system_monitor.memory_usage),
+                    Style::default().fg(self.get_usage_color(self.system_monitor.memory_usage, theme))
+                )
+            ]),
+            Line::from(vec![
+                Span::styled("NET: ", Style::default().fg(theme.colors.palette.text_muted)),
+                Span::styled(
+                    format!("↑{:.0} ↓{:.0}", 
+                        self.system_monitor.network_activity.upload_speed,
+                        self.system_monitor.network_activity.download_speed
+                    ),
+                    Style::default().fg(theme.colors.palette.text_muted)
+                )
+            ]),
+        ];
+
+        let compact_paragraph = Paragraph::new(compact_lines)
+            .alignment(Alignment::Left);
+
+        f.render_widget(compact_paragraph, inner);
+    }
+
     /// Get color based on usage percentage
     fn get_usage_color(&self, usage: f64, theme: &Theme) -> Color {
         if usage > 80.0 {

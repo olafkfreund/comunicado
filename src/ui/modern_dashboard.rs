@@ -587,8 +587,8 @@ impl ModernDashboard {
         // Render weather
         self.render_weather_widget(f, header_chunks[1], theme);
         
-        // Render quick system stats
-        self.render_quick_stats(f, header_chunks[2], theme);
+        // Render compact system monitor
+        self.render_compact_system_monitor(f, header_chunks[2], theme);
     }
 
     /// Render main content area

@@ -391,8 +391,9 @@ This is a sample email showcasing the modern email display format."
             if let Some(processed_lines) = html_lines {
                 all_lines.extend(processed_lines);
             } else {
-                // Use parsed content lines for plain text
-                for content_line in &email.parsed_content {
+                // Use parsed content lines for plain text with header filtering
+                let filtered_content = self.filter_raw_headers_from_content(&email.parsed_content);
+                for content_line in &filtered_content {
                     all_lines.push(self.render_content_line(content_line, theme));
                 }
             }
@@ -2706,6 +2707,115 @@ This is a sample email showcasing the modern email display format."
         }
 
         rendered_content
+    }
+
+    /// Filter out raw email headers from content lines
+    fn filter_raw_headers(&self, content_lines: &[String]) -> Vec<String> {
+        let mut filtered_lines = Vec::new();
+        let mut skip_headers = true;
+        let mut found_content_start = false;
+        
+        // Common email headers to filter out
+        let header_patterns = [
+            "Message-ID:", "Date:", "From:", "To:", "Subject:", "Mime-Version:",
+            "Content-Type:", "Content-Transfer-Encoding:", "X-", "Received:",
+            "Return-Path:", "Delivered-To:", "Authentication-Results:",
+            "DKIM-Signature:", "Reply-To:", "Cc:", "Bcc:", "In-Reply-To:",
+            "References:", "Thread-Topic:", "Thread-Index:", "Precedence:",
+            "List-", "Organization:", "User-Agent:", "X-Mailer:", "Content-",
+            "MIME-", "Boundary=", "charset=", "name=", "filename=",
+        ];
+        
+        for line in content_lines {
+            let trimmed = line.trim();
+            
+            // Skip empty lines at the start
+            if skip_headers && trimmed.is_empty() {
+                continue;
+            }
+            
+            // Check if this line looks like a header
+            let is_header = header_patterns.iter().any(|pattern| {
+                trimmed.starts_with(pattern) || 
+                trimmed.to_lowercase().starts_with(&pattern.to_lowercase())
+            });
+            
+            // Also check for header continuation lines (starting with whitespace)
+            let is_header_continuation = skip_headers && 
+                (trimmed.starts_with(' ') || trimmed.starts_with('\t')) &&
+                !found_content_start;
+            
+            if skip_headers && (is_header || is_header_continuation) {
+                continue;
+            }
+            
+            // If we find a line that doesn't look like a header, start including content
+            if skip_headers && !is_header && !is_header_continuation && !trimmed.is_empty() {
+                skip_headers = false;
+                found_content_start = true;
+            }
+            
+            // Include this line if we're past the headers
+            if !skip_headers {
+                filtered_lines.push(line.clone());
+            }
+        }
+        
+        filtered_lines
+    }
+
+    /// Filter out raw email headers from ContentLine objects
+    fn filter_raw_headers_from_content(&self, content_lines: &[ContentLine]) -> Vec<ContentLine> {
+        let mut filtered_lines = Vec::new();
+        let mut skip_headers = true;
+        let mut found_content_start = false;
+        
+        // Common email headers to filter out
+        let header_patterns = [
+            "Message-ID:", "Date:", "From:", "To:", "Subject:", "Return-Path:",
+            "Received:", "Authentication-Results:", "ARC-", "Delivered-To:",
+            "DKIM-Signature:", "Reply-To:", "Cc:", "Bcc:", "In-Reply-To:",
+            "References:", "Thread-Topic:", "Thread-Index:", "Precedence:",
+            "List-", "Organization:", "User-Agent:", "X-Mailer:", "Content-",
+            "MIME-", "Boundary=", "charset=", "name=", "filename=",
+        ];
+        
+        for content_line in content_lines {
+            let trimmed = content_line.text.trim();
+            
+            // Skip empty lines at the start
+            if skip_headers && trimmed.is_empty() {
+                continue;
+            }
+            
+            // Check if this line looks like a header
+            let is_header = header_patterns.iter().any(|pattern| {
+                trimmed.starts_with(pattern) || 
+                trimmed.to_lowercase().starts_with(&pattern.to_lowercase())
+            });
+            
+            // Also check for header continuation lines (starting with whitespace)
+            let is_header_continuation = skip_headers && 
+                (trimmed.starts_with(' ') || trimmed.starts_with('\t')) &&
+                !found_content_start;
+            
+            if skip_headers && (is_header || is_header_continuation) {
+                continue;
+            }
+            
+            // If we find a line that doesn't look like a header, start including content
+            if skip_headers && !is_header && !is_header_continuation && !trimmed.is_empty() {
+                skip_headers = false;
+                found_content_start = true;
+            }
+            
+            // Include this line if we're past the headers
+            if !skip_headers {
+                filtered_lines.push(content_line.clone());
+            }
+        }
+        
+        filtered_lines
     }
 }
 

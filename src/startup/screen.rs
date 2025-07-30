@@ -143,10 +143,10 @@ impl StartupProgressScreen {
                 .constraints([
                     Constraint::Length(1), // Phase name
                     Constraint::Length(1), // Description
-                    Constraint::Length(1), // Status
-                    Constraint::Min(1),    // Additional details
+                    Constraint::Length(2), // Progress bar for current phase
+                    Constraint::Min(1),    // Phase logs
                 ])
-                .split(inner_area.inner(&Margin { vertical: 1, horizontal: 2 }));
+                .split(inner_area.inner(&Margin { vertical: 1, horizontal: 1 }));
 
             // Phase name with icon
             let phase_line = Line::from(vec![
@@ -169,23 +169,34 @@ impl StartupProgressScreen {
                 .style(Style::default().fg(theme.colors.palette.text_secondary));
             frame.render_widget(description, chunks[1]);
 
-            // Status details
-            let status_text = self.format_phase_status(current_phase.status(), &current_phase.timeout());
-            let status = Paragraph::new(status_text)
-                .style(Style::default().fg(theme.colors.palette.text_secondary));
-            frame.render_widget(status, chunks[2]);
+            // Current phase progress bar
+            let phase_progress = manager.current_phase_progress();
+            if current_phase.status().is_in_progress() && phase_progress > 0.0 {
+                let phase_gauge = Gauge::default()
+                    .gauge_style(Style::default().fg(theme.colors.palette.accent))
+                    .percent(phase_progress as u16)
+                    .label(format!("{:.1}%", phase_progress));
+                frame.render_widget(phase_gauge, chunks[2]);
+            } else {
+                // Show status text instead
+                let status_text = self.format_phase_status(current_phase.status(), &current_phase.timeout());
+                let status = Paragraph::new(status_text)
+                    .style(Style::default().fg(theme.colors.palette.text_secondary));
+                frame.render_widget(status, chunks[2]);
+            }
 
-            // Timeout warning if applicable
-            if let Ok(Some(time_until_timeout)) = manager.time_until_timeout(current_phase.name()) {
-                if time_until_timeout <= Duration::from_secs(10) {
-                    let warning = Paragraph::new(format!(
-                        "⚠️  Timeout in {:.1}s",
-                        time_until_timeout.as_secs_f64()
-                    ))
-                    .style(Style::default().fg(theme.colors.palette.warning))
-                    .alignment(Alignment::Center);
-                    frame.render_widget(warning, chunks[3]);
-                }
+            // Show phase logs
+            let logs = manager.get_phase_logs(current_phase.name());
+            if !logs.is_empty() {
+                let log_lines: Vec<Line> = logs.iter()
+                    .rev() // Show most recent first
+                    .take(3) // Show last 3 logs
+                    .map(|log| Line::from(Span::styled(log, Style::default().fg(theme.colors.palette.text_muted))))
+                    .collect();
+                
+                let logs_paragraph = Paragraph::new(log_lines)
+                    .wrap(Wrap { trim: true });
+                frame.render_widget(logs_paragraph, chunks[3]);
             }
         } else {
             let no_phase = Paragraph::new("Initialization complete")

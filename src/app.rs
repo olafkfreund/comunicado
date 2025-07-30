@@ -21,6 +21,10 @@ use crate::services::ServiceManager;
 use crate::smtp::{SmtpService, SmtpServiceBuilder};
 use crate::startup::StartupProgressManager;
 use crate::ui::{ComposeAction, DraftAction, UI};
+use crate::performance::background_processor::{BackgroundProcessor, BackgroundTask, TaskResult};
+use crate::email::sync_engine::SyncProgress;
+use tokio::sync::mpsc;
+use uuid::Uuid;
 
 pub struct App {
     should_quit: bool,
@@ -45,6 +49,10 @@ pub struct App {
     initialization_in_progress: bool,
     // Startup progress tracking
     startup_progress_manager: StartupProgressManager,
+    // Background processing
+    background_processor: Option<Arc<BackgroundProcessor>>,
+    sync_progress_rx: Option<mpsc::UnboundedReceiver<SyncProgress>>,
+    task_completion_rx: Option<mpsc::UnboundedReceiver<TaskResult>>,
 }
 
 impl App {
@@ -73,6 +81,10 @@ impl App {
             initialization_in_progress: false,
             // Startup progress tracking
             startup_progress_manager: StartupProgressManager::new(),
+            // Background processing
+            background_processor: None,
+            sync_progress_rx: None,
+            task_completion_rx: None,
         })
     }
 
@@ -262,6 +274,25 @@ impl App {
             }
             Err(_) => {
                 tracing::error!("Service initialization timed out after 15 seconds");
+            }
+        }
+
+        // Initialize background processor for non-blocking operations
+        tracing::info!("Initializing background processor...");
+        match tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            self.initialize_background_processor(),
+        )
+        .await
+        {
+            Ok(Ok(())) => {
+                tracing::info!("Background processor initialized successfully");
+            }
+            Ok(Err(e)) => {
+                tracing::error!("Failed to initialize background processor: {}", e);
+            }
+            Err(_) => {
+                tracing::error!("Background processor initialization timed out after 5 seconds");
             }
         }
 
@@ -513,6 +544,74 @@ impl App {
             Err(e) => {
                 self.startup_progress_manager.fail_phase("IMAP Manager", e.to_string()).map_err(|pe| anyhow::anyhow!("Progress manager error: {}", pe))?;
                 Err(e)
+            }
+        }
+    }
+
+    /// Initialize background processor for async task handling
+    pub async fn initialize_background_processor(&mut self) -> Result<()> {
+        tracing::info!("🔄 Initializing background processor for non-blocking operations");
+
+        // Create channels for progress updates and task completion
+        let (progress_tx, progress_rx) = mpsc::unbounded_channel::<SyncProgress>();
+        let (completion_tx, completion_rx) = mpsc::unbounded_channel::<TaskResult>();
+
+        // Create background processor with optimized settings
+        let settings = crate::performance::background_processor::ProcessorSettings {
+            max_concurrent_tasks: 2, // Conservative limit to prevent system overload
+            task_timeout: Duration::from_secs(300), // 5 minute timeout
+            max_queue_size: 50, // Reasonable queue size
+            result_cache_size: 25, // Keep recent results
+            processing_interval: Duration::from_millis(250), // Check every 250ms
+        };
+
+        let processor = Arc::new(BackgroundProcessor::with_settings(
+            progress_tx,
+            completion_tx,
+            settings,
+        ));
+
+        // Start the background processor
+        processor.start().await.map_err(|e| {
+            anyhow::anyhow!("Failed to start background processor: {}", e)
+        })?;
+
+        // Store processor and channels
+        self.background_processor = Some(processor);
+        self.sync_progress_rx = Some(progress_rx);
+        self.task_completion_rx = Some(completion_rx);
+
+        tracing::info!("✅ Background processor initialized successfully");
+        Ok(())
+    }
+
+    /// Queue background task to prevent UI blocking
+    pub async fn queue_background_task(&self, task: BackgroundTask) -> Result<Uuid> {
+        if let Some(ref processor) = self.background_processor {
+            processor
+                .queue_task(task)
+                .await
+                .map_err(|e| anyhow::anyhow!("Failed to queue background task: {}", e))
+        } else {
+            Err(anyhow::anyhow!("Background processor not initialized"))
+        }
+    }
+
+    /// Process background task updates (call this in main loop)
+    pub async fn process_background_updates(&mut self) {
+        // Process sync progress updates
+        if let Some(ref mut progress_rx) = self.sync_progress_rx {
+            while let Ok(progress) = progress_rx.try_recv() {
+                // Update UI with sync progress
+                self.ui.update_sync_progress(progress);
+            }
+        }
+
+        // Process task completion updates
+        if let Some(ref mut completion_rx) = self.task_completion_rx {
+            while let Ok(result) = completion_rx.try_recv() {
+                // Handle task completion
+                tracing::debug!("Background task completed: {:?}", result.status);
             }
         }
     }
@@ -1342,9 +1441,12 @@ impl App {
         let mut previous_selection: Option<usize> = None;
 
         loop {
-            // Check for auto-sync (every 3 minutes)
+            // Process background task updates to prevent UI blocking
+            self.process_background_updates().await;
+            
+            // Check for auto-sync (every 3 minutes) - now uses background processing
             if self.last_auto_sync.elapsed() >= self.auto_sync_interval {
-                self.perform_auto_sync().await;
+                self.queue_auto_sync_background().await;
                 self.last_auto_sync = Instant::now();
             }
 
@@ -2806,28 +2908,46 @@ impl App {
             }
         }
 
-        // STEP 2: Schedule background refresh (non-blocking)
-        // Clone the necessary data for the background task
-        let account_id_bg = current_account_id.clone();
-        let folder_path_bg = folder_path.to_string();
-        
-        // Create a lightweight check that completes quickly to clear the notification
-        tokio::spawn(async move {
-            // This runs in background without blocking the UI
-            tracing::debug!("🔄 Background: Quick check for folder: {}", folder_path_bg);
+        // STEP 2: Queue background refresh task using the background processor
+        if let Some(folder_name) = folder_path.split('/').last() {
+            use crate::performance::background_processor::{BackgroundTask, BackgroundTaskType, TaskPriority};
             
-            // Simulate a quick background check (1 second max)
-            tokio::time::sleep(std::time::Duration::from_millis(800)).await;
+            use uuid::Uuid;
             
-            // In a production implementation, this would:
-            // 1. Check folder metadata (message count, last message date)
-            // 2. Compare with cached values to see if refresh is needed
-            // 3. Only do expensive IMAP operations if changes detected
-            // 4. Update UI with completion status
+            let background_task = BackgroundTask {
+                id: Uuid::new_v4(),
+                name: format!("Quick refresh: {}", folder_name),
+                priority: TaskPriority::Normal,
+                account_id: current_account_id.clone(),
+                folder_name: Some(folder_name.to_string()),
+                task_type: BackgroundTaskType::FolderRefresh {
+                    folder_name: folder_name.to_string(),
+                },
+                created_at: std::time::Instant::now(),
+                estimated_duration: Some(std::time::Duration::from_secs(2)),
+            };
             
-            tracing::info!("✅ Background check completed for {} (account: {})", folder_path_bg, account_id_bg);
-            // Note: In a full implementation, we'd send a completion event to the UI here
-        });
+            // Queue the background task (non-blocking)
+            match self.queue_background_task(background_task).await {
+                Ok(task_id) => {
+                    tracing::info!("✅ Queued background refresh task for {} (ID: {})", folder_path, task_id);
+                    self.ui.show_notification(
+                        format!("🔄 Background sync queued for {}", folder_name),
+                        std::time::Duration::from_millis(1000)
+                    );
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to queue background task: {}", e);
+                    // Fallback to the old method if background processor isn't available
+                    let account_id_bg = current_account_id.clone();
+                    let folder_path_bg = folder_path.to_string();
+                    tokio::spawn(async move {
+                        tokio::time::sleep(std::time::Duration::from_millis(800)).await;
+                        tracing::info!("✅ Fallback background check completed for {} (account: {})", folder_path_bg, account_id_bg);
+                    });
+                }
+            }
+        }
 
         Ok(())
     }
@@ -2851,7 +2971,43 @@ impl App {
 
         tracing::info!("Force refreshing folder: {} for account: {}", folder_path, current_account_id);
 
-        // Do the full IMAP fetch (this is the blocking operation users explicitly requested)
+        // Queue a high-priority background task for full IMAP sync
+        if let Some(folder_name) = folder_path.split('/').last() {
+            use crate::performance::background_processor::{BackgroundTask, BackgroundTaskType, TaskPriority};
+            use crate::email::sync_engine::SyncStrategy;
+            use uuid::Uuid;
+            
+            let sync_task = BackgroundTask {
+                id: Uuid::new_v4(),
+                name: format!("Full sync: {}", folder_name),
+                priority: TaskPriority::High, // High priority for user-requested operations
+                account_id: current_account_id.clone(),
+                folder_name: Some(folder_name.to_string()),
+                task_type: BackgroundTaskType::FolderSync {
+                    folder_name: folder_name.to_string(),
+                    strategy: SyncStrategy::Full,
+                },
+                created_at: std::time::Instant::now(),
+                estimated_duration: Some(std::time::Duration::from_secs(30)),
+            };
+            
+            match self.queue_background_task(sync_task).await {
+                Ok(task_id) => {
+                    tracing::info!("✅ Queued high-priority sync task for {} (ID: {})", folder_path, task_id);
+                    self.ui.show_notification(
+                        format!("🚀 Full sync started for {}", folder_name),
+                        std::time::Duration::from_secs(2)
+                    );
+                    return Ok(());
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to queue background sync task: {}, falling back to direct IMAP", e);
+                    // Fall through to direct IMAP fetch as fallback
+                }
+            }
+        }
+        
+        // Fallback to direct IMAP fetch if background processor is not available
         match self.fetch_messages_from_imap(&current_account_id, folder_path).await {
             Ok(()) => {
                 tracing::info!("✅ Successfully refreshed folder: {}", folder_path);
@@ -3175,7 +3331,72 @@ impl App {
         Ok(())
     }
 
-    /// Perform automatic background sync for all accounts
+    /// Queue automatic background sync for all accounts (non-blocking)
+    async fn queue_auto_sync_background(&mut self) {
+        tracing::info!("🔄 Queuing automatic background sync for all accounts");
+        
+        // Get all account IDs
+        let account_ids = if let Some(ref database) = self.database {
+            match sqlx::query("SELECT id FROM accounts")
+                .fetch_all(&database.pool)
+                .await
+            {
+                Ok(rows) => rows
+                    .into_iter()
+                    .map(|row| row.get::<String, _>("id"))
+                    .collect::<Vec<_>>(),
+                Err(e) => {
+                    tracing::error!("Failed to get account IDs for auto-sync: {}", e);
+                    return;
+                }
+            }
+        } else {
+            tracing::warn!("Database not available for auto-sync");
+            return;
+        };
+
+        if account_ids.is_empty() {
+            tracing::debug!("No accounts configured, skipping auto-sync");
+            return;
+        }
+
+        // Queue background sync tasks for each account with low priority
+        for account_id in account_ids {
+            use crate::performance::background_processor::{BackgroundTask, BackgroundTaskType, TaskPriority};
+            use uuid::Uuid;
+            
+            let background_task = BackgroundTask {
+                id: Uuid::new_v4(),
+                name: format!("Auto-sync: {}", account_id),
+                priority: TaskPriority::Low, // Low priority so it doesn't interfere with user actions
+                account_id: account_id.clone(),
+                folder_name: None, // Account-wide sync
+                task_type: BackgroundTaskType::AccountSync {
+                    strategy: crate::email::sync_engine::SyncStrategy::Incremental,
+                },
+                created_at: std::time::Instant::now(),
+                estimated_duration: Some(std::time::Duration::from_secs(30)),
+            };
+            
+            match self.queue_background_task(background_task).await {
+                Ok(task_id) => {
+                    tracing::debug!("✅ Queued auto-sync task for {} (ID: {})", account_id, task_id);
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to queue auto-sync task for {}: {}", account_id, e);
+                }
+            }
+        }
+        
+        // Show a subtle notification that auto-sync is running
+        self.ui.show_notification(
+            "🔄 Background sync started".to_string(),
+            std::time::Duration::from_millis(1500)
+        );
+    }
+
+    /// Perform automatic background sync for all accounts (DEPRECATED - use queue_auto_sync_background instead)
+    #[allow(dead_code)]
     async fn perform_auto_sync(&mut self) {
         tracing::info!("Performing automatic background sync for all accounts");
 
