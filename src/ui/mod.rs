@@ -180,11 +180,7 @@ impl UI {
             compose_ui: None,
             draft_list: DraftListUI::new(),
             start_page: StartPage::new(),
-            modern_dashboard: {
-                let mut dashboard = ModernDashboard::new();
-                dashboard.initialize_with_sample_data();
-                dashboard
-            },
+            modern_dashboard: ModernDashboard::new(),
             calendar_ui: CalendarUI::new(),
             event_form_ui: None,
             email_viewer: EmailViewer::new(),

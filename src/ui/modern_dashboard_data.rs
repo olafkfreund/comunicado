@@ -4,53 +4,71 @@ use super::modern_dashboard::*;
 use chrono::{Local, Duration as ChronoDuration};
 
 impl ModernDashboard {
-    /// Initialize dashboard with sample data
+    /// Initialize dashboard with sample data (for testing/development)
     pub fn initialize_with_sample_data(&mut self) {
         self.initialize_sample_weather();
         self.initialize_sample_calendar();
         self.initialize_sample_contacts();
         self.initialize_sample_startup();
     }
+    
+    /// Initialize dashboard with minimal real data
+    pub fn initialize_with_real_data(&mut self) {
+        // Set London weather as default (should be replaced with real API data)
+        self.initialize_sample_weather(); // Uses London data now
+        
+        // Start with empty calendar and contacts - will be populated from real data
+        self.calendar_widget.events.clear();
+        self.contacts_widget.recent_contacts.clear();
+        self.contacts_widget.favorite_contacts.clear();
+        self.contacts_widget.contact_count = 0;
+        
+        // Initialize startup widget with actual startup status
+        self.startup_widget.phases.clear();
+        self.startup_widget.current_phase = 0;
+        self.startup_widget.overall_progress = 100.0; // Startup complete
+        self.startup_widget.estimated_time_remaining = None;
+    }
 
     /// Initialize sample weather data
     fn initialize_sample_weather(&mut self) {
         self.weather_widget.current_weather = Some(CurrentWeather {
-            location: "San Francisco, CA".to_string(),
-            temperature: 22.5,
-            feels_like: 24.0,
-            condition: WeatherCondition::PartlyCloudy,
-            humidity: 65,
-            wind_speed: 12.5,
-            wind_direction: 245,
-            pressure: 1013.25,
-            visibility: 10.0,
-            uv_index: 6,
+            location: "London, UK".to_string(),
+            temperature: 16.0,
+            feels_like: 14.0,
+            condition: WeatherCondition::Cloudy,
+            humidity: 78,
+            wind_speed: 8.5,
+            wind_direction: 220,
+            pressure: 1012.5,
+            visibility: 8.0,
+            uv_index: 3,
         });
 
         self.weather_widget.forecast = vec![
             WeatherForecast {
                 date: Local::now() + std::time::Duration::from_secs(24 * 60 * 60),
-                high_temp: 25.0,
-                low_temp: 18.0,
-                condition: WeatherCondition::Clear,
-                precipitation_chance: 10,
-                wind_speed: 8.0,
+                high_temp: 18.0,
+                low_temp: 12.0,
+                condition: WeatherCondition::Rain,
+                precipitation_chance: 65,
+                wind_speed: 10.0,
             },
             WeatherForecast {
                 date: Local::now() + std::time::Duration::from_secs(2 * 24 * 60 * 60),
-                high_temp: 23.0,
-                low_temp: 16.0,
+                high_temp: 15.0,
+                low_temp: 9.0,
                 condition: WeatherCondition::Rain,
-                precipitation_chance: 80,
-                wind_speed: 15.0,
+                precipitation_chance: 85,
+                wind_speed: 12.0,
             },
             WeatherForecast {
                 date: Local::now() + ChronoDuration::days(3),
-                high_temp: 20.0,
-                low_temp: 14.0,
-                condition: WeatherCondition::Cloudy,
-                precipitation_chance: 40,
-                wind_speed: 10.0,
+                high_temp: 17.0,
+                low_temp: 11.0,
+                condition: WeatherCondition::PartlyCloudy,
+                precipitation_chance: 30,
+                wind_speed: 8.0,
             },
         ];
 
