@@ -1,4 +1,5 @@
 use chrono::{DateTime, Duration, Local, NaiveDate, NaiveTime, TimeZone, Timelike, Utc};
+use crossterm::event::KeyModifiers;
 use ratatui::{layout::Rect, widgets::ListState, Frame};
 
 use crate::calendar::database::CalendarDatabase;
@@ -849,12 +850,12 @@ impl EventFormUI {
     }
 
     /// Handle key input for the event form
-    pub async fn handle_key(&mut self, key: crossterm::event::KeyCode) -> Option<EventFormAction> {
+    pub async fn handle_key(&mut self, key: crossterm::event::KeyEvent) -> Option<EventFormAction> {
         use crossterm::event::KeyCode;
 
         // Handle popup dialogs first
         if self.show_date_picker {
-            match key {
+            match key.code {
                 KeyCode::Esc => {
                     self.show_date_picker = false;
                 }
@@ -894,7 +895,7 @@ impl EventFormUI {
         }
 
         if self.show_time_picker {
-            match key {
+            match key.code {
                 KeyCode::Esc => {
                     self.show_time_picker = false;
                 }
@@ -941,19 +942,19 @@ impl EventFormUI {
         }
 
         // Handle main form input
-        match key {
+        match key.code {
             KeyCode::Esc => {
                 if self.is_modified {
                     // TODO: Show confirmation dialog
                 }
                 return Some(EventFormAction::Cancel);
             }
-            KeyCode::F(1) => {
+            KeyCode::Char('s') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 if !self.is_read_only() {
                     return Some(EventFormAction::Save);
                 }
             }
-            KeyCode::F(3) => {
+            KeyCode::Char('d') => {
                 if matches!(self.mode, EventFormMode::Edit(_)) {
                     return Some(EventFormAction::Delete);
                 }
@@ -1021,7 +1022,7 @@ impl EventFormUI {
         let instructions = if self.is_read_only() {
             "Press 'e' to edit, 'd' to delete, or Esc to close"
         } else {
-            "F1: Save | F3: Delete | Tab/Shift+Tab: Navigate | Esc: Cancel"
+            "Ctrl+S: Save | d: Delete | Tab/Shift+Tab: Navigate | Esc: Cancel"
         };
 
         let instruction_paragraph = Paragraph::new(instructions)

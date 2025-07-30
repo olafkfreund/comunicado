@@ -438,16 +438,16 @@ impl StartPage {
                     .add_modifier(Modifier::BOLD),
             )]),
             Line::from(vec![
-                Span::styled("F3", Style::default().fg(theme.colors.palette.accent)),
+                Span::styled("g", Style::default().fg(theme.colors.palette.accent)),
                 Span::styled(
                     " calendar",
                     Style::default().fg(theme.colors.palette.text_primary),
                 ),
             ]),
             Line::from(vec![
-                Span::styled("Ctrl+A", Style::default().fg(theme.colors.palette.accent)),
+                Span::styled("?", Style::default().fg(theme.colors.palette.accent)),
                 Span::styled(
-                    " add account",
+                    " help",
                     Style::default().fg(theme.colors.palette.text_primary),
                 ),
             ]),
@@ -459,9 +459,9 @@ impl StartPage {
                 ),
             ]),
             Line::from(vec![
-                Span::styled("m", Style::default().fg(theme.colors.palette.accent)),
+                Span::styled(",", Style::default().fg(theme.colors.palette.accent)),
                 Span::styled(
-                    " view mode",
+                    " settings",
                     Style::default().fg(theme.colors.palette.text_primary),
                 ),
             ]),

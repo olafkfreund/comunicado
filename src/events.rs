@@ -1214,30 +1214,30 @@ impl EventHandler {
             }
 
             // Function keys for folder operations
-            KeyCode::F(5) => {
-                // F5 - Refresh
+            KeyCode::Char('r') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                // Ctrl+R - Refresh
                 match ui.focused_pane() {
                     FocusedPane::FolderTree => {
-                        if let Some(operation) = ui.folder_tree_mut().handle_function_key(key.code)
+                        if let Some(operation) = ui.folder_tree_mut().handle_function_key(KeyCode::F(5))
                         {
                             return EventResult::FolderOperation(operation);
                         }
                     }
                     _ => {
-                        // Global F5 refresh
+                        // Global Ctrl+R refresh
                         // TODO: Add global refresh functionality
                     }
                 }
             }
-            KeyCode::F(3) => {
-                // F3 - Calendar (global access)
+            KeyCode::Char('g') => {
+                // g - Calendar (global access) - more terminal friendly than F3
                 ui.show_calendar();
             }
-            KeyCode::F(2) => {
-                // F2 - Rename
+            KeyCode::Char('R') => {
+                // R - Rename (uppercase R)
                 match ui.focused_pane() {
                     FocusedPane::FolderTree => {
-                        if let Some(operation) = ui.folder_tree_mut().handle_function_key(key.code)
+                        if let Some(operation) = ui.folder_tree_mut().handle_function_key(KeyCode::F(2))
                         {
                             return EventResult::FolderOperation(operation);
                         }
@@ -1524,8 +1524,8 @@ impl EventHandler {
                     }
                 }
             }
-            KeyCode::Char('R') => {
-                // Force refresh folder (capital R) - full IMAP sync
+            KeyCode::Char('F') => {
+                // Force refresh folder (capital F) - full IMAP sync
                 if let FocusedPane::FolderTree = ui.focused_pane() {
                     let folder_path = ui.folder_tree().selected_folder().map(|f| f.path.clone());
                     if let Some(path) = folder_path {
@@ -1669,16 +1669,18 @@ impl EventHandler {
             }
 
             // Function keys for direct access
-            KeyCode::F(1) => {
-                // F1: Help/Keyboard shortcuts
+            KeyCode::Char('?') => {
+                // ?: Help/Keyboard shortcuts  
                 ui.show_keyboard_shortcuts();
             }
-            KeyCode::F(3) => {
-                // F3: Calendar mode
+            KeyCode::Char('g') => {
+                // g: Expect 'c' next for 'go to calendar'
+                // We'll handle this as a two-key sequence in the future
+                // For now, treat as direct calendar access
                 ui.show_calendar();
             }
-            KeyCode::F(4) => {
-                // F4: Settings/Configuration
+            KeyCode::Char(',') => {
+                // ,: Settings/Configuration (like vim)
                 // TODO: Implement settings mode
             }
 
@@ -1701,10 +1703,6 @@ impl EventHandler {
             KeyCode::Char('C') => {
                 // C: Calendar view
                 ui.show_calendar();
-            }
-            KeyCode::Char('?') if ui.focused_pane() != FocusedPane::FolderTree => {
-                // ?: Help/keyboard shortcuts
-                ui.show_keyboard_shortcuts();
             }
 
             // Search and filtering
@@ -1794,8 +1792,8 @@ impl EventHandler {
                     return EventResult::FolderOperation(operation);
                 }
             }
-            KeyCode::Char('?') if ui.focused_pane() == FocusedPane::FolderTree => {
-                ui.folder_tree_mut().handle_char_key('?'); // Show context menu
+            KeyCode::Char('.') if ui.focused_pane() == FocusedPane::FolderTree => {
+                ui.folder_tree_mut().handle_char_key('.'); // Show context menu (changed from '?' to '.' for menu)
             }
 
             _ => {}

@@ -1,6 +1,7 @@
 use crate::contacts::{ContactAutocomplete, ContactsManager};
 use crate::spell::{SpellCheckResult, SpellChecker};
 use crate::theme::Theme;
+use crossterm::event::KeyModifiers;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
@@ -642,7 +643,7 @@ impl ComposeUI {
     }
 
     /// Handle keyboard input
-    pub async fn handle_key(&mut self, key: crossterm::event::KeyCode) -> ComposeAction {
+    pub async fn handle_key(&mut self, key: crossterm::event::KeyEvent) -> ComposeAction {
         use crossterm::event::KeyCode;
 
         if self.contact_autocomplete.is_visible() {
@@ -653,30 +654,30 @@ impl ComposeUI {
             return self.handle_spell_config_key(key).await;
         }
 
-        match key {
+        match key.code {
             KeyCode::Esc => ComposeAction::Cancel,
-            KeyCode::F(1) => ComposeAction::Send,
-            KeyCode::F(2) => ComposeAction::SaveDraft,
-            KeyCode::F(7) => {
+            KeyCode::Char('s') if key.modifiers.contains(KeyModifiers::CONTROL) => ComposeAction::Send,
+            KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => ComposeAction::SaveDraft,
+            KeyCode::Char('z') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 // Toggle spell checking
                 self.toggle_spell_check().await;
                 ComposeAction::Continue
             }
-            KeyCode::F(8) => {
+            KeyCode::Char('n') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 // Next spell error
                 if self.spell_check_enabled {
                     self.next_spell_error();
                 }
                 ComposeAction::Continue
             }
-            KeyCode::F(9) => {
+            KeyCode::Char('p') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 // Previous spell error
                 if self.spell_check_enabled {
                     self.previous_spell_error();
                 }
                 ComposeAction::Continue
             }
-            KeyCode::F(10) => {
+            KeyCode::Char(',') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 // Open spell check configuration
                 self.toggle_spell_config();
                 ComposeAction::Continue
@@ -770,10 +771,10 @@ impl ComposeUI {
     }
 
     /// Handle autocomplete-specific keyboard input
-    async fn handle_autocomplete_key(&mut self, key: crossterm::event::KeyCode) -> ComposeAction {
+    async fn handle_autocomplete_key(&mut self, key: crossterm::event::KeyEvent) -> ComposeAction {
         use crossterm::event::KeyCode;
 
-        match key {
+        match key.code {
             KeyCode::Esc => {
                 self.contact_autocomplete.hide();
                 ComposeAction::Continue
@@ -1396,11 +1397,11 @@ impl ComposeUI {
     }
 
     /// Handle spell configuration popup key input
-    async fn handle_spell_config_key(&mut self, key: crossterm::event::KeyCode) -> ComposeAction {
+    async fn handle_spell_config_key(&mut self, key: crossterm::event::KeyEvent) -> ComposeAction {
         use crossterm::event::KeyCode;
 
-        match key {
-            KeyCode::Esc | KeyCode::F(10) => {
+        match key.code {
+            KeyCode::Esc => {
                 self.is_spell_config_visible = false;
                 ComposeAction::Continue
             }

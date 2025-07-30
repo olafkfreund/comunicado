@@ -1481,7 +1481,7 @@ impl App {
 
             if event::poll(timeout)? {
                 if let Event::Key(key) = event::read()? {
-                    let event_result = self.event_handler.handle_key_event(key, &mut self.ui).await;
+                    let event_result = self.event_handler.handle_key_event_with_config(key, &mut self.ui).await;
 
                     // Handle the event result
                     match event_result {

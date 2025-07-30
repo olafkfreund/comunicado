@@ -729,7 +729,7 @@ impl UI {
                     ("Enter".to_string(), "Select".to_string()),
                     ("Space".to_string(), "Expand".to_string()),
                     ("c".to_string(), "Compose".to_string()),
-                    ("F3".to_string(), "Calendar".to_string()),
+                    ("g".to_string(), "Calendar".to_string()),
                     ("Ctrl+R".to_string(), "Refresh".to_string()),
                     ("F5".to_string(), "Sync".to_string()),
                 ],
@@ -739,7 +739,7 @@ impl UI {
                     ("l".to_string(), "Expand".to_string()),
                     ("h".to_string(), "Collapse".to_string()),
                     ("c".to_string(), "Compose".to_string()),
-                    ("F3".to_string(), "Calendar".to_string()),
+                    ("g".to_string(), "Calendar".to_string()),
                 ],
                 FocusedPane::MessageList => vec![
                     ("Tab".to_string(), "Switch".to_string()),
@@ -748,7 +748,7 @@ impl UI {
                     ("c".to_string(), "Compose".to_string()),
                     ("r".to_string(), "Reply".to_string()),
                     ("f".to_string(), "Forward".to_string()),
-                    ("F3".to_string(), "Calendar".to_string()),
+                    ("g".to_string(), "Calendar".to_string()),
                 ],
                 FocusedPane::ContentPreview => vec![
                     ("Tab".to_string(), "Switch".to_string()),
@@ -761,7 +761,7 @@ impl UI {
                     ("Home/End".to_string(), "Jump".to_string()),
                     ("r".to_string(), "Reply".to_string()),
                     ("f".to_string(), "Forward".to_string()),
-                    ("F3".to_string(), "Calendar".to_string()),
+                    ("g".to_string(), "Calendar".to_string()),
                 ],
                 FocusedPane::StartPage => vec![],
                 _ => vec![],
@@ -818,8 +818,8 @@ impl UI {
                 ("Tab".to_string(), "Next Field".to_string()),
                 ("Shift+Tab".to_string(), "Prev Field".to_string()),
                 ("Enter".to_string(), "Edit Field".to_string()),
-                ("F1".to_string(), "Save Changes".to_string()),
-                ("F3".to_string(), "Delete Event".to_string()),
+                ("Ctrl+S".to_string(), "Save Changes".to_string()),
+                ("d".to_string(), "Delete Event".to_string()),
                 ("Esc".to_string(), "Cancel".to_string()),
             ],
             UIMode::EventView => vec![
@@ -1527,7 +1527,8 @@ impl UI {
         key: crossterm::event::KeyCode,
     ) -> Option<ComposeAction> {
         if let Some(ref mut compose_ui) = self.compose_ui {
-            Some(compose_ui.handle_key(key).await)
+            let key_event = crossterm::event::KeyEvent::new(key, crossterm::event::KeyModifiers::empty());
+            Some(compose_ui.handle_key(key_event).await)
         } else {
             None
         }
@@ -1802,7 +1803,8 @@ impl UI {
         let is_visible = self.is_event_form_visible();
         if is_visible {
             if let Some(ref mut event_form) = self.event_form_ui {
-                return event_form.handle_key(key).await;
+                let key_event = crossterm::event::KeyEvent::new(key, crossterm::event::KeyModifiers::empty());
+                return event_form.handle_key(key_event).await;
             }
         }
         None

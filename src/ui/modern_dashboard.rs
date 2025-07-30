@@ -596,26 +596,22 @@ impl ModernDashboard {
         let content_chunks = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([
-                Constraint::Percentage(45), // Calendar (increased from 33%)
-                Constraint::Percentage(20), // System monitoring (reduced from 34%)
-                Constraint::Percentage(35), // Contacts and startup (slightly increased)
+                Constraint::Percentage(60), // Calendar (increased, no system monitor)
+                Constraint::Percentage(40), // Contacts and startup
             ])
             .split(area);
 
         // Render calendar
         self.render_calendar_widget(f, content_chunks[0], theme);
         
-        // Render compact system monitoring
-        self.render_compact_system_monitor(f, content_chunks[1], theme);
-        
         // Render contacts and startup with better balance
         let right_chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Percentage(50), // Contacts (reduced from 60%)
-                Constraint::Percentage(50), // Startup progress (increased from 40%)
+                Constraint::Percentage(50), // Contacts
+                Constraint::Percentage(50), // Startup progress
             ])
-            .split(content_chunks[2]);
+            .split(content_chunks[1]);
             
         self.render_contacts_widget(f, right_chunks[0], theme);
         self.render_startup_widget(f, right_chunks[1], theme);
