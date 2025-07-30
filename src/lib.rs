@@ -1,6 +1,7 @@
 pub mod animation;
 pub mod app;
 pub mod app_fast_startup;
+pub mod app_optimized;
 pub mod calendar;
 pub mod cli;
 pub mod clipboard;

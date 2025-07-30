@@ -107,6 +107,14 @@ filetime = "0.2"
 tokio-test = "0.4"
 tempfile = "3.8"
 
+[[bin]]
+name = "comunicado"
+path = "src/main.rs"
+
+[[bin]]
+name = "comunicado_optimized"
+path = "src/main_optimized.rs"
+
 [profile.release]
 strip = true
 lto = true
