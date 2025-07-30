@@ -8,7 +8,7 @@ license = "MIT OR Apache-2.0"
 repository = "https://github.com/your-username/comunicado"
 keywords = ["email", "calendar", "tui", "terminal", "imap"]
 categories = ["command-line-utilities", "email"]
-default-run = "comunicado_optimized"
+default-run = "comunicado"
 
 [dependencies]
 # TUI Framework
@@ -110,11 +110,11 @@ tempfile = "3.8"
 
 [[bin]]
 name = "comunicado"
-path = "src/main.rs"
+path = "src/main_optimized.rs"
 
 [[bin]]
-name = "comunicado_optimized"
-path = "src/main_optimized.rs"
+name = "comunicado_legacy"
+path = "src/main.rs"
 
 [profile.release]
 strip = true

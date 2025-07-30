@@ -10,6 +10,12 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::{mpsc, RwLock};
 use tokio::time::interval;
+use crossterm::{
+    execute,
+    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+};
+use ratatui::{backend::CrosstermBackend, Terminal};
+use std::io;
 
 use crate::startup::{
     BackgroundTaskManager, LazyInit, LazyInitManager, StartupOptimizer, 
@@ -58,6 +64,9 @@ pub struct OptimizedApp {
     // Core UI components (always available)
     ui: UI,
     theme: Theme,
+    
+    // Terminal management
+    terminal: Option<Terminal<CrosstermBackend<io::Stdout>>>,
     
     // Application state
     state: AppState,
@@ -127,6 +136,7 @@ impl OptimizedApp {
         Ok(Self {
             ui,
             theme,
+            terminal: None,
             state: AppState::Starting,
             startup_optimizer,
             contacts_manager,
@@ -142,6 +152,9 @@ impl OptimizedApp {
     
     /// Start the application with progressive loading
     pub async fn run(&mut self) -> Result<(), String> {
+        // Initialize terminal first
+        self.setup_terminal().map_err(|e| format!("Failed to setup terminal: {}", e))?;
+        
         // Phase 1: Show minimal UI immediately
         self.show_startup_ui().await?;
         
@@ -149,8 +162,35 @@ impl OptimizedApp {
         self.start_background_initialization().await?;
         
         // Phase 3: Main event loop with progressive feature availability
-        self.run_main_loop().await?;
+        let result = self.run_main_loop().await;
         
+        // Always cleanup terminal
+        if let Err(e) = self.cleanup_terminal() {
+            eprintln!("Warning: Failed to cleanup terminal: {}", e);
+        }
+        
+        result
+    }
+    
+    /// Initialize terminal for TUI rendering
+    fn setup_terminal(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        enable_raw_mode()?;
+        let mut stdout = io::stdout();
+        execute!(stdout, EnterAlternateScreen)?;
+        
+        let backend = CrosstermBackend::new(stdout);
+        let terminal = Terminal::new(backend)?;
+        self.terminal = Some(terminal);
+        
+        Ok(())
+    }
+    
+    /// Cleanup terminal when exiting
+    fn cleanup_terminal(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        if let Some(mut terminal) = self.terminal.take() {
+            disable_raw_mode()?;
+            execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
+        }
         Ok(())
     }
     
@@ -365,17 +405,34 @@ impl OptimizedApp {
     
     /// Render the UI
     async fn render_ui(&mut self) -> Result<(), String> {
-        // This would integrate with your existing UI rendering system
-        // For now, we'll just track the render time
         let render_start = Instant::now();
         
-        // Actual rendering would happen here
-        // self.ui.render(&self.theme).await?;
-        
-        let render_duration = render_start.elapsed();
-        self.startup_optimizer.record_operation("ui_render", render_duration);
-        
-        Ok(())
+        // Render using the managed terminal
+        if let Some(ref mut terminal) = self.terminal {
+            match terminal.draw(|frame| {
+                self.ui.render(frame);
+            }) {
+                Ok(_) => {
+                    let render_duration = render_start.elapsed();
+                    self.startup_optimizer.record_operation("ui_render", render_duration);
+                    Ok(())
+                }
+                Err(e) => {
+                    let render_duration = render_start.elapsed();
+                    self.startup_optimizer.record_operation("ui_render_error", render_duration);
+                    Err(format!("TUI rendering failed: {}", e))
+                }
+            }
+        } else {
+            // Fallback to progress display if terminal not available
+            let status = self.resource_status.read().await;
+            let progress = self.calculate_overall_progress(&status);
+            println!("Progress: {:.1}%", progress * 100.0);
+            
+            let render_duration = render_start.elapsed();
+            self.startup_optimizer.record_operation("ui_render_fallback", render_duration);
+            Ok(())
+        }
     }
     
     /// Handle application events
