@@ -7,14 +7,21 @@ pub mod content_preview;
 pub mod date_picker;
 pub mod draft_list;
 pub mod email_viewer;
+pub mod enhanced_message_list;
 pub mod folder_tree;
 pub mod graphics;
 pub mod invitation_viewer;
 pub mod keyboard_shortcuts;
 pub mod layout;
 pub mod message_list;
+pub mod modern_dashboard;
+pub mod modern_dashboard_widgets;
+pub mod modern_dashboard_calendar;
+pub mod modern_dashboard_contacts;
+pub mod modern_dashboard_data;
 pub mod search;
 pub mod start_page;
+pub mod startup_progress;
 pub mod status_bar;
 pub mod sync_progress;
 pub mod time_picker;
@@ -47,6 +54,7 @@ use self::{
     layout::AppLayout,
     message_list::MessageList,
     start_page::StartPage,
+    modern_dashboard::ModernDashboard,
     status_bar::{
         CalendarStatusSegment, EmailStatusSegment, NavigationHintsSegment, StatusBar, SyncStatus,
         SystemInfoSegment,
@@ -125,6 +133,7 @@ pub struct UI {
     compose_ui: Option<ComposeUI>,
     draft_list: DraftListUI,
     start_page: StartPage,
+    modern_dashboard: ModernDashboard,
     calendar_ui: CalendarUI,
     event_form_ui: Option<crate::calendar::EventFormUI>,
     email_viewer: EmailViewer,
@@ -154,6 +163,7 @@ impl UI {
             compose_ui: None,
             draft_list: DraftListUI::new(),
             start_page: StartPage::new(),
+            modern_dashboard: ModernDashboard::new(),
             calendar_ui: CalendarUI::new(),
             event_form_ui: None,
             email_viewer: EmailViewer::new(),
@@ -230,9 +240,9 @@ impl UI {
 
         match self.mode {
             UIMode::StartPage => {
-                // Render start page dashboard in full screen
+                // Render modern dashboard in full screen
                 let theme = self.theme_manager.current_theme();
-                self.start_page.render(frame, size, theme);
+                self.modern_dashboard.render(frame, size, theme);
             }
             UIMode::Normal => {
                 let chunks = self.layout.calculate_layout(size);
@@ -1463,6 +1473,16 @@ impl UI {
     /// Get reference to start page
     pub fn start_page(&self) -> &StartPage {
         &self.start_page
+    }
+
+    /// Get mutable reference to modern dashboard for data updates
+    pub fn modern_dashboard_mut(&mut self) -> &mut ModernDashboard {
+        &mut self.modern_dashboard
+    }
+
+    /// Get reference to modern dashboard
+    pub fn modern_dashboard(&self) -> &ModernDashboard {
+        &self.modern_dashboard
     }
 
     /// Handle start page navigation
