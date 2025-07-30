@@ -14,6 +14,8 @@ use std::sync::Arc;
 #[derive(Debug, Clone)]
 pub enum AddressBookAction {
     ComposeEmail { to: String, name: String },
+    LaunchAdvancedSearch,
+    ExportContacts,
 }
 
 /// Address book UI state and components
@@ -36,6 +38,9 @@ pub struct AddressBookUI {
 
     // Search and filters
     is_searching: bool,
+
+    // Contact editing
+    contact_editor: ContactEditor,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -57,6 +62,201 @@ pub enum AddressBookMode {
     Settings,
 }
 
+/// Contact editor state
+#[derive(Debug, Clone)]
+pub struct ContactEditor {
+    // Form fields
+    pub display_name: String,
+    pub first_name: String,
+    pub last_name: String,
+    pub company: String,
+    pub job_title: String,
+    pub notes: String,
+    pub photo_url: String,
+    
+    // Email addresses
+    pub emails: Vec<ContactEmailInput>,
+    
+    // Phone numbers
+    pub phones: Vec<ContactPhoneInput>,
+    
+    // UI state
+    pub focused_field: ContactField,
+    pub focused_email_index: usize,
+    pub focused_phone_index: usize,
+    pub is_editing: bool, // true for edit, false for create
+    pub original_contact_id: Option<i64>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ContactEmailInput {
+    pub address: String,
+    pub label: String,
+    pub is_primary: bool,
+    pub is_focused: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct ContactPhoneInput {
+    pub number: String,
+    pub label: String,
+    pub is_primary: bool,
+    pub is_focused: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ContactField {
+    DisplayName,
+    FirstName,
+    LastName,
+    Company,
+    JobTitle,
+    Notes,
+    PhotoUrl,
+    Emails,
+    Phones,
+}
+
+impl ContactEditor {
+    pub fn new() -> Self {
+        Self {
+            display_name: String::new(),
+            first_name: String::new(),
+            last_name: String::new(),
+            company: String::new(),
+            job_title: String::new(),
+            notes: String::new(),
+            photo_url: String::new(),
+            emails: vec![ContactEmailInput::new()],
+            phones: vec![ContactPhoneInput::new()],
+            focused_field: ContactField::DisplayName,
+            focused_email_index: 0,
+            focused_phone_index: 0,
+            is_editing: false,
+            original_contact_id: None,
+        }
+    }
+
+    pub fn from_contact(contact: &Contact) -> Self {
+        let emails = if contact.emails.is_empty() {
+            vec![ContactEmailInput::new()]
+        } else {
+            contact.emails.iter().map(ContactEmailInput::from_contact_email).collect()
+        };
+
+        let phones = if contact.phones.is_empty() {
+            vec![ContactPhoneInput::new()]
+        } else {
+            contact.phones.iter().map(ContactPhoneInput::from_contact_phone).collect()
+        };
+
+        Self {
+            display_name: contact.display_name.clone(),
+            first_name: contact.first_name.clone().unwrap_or_default(),
+            last_name: contact.last_name.clone().unwrap_or_default(),
+            company: contact.company.clone().unwrap_or_default(),
+            job_title: contact.job_title.clone().unwrap_or_default(),
+            notes: contact.notes.clone().unwrap_or_default(),
+            photo_url: contact.photo_url.clone().unwrap_or_default(),
+            emails,
+            phones,
+            focused_field: ContactField::DisplayName,
+            focused_email_index: 0,
+            focused_phone_index: 0,
+            is_editing: true,
+            original_contact_id: contact.id,
+        }
+    }
+
+    pub fn to_contact(&self) -> Contact {
+        let mut contact = Contact::new(
+            self.original_contact_id.map(|id| id.to_string()).unwrap_or_else(|| chrono::Utc::now().timestamp().to_string()),
+            crate::contacts::ContactSource::Local,
+            self.display_name.clone(),
+        );
+
+        contact.id = self.original_contact_id;
+        contact.first_name = if self.first_name.is_empty() { None } else { Some(self.first_name.clone()) };
+        contact.last_name = if self.last_name.is_empty() { None } else { Some(self.last_name.clone()) };
+        contact.company = if self.company.is_empty() { None } else { Some(self.company.clone()) };
+        contact.job_title = if self.job_title.is_empty() { None } else { Some(self.job_title.clone()) };
+        contact.notes = if self.notes.is_empty() { None } else { Some(self.notes.clone()) };
+        contact.photo_url = if self.photo_url.is_empty() { None } else { Some(self.photo_url.clone()) };
+
+        contact.emails = self.emails.iter()
+            .filter(|e| !e.address.is_empty())
+            .map(|e| e.to_contact_email())
+            .collect();
+
+        contact.phones = self.phones.iter()
+            .filter(|p| !p.number.is_empty())
+            .map(|p| p.to_contact_phone())
+            .collect();
+
+        contact
+    }
+
+    pub fn clear(&mut self) {
+        *self = Self::new();
+    }
+}
+
+impl ContactEmailInput {
+    pub fn new() -> Self {
+        Self {
+            address: String::new(),
+            label: "work".to_string(),
+            is_primary: false,
+            is_focused: false,
+        }
+    }
+
+    pub fn from_contact_email(email: &crate::contacts::ContactEmail) -> Self {
+        Self {
+            address: email.address.clone(),
+            label: email.label.clone(),
+            is_primary: email.is_primary,
+            is_focused: false,
+        }
+    }
+
+    pub fn to_contact_email(&self) -> crate::contacts::ContactEmail {
+        crate::contacts::ContactEmail {
+            address: self.address.clone(),
+            label: self.label.clone(),
+            is_primary: self.is_primary,
+        }
+    }
+}
+
+impl ContactPhoneInput {
+    pub fn new() -> Self {
+        Self {
+            number: String::new(),
+            label: "mobile".to_string(),
+            is_primary: false,
+            is_focused: false,
+        }
+    }
+
+    pub fn from_contact_phone(phone: &crate::contacts::ContactPhone) -> Self {
+        Self {
+            number: phone.number.clone(),
+            label: phone.label.clone(),
+            is_primary: phone.is_primary,
+            is_focused: false,
+        }
+    }
+
+    pub fn to_contact_phone(&self) -> crate::contacts::ContactPhone {
+        crate::contacts::ContactPhone {
+            number: self.number.clone(),
+            label: self.label.clone(),
+            is_primary: self.is_primary,
+        }
+    }
+}
+
 impl AddressBookUI {
     /// Create a new address book UI
     pub fn new(manager: Arc<ContactsManager>) -> Self {
@@ -71,6 +271,7 @@ impl AddressBookUI {
             stats: None,
             ui_mode: AddressBookMode::Browse,
             is_searching: false,
+            contact_editor: ContactEditor::new(),
         }
     }
 
@@ -409,47 +610,306 @@ impl AddressBookUI {
         }
     }
 
-    /// Render contact editor (placeholder)
+    /// Render contact editor
     fn render_contact_editor(&self, f: &mut Frame, area: Rect) {
-        let block = Block::default()
-            .borders(Borders::ALL)
-            .title("Edit Contact (Implementation Pending)");
-
-        let text = Paragraph::new(
-            "Contact editor will be implemented in the next phase.\n\nPress Esc to go back.",
-        )
-        .block(block)
-        .alignment(Alignment::Center);
-
-        f.render_widget(text, area);
+        self.render_contact_form(f, area, "Edit Contact");
     }
 
-    /// Render contact creator (placeholder)
+    /// Render contact creator
     fn render_contact_creator(&self, f: &mut Frame, area: Rect) {
-        let block = Block::default()
-            .borders(Borders::ALL)
-            .title("Create New Contact (Implementation Pending)");
-
-        let text = Paragraph::new(
-            "Contact creator will be implemented in the next phase.\n\nPress Esc to go back.",
-        )
-        .block(block)
-        .alignment(Alignment::Center);
-
-        f.render_widget(text, area);
+        self.render_contact_form(f, area, "Create New Contact");
     }
 
-    /// Render search mode (placeholder)
+    /// Render contact form (shared by editor and creator)
+    fn render_contact_form(&self, f: &mut Frame, area: Rect, title: &str) {
+        let main_block = Block::default()
+            .borders(Borders::ALL)
+            .title(title);
+
+        let inner_area = main_block.inner(area);
+        f.render_widget(main_block, area);
+
+        // Split into form fields and controls
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Min(20), // Form fields
+                Constraint::Length(3), // Controls
+            ])
+            .split(inner_area);
+
+        // Split form into left and right columns
+        let form_chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Percentage(50), // Left column
+                Constraint::Percentage(50), // Right column
+            ])
+            .split(chunks[0]);
+
+        // Render left column (basic info)
+        self.render_contact_form_left(f, form_chunks[0]);
+
+        // Render right column (emails, phones, notes)
+        self.render_contact_form_right(f, form_chunks[1]);
+
+        // Render controls
+        self.render_contact_form_controls(f, chunks[1]);
+    }
+
+    /// Render left column of contact form
+    fn render_contact_form_left(&self, f: &mut Frame, area: Rect) {
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(3), // Display name
+                Constraint::Length(3), // First name
+                Constraint::Length(3), // Last name
+                Constraint::Length(3), // Company
+                Constraint::Length(3), // Job title
+                Constraint::Min(3),    // Photo URL
+            ])
+            .split(area);
+
+        // Display Name field
+        let display_name_style = if self.contact_editor.focused_field == ContactField::DisplayName {
+            Style::default().fg(Color::Yellow)
+        } else {
+            Style::default().fg(Color::White)
+        };
+
+        let display_name = Paragraph::new(self.contact_editor.display_name.clone())
+            .block(Block::default().borders(Borders::ALL).title("Display Name *"))
+            .style(display_name_style);
+        f.render_widget(display_name, chunks[0]);
+
+        // First Name field
+        let first_name_style = if self.contact_editor.focused_field == ContactField::FirstName {
+            Style::default().fg(Color::Yellow)
+        } else {
+            Style::default().fg(Color::White)
+        };
+
+        let first_name = Paragraph::new(self.contact_editor.first_name.clone())
+            .block(Block::default().borders(Borders::ALL).title("First Name"))
+            .style(first_name_style);
+        f.render_widget(first_name, chunks[1]);
+
+        // Last Name field
+        let last_name_style = if self.contact_editor.focused_field == ContactField::LastName {
+            Style::default().fg(Color::Yellow)
+        } else {
+            Style::default().fg(Color::White)
+        };
+
+        let last_name = Paragraph::new(self.contact_editor.last_name.clone())
+            .block(Block::default().borders(Borders::ALL).title("Last Name"))
+            .style(last_name_style);
+        f.render_widget(last_name, chunks[2]);
+
+        // Company field
+        let company_style = if self.contact_editor.focused_field == ContactField::Company {
+            Style::default().fg(Color::Yellow)
+        } else {
+            Style::default().fg(Color::White)
+        };
+
+        let company = Paragraph::new(self.contact_editor.company.clone())
+            .block(Block::default().borders(Borders::ALL).title("Company"))
+            .style(company_style);
+        f.render_widget(company, chunks[3]);
+
+        // Job Title field
+        let job_title_style = if self.contact_editor.focused_field == ContactField::JobTitle {
+            Style::default().fg(Color::Yellow)
+        } else {
+            Style::default().fg(Color::White)
+        };
+
+        let job_title = Paragraph::new(self.contact_editor.job_title.clone())
+            .block(Block::default().borders(Borders::ALL).title("Job Title"))
+            .style(job_title_style);
+        f.render_widget(job_title, chunks[4]);
+
+        // Photo URL field
+        let photo_url_style = if self.contact_editor.focused_field == ContactField::PhotoUrl {
+            Style::default().fg(Color::Yellow)
+        } else {
+            Style::default().fg(Color::White)
+        };
+
+        let photo_url = Paragraph::new(self.contact_editor.photo_url.clone())
+            .block(Block::default().borders(Borders::ALL).title("Photo URL"))
+            .style(photo_url_style)
+            .wrap(Wrap { trim: true });
+        f.render_widget(photo_url, chunks[5]);
+    }
+
+    /// Render right column of contact form
+    fn render_contact_form_right(&self, f: &mut Frame, area: Rect) {
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(8),  // Emails
+                Constraint::Length(6),  // Phones
+                Constraint::Min(3),     // Notes
+            ])
+            .split(area);
+
+        // Render emails section
+        self.render_contact_emails_section(f, chunks[0]);
+
+        // Render phones section
+        self.render_contact_phones_section(f, chunks[1]);
+
+        // Notes field
+        let notes_style = if self.contact_editor.focused_field == ContactField::Notes {
+            Style::default().fg(Color::Yellow)
+        } else {
+            Style::default().fg(Color::White)
+        };
+
+        let notes = Paragraph::new(self.contact_editor.notes.clone())
+            .block(Block::default().borders(Borders::ALL).title("Notes"))
+            .style(notes_style)
+            .wrap(Wrap { trim: true });
+        f.render_widget(notes, chunks[2]);
+    }
+
+    /// Render emails section
+    fn render_contact_emails_section(&self, f: &mut Frame, area: Rect) {
+        let emails_style = if self.contact_editor.focused_field == ContactField::Emails {
+            Style::default().fg(Color::Yellow)
+        } else {
+            Style::default().fg(Color::White)
+        };
+
+        let emails_block = Block::default()
+            .borders(Borders::ALL)
+            .title("Email Addresses")
+            .border_style(emails_style);
+
+        let inner_area = emails_block.inner(area);
+        f.render_widget(emails_block, area);
+
+        // Create email list items
+        let email_items: Vec<ListItem> = self.contact_editor.emails
+            .iter()
+            .enumerate()
+            .map(|(i, email)| {
+                let primary_marker = if email.is_primary { " (Primary)" } else { "" };
+                let focused_marker = if self.contact_editor.focused_field == ContactField::Emails && 
+                                         self.contact_editor.focused_email_index == i { "▶ " } else { "  " };
+                
+                let line = Line::from(vec![
+                    Span::raw(focused_marker),
+                    Span::styled(
+                        format!("{}: ", email.label),
+                        Style::default().fg(Color::Cyan)
+                    ),
+                    Span::raw(format!("{}{}", email.address, primary_marker)),
+                ]);
+
+                ListItem::new(line)
+            })
+            .collect();
+
+        let emails_list = List::new(email_items);
+        f.render_widget(emails_list, inner_area);
+    }
+
+    /// Render phones section
+    fn render_contact_phones_section(&self, f: &mut Frame, area: Rect) {
+        let phones_style = if self.contact_editor.focused_field == ContactField::Phones {
+            Style::default().fg(Color::Yellow)
+        } else {
+            Style::default().fg(Color::White)
+        };
+
+        let phones_block = Block::default()
+            .borders(Borders::ALL)
+            .title("Phone Numbers")
+            .border_style(phones_style);
+
+        let inner_area = phones_block.inner(area);
+        f.render_widget(phones_block, area);
+
+        // Create phone list items
+        let phone_items: Vec<ListItem> = self.contact_editor.phones
+            .iter()
+            .enumerate()
+            .map(|(i, phone)| {
+                let primary_marker = if phone.is_primary { " (Primary)" } else { "" };
+                let focused_marker = if self.contact_editor.focused_field == ContactField::Phones && 
+                                         self.contact_editor.focused_phone_index == i { "▶ " } else { "  " };
+                
+                let line = Line::from(vec![
+                    Span::raw(focused_marker),
+                    Span::styled(
+                        format!("{}: ", phone.label),
+                        Style::default().fg(Color::Green)
+                    ),
+                    Span::raw(format!("{}{}", phone.number, primary_marker)),
+                ]);
+
+                ListItem::new(line)
+            })
+            .collect();
+
+        let phones_list = List::new(phone_items);
+        f.render_widget(phones_list, inner_area);
+    }
+
+    /// Render contact form controls
+    fn render_contact_form_controls(&self, f: &mut Frame, area: Rect) {
+        let controls_text = "Tab: Next Field | Enter: Add Email/Phone | Ctrl+S: Save | Ctrl+D: Delete Field | Esc: Cancel";
+
+        let controls = Paragraph::new(controls_text)
+            .block(Block::default().borders(Borders::ALL).title("Controls"))
+            .style(Style::default().fg(Color::Gray))
+            .alignment(Alignment::Center)
+            .wrap(Wrap { trim: true });
+
+        f.render_widget(controls, area);
+    }
+
+    /// Render search mode with advanced search interface
     fn render_search_mode(&self, f: &mut Frame, area: Rect) {
         let block = Block::default()
             .borders(Borders::ALL)
-            .title("Advanced Search (Implementation Pending)");
+            .title("Advanced Search");
 
-        let text = Paragraph::new("Advanced search interface will be implemented in the next phase.\n\nPress Esc to go back.")
-            .block(block)
-            .alignment(Alignment::Center);
+        let inner_area = block.inner(area);
+        f.render_widget(block, area);
 
-        f.render_widget(text, area);
+        let search_info = vec![
+            Line::from("🔍 Advanced Contact Search"),
+            Line::from(""),
+            Line::from("Features Available:"),
+            Line::from("  • Multi-field search (name, email, phone, company)"),
+            Line::from("  • Filter by contact source (Google, Outlook, Local)"),
+            Line::from("  • Presence filters (has email, phone, etc.)"),
+            Line::from("  • Fuzzy matching and relevance scoring"),
+            Line::from("  • Sort by various criteria"),
+            Line::from("  • Export and save search results"),
+            Line::from(""),
+            Line::from("Keyboard Shortcuts:"),
+            Line::from("  • A: Launch Advanced Search"),
+            Line::from("  • /: Quick search mode"),
+            Line::from("  • Esc: Return to contact list"),
+            Line::from(""),
+            Line::from(Span::styled(
+                "Press 'A' to open Advanced Search or '/' for quick search",
+                Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+            )),
+        ];
+
+        let info_paragraph = Paragraph::new(search_info)
+            .style(Style::default().fg(Color::White))
+            .alignment(Alignment::Left)
+            .wrap(Wrap { trim: true });
+
+        f.render_widget(info_paragraph, inner_area);
     }
 
     /// Render settings (placeholder)
@@ -651,14 +1111,21 @@ impl AddressBookUI {
                         self.ui_mode = AddressBookMode::Search;
                         self.is_searching = true;
                     }
-                    KeyCode::Char('n') => self.ui_mode = AddressBookMode::CreateContact,
+                    KeyCode::Char('n') => {
+                        self.contact_editor.clear();
+                        self.ui_mode = AddressBookMode::CreateContact;
+                    }
                     KeyCode::Char('e') => {
-                        if self.get_selected_contact().is_some() {
+                        if let Some(contact) = self.get_selected_contact() {
+                            self.contact_editor = ContactEditor::from_contact(&contact);
                             self.ui_mode = AddressBookMode::EditContact;
                         }
                     }
                     KeyCode::Char('d') => self.delete_selected_contact().await,
                     KeyCode::Char('s') => self.sync_contacts().await,
+                    KeyCode::Char('a') | KeyCode::Char('A') => {
+                        return (true, Some(AddressBookAction::LaunchAdvancedSearch));
+                    }
                     KeyCode::Esc => return (false, None), // Exit address book
                     _ => {}
                 }
@@ -666,7 +1133,12 @@ impl AddressBookUI {
             AddressBookMode::ViewContact => {
                 match key {
                     KeyCode::Esc => self.ui_mode = AddressBookMode::Browse,
-                    KeyCode::Char('e') => self.ui_mode = AddressBookMode::EditContact,
+                    KeyCode::Char('e') => {
+                        if let Some(contact) = &self.selected_contact {
+                            self.contact_editor = ContactEditor::from_contact(contact);
+                            self.ui_mode = AddressBookMode::EditContact;
+                        }
+                    }
                     KeyCode::Char('d') => {
                         self.delete_selected_contact().await;
                         self.ui_mode = AddressBookMode::Browse;
@@ -706,6 +1178,9 @@ impl AddressBookUI {
                     self.is_searching = false;
                     self.apply_search().await;
                 }
+                KeyCode::Char('a') | KeyCode::Char('A') => {
+                    return (true, Some(AddressBookAction::LaunchAdvancedSearch));
+                }
                 KeyCode::Backspace => {
                     self.search_query.pop();
                 }
@@ -714,6 +1189,9 @@ impl AddressBookUI {
                 }
                 _ => {}
             },
+            AddressBookMode::EditContact | AddressBookMode::CreateContact => {
+                self.handle_contact_editor_key(key).await
+            }
             _ => match key {
                 KeyCode::Esc => self.ui_mode = AddressBookMode::Browse,
                 _ => {}
@@ -898,5 +1376,226 @@ impl AddressBookUI {
     /// Set UI mode
     pub fn set_mode(&mut self, mode: AddressBookMode) {
         self.ui_mode = mode;
+    }
+
+    /// Handle keyboard input for contact editor
+    async fn handle_contact_editor_key(&mut self, key: crossterm::event::KeyCode) {
+        use crossterm::event::KeyCode;
+
+        match key {
+            KeyCode::Esc => {
+                self.contact_editor.clear();
+                self.ui_mode = AddressBookMode::Browse;
+            }
+            KeyCode::Tab => {
+                self.next_contact_field();
+            }
+            KeyCode::BackTab => {
+                self.previous_contact_field();
+            }
+            KeyCode::Enter => {
+                self.handle_contact_field_enter().await;
+            }
+            KeyCode::Backspace => {
+                self.handle_contact_field_backspace();
+            }
+            KeyCode::Char(c) => {
+                match c {
+                    's' if self.is_ctrl_pressed() => {
+                        self.save_contact().await;
+                    }
+                    'd' if self.is_ctrl_pressed() => {
+                        self.delete_current_field_item();
+                    }
+                    _ => {
+                        self.handle_contact_field_input(c);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Check if Ctrl is pressed (placeholder - would need proper modifier key handling)
+    fn is_ctrl_pressed(&self) -> bool {
+        // TODO: Implement proper modifier key detection
+        // For now, we'll handle Ctrl+S differently in the actual implementation
+        false
+    }
+
+    /// Navigate to next field in contact editor
+    fn next_contact_field(&mut self) {
+        self.contact_editor.focused_field = match self.contact_editor.focused_field {
+            ContactField::DisplayName => ContactField::FirstName,
+            ContactField::FirstName => ContactField::LastName,
+            ContactField::LastName => ContactField::Company,
+            ContactField::Company => ContactField::JobTitle,
+            ContactField::JobTitle => ContactField::PhotoUrl,
+            ContactField::PhotoUrl => ContactField::Emails,
+            ContactField::Emails => ContactField::Phones,
+            ContactField::Phones => ContactField::Notes,
+            ContactField::Notes => ContactField::DisplayName,
+        };
+    }
+
+    /// Navigate to previous field in contact editor
+    fn previous_contact_field(&mut self) {
+        self.contact_editor.focused_field = match self.contact_editor.focused_field {
+            ContactField::DisplayName => ContactField::Notes,
+            ContactField::FirstName => ContactField::DisplayName,
+            ContactField::LastName => ContactField::FirstName,
+            ContactField::Company => ContactField::LastName,
+            ContactField::JobTitle => ContactField::Company,
+            ContactField::PhotoUrl => ContactField::JobTitle,
+            ContactField::Emails => ContactField::PhotoUrl,
+            ContactField::Phones => ContactField::Emails,
+            ContactField::Notes => ContactField::Phones,
+        };
+    }
+
+    /// Handle Enter key in contact editor
+    async fn handle_contact_field_enter(&mut self) {
+        match self.contact_editor.focused_field {
+            ContactField::Emails => {
+                // Add new email
+                self.contact_editor.emails.push(ContactEmailInput::new());
+                self.contact_editor.focused_email_index = self.contact_editor.emails.len() - 1;
+            }
+            ContactField::Phones => {
+                // Add new phone
+                self.contact_editor.phones.push(ContactPhoneInput::new());
+                self.contact_editor.focused_phone_index = self.contact_editor.phones.len() - 1;
+            }
+            _ => {
+                // Save contact
+                self.save_contact().await;
+            }
+        }
+    }
+
+    /// Handle Backspace in contact editor
+    fn handle_contact_field_backspace(&mut self) {
+        match self.contact_editor.focused_field {
+            ContactField::DisplayName => {
+                self.contact_editor.display_name.pop();
+            }
+            ContactField::FirstName => {
+                self.contact_editor.first_name.pop();
+            }
+            ContactField::LastName => {
+                self.contact_editor.last_name.pop();
+            }
+            ContactField::Company => {
+                self.contact_editor.company.pop();
+            }
+            ContactField::JobTitle => {
+                self.contact_editor.job_title.pop();
+            }
+            ContactField::PhotoUrl => {
+                self.contact_editor.photo_url.pop();
+            }
+            ContactField::Notes => {
+                self.contact_editor.notes.pop();
+            }
+            ContactField::Emails => {
+                if let Some(email) = self.contact_editor.emails.get_mut(self.contact_editor.focused_email_index) {
+                    email.address.pop();
+                }
+            }
+            ContactField::Phones => {
+                if let Some(phone) = self.contact_editor.phones.get_mut(self.contact_editor.focused_phone_index) {
+                    phone.number.pop();
+                }
+            }
+        }
+    }
+
+    /// Handle character input in contact editor
+    fn handle_contact_field_input(&mut self, c: char) {
+        match self.contact_editor.focused_field {
+            ContactField::DisplayName => {
+                self.contact_editor.display_name.push(c);
+            }
+            ContactField::FirstName => {
+                self.contact_editor.first_name.push(c);
+            }
+            ContactField::LastName => {
+                self.contact_editor.last_name.push(c);
+            }
+            ContactField::Company => {
+                self.contact_editor.company.push(c);
+            }
+            ContactField::JobTitle => {
+                self.contact_editor.job_title.push(c);
+            }
+            ContactField::PhotoUrl => {
+                self.contact_editor.photo_url.push(c);
+            }
+            ContactField::Notes => {
+                self.contact_editor.notes.push(c);
+            }
+            ContactField::Emails => {
+                if let Some(email) = self.contact_editor.emails.get_mut(self.contact_editor.focused_email_index) {
+                    email.address.push(c);
+                }
+            }
+            ContactField::Phones => {
+                if let Some(phone) = self.contact_editor.phones.get_mut(self.contact_editor.focused_phone_index) {
+                    phone.number.push(c);
+                }
+            }
+        }
+    }
+
+    /// Delete current field item (email or phone)
+    fn delete_current_field_item(&mut self) {
+        match self.contact_editor.focused_field {
+            ContactField::Emails => {
+                if self.contact_editor.emails.len() > 1 {
+                    self.contact_editor.emails.remove(self.contact_editor.focused_email_index);
+                    if self.contact_editor.focused_email_index >= self.contact_editor.emails.len() {
+                        self.contact_editor.focused_email_index = self.contact_editor.emails.len().saturating_sub(1);
+                    }
+                }
+            }
+            ContactField::Phones => {
+                if self.contact_editor.phones.len() > 1 {
+                    self.contact_editor.phones.remove(self.contact_editor.focused_phone_index);
+                    if self.contact_editor.focused_phone_index >= self.contact_editor.phones.len() {
+                        self.contact_editor.focused_phone_index = self.contact_editor.phones.len().saturating_sub(1);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Save contact
+    async fn save_contact(&mut self) {
+        if self.contact_editor.display_name.is_empty() {
+            tracing::warn!("Cannot save contact without display name");
+            return;
+        }
+
+        let contact = self.contact_editor.to_contact();
+
+        let result = if self.contact_editor.is_editing {
+            self.manager.update_contact(contact).await
+        } else {
+            self.manager.create_contact(contact).await
+        };
+
+        match result {
+            Ok(_) => {
+                tracing::info!("Contact saved successfully");
+                self.contact_editor.clear();
+                self.ui_mode = AddressBookMode::Browse;
+                self.refresh_contacts().await;
+            }
+            Err(e) => {
+                tracing::error!("Failed to save contact: {}", e);
+                // TODO: Show error message to user
+            }
+        }
     }
 }

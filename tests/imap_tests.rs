@@ -16,7 +16,11 @@ fn test_imap_config_creation() {
     assert_eq!(config.hostname, "imap.example.com");
     assert_eq!(config.port, 993);
     assert_eq!(config.username, "user@example.com");
-    assert_eq!(config.password, "password");
+    if let ImapAuthMethod::Password(password) = &config.auth_method {
+        assert_eq!(password, "password");
+    } else {
+        panic!("Expected password auth method");
+    }
     assert!(config.use_tls); // Should default to true for port 993
     assert_eq!(config.timeout_seconds, 30);
 }

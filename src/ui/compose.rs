@@ -1,11 +1,11 @@
-use crate::contacts::{Contact, ContactsManager};
+use crate::contacts::{ContactAutocomplete, ContactsManager};
 use crate::spell::{SpellCheckResult, SpellChecker};
 use crate::theme::Theme;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Text},
-    widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Wrap},
+    widgets::{Block, Borders, Clear, Paragraph, Wrap},
     Frame,
 };
 use std::sync::Arc;
@@ -14,6 +14,7 @@ use std::sync::Arc;
 pub struct ComposeUI {
     contacts_manager: Arc<ContactsManager>,
     spell_checker: SpellChecker,
+    contact_autocomplete: ContactAutocomplete,
 
     // Form fields
     to_field: String,
@@ -24,9 +25,6 @@ pub struct ComposeUI {
 
     // UI state
     current_field: ComposeField,
-    is_autocomplete_visible: bool,
-    autocomplete_suggestions: Vec<Contact>,
-    autocomplete_selected: usize,
 
     // Spell check state
     is_spell_check_visible: bool,
@@ -76,19 +74,18 @@ impl ComposeUI {
     pub fn new(contacts_manager: Arc<ContactsManager>) -> Self {
         let spell_checker = SpellChecker::new().unwrap_or_default();
         let available_languages = spell_checker.available_languages();
+        let contact_autocomplete = ContactAutocomplete::new(contacts_manager.clone());
 
         Self {
             contacts_manager,
             spell_checker,
+            contact_autocomplete,
             to_field: String::new(),
             cc_field: String::new(),
             bcc_field: String::new(),
             subject_field: String::new(),
             body_text: String::new(),
             current_field: ComposeField::To,
-            is_autocomplete_visible: false,
-            autocomplete_suggestions: Vec::new(),
-            autocomplete_selected: 0,
             is_spell_check_visible: false,
             spell_check_result: None,
             current_spell_error: 0,
@@ -225,8 +222,9 @@ impl ComposeUI {
         self.render_body(f, chunks[5], theme);
 
         // Render autocomplete suggestions if visible
-        if self.is_autocomplete_visible && !self.autocomplete_suggestions.is_empty() {
-            self.render_autocomplete(f, area, theme);
+        if self.contact_autocomplete.is_visible() {
+            let anchor_pos = self.get_current_field_anchor_position(area);
+            self.contact_autocomplete.render(f, area, anchor_pos.0, anchor_pos.1);
         }
 
         // Render spell check suggestions if visible
@@ -348,60 +346,21 @@ impl ComposeUI {
         f.render_widget(paragraph, inner);
     }
 
-    /// Render autocomplete suggestions
-    fn render_autocomplete(&mut self, f: &mut Frame, compose_area: Rect, theme: &Theme) {
-        // Calculate position for autocomplete popup
-        let popup_width = 50;
-        let popup_height = (self.autocomplete_suggestions.len() + 2).min(8) as u16;
-
-        let popup_area = Rect {
-            x: compose_area.x + 10,
-            y: compose_area.y + 3, // Position below the To field
-            width: popup_width,
-            height: popup_height,
+    /// Get the anchor position for the current field for autocomplete popup positioning
+    fn get_current_field_anchor_position(&self, area: Rect) -> (u16, u16) {
+        // Calculate the position based on the current field
+        let field_y = match self.current_field {
+            ComposeField::To => area.y + 2,     // First field
+            ComposeField::Cc => area.y + 4,     // Second field
+            ComposeField::Bcc => area.y + 6,    // Third field
+            ComposeField::Subject => area.y + 8, // Fourth field
+            ComposeField::Body => area.y + 12,  // Body area
         };
-
-        // Clear the background
-        f.render_widget(Clear, popup_area);
-
-        // Create suggestion list
-        let suggestions: Vec<ListItem> = self
-            .autocomplete_suggestions
-            .iter()
-            .map(|contact| {
-                let email = contact
-                    .primary_email()
-                    .map(|e| e.address.clone())
-                    .unwrap_or_else(|| "No email".to_string());
-
-                let display_text = if contact.display_name.is_empty() {
-                    email
-                } else {
-                    format!("{} <{}>", contact.display_name, email)
-                };
-
-                ListItem::new(display_text)
-            })
-            .collect();
-
-        let mut list_state = ListState::default();
-        list_state.select(Some(self.autocomplete_selected));
-
-        let suggestions_list = List::new(suggestions)
-            .block(
-                Block::default()
-                    .title("Contact Suggestions")
-                    .borders(Borders::ALL)
-                    .border_style(theme.get_component_style("popup", true)),
-            )
-            .highlight_style(
-                Style::default()
-                    .bg(Color::DarkGray)
-                    .add_modifier(Modifier::BOLD),
-            )
-            .highlight_symbol("▶ ");
-
-        f.render_stateful_widget(suggestions_list, popup_area, &mut list_state);
+        
+        // X position is typically at the start of the input field
+        let field_x = area.x + 10; // Account for label width
+        
+        (field_x, field_y)
     }
 
     /// Render status line with shortcuts
@@ -413,7 +372,7 @@ impl ComposeUI {
             height: 1,
         };
 
-        let status_text = if self.is_autocomplete_visible {
+        let status_text = if self.contact_autocomplete.is_visible() {
             "↑↓ Navigate suggestions | Tab Complete | Esc Cancel | Enter Select"
         } else if self.is_spell_config_visible {
             "↑↓ Select language | Enter Apply | Esc/F10 Close"
@@ -685,7 +644,7 @@ impl ComposeUI {
     pub async fn handle_key(&mut self, key: crossterm::event::KeyCode) -> ComposeAction {
         use crossterm::event::KeyCode;
 
-        if self.is_autocomplete_visible {
+        if self.contact_autocomplete.is_visible() {
             return self.handle_autocomplete_key(key).await;
         }
 
@@ -815,21 +774,15 @@ impl ComposeUI {
 
         match key {
             KeyCode::Esc => {
-                self.hide_autocomplete();
+                self.contact_autocomplete.hide();
                 ComposeAction::Continue
             }
             KeyCode::Up => {
-                if self.autocomplete_selected > 0 {
-                    self.autocomplete_selected -= 1;
-                }
+                self.contact_autocomplete.select_previous();
                 ComposeAction::Continue
             }
             KeyCode::Down => {
-                if self.autocomplete_selected
-                    < self.autocomplete_suggestions.len().saturating_sub(1)
-                {
-                    self.autocomplete_selected += 1;
-                }
+                self.contact_autocomplete.select_next();
                 ComposeAction::Continue
             }
             KeyCode::Enter | KeyCode::Tab => {
@@ -838,13 +791,13 @@ impl ComposeUI {
             }
             KeyCode::Char(c) => {
                 // Continue typing and update autocomplete
-                self.hide_autocomplete();
+                self.contact_autocomplete.hide();
                 self.insert_char(c);
                 self.update_autocomplete().await;
                 ComposeAction::Continue
             }
             KeyCode::Backspace => {
-                self.hide_autocomplete();
+                self.contact_autocomplete.hide();
                 self.delete_char();
                 self.update_autocomplete().await;
                 ComposeAction::Continue
@@ -864,84 +817,54 @@ impl ComposeUI {
             let search_query = query.split(',').last().unwrap_or("").trim();
 
             if !search_query.is_empty() {
-                match self
-                    .contacts_manager
-                    .search_by_email(search_query, Some(10))
-                    .await
-                {
-                    Ok(contacts) => {
-                        self.autocomplete_suggestions = contacts;
-                        self.autocomplete_selected = 0;
-                        self.is_autocomplete_visible = !self.autocomplete_suggestions.is_empty();
-                    }
-                    Err(e) => {
-                        tracing::error!("Failed to search contacts: {}", e);
-                    }
-                }
+                self.contact_autocomplete.update_suggestions(search_query).await;
+                self.contact_autocomplete.set_focus(true);
             }
         }
     }
 
     /// Update autocomplete suggestions based on current input
     async fn update_autocomplete(&mut self) {
-        let current_value = self.get_current_field_value();
-        let last_entry = current_value.split(',').last().unwrap_or("").trim();
+        if matches!(
+            self.current_field,
+            ComposeField::To | ComposeField::Cc | ComposeField::Bcc
+        ) {
+            let current_value = self.get_current_field_value();
+            let last_entry = current_value.split(',').last().unwrap_or("").trim();
 
-        if last_entry.len() >= 2 {
-            match self
-                .contacts_manager
-                .search_by_email(last_entry, Some(5))
-                .await
-            {
-                Ok(contacts) => {
-                    self.autocomplete_suggestions = contacts;
-                    self.autocomplete_selected = 0;
-                    self.is_autocomplete_visible = !self.autocomplete_suggestions.is_empty();
-                }
-                Err(_) => {
-                    self.hide_autocomplete();
-                }
+            if last_entry.len() >= 2 {
+                self.contact_autocomplete.update_suggestions(last_entry).await;
+            } else {
+                self.contact_autocomplete.hide();
             }
-        } else {
-            self.hide_autocomplete();
         }
     }
 
     /// Select the currently highlighted autocomplete suggestion
     fn select_autocomplete_suggestion(&mut self) {
-        if let Some(contact) = self
-            .autocomplete_suggestions
-            .get(self.autocomplete_selected)
-        {
-            if let Some(email) = contact.primary_email() {
-                let current_value = self.get_current_field_value();
-                let parts: Vec<&str> = current_value.split(',').collect();
+        if let Some(suggestion) = self.contact_autocomplete.get_selected_suggestion() {
+            let current_value = self.get_current_field_value();
+            let parts: Vec<&str> = current_value.split(',').collect();
 
-                let new_value = if parts.len() > 1 {
-                    // Replace the last entry
-                    let mut new_parts = parts;
-                    new_parts.pop(); // Remove last incomplete entry
-                    let formatted_contact = format!("{} <{}>", contact.display_name, email.address);
-                    new_parts.push(&formatted_contact);
-                    new_parts.join(", ")
-                } else {
-                    // Replace entire field
-                    format!("{} <{}>", contact.display_name, email.address)
-                };
+            let formatted_contact = self.contact_autocomplete.format_suggestion(suggestion);
 
-                self.set_current_field_value(new_value);
-            }
+            let new_value = if parts.len() > 1 {
+                // Replace the last entry
+                let mut new_parts = parts;
+                new_parts.pop(); // Remove last incomplete entry
+                new_parts.push(&formatted_contact);
+                new_parts.join(", ")
+            } else {
+                // Replace entire field
+                formatted_contact
+            };
+
+            self.set_current_field_value(new_value);
         }
 
-        self.hide_autocomplete();
+        self.contact_autocomplete.hide();
     }
 
-    /// Hide autocomplete suggestions
-    fn hide_autocomplete(&mut self) {
-        self.is_autocomplete_visible = false;
-        self.autocomplete_suggestions.clear();
-        self.autocomplete_selected = 0;
-    }
 
     /// Navigation methods
     fn next_field(&mut self) {

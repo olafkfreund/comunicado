@@ -591,7 +591,7 @@ impl ContactsDatabase {
     }
 
     /// Helper method to convert row to contact
-    fn contact_from_row(&self, row: &sqlx::sqlite::SqliteRow) -> ContactsResult<Contact> {
+    pub fn contact_from_row(&self, row: &sqlx::sqlite::SqliteRow) -> ContactsResult<Contact> {
         let id: i64 = row
             .try_get("id")
             .map_err(|e| ContactsError::DatabaseError(e.to_string()))?;

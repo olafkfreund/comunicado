@@ -10,10 +10,15 @@
 /// - Privacy-aware content display
 /// - Calendar reminder management
 /// - Cross-platform notification support
+/// - Advanced integration with email and calendar systems
+/// - Automated reminder scheduling
+/// - Notification action handling
 pub mod desktop;
+pub mod integration;
 pub mod manager;
 pub mod types;
 
 pub use desktop::DesktopNotificationService;
+pub use integration::{NotificationIntegrationService, NotificationStatistics};
 pub use manager::UnifiedNotificationManager;
 pub use types::{NotificationConfig, NotificationEvent, NotificationPriority};

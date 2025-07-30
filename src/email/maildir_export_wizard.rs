@@ -577,6 +577,7 @@ fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crossterm::event::KeyModifiers;
 
     /// Create a test EmailDatabase
     async fn create_test_database() -> Arc<EmailDatabase> {

@@ -106,7 +106,7 @@ async fn test_idle_timeout_handling() {
 async fn test_idle_with_account_manager() {
     use comunicado::oauth2::TokenManager;
 
-    let account_manager = ImapAccountManager::new(TokenManager::new());
+    let account_manager = ImapAccountManager::new().unwrap();
 
     // Create a test account configuration
     let config = ImapConfig {
@@ -123,7 +123,7 @@ async fn test_idle_with_account_manager() {
     };
 
     // Test that we can create an account manager with config
-    let stats = account_manager.get_stats().await;
+    let stats = account_manager.get_statistics().await;
     assert_eq!(stats.total_accounts, 0); // Should start with 0 accounts
 }
 

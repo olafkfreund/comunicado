@@ -14,10 +14,12 @@ pub mod maildir;
 pub mod mime;
 pub mod notifications;
 pub mod oauth2;
+pub mod plugins;
 pub mod services;
 pub mod smtp;
 pub mod spell;
 pub mod startup;
+pub mod system;
 pub mod theme;
 pub mod ui;
 

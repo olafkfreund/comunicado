@@ -1,6 +1,9 @@
+pub mod advanced_filters;
+pub mod advanced_filters_ui;
 pub mod attachment_viewer;
 pub mod attachments;
 pub mod database;
+pub mod database_optimizations;
 pub mod desktop_notifications;
 pub mod filters;
 pub mod folder_hierarchy;
@@ -16,17 +19,36 @@ pub mod maildir_mapper;
 pub mod maildir_ui;
 pub mod message;
 pub mod notifications;
+pub mod performance_benchmarks;
+pub mod performance_integration;
 pub mod sorting;
 pub mod sync_engine;
 pub mod thread;
 pub mod threading_engine;
 pub mod timestamp_utils;
 
+pub use advanced_filters::{
+    AdvancedEmailFilter, AdvancedFilterEngine, AdvancedFilterResult, AdvancedCondition,
+    ConditionGroup, BooleanLogic, AdvancedFilterField, AdvancedFilterOperator, FilterValue,
+    ActionRule, AdvancedFilterAction, FilterTemplateLibrary, FilterStatistics, TimePeriod,
+    NotificationPriority, MessagePriority,
+};
+pub use advanced_filters_ui::{AdvancedFiltersUI, FilterUIAction, FilterTab};
 pub use attachment_viewer::{AttachmentViewer, ViewResult, ViewerMode};
 pub use attachments::{AttachmentInfo, AttachmentManager, AttachmentType};
 pub use database::{
     BackupResult, CleanupResult, DatabaseError, DatabaseResult, DatabaseStats, EmailDatabase,
     FolderSyncState, RestoreResult, StoredAttachment, StoredMessage, SyncStatus,
+};
+pub use database_optimizations::{
+    OptimizedDatabase, DatabaseOptimizationConfig, PaginationConfig, SearchFilters,
+    SortDirection, QueryStats, BatchOperationResult, FolderMessageCount,
+};
+pub use performance_benchmarks::{
+    PerformanceBenchmarkSuite, BenchmarkResults, BenchmarkConfig, MemoryUsageStats,
+};
+pub use performance_integration::{
+    PerformanceEnhancedDatabase, PerformanceConfig, PerformanceAwareResult, PerformanceStats,
 };
 pub use desktop_notifications::DesktopNotificationService;
 pub use filters::{

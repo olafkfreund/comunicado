@@ -29,7 +29,7 @@ impl TestAttachment {
             id: uuid::Uuid::new_v4().to_string(),
             filename: self.filename.clone(),
             content_type: self.content_type.clone(),
-            size: self.size as i64,
+            size: self.size as u32,
             content_id: None,
             is_inline: false,
             data: Some(self.data.clone()),
@@ -118,7 +118,7 @@ fn create_test_attachments() -> Vec<TestAttachment> {
             filename: "malware.exe".to_string(),
             content_type: "application/octet-stream".to_string(),
             size: 1024 * 10,                                                  // 10KB
-            data: b"MZ\x90\x00".repeat(2560).into_iter().flatten().collect(), // Fake PE header
+            data: b"MZ\x90\x00".repeat(2560), // Fake PE header
             expected_type: AttachmentType::Unknown,
             is_viewable: false,
             provider: "Unknown",

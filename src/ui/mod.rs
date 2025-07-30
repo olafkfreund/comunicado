@@ -1,4 +1,6 @@
 pub mod account_switcher;
+pub mod animated_content;
+pub mod animation;
 pub mod calendar;
 pub mod compose;
 pub mod content_preview;
@@ -6,6 +8,7 @@ pub mod date_picker;
 pub mod draft_list;
 pub mod email_viewer;
 pub mod folder_tree;
+pub mod graphics;
 pub mod invitation_viewer;
 pub mod keyboard_shortcuts;
 pub mod layout;
@@ -15,6 +18,9 @@ pub mod start_page;
 pub mod status_bar;
 pub mod sync_progress;
 pub mod time_picker;
+
+#[cfg(test)]
+mod compose_tests;
 
 use crate::email::{
     sync_engine::SyncProgress, EmailDatabase, EmailNotification, EmailNotificationManager,
@@ -70,6 +76,11 @@ pub use invitation_viewer::{InvitationAction, InvitationViewer};
 
 // Re-export search types
 pub use search::{SearchAction, SearchEngine, SearchMode, SearchResult, SearchUI};
+
+// Re-export animation and graphics types
+pub use animated_content::{AnimatedContentManager, AnimatedEmailContent, AnimationControlWidget};
+pub use animation::{Animation, AnimationDecoder, AnimationFormat, AnimationManager, AnimationSettings};
+pub use graphics::{GraphicsProtocol, ImageRenderer, RenderConfig};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FocusedPane {

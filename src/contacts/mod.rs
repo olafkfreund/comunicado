@@ -1,9 +1,18 @@
+pub mod advanced_search;
+pub mod advanced_search_ui;
+pub mod autocomplete;
 pub mod database;
 pub mod manager;
 pub mod providers;
 pub mod sync;
 pub mod ui;
 
+pub use advanced_search::{
+    AdvancedContactSearch, AdvancedSearchCriteria, SavedSearch, SearchHistoryEntry, 
+    SearchResult, SortDirection, SortField,
+};
+pub use advanced_search_ui::{AdvancedSearchUI, SearchAction, SearchField, SearchTab};
+pub use autocomplete::{ContactAutocomplete, ContactSuggestion};
 pub use database::{Contact, ContactEmail, ContactGroup, ContactPhone, ContactsDatabase};
 pub use manager::ContactsManager;
 pub use providers::{ContactsProvider, GoogleContactsProvider, OutlookContactsProvider};
