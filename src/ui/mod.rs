@@ -774,10 +774,14 @@ impl UI {
                 ("Esc".to_string(), "Cancel".to_string()),
             ],
             UIMode::StartPage => vec![
-                ("h/l".to_string(), "Navigate".to_string()),
+                ("F1".to_string(), "Help".to_string()),
+                ("F3".to_string(), "Calendar".to_string()),
                 ("Enter/e".to_string(), "Email".to_string()),
-                ("c".to_string(), "Compose".to_string()),
+                ("c/n".to_string(), "Compose".to_string()),
+                ("C/t".to_string(), "Calendar".to_string()),
                 ("/".to_string(), "Search".to_string()),
+                ("r".to_string(), "Refresh".to_string()),
+                ("?".to_string(), "Help".to_string()),
                 ("q".to_string(), "Quit".to_string()),
             ],
             UIMode::DraftList => vec![

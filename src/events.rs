@@ -1,7 +1,7 @@
 use crate::keyboard::{KeyboardAction, KeyboardManager};
 use crate::ui::{ComposeAction, DraftAction, FocusedPane, StartPageNavigation, UIMode, UI};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-use chrono::{Datelike, NaiveDate};
+use chrono::Datelike;
 
 pub struct EventHandler {
     should_quit: bool,
@@ -1655,6 +1655,12 @@ impl EventHandler {
             KeyCode::Right | KeyCode::Char('l') => {
                 ui.handle_start_page_navigation(StartPageNavigation::Next);
             }
+            KeyCode::Up | KeyCode::Char('k') => {
+                ui.handle_start_page_navigation(StartPageNavigation::Previous);
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                ui.handle_start_page_navigation(StartPageNavigation::Next);
+            }
             KeyCode::Tab => {
                 ui.handle_start_page_navigation(StartPageNavigation::Next);
             }
@@ -1662,44 +1668,94 @@ impl EventHandler {
                 ui.handle_start_page_navigation(StartPageNavigation::Previous);
             }
 
-            // Switch to email interface
-            KeyCode::Enter | KeyCode::Char('e') => {
-                ui.show_email_interface();
+            // Function keys for direct access
+            KeyCode::F(1) => {
+                // F1: Help/Keyboard shortcuts
+                ui.show_keyboard_shortcuts();
+            }
+            KeyCode::F(3) => {
+                // F3: Calendar mode
+                ui.show_calendar();
+            }
+            KeyCode::F(4) => {
+                // F4: Settings/Configuration
+                // TODO: Implement settings mode
             }
 
-            // Quick actions from start page
+            // Primary actions
+            KeyCode::Enter | KeyCode::Char('e') => {
+                // Enter/e: Switch to email interface
+                ui.show_email_interface();
+            }
             KeyCode::Char('c') => {
-                // Compose email - switch to email interface and start compose
+                // c: Compose email
                 ui.show_email_interface();
                 return EventResult::ComposeAction(crate::ui::ComposeAction::StartCompose);
             }
+
+            // Navigation and view modes
+            KeyCode::Char('E') if ui.focused_pane() != FocusedPane::FolderTree => {
+                // E: Email interface
+                ui.show_email_interface();
+            }
+            KeyCode::Char('C') => {
+                // C: Calendar view
+                ui.show_calendar();
+            }
+            KeyCode::Char('?') if ui.focused_pane() != FocusedPane::FolderTree => {
+                // ?: Help/keyboard shortcuts
+                ui.show_keyboard_shortcuts();
+            }
+
+            // Search and filtering
             KeyCode::Char('/') => {
-                // Search - switch to email interface and focus search
+                // /: Search - switch to email interface and activate search
                 ui.show_email_interface();
                 // TODO: Focus search when implemented
             }
-            KeyCode::Char('a') => {
-                // Address book - switch to email interface and show contacts
+            KeyCode::Char('f') => {
+                // f: Filter/Find
                 ui.show_email_interface();
-                // TODO: Show contacts when implemented
-            }
-            KeyCode::Char('C') => {
-                // Calendar - switch to email interface and show calendar
-                ui.show_email_interface();
-                // TODO: Show calendar when implemented
+                // TODO: Activate filter mode
             }
 
-            // Task management on start page
-            KeyCode::Char('t') => {
-                // TODO: Add new task functionality
+            // Quick productivity actions
+            KeyCode::Char('n') if ui.focused_pane() != FocusedPane::FolderTree => {
+                // n: New (compose email)
+                ui.show_email_interface();
+                return EventResult::ComposeAction(crate::ui::ComposeAction::StartCompose);
             }
-            KeyCode::Char('x') => {
-                // TODO: Mark task as complete
-            }
-
-            // Refresh data (when not in folder tree - handled above)
-            KeyCode::Char('r') if ui.focused_pane() != FocusedPane::FolderTree => {
+            KeyCode::Char('r') => {
+                // r: Refresh all data
                 // TODO: Add refresh functionality to app events
+            }
+            KeyCode::Char('s') => {
+                // s: Sync/Synchronize accounts
+                // TODO: Trigger account synchronization
+            }
+
+            // Dashboard-specific actions
+            KeyCode::Char('t') if ui.focused_pane() != FocusedPane::FolderTree => {
+                // t: Tasks/Todos (switch to calendar for todo management)
+                ui.show_calendar();
+            }
+            KeyCode::Char('w') if ui.focused_pane() != FocusedPane::FolderTree => {
+                // w: Weather refresh
+                // TODO: Refresh weather data
+            }
+            KeyCode::Char('M') if ui.focused_pane() != FocusedPane::FolderTree => {
+                // M: Monitor system resources (uppercase to avoid conflict)
+                // TODO: Toggle detailed system monitor view
+            }
+
+            // Space and Escape for common actions
+            KeyCode::Char(' ') => {
+                // Space: Quick action (same as Enter)
+                ui.show_email_interface();
+            }
+            KeyCode::Esc => {
+                // Esc: Nothing to escape from on dashboard, but could be used for other actions
+                // For now, just continue
             }
 
             // Folder-specific character keys (only when folder tree is focused)
