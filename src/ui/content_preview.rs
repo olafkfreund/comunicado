@@ -2710,6 +2710,7 @@ This is a sample email showcasing the modern email display format."
     }
 
     /// Filter out raw email headers from content lines
+    #[allow(dead_code)]
     fn filter_raw_headers(&self, content_lines: &[String]) -> Vec<String> {
         let mut filtered_lines = Vec::new();
         let mut skip_headers = true;

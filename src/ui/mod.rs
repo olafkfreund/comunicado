@@ -4,12 +4,14 @@ pub mod animation;
 pub mod calendar;
 pub mod compose;
 pub mod content_preview;
+pub mod context_calendar;
 pub mod date_picker;
 pub mod draft_list;
 pub mod email_viewer;
 pub mod enhanced_message_list;
 pub mod folder_tree;
 pub mod graphics;
+pub mod integrated_layout;
 pub mod invitation_viewer;
 pub mod keyboard_shortcuts;
 pub mod layout;
@@ -25,6 +27,7 @@ pub mod startup_progress;
 pub mod status_bar;
 pub mod sync_progress;
 pub mod time_picker;
+pub mod unified_sidebar;
 
 #[cfg(test)]
 mod compose_tests;
@@ -90,6 +93,11 @@ pub use animated_content::{AnimatedContentManager, AnimatedEmailContent, Animati
 pub use animation::{Animation, AnimationDecoder, AnimationFormat, AnimationManager, AnimationSettings};
 pub use graphics::{GraphicsProtocol, ImageRenderer, RenderConfig};
 
+// Re-export integrated layout and context-aware calendar types
+pub use context_calendar::{CalendarAction as ContextCalendarAction, ContextAwareCalendar, CalendarDisplayMode, EmailCalendarContext};
+pub use integrated_layout::{IntegratedLayout, IntegratedLayoutManager, IntegratedViewMode, ContentType};
+pub use unified_sidebar::{UnifiedSidebar, SidebarAction, NavigationItem, QuickActionType};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FocusedPane {
     AccountSwitcher,
@@ -109,6 +117,7 @@ pub enum UIMode {
     Compose,
     DraftList,
     Calendar,
+    ContextAware, // New context-aware email-calendar integration
     EventCreate,
     EventEdit,
     EventView,
@@ -141,6 +150,10 @@ pub struct UI {
     search_ui: SearchUI,
     search_engine: Option<SearchEngine>,
     keyboard_shortcuts_ui: KeyboardShortcutsUI,
+    // Context-aware integration components
+    context_calendar: ContextAwareCalendar,
+    integrated_layout: IntegratedLayoutManager,
+    unified_sidebar: UnifiedSidebar,
     // Notification system
     notification_message: Option<String>,
     notification_expires_at: Option<tokio::time::Instant>,
@@ -175,6 +188,10 @@ impl UI {
             search_ui: SearchUI::new(),
             search_engine: None,
             keyboard_shortcuts_ui: KeyboardShortcutsUI::new(),
+            // Initialize context-aware integration components
+            context_calendar: ContextAwareCalendar::new(),
+            integrated_layout: IntegratedLayoutManager::new(),
+            unified_sidebar: UnifiedSidebar::new(),
             // Initialize notification system
             notification_message: None,
             notification_expires_at: None,
@@ -285,6 +302,10 @@ impl UI {
                 let theme = self.theme_manager.current_theme();
                 self.calendar_ui.render(frame, size, theme);
             }
+            UIMode::ContextAware => {
+                // Render context-aware email-calendar integration
+                self.render_context_aware_layout(frame, size);
+            }
             UIMode::EventCreate | UIMode::EventEdit | UIMode::EventView => {
                 // Render event form UI in full screen
                 if let Some(ref mut event_form) = self.event_form_ui {
@@ -342,6 +363,118 @@ impl UI {
                     .render(frame, size, theme, keyboard_manager);
             }
         }
+    }
+
+    /// Render context-aware email-calendar integrated layout
+    fn render_context_aware_layout(&mut self, frame: &mut Frame, area: Rect) {
+        let layout = self.integrated_layout.calculate_layout(area);
+
+        // Analyze current email for calendar context first
+        let mut calendar_context_mode = CalendarDisplayMode::Hidden;
+        if let Some(selected_message) = self.message_list.get_selected_message_for_preview() {
+            calendar_context_mode = self.context_calendar.analyze_message_item_context(&selected_message);
+        }
+
+        // Render components that need mutable access first
+        self.render_context_aware_details(frame, layout.details_panel);
+
+        // Now get theme and render components that need immutable access
+        let theme = self.theme_manager.current_theme();
+
+        // Render unified sidebar
+        self.unified_sidebar.render(frame, layout.sidebar, theme);
+
+        // Render primary content (email list)
+        self.render_context_aware_email_list(frame, layout.primary_content);
+
+        // Render context-aware calendar sidebar (only if relevant)
+        if let Some(secondary_area) = layout.secondary_content {
+            if calendar_context_mode != CalendarDisplayMode::Hidden {
+                self.context_calendar.render(frame, secondary_area, theme);
+            }
+        }
+
+        // Render status bar
+        self.render_status_bar(frame, layout.status_bar);
+
+        // Render action bar if visible
+        if let Some(action_area) = layout.action_bar {
+            self.render_context_aware_actions(frame, action_area, calendar_context_mode);
+        }
+    }
+
+    /// Render email list with context-aware highlighting
+    fn render_context_aware_email_list(&self, frame: &mut Frame, area: Rect) {
+        let is_focused = matches!(self.focused_pane, FocusedPane::MessageList);
+        let theme = self.theme_manager.current_theme();
+
+        let border_style = theme.get_component_style("border", is_focused);
+        let block = Block::default()
+            .title("Messages")
+            .borders(Borders::ALL)
+            .border_style(border_style);
+
+        self.message_list.render(frame, area, block, is_focused, theme);
+    }
+
+    /// Render email content details with context awareness
+    fn render_context_aware_details(&mut self, frame: &mut Frame, area: Rect) {
+        let is_focused = matches!(self.focused_pane, FocusedPane::ContentPreview);
+        let theme = self.theme_manager.current_theme();
+
+        let border_style = theme.get_component_style("border", is_focused);
+        let block = Block::default()
+            .title("Content")
+            .borders(Borders::ALL)
+            .border_style(border_style);
+
+        self.content_preview.render(frame, area, block, is_focused, theme);
+    }
+
+    /// Render context-aware action bar for calendar/email actions
+    fn render_context_aware_actions(&self, frame: &mut Frame, area: Rect, context_mode: CalendarDisplayMode) {
+        use ratatui::{
+            layout::Alignment,
+            style::{Modifier, Style},
+            text::{Line, Span},
+            widgets::{Block, Borders, Paragraph},
+        };
+
+        let theme = self.theme_manager.current_theme();
+        
+        let actions = match context_mode {
+            CalendarDisplayMode::InvitationDetails => vec![
+                Span::styled(" [←→] Navigate ", Style::default().fg(theme.colors.palette.text_muted)),
+                Span::styled(" [Enter] RSVP ", Style::default().fg(theme.colors.palette.accent).add_modifier(Modifier::BOLD)),
+                Span::styled(" [Esc] Hide ", Style::default().fg(theme.colors.palette.text_muted)),
+            ],
+            CalendarDisplayMode::DailyAgenda => vec![
+                Span::styled(" [c] Create Event ", Style::default().fg(theme.colors.palette.accent).add_modifier(Modifier::BOLD)),
+                Span::styled(" [r] Reply ", Style::default().fg(theme.colors.palette.text_muted)),
+                Span::styled(" [f] Forward ", Style::default().fg(theme.colors.palette.text_muted)),
+            ],
+            CalendarDisplayMode::QuickSchedule => vec![
+                Span::styled(" [c] Create Meeting ", Style::default().fg(theme.colors.palette.accent).add_modifier(Modifier::BOLD)),
+                Span::styled(" [s] Schedule ", Style::default().fg(theme.colors.palette.text_muted)),
+                Span::styled(" [r] Reply ", Style::default().fg(theme.colors.palette.text_muted)),
+            ],
+            _ => vec![
+                Span::styled(" [r] Reply ", Style::default().fg(theme.colors.palette.text_muted)),
+                Span::styled(" [f] Forward ", Style::default().fg(theme.colors.palette.text_muted)),
+                Span::styled(" [c] Compose ", Style::default().fg(theme.colors.palette.text_muted)),
+            ],
+        };
+
+        let action_line = Line::from(actions);
+        let action_paragraph = Paragraph::new(action_line)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(theme.colors.palette.border))
+            )
+            .alignment(Alignment::Center);
+
+        frame.render_widget(action_paragraph, area);
     }
 
     fn render_account_switcher(&mut self, frame: &mut Frame, area: Rect) {
@@ -543,6 +676,7 @@ impl UI {
             UIMode::StartPage => "Dashboard",
             UIMode::DraftList => "Draft Manager",
             UIMode::Calendar => "Calendar",
+            UIMode::ContextAware => "Context-Aware View",
             UIMode::EventCreate => "Create Event",
             UIMode::EventEdit => "Edit Event",
             UIMode::EventView => "View Event",
@@ -682,6 +816,15 @@ impl UI {
                 ("Tab".to_string(), "Search Mode".to_string()),
                 ("F1-F4".to_string(), "Quick Mode".to_string()),
                 ("Esc".to_string(), "Close Search".to_string()),
+            ],
+            UIMode::ContextAware => vec![
+                ("Tab".to_string(), "Switch Pane".to_string()),
+                ("j/k".to_string(), "Navigate".to_string()),
+                ("Enter".to_string(), "Select/RSVP".to_string()),
+                ("c".to_string(), "Create Event".to_string()),
+                ("r".to_string(), "Reply".to_string()),
+                ("f".to_string(), "Forward".to_string()),
+                ("Esc".to_string(), "Hide Calendar".to_string()),
             ],
             UIMode::KeyboardShortcuts => vec![
                 ("↑↓/j/k".to_string(), "Scroll".to_string()),
@@ -1860,6 +2003,92 @@ impl UI {
     /// Get current notification message for rendering
     pub fn get_notification(&self) -> Option<&String> {
         self.notification_message.as_ref()
+    }
+
+    // Context-aware integration methods
+
+    /// Switch to context-aware mode
+    pub fn show_context_aware_interface(&mut self) {
+        self.mode = UIMode::ContextAware;
+        self.focused_pane = FocusedPane::MessageList;
+        self.integrated_layout.set_view_mode(IntegratedViewMode::ContextAware);
+        self.update_navigation_hints();
+    }
+
+    /// Check if currently in context-aware mode
+    pub fn is_context_aware_active(&self) -> bool {
+        matches!(self.mode, UIMode::ContextAware)
+    }
+
+    /// Handle context-aware calendar key input
+    pub fn handle_context_calendar_key(&mut self, key: crossterm::event::KeyCode) -> Option<ContextCalendarAction> {
+        if self.is_context_aware_active() {
+            self.context_calendar.handle_key(key)
+        } else {
+            None
+        }
+    }
+
+    /// Handle unified sidebar navigation
+    pub fn handle_sidebar_key(&mut self, key: crossterm::event::KeyCode) -> Option<SidebarAction> {
+        if self.is_context_aware_active() {
+            self.unified_sidebar.handle_key(key)
+        } else {
+            None
+        }
+    }
+
+    /// Update unified sidebar with current data
+    pub fn update_sidebar_data(
+        &mut self,
+        accounts: &[(String, String, AccountSyncStatus, u32)],
+        folders: &[(String, String, u32, bool, usize)],
+        calendars: &[crate::calendar::Calendar],
+    ) {
+        self.unified_sidebar.update_data(accounts, folders, calendars);
+    }
+
+    /// Set context-aware calendar events and calendars
+    pub fn update_context_calendar(&mut self, events: Vec<crate::calendar::Event>, calendars: Vec<crate::calendar::Calendar>) {
+        self.context_calendar.update_calendar_data(events, calendars);
+    }
+
+    /// Toggle integrated layout view mode
+    pub fn cycle_integrated_view_mode(&mut self) {
+        let current_mode = self.integrated_layout.get_view_mode();
+        let next_mode = match current_mode {
+            IntegratedViewMode::EmailPrimary => IntegratedViewMode::CalendarPrimary,
+            IntegratedViewMode::CalendarPrimary => IntegratedViewMode::SplitView,
+            IntegratedViewMode::SplitView => IntegratedViewMode::ContextAware,
+            IntegratedViewMode::ContextAware => IntegratedViewMode::EmailPrimary,
+            IntegratedViewMode::FullScreen(_) => IntegratedViewMode::EmailPrimary,
+        };
+        self.integrated_layout.set_view_mode(next_mode);
+    }
+
+    /// Get current integrated view mode
+    pub fn get_integrated_view_mode(&self) -> IntegratedViewMode {
+        self.integrated_layout.get_view_mode()
+    }
+
+    /// Check calendar urgency level for priority handling
+    pub fn get_calendar_urgency(&self) -> crate::ui::context_calendar::ContextUrgency {
+        self.context_calendar.get_urgency_level()
+    }
+
+    /// Get mutable reference to context calendar for external updates
+    pub fn context_calendar_mut(&mut self) -> &mut ContextAwareCalendar {
+        &mut self.context_calendar
+    }
+
+    /// Get reference to unified sidebar
+    pub fn unified_sidebar(&self) -> &UnifiedSidebar {
+        &self.unified_sidebar
+    }
+
+    /// Get mutable reference to unified sidebar
+    pub fn unified_sidebar_mut(&mut self) -> &mut UnifiedSidebar {
+        &mut self.unified_sidebar
     }
 }
 

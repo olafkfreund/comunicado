@@ -187,7 +187,7 @@ async fn main() -> Result<()> {
                         break;
                     }
                     _ = progress_interval.tick() => {
-                        progress_value = (progress_value + 15.0).min(90.0); // Increment progress but cap at 90%
+                        progress_value = (progress_value + 15.0_f64).min(90.0_f64); // Increment progress but cap at 90%
                         let log_messages = [
                             "🔗 Establishing connections...",
                             "🔍 Verifying configurations...", 
@@ -213,16 +213,28 @@ async fn main() -> Result<()> {
     }
     
     // Phase 2: IMAP Manager (reduced timeout from 10s to 5s)
-    init_phase!("IMAP Manager", 5, app.initialize_imap_manager());
+    {
+        let init_fn = app.initialize_imap_manager();
+        init_phase!("IMAP Manager", 5, init_fn);
+    }
     
     // Phase 3: Account Setup (reduced timeout from 15s to 8s)
-    init_phase!("Account Setup", 8, app.check_accounts_and_setup());
+    {
+        let init_fn = app.check_accounts_and_setup();
+        init_phase!("Account Setup", 8, init_fn);
+    }
     
     // Phase 4: Services (reduced timeout from 5s to 3s)
-    init_phase!("Services", 3, app.initialize_services());
+    {
+        let init_fn = app.initialize_services();
+        init_phase!("Services", 3, init_fn);
+    }
     
     // Phase 5: Dashboard Services (reduced timeout from 3s to 2s)
-    init_phase!("Dashboard Services", 2, app.initialize_dashboard_services());
+    {
+        let init_fn = app.initialize_dashboard_services();
+        init_phase!("Dashboard Services", 2, init_fn);
+    }
     
     update_progress(&progress_manager, &mut terminal)?;
 

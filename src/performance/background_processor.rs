@@ -13,6 +13,39 @@ use tokio::task::JoinHandle;
 use uuid::Uuid;
 use chrono::Utc;
 
+/// Calendar synchronization types
+#[derive(Debug, Clone)]
+pub enum CalendarSyncType {
+    /// Full calendar sync
+    Full,
+    /// Incremental sync based on changes
+    Incremental,
+    /// Sync only upcoming events
+    Upcoming,
+    /// Sync specific date range
+    DateRange {
+        start: chrono::DateTime<Utc>,
+        end: chrono::DateTime<Utc>,
+    },
+}
+
+/// Calendar database operation types
+#[derive(Debug, Clone)]
+pub enum CalendarDbOperationType {
+    /// Store a single event
+    StoreEvent,
+    /// Update an existing event
+    UpdateEvent,
+    /// Delete an event
+    DeleteEvent,
+    /// Bulk store multiple events
+    BulkStoreEvents,
+    /// Clear all events for a calendar
+    ClearCalendar,
+    /// Update calendar metadata
+    UpdateCalendar,
+}
+
 /// Priority levels for background tasks
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum TaskPriority {
@@ -65,6 +98,21 @@ pub enum BackgroundTaskType {
         folder_name: String,
         message_count: usize,
     },
+    /// Calendar sync operations
+    CalendarSync {
+        calendar_id: String,
+        sync_type: CalendarSyncType,
+    },
+    /// CalDAV discovery for an account
+    CalDAVDiscovery {
+        account_id: String,
+    },
+    /// Calendar database operations
+    CalendarDatabaseOperation {
+        operation_type: CalendarDbOperationType,
+        calendar_id: String,
+        data: Vec<u8>, // Serialized operation data
+    },
 }
 
 /// Task execution status
@@ -95,6 +143,18 @@ pub enum TaskResultData {
     MessageCount(usize),
     SearchResults(Vec<String>), // Message IDs
     CacheStats(usize), // Number of cached items
+    CalendarSyncResult {
+        events_synced: usize,
+        events_updated: usize,
+        events_deleted: usize,
+    },
+    CalendarDiscoveryResult {
+        calendars_found: Vec<String>,
+    },
+    CalendarDbOperationResult {
+        success: bool,
+        affected_rows: usize,
+    },
 }
 
 /// Background task processor for non-blocking operations
@@ -843,7 +903,288 @@ impl BackgroundProcessor {
                 tokio::time::sleep(Duration::from_millis(200)).await;
                 Ok(TaskResultData::CacheStats(message_count))
             }
+            BackgroundTaskType::CalendarSync { calendar_id, sync_type } => {
+                // Send calendar sync progress
+                let progress = SyncProgress {
+                    account_id: task.account_id.clone(),
+                    folder_name: format!("Calendar: {}", calendar_id),
+                    phase: SyncPhase::Initializing,
+                    messages_processed: 0,
+                    total_messages: 100, // Estimated events to sync
+                    bytes_downloaded: 0,
+                    started_at: Utc::now(),
+                    estimated_completion: Some(Utc::now() + chrono::Duration::seconds(30)),
+                };
+                let _ = progress_sender.send(progress);
+
+                // Simulate calendar sync based on type
+                match sync_type {
+                    CalendarSyncType::Full => {
+                        // Full sync simulation
+                        for i in 0..10 {
+                            tokio::time::sleep(Duration::from_millis(300)).await;
+                            let progress = SyncProgress {
+                                account_id: task.account_id.clone(),
+                                folder_name: format!("Calendar: {}", calendar_id),
+                                phase: SyncPhase::FetchingBodies,
+                                messages_processed: i * 10,
+                                total_messages: 100,
+                                bytes_downloaded: (i * 512) as u64,
+                                started_at: Utc::now(),
+                                estimated_completion: Some(Utc::now() + chrono::Duration::seconds((30 - i * 3) as i64)),
+                            };
+                            let _ = progress_sender.send(progress);
+                        }
+                        Ok(TaskResultData::CalendarSyncResult {
+                            events_synced: 85,
+                            events_updated: 12,
+                            events_deleted: 3,
+                        })
+                    }
+                    CalendarSyncType::Incremental => {
+                        tokio::time::sleep(Duration::from_secs(2)).await;
+                        Ok(TaskResultData::CalendarSyncResult {
+                            events_synced: 5,
+                            events_updated: 2,
+                            events_deleted: 0,
+                        })
+                    }
+                    CalendarSyncType::Upcoming => {
+                        tokio::time::sleep(Duration::from_secs(1)).await;
+                        Ok(TaskResultData::CalendarSyncResult {
+                            events_synced: 10,
+                            events_updated: 1,
+                            events_deleted: 0,
+                        })
+                    }
+                    CalendarSyncType::DateRange { .. } => {
+                        tokio::time::sleep(Duration::from_secs(3)).await;
+                        Ok(TaskResultData::CalendarSyncResult {
+                            events_synced: 25,
+                            events_updated: 3,
+                            events_deleted: 1,
+                        })
+                    }
+                }
+            }
+            BackgroundTaskType::CalDAVDiscovery { account_id: _ } => {
+                // Send CalDAV discovery progress
+                let progress = SyncProgress {
+                    account_id: task.account_id.clone(),
+                    folder_name: "CalDAV Discovery".to_string(),
+                    phase: SyncPhase::Initializing,
+                    messages_processed: 0,
+                    total_messages: 1,
+                    bytes_downloaded: 0,
+                    started_at: Utc::now(),
+                    estimated_completion: Some(Utc::now() + chrono::Duration::seconds(10)),
+                };
+                let _ = progress_sender.send(progress);
+
+                // Simulate CalDAV discovery
+                tokio::time::sleep(Duration::from_secs(2)).await;
+                Ok(TaskResultData::CalendarDiscoveryResult {
+                    calendars_found: vec![
+                        "primary".to_string(),
+                        "work".to_string(),
+                        "personal".to_string(),
+                    ],
+                })
+            }
+            BackgroundTaskType::CalendarDatabaseOperation { operation_type, calendar_id: _, data: _ } => {
+                // Send database operation progress
+                let progress = SyncProgress {
+                    account_id: task.account_id.clone(),
+                    folder_name: "Database Operation".to_string(),
+                    phase: SyncPhase::ProcessingChanges,
+                    messages_processed: 0,
+                    total_messages: 1,
+                    bytes_downloaded: 0,
+                    started_at: Utc::now(),
+                    estimated_completion: Some(Utc::now() + chrono::Duration::seconds(2)),
+                };
+                let _ = progress_sender.send(progress);
+
+                // Simulate database operation based on type
+                match operation_type {
+                    CalendarDbOperationType::StoreEvent => {
+                        tokio::time::sleep(Duration::from_millis(100)).await;
+                        Ok(TaskResultData::CalendarDbOperationResult {
+                            success: true,
+                            affected_rows: 1,
+                        })
+                    }
+                    CalendarDbOperationType::UpdateEvent => {
+                        tokio::time::sleep(Duration::from_millis(150)).await;
+                        Ok(TaskResultData::CalendarDbOperationResult {
+                            success: true,
+                            affected_rows: 1,
+                        })
+                    }
+                    CalendarDbOperationType::DeleteEvent => {
+                        tokio::time::sleep(Duration::from_millis(50)).await;
+                        Ok(TaskResultData::CalendarDbOperationResult {
+                            success: true,
+                            affected_rows: 1,
+                        })
+                    }
+                    CalendarDbOperationType::BulkStoreEvents => {
+                        tokio::time::sleep(Duration::from_millis(500)).await;
+                        Ok(TaskResultData::CalendarDbOperationResult {
+                            success: true,
+                            affected_rows: 25,
+                        })
+                    }
+                    CalendarDbOperationType::ClearCalendar => {
+                        tokio::time::sleep(Duration::from_millis(200)).await;
+                        Ok(TaskResultData::CalendarDbOperationResult {
+                            success: true,
+                            affected_rows: 100,
+                        })
+                    }
+                    CalendarDbOperationType::UpdateCalendar => {
+                        tokio::time::sleep(Duration::from_millis(100)).await;
+                        Ok(TaskResultData::CalendarDbOperationResult {
+                            success: true,
+                            affected_rows: 1,
+                        })
+                    }
+                }
+            }
         }
+    }
+
+    /// Queue a calendar synchronization task
+    /// 
+    /// Convenience method for queuing calendar sync operations as background tasks.
+    /// This prevents calendar sync from blocking the UI thread.
+    /// 
+    /// # Arguments
+    /// * `calendar_id` - ID of the calendar to synchronize
+    /// * `sync_type` - Type of synchronization to perform
+    /// * `priority` - Task priority (defaults to Normal)
+    /// 
+    /// # Returns
+    /// `Ok(task_id)` if the task was queued successfully, or `Err(msg)` if queueing failed
+    /// 
+    /// # Example
+    /// ```rust
+    /// let task_id = processor.queue_calendar_sync(
+    ///     "calendar-123",
+    ///     CalendarSyncType::Incremental,
+    ///     Some(TaskPriority::High)
+    /// ).await?;
+    /// ```
+    pub async fn queue_calendar_sync(
+        &self,
+        calendar_id: &str,
+        sync_type: CalendarSyncType,
+        priority: Option<TaskPriority>,
+    ) -> Result<Uuid, String> {
+        let task = BackgroundTask {
+            id: Uuid::new_v4(),
+            name: format!("Calendar Sync: {}", calendar_id),
+            priority: priority.unwrap_or(TaskPriority::Normal),
+            account_id: "calendar".to_string(), // Calendar tasks use "calendar" as account_id
+            folder_name: Some(calendar_id.to_string()),
+            task_type: BackgroundTaskType::CalendarSync {
+                calendar_id: calendar_id.to_string(),
+                sync_type,
+            },
+            created_at: Instant::now(),
+            estimated_duration: Some(Duration::from_secs(30)),
+        };
+
+        self.queue_task(task).await
+    }
+
+    /// Queue a CalDAV discovery task
+    /// 
+    /// Convenience method for queuing CalDAV discovery operations as background tasks.
+    /// This discovers available calendars for an account without blocking the UI.
+    /// 
+    /// # Arguments
+    /// * `account_id` - ID of the account to discover calendars for
+    /// * `priority` - Task priority (defaults to Normal)
+    /// 
+    /// # Returns
+    /// `Ok(task_id)` if the task was queued successfully, or `Err(msg)` if queueing failed
+    /// 
+    /// # Example
+    /// ```rust
+    /// let task_id = processor.queue_caldav_discovery(
+    ///     "google-account-123",
+    ///     Some(TaskPriority::High)
+    /// ).await?;
+    /// ```
+    pub async fn queue_caldav_discovery(
+        &self,
+        account_id: &str,
+        priority: Option<TaskPriority>,
+    ) -> Result<Uuid, String> {
+        let task = BackgroundTask {
+            id: Uuid::new_v4(),
+            name: format!("CalDAV Discovery: {}", account_id),
+            priority: priority.unwrap_or(TaskPriority::Normal),
+            account_id: account_id.to_string(),
+            folder_name: None,
+            task_type: BackgroundTaskType::CalDAVDiscovery {
+                account_id: account_id.to_string(),
+            },
+            created_at: Instant::now(),
+            estimated_duration: Some(Duration::from_secs(10)),
+        };
+
+        self.queue_task(task).await
+    }
+
+    /// Queue a calendar database operation task
+    /// 
+    /// Convenience method for queuing calendar database operations as background tasks.
+    /// This prevents database operations from blocking the UI thread.
+    /// 
+    /// # Arguments
+    /// * `operation_type` - Type of database operation to perform
+    /// * `calendar_id` - ID of the calendar affected by the operation
+    /// * `data` - Serialized operation data (e.g., event JSON)
+    /// * `priority` - Task priority (defaults to Normal)
+    /// 
+    /// # Returns
+    /// `Ok(task_id)` if the task was queued successfully, or `Err(msg)` if queueing failed
+    /// 
+    /// # Example
+    /// ```rust
+    /// let event_data = serde_json::to_vec(&event)?;
+    /// let task_id = processor.queue_calendar_db_operation(
+    ///     CalendarDbOperationType::StoreEvent,
+    ///     "calendar-123",
+    ///     event_data,
+    ///     Some(TaskPriority::High)
+    /// ).await?;
+    /// ```
+    pub async fn queue_calendar_db_operation(
+        &self,
+        operation_type: CalendarDbOperationType,
+        calendar_id: &str,
+        data: Vec<u8>,
+        priority: Option<TaskPriority>,
+    ) -> Result<Uuid, String> {
+        let task = BackgroundTask {
+            id: Uuid::new_v4(),
+            name: format!("Calendar DB: {:?} on {}", operation_type, calendar_id),
+            priority: priority.unwrap_or(TaskPriority::Normal),
+            account_id: "calendar".to_string(),
+            folder_name: Some(calendar_id.to_string()),
+            task_type: BackgroundTaskType::CalendarDatabaseOperation {
+                operation_type,
+                calendar_id: calendar_id.to_string(),
+                data,
+            },
+            created_at: Instant::now(),
+            estimated_duration: Some(Duration::from_secs(2)),
+        };
+
+        self.queue_task(task).await
     }
 
     /// Internal method to clean up old task results from the cache
