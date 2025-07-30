@@ -24,6 +24,7 @@ pub enum EventResult {
     ContactsPopup,          // Open contacts popup
     ContactsAction(crate::contacts::ContactPopupAction), // Contact popup action
     AddToContacts(String, String), // Add email address and name to contacts
+    EmailViewerStarted(String), // Email address of sender for contact lookup
 }
 
 impl EventHandler {
@@ -1060,7 +1061,12 @@ impl EventHandler {
                                     last_synced: chrono::Utc::now(),
                                     sync_version: 1,
                                 };
+                                // Extract sender email for contact lookup before starting viewer
+                                let sender_email = Self::extract_email_from_address(&email_content.headers.from);
+                                
                                 ui.start_email_viewer(stored_message, email_content.clone());
+                                
+                                return EventResult::EmailViewerStarted(sender_email);
                             }
                         }
                     }
@@ -1690,6 +1696,20 @@ impl EventHandler {
                 }
                 EventResult::Continue
             }
+        }
+    }
+
+    /// Extract email address from "Name <email@domain.com>" format
+    fn extract_email_from_address(address: &str) -> String {
+        if address.contains('<') && address.contains('>') {
+            address
+                .split('<')
+                .nth(1)
+                .unwrap_or(address)
+                .trim_end_matches('>')
+                .to_string()
+        } else {
+            address.to_string()
         }
     }
 }

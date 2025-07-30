@@ -1524,6 +1524,9 @@ impl App {
                         EventResult::AddToContacts(email, name) => {
                             self.handle_add_to_contacts(&email, &name).await?;
                         }
+                        EventResult::EmailViewerStarted(sender_email) => {
+                            self.handle_email_viewer_started(&sender_email).await?;
+                        }
                     }
 
                     // Check for quit command
@@ -2506,13 +2509,36 @@ impl App {
 
     /// Aggressively clean email content to remove headers, encoded data, and technical junk
     fn clean_email_content(&self, raw_content: &str) -> String {
+        // First, try to extract content from MIME structure
+        if let Some(extracted_content) = self.extract_content_from_mime(raw_content) {
+            return extracted_content;
+        }
+
+        // Fall back to line-by-line cleaning for simpler formats
         let lines: Vec<&str> = raw_content.lines().collect();
         let mut cleaned_lines = Vec::new();
         let mut _in_header_section = true;
         let mut found_content_start = false;
+        let mut skip_until_boundary = false;
 
         for line in lines {
             let trimmed = line.trim();
+
+            // Skip MIME boundaries and everything until content
+            if trimmed.starts_with("--") && (trimmed.contains("boundary") || trimmed.len() > 10) {
+                skip_until_boundary = false;
+                continue;
+            }
+
+            // Skip encoded content blocks
+            if self.is_encoded_content_block(trimmed) {
+                skip_until_boundary = true;
+                continue;
+            }
+
+            if skip_until_boundary {
+                continue;
+            }
 
             // Skip empty lines at the start
             if !found_content_start && trimmed.is_empty() {
@@ -2548,6 +2574,124 @@ impl App {
         self.final_content_cleanup(&result)
     }
 
+    /// Extract content from MIME structure by finding the main body part
+    fn extract_content_from_mime(&self, raw_content: &str) -> Option<String> {
+        let lines: Vec<&str> = raw_content.lines().collect();
+        let mut extracted_content = Vec::new();
+        let mut in_content_section = false;
+        let mut _content_type = None;
+        let mut boundary = None;
+
+        // First pass: find boundary and content type
+        for line in &lines {
+            if line.to_lowercase().contains("content-type:") {
+                if line.to_lowercase().contains("text/html") {
+                    _content_type = Some("html");
+                } else if line.to_lowercase().contains("text/plain") {
+                    _content_type = Some("plain");
+                }
+            }
+            if line.to_lowercase().contains("boundary=") {
+                if let Some(start) = line.find("boundary=") {
+                    let boundary_part = &line[start + 9..];
+                    let boundary_clean = boundary_part.trim_matches('"').trim_matches('\'');
+                    boundary = Some(format!("--{}", boundary_clean));
+                }
+            }
+        }
+
+        // Second pass: extract content between boundaries
+        let mut found_text_part = false;
+        for line in &lines {
+            let trimmed = line.trim();
+
+            // Check for MIME part boundaries
+            if let Some(ref b) = boundary {
+                if trimmed.starts_with(b) {
+                    // Reset state for new MIME part
+                    in_content_section = false;
+                    found_text_part = false;
+                    continue;
+                }
+            }
+
+            // Look for content-type headers in MIME parts
+            if trimmed.to_lowercase().starts_with("content-type:") {
+                if trimmed.to_lowercase().contains("text/") {
+                    found_text_part = true;
+                }
+                continue;
+            }
+
+            // Look for content-transfer-encoding
+            if trimmed.to_lowercase().starts_with("content-transfer-encoding:") {
+                continue;
+            }
+
+            // Empty line after headers indicates start of content
+            if found_text_part && trimmed.is_empty() && !in_content_section {
+                in_content_section = true;
+                continue;
+            }
+
+            // Collect content lines
+            if in_content_section && found_text_part {
+                // Stop at next boundary or end
+                if let Some(ref b) = boundary {
+                    if trimmed.starts_with(b) {
+                        break;
+                    }
+                }
+                
+                if !self.is_technical_line(trimmed) && !self.is_encoded_content_block(trimmed) {
+                    extracted_content.push(trimmed);
+                }
+            }
+        }
+
+        if !extracted_content.is_empty() {
+            Some(extracted_content.join("\n"))
+        } else {
+            None
+        }
+    }
+
+    /// Check if a line is an encoded content block (base64, quoted-printable, etc.)
+    fn is_encoded_content_block(&self, line: &str) -> bool {
+        // Check for base64 encoded content (long lines of alphanumeric + / + =)
+        if line.len() > 60 
+            && line.chars().all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '/' || c == '=') {
+            return true;
+        }
+
+        // Check for quoted-printable encoding
+        if line.contains("=?") && line.contains("?=") {
+            return true;
+        }
+
+        // Check for other encoding indicators
+        let encoding_patterns = [
+            "Content-Transfer-Encoding:",
+            "charset=",
+            "=20", // quoted-printable space
+            "=3D", // quoted-printable equals
+            "=0A", // quoted-printable newline
+        ];
+
+        for pattern in &encoding_patterns {
+            if line.contains(pattern) {
+                return true;
+            }
+        }
+
+        // Check for long hex sequences
+        if line.len() > 30 && line.chars().all(|c| c.is_ascii_hexdigit()) {
+            return true;
+        }
+
+        false
+    }
+
     /// Check if a line looks like technical email metadata
     fn is_technical_line(&self, line: &str) -> bool {
         // Check for common email headers and technical patterns
@@ -2577,6 +2721,50 @@ impl App {
             "X-Google-",
             "X-MS-",
             "X-Mailer:",
+            // Additional patterns from screenshots
+            "bh=",
+            "b=",
+            "d=google.com;",
+            "s=",
+            "sarc=",
+            "dmarc=pass",
+            "spf=pass",
+            "dkim=pass",
+            "header.i=",
+            "header.b=",
+            "envelope.from=",
+            "dares=pass",
+            "Mon, ",
+            "Tue, ",
+            "Wed, ",
+            "Thu, ",
+            "Fri, ",
+            "Sat, ",
+            "Sun, ",
+            "Jan 2025",
+            "Feb 2025", 
+            "Mar 2025",
+            "Apr 2025",
+            "May 2025",
+            "Jun 2025",
+            "Jul 2025",
+            "Aug 2025",
+            "Sep 2025",
+            "Oct 2025",
+            "Nov 2025",
+            "Dec 2025",
+            "(PDT)",
+            "(PST)",
+            "(UTC)",
+            "(GMT)",
+            "version=1;",
+            "algorithm=",
+            "canonical=",
+            "selector=",
+            "subdomain=",
+            "header.from=",
+            "smtp.helo=",
+            "smtp.mailfrom=",
         ];
 
         for pattern in &technical_patterns {
@@ -2623,30 +2811,60 @@ impl App {
         // Look for signs of actual content
         let content_indicators = [
             // Common greeting patterns
-            "Hi",
-            "Hello",
-            "Dear",
+            "Hi ",
+            "Hello ",
+            "Dear ",
             "Greetings",
-            // Common content words
-            "The",
-            "This",
-            "Please",
-            "Thank",
-            "We",
-            "You",
-            "I",
-            // HTML content indicators
-            "<html",
-            "<body",
-            "<div",
-            "<p",
-            "<span",
-            "<a",
-            // Email body content
-            "wrote:",
-            "said:",
-            "From:",
-            "Subject:",
+            // Common content words that start sentences
+            "The ",
+            "This ",
+            "Please ",
+            "Thank ",
+            "We ",
+            "You ",
+            "I ",
+            "It ",
+            "Here ",
+            "There ",
+            // HTML content indicators (opening tags)
+            "<html>",
+            "<html ",
+            "<body>",
+            "<body ",
+            "<div>",
+            "<div ",
+            "<p>",
+            "<p ",
+            "<span>",
+            "<span ",
+            "<a ",
+            "<h1",
+            "<h2",
+            "<h3",
+            "<strong",
+            "<em",
+            "<br",
+            "<img",
+            "<table",
+            // Common email content patterns
+            "On ",  // "On Mon, Jul 28, 2025..."
+            "Best ",
+            "Regards",
+            "Sincerely",
+            "Thanks",
+            "Kind ",
+            "Hope ",
+            "Looking ",
+            "Would ",
+            "Could ",
+            "Should ",
+            // Question patterns
+            "How ",
+            "What ",
+            "When ",
+            "Where ",
+            "Why ",
+            "Who ",
         ];
 
         // If line contains readable text and common words, it's likely content
@@ -2675,13 +2893,60 @@ impl App {
         cleaned = cleaned.replace("=20", " ");
         cleaned = cleaned.replace("=3D", "=");
         cleaned = cleaned.replace("=\n", "");
+        cleaned = cleaned.replace("=0A", "\n");
+        cleaned = cleaned.replace("=09", "\t");
+
+        // Remove URL encoding artifacts
+        cleaned = cleaned.replace("%20", " ");
+        cleaned = cleaned.replace("%3D", "=");
+        cleaned = cleaned.replace("%2F", "/");
+        cleaned = cleaned.replace("%3A", ":");
+
+        // Remove any remaining technical headers that slipped through
+        let lines: Vec<&str> = cleaned.lines().collect();
+        let mut final_lines = Vec::new();
+
+        for line in lines {
+            let trimmed = line.trim();
+            
+            // Skip lines that are clearly technical artifacts
+            if trimmed.is_empty() {
+                final_lines.push(line);
+                continue;
+            }
+
+            // Skip lines with only technical characters
+            if trimmed.len() > 50 && trimmed.chars().all(|c| c.is_ascii_alphanumeric() || "+=/-_".contains(c)) {
+                continue;
+            }
+
+            // Skip lines that look like encoded headers
+            if trimmed.contains("=?") && trimmed.contains("?=") {
+                continue;
+            }
+
+            // Skip authentication/DKIM lines
+            if trimmed.contains("dkim=") || trimmed.contains("spf=") || trimmed.contains("dmarc=") {
+                continue;
+            }
+
+            // Skip lines with multiple semicolons (likely technical)
+            if trimmed.matches(';').count() > 2 {
+                continue;
+            }
+
+            final_lines.push(line);
+        }
+
+        let result = final_lines.join("\n");
 
         // Remove excessive whitespace
         if let Ok(re) = regex::Regex::new(r"\n\s*\n\s*\n") {
-            cleaned = re.replace_all(&cleaned, "\n\n").to_string();
+            let cleaned_whitespace = re.replace_all(&result, "\n\n").to_string();
+            cleaned_whitespace.trim().to_string()
+        } else {
+            result.trim().to_string()
         }
-
-        cleaned.trim().to_string()
     }
 
     /// Clean plain text content specifically
@@ -3612,6 +3877,38 @@ impl App {
             }
         } else {
             tracing::warn!("Contacts manager not initialized, cannot add to contacts");
+        }
+        
+        Ok(())
+    }
+
+    /// Handle email viewer started - look up sender contact information
+    async fn handle_email_viewer_started(&mut self, sender_email: &str) -> Result<()> {
+        if let Some(ref contacts_manager) = self.contacts_manager {
+            tracing::debug!("Looking up contact for sender: {}", sender_email);
+            
+            match contacts_manager.find_contact_by_email(sender_email).await {
+                Ok(Some(contact)) => {
+                    tracing::info!("Found contact for sender {}: {}", sender_email, contact.display_name);
+                    
+                    // Set the contact information in the email viewer
+                    self.ui.email_viewer_mut().set_sender_contact(Some(contact));
+                }
+                Ok(None) => {
+                    tracing::debug!("No contact found for sender: {}", sender_email);
+                    
+                    // Clear any existing contact information
+                    self.ui.email_viewer_mut().set_sender_contact(None);
+                }
+                Err(e) => {
+                    tracing::warn!("Error looking up contact for {}: {}", sender_email, e);
+                    
+                    // Clear contact information on error
+                    self.ui.email_viewer_mut().set_sender_contact(None);
+                }
+            }
+        } else {
+            tracing::debug!("Contacts manager not available for sender lookup");
         }
         
         Ok(())

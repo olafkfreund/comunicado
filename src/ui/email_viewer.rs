@@ -10,6 +10,7 @@ use ratatui::{
 use crate::email::StoredMessage;
 use crate::theme::Theme;
 use crate::ui::content_preview::{ContentType, EmailContent, EmailHeader, ViewMode};
+use crate::images::{ImageManager, extract_images_from_html};
 
 /// Email viewer actions
 #[derive(Debug, Clone, PartialEq)]
@@ -30,12 +31,14 @@ pub enum EmailViewerAction {
 pub struct EmailViewer {
     email_content: Option<EmailContent>,
     pub current_message: Option<StoredMessage>,
+    sender_contact: Option<crate::contacts::Contact>,
     view_mode: ViewMode,
     scroll_position: usize,
     show_raw_headers: bool,
     show_actions: bool,
     selected_action: usize,
     actions: Vec<EmailViewerAction>,
+    image_manager: ImageManager,
 }
 
 impl EmailViewer {
@@ -43,6 +46,7 @@ impl EmailViewer {
         Self {
             email_content: None,
             current_message: None,
+            sender_contact: None,
             view_mode: ViewMode::Formatted,
             scroll_position: 0,
             show_raw_headers: false,
@@ -59,6 +63,7 @@ impl EmailViewer {
                 EmailViewerAction::AddToContacts,
                 EmailViewerAction::Close,
             ],
+            image_manager: ImageManager::new().unwrap_or_default(),
         }
     }
 
@@ -66,9 +71,25 @@ impl EmailViewer {
     pub fn set_email(&mut self, message: StoredMessage, email_content: EmailContent) {
         self.current_message = Some(message);
         self.email_content = Some(email_content);
+        self.sender_contact = None; // Reset contact info when setting new email
         self.scroll_position = 0;
         self.show_actions = false;
         self.selected_action = 0;
+    }
+
+    /// Set sender contact information
+    pub fn set_sender_contact(&mut self, contact: Option<crate::contacts::Contact>) {
+        self.sender_contact = contact;
+    }
+
+    /// Get sender contact information
+    pub fn get_sender_contact(&self) -> Option<&crate::contacts::Contact> {
+        self.sender_contact.as_ref()
+    }
+
+    /// Check if sender is a known contact
+    pub fn is_sender_known_contact(&self) -> bool {
+        self.sender_contact.is_some()
     }
 
     /// Toggle view mode
@@ -317,8 +338,13 @@ impl EmailViewer {
     fn render_email_content(&mut self, frame: &mut Frame, area: Rect, theme: &Theme) {
         let content_height = area.height.saturating_sub(2) as usize;
 
-        let lines = if let Some(ref email) = self.email_content {
-            match self.view_mode {
+        // Extract data needed for rendering before borrowing self
+        let email_ref = self.email_content.as_ref();
+        let _sender_contact_ref = self.sender_contact.as_ref();
+        let view_mode = self.view_mode;
+
+        let lines = if let Some(email) = email_ref {
+            match view_mode {
                 ViewMode::Formatted => Self::render_formatted_email_static(email, theme),
                 ViewMode::Raw => Self::render_raw_email_static(email, theme),
                 ViewMode::Html => Self::render_html_email_static(email, theme),
@@ -525,6 +551,379 @@ impl EmailViewer {
                 }
             }
         }
+
+        lines
+    }
+
+    /// Render HTML email with embedded images and animations support
+    async fn render_html_email_with_media<'a>(&self, email: &'a EmailContent, theme: &'a Theme) -> Vec<Line<'a>> {
+        let mut lines = Vec::new();
+        
+        // Headers
+        lines.push(Line::from(vec![
+            Span::styled("From: ", Style::default().fg(theme.colors.palette.accent)),
+            Span::raw(email.headers.from.clone()),
+        ]));
+        lines.push(Line::from(vec![
+            Span::styled(
+                "Subject: ",
+                Style::default().fg(theme.colors.palette.accent),
+            ),
+            Span::raw(email.headers.subject.clone()),
+        ]));
+        lines.push(Line::from(""));
+
+        // Get cleaned email body
+        let cleaned_body = Self::filter_email_headers_and_metadata(&email.body);
+        
+        // Check if terminal supports images
+        if self.image_manager.supports_images() {
+            // Extract and process images from HTML
+            let image_refs = extract_images_from_html(&cleaned_body);
+            
+            if !image_refs.is_empty() {
+                lines.push(Line::from(vec![
+                    Span::styled(
+                        "📷 Images detected - loading...",
+                        Style::default().fg(theme.colors.palette.text_secondary),
+                    ),
+                ]));
+                lines.push(Line::from(""));
+            }
+        }
+
+        // Render HTML content with image placeholders
+        if email.content_type == ContentType::Html || crate::html::is_html_content(&cleaned_body) {
+            let mut html_renderer = crate::html::HtmlRenderer::new(80);
+            let rendered_text = html_renderer.render_html(&cleaned_body);
+            
+            // Convert ratatui Text to Lines for display with image integration
+            for line in rendered_text.lines {
+                let line_text = line
+                    .spans
+                    .iter()
+                    .map(|span| span.content.as_ref())
+                    .collect::<String>();
+
+                // Filter out technical content that may have slipped through
+                if !line_text.trim().is_empty() 
+                    && !Self::is_line_technical_metadata(&line_text) {
+                    
+                    // Check if this line should be replaced with image content
+                    if line_text.contains("[Image:") || line_text.contains("<img") {
+                        // TODO: Replace with actual image terminal output
+                        // For now, show a placeholder
+                        lines.push(Line::from(vec![
+                            Span::styled(
+                                "🖼️  [Image]",
+                                Style::default()
+                                    .fg(theme.colors.palette.accent)
+                                    .add_modifier(Modifier::BOLD),
+                            ),
+                        ]));
+                    } else {
+                        lines.push(line);
+                    }
+                }
+            }
+        } else {
+            // Plain text content - split into lines
+            for line in cleaned_body.lines() {
+                if !line.trim().is_empty() && !Self::is_line_technical_metadata(line) {
+                    lines.push(Line::from(line.to_string()));
+                }
+            }
+        }
+
+        lines
+    }
+
+    /// Check if a line contains technical metadata that should be filtered
+    fn is_line_technical_metadata(line: &str) -> bool {
+        let line_lower = line.to_lowercase();
+        
+        // Common patterns that indicate technical metadata
+        line_lower.contains("message-id:")
+            || line_lower.contains("x-")
+            || line_lower.contains("dkim-signature:")
+            || line_lower.contains("authentication-results:")
+            || line_lower.contains("received:")
+            || line_lower.contains("return-path:")
+            || line_lower.contains("content-type:")
+            || line_lower.contains("content-transfer-encoding:")
+            || line_lower.contains("mime-version:")
+            || (line_lower.starts_with("http") && line_lower.contains("://"))
+            || line.trim().chars().all(|c| c.is_ascii_alphanumeric() || "+=/-_".contains(c))
+    }
+
+    /// Render formatted email with contact information
+    fn render_formatted_email_with_contact<'a>(&'a self, email: &'a EmailContent, _sender_contact: Option<&'a crate::contacts::Contact>, theme: &'a Theme) -> Vec<Line<'a>> {
+        let mut lines = Vec::new();
+
+        // Modern sender box with contact info
+        lines.extend(self.render_sender_box(&email.headers, theme));
+        lines.push(Line::from(""));
+
+        // Subject
+        if !email.headers.subject.is_empty() {
+            lines.push(Line::from(vec![
+                Span::styled("Subject: ", Style::default().fg(theme.colors.palette.accent)),
+                Span::styled(
+                    &email.headers.subject,
+                    Style::default()
+                        .fg(theme.colors.palette.text_primary)
+                        .add_modifier(Modifier::BOLD),
+                ),
+            ]));
+        }
+
+        // Date
+        if !email.headers.date.is_empty() {
+            lines.push(Line::from(vec![
+                Span::styled("Date: ", Style::default().fg(theme.colors.palette.accent)),
+                Span::styled(&email.headers.date, Style::default().fg(theme.colors.palette.text_secondary)),
+            ]));
+        }
+
+        // Content separator
+        lines.push(Line::from(vec![Span::styled(
+            "─".repeat(80),
+            Style::default().fg(theme.colors.palette.border),
+        )]));
+        lines.push(Line::from(""));
+
+        // Email body - render properly based on content type with aggressive header filtering
+        let cleaned_body = Self::filter_email_headers_and_metadata(&email.body);
+
+        match email.content_type {
+            ContentType::Html => {
+                // Use HTML renderer to convert to plain text for terminal display
+                let html_renderer = crate::html::HtmlRenderer::new(80);
+                let plain_text = html_renderer.html_to_plain_text(&cleaned_body);
+
+                // Further clean the rendered text of any remaining headers
+                for line in plain_text.lines() {
+                    let trimmed_line = line.trim();
+                    if !trimmed_line.is_empty() && Self::is_content_line(trimmed_line) {
+                        lines.push(Line::from(trimmed_line.to_string()));
+                    } else if trimmed_line.is_empty() {
+                        lines.push(Line::from(""));
+                    }
+                }
+            }
+            _ => {
+                // Plain text - display as is but clean up any residual HTML and headers
+                for line in cleaned_body.lines() {
+                    let trimmed_line = line.trim();
+                    if !trimmed_line.is_empty() && Self::is_content_line(trimmed_line) {
+                        lines.push(Line::from(trimmed_line.to_string()));
+                    } else if trimmed_line.is_empty() {
+                        lines.push(Line::from(""));
+                    }
+                }
+            }
+        }
+
+        lines
+    }
+
+    /// Render HTML email with contact information (non-static version)
+    fn render_html_email<'a>(&'a self, email: &'a EmailContent, theme: &'a Theme) -> Vec<Line<'a>> {
+        let mut lines = Vec::new();
+
+        // Headers with contact info
+        lines.extend(self.render_sender_box(&email.headers, theme));
+        
+        lines.push(Line::from(vec![
+            Span::styled("Subject: ", Style::default().fg(theme.colors.palette.accent)),
+            Span::styled(&email.headers.subject, Style::default().fg(theme.colors.palette.text_primary)),
+        ]));
+        
+        if !email.headers.to.is_empty() {
+            let to_string = email.headers.to.join(", ");
+            lines.push(Line::from(vec![
+                Span::styled("To: ", Style::default().fg(theme.colors.palette.accent)),
+                Span::styled(to_string, Style::default().fg(theme.colors.palette.text_secondary)),
+            ]));
+        }
+        
+        lines.push(Line::from(vec![
+            Span::styled("Date: ", Style::default().fg(theme.colors.palette.accent)),
+            Span::styled(email.headers.date.clone(), Style::default().fg(theme.colors.palette.text_secondary)),
+        ]));
+        
+        lines.push(Line::from(""));
+
+        // Render HTML content with enhanced rendering and header filtering
+        let cleaned_body = Self::filter_email_headers_and_metadata(&email.body);
+        if email.content_type == ContentType::Html || crate::html::is_html_content(&cleaned_body) {
+            let mut html_renderer = crate::html::HtmlRenderer::new(80);
+            let rendered_text = html_renderer.render_html(&cleaned_body);
+            
+            // Process rendered lines and filter out any remaining headers or metadata
+            for line in rendered_text.lines {
+                // Check if the rendered line contains actual content
+                let line_text = line
+                    .spans
+                    .iter()
+                    .map(|span| span.content.as_ref())
+                    .collect::<String>();
+
+                if Self::is_content_line(&line_text) {
+                    lines.push(line);
+                }
+            }
+        } else {
+            // Fallback to plain text rendering if not HTML
+            for line in cleaned_body.lines() {
+                let trimmed_line = line.trim();
+                if !trimmed_line.is_empty() && Self::is_content_line(trimmed_line) {
+                    lines.push(Line::from(trimmed_line.to_string()));
+                } else if trimmed_line.is_empty() {
+                    lines.push(Line::from(""));
+                }
+            }
+        }
+
+        lines
+    }
+
+    /// Render sender box with contact information (non-static version)
+    fn render_sender_box<'a>(&'a self, headers: &'a EmailHeader, theme: &'a Theme) -> Vec<Line<'a>> {
+        let mut lines = Vec::new();
+        let box_width = 70;
+
+        // Parse sender info
+        let (sender_name, sender_email) = Self::parse_sender_info_static(&headers.from);
+
+        // Top border with contact indicator
+        let title = if self.sender_contact.is_some() {
+            " From 👤 " // Contact icon to indicate known contact
+        } else {
+            " From "
+        };
+
+        lines.push(Line::from(vec![
+            Span::styled("┌─", Style::default().fg(theme.colors.palette.border)),
+            Span::styled(
+                title,
+                Style::default()
+                    .fg(if self.sender_contact.is_some() { 
+                        theme.colors.palette.success 
+                    } else { 
+                        theme.colors.palette.accent 
+                    })
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                "─".repeat(box_width - title.len() - 2),
+                Style::default().fg(theme.colors.palette.border),
+            ),
+            Span::styled("┐", Style::default().fg(theme.colors.palette.border)),
+        ]));
+
+        // Contact name or sender name
+        let display_name = if let Some(ref contact) = self.sender_contact {
+            if !contact.display_name.is_empty() {
+                contact.display_name.clone()
+            } else {
+                sender_name
+            }
+        } else {
+            sender_name
+        };
+
+        if !display_name.is_empty() {
+            let content_width = box_width - 4;
+            let truncated_name = if display_name.len() > content_width {
+                format!("{}...", &display_name[..content_width.saturating_sub(3)])
+            } else {
+                display_name
+            };
+
+            lines.push(Line::from(vec![
+                Span::styled("│ ", Style::default().fg(theme.colors.palette.border)),
+                Span::styled(
+                    format!("{:width$}", truncated_name, width = content_width),
+                    Style::default()
+                        .fg(if self.sender_contact.is_some() {
+                            theme.colors.palette.success
+                        } else {
+                            theme.colors.palette.text_primary
+                        })
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(" │", Style::default().fg(theme.colors.palette.border)),
+            ]));
+        }
+
+        // Email address
+        let content_width = box_width - 4;
+        let truncated_email = if sender_email.len() > content_width {
+            format!("{}...", &sender_email[..content_width.saturating_sub(3)])
+        } else {
+            sender_email
+        };
+
+        lines.push(Line::from(vec![
+            Span::styled("│ ", Style::default().fg(theme.colors.palette.border)),
+            Span::styled(
+                format!("{:width$}", truncated_email, width = content_width),
+                Style::default().fg(theme.colors.palette.text_secondary),
+            ),
+            Span::styled(" │", Style::default().fg(theme.colors.palette.border)),
+        ]));
+
+        // Contact details if available
+        if let Some(ref contact) = self.sender_contact {
+            if let Some(company) = &contact.company {
+                if !company.is_empty() {
+                    let truncated_company = if company.len() > content_width {
+                        format!("{}...", &company[..content_width.saturating_sub(3)])
+                    } else {
+                        company.clone()
+                    };
+
+                    lines.push(Line::from(vec![
+                        Span::styled("│ ", Style::default().fg(theme.colors.palette.border)),
+                        Span::styled(
+                            format!("🏢 {:width$}", truncated_company, width = content_width - 2),
+                            Style::default().fg(theme.colors.palette.text_secondary),
+                        ),
+                        Span::styled(" │", Style::default().fg(theme.colors.palette.border)),
+                    ]));
+                }
+            }
+
+            if let Some(title) = &contact.job_title {
+                if !title.is_empty() {
+                    let truncated_title = if title.len() > content_width {
+                        format!("{}...", &title[..content_width.saturating_sub(3)])
+                    } else {
+                        title.clone()
+                    };
+
+                    lines.push(Line::from(vec![
+                        Span::styled("│ ", Style::default().fg(theme.colors.palette.border)),
+                        Span::styled(
+                            format!("💼 {:width$}", truncated_title, width = content_width - 2),
+                            Style::default().fg(theme.colors.palette.text_secondary),
+                        ),
+                        Span::styled(" │", Style::default().fg(theme.colors.palette.border)),
+                    ]));
+                }
+            }
+        }
+
+        // Bottom border
+        lines.push(Line::from(vec![
+            Span::styled("└", Style::default().fg(theme.colors.palette.border)),
+            Span::styled(
+                "─".repeat(box_width - 2),
+                Style::default().fg(theme.colors.palette.border),
+            ),
+            Span::styled("┘", Style::default().fg(theme.colors.palette.border)),
+        ]));
 
         lines
     }
