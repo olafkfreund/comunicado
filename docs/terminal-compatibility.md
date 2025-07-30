@@ -4,7 +4,36 @@
 
 ## Overview
 
-Comunicado supports advanced image display in HTML emails through modern terminal graphics protocols. This document outlines compatibility across different terminal emulators and provides setup instructions for optimal experience.
+Comunicado is designed for universal terminal compatibility, supporting both advanced graphics protocols for image display and keyboard input systems that work across all terminal environments. This document outlines compatibility across different terminal emulators and provides setup instructions for optimal experience.
+
+## Keyboard Compatibility
+
+Comunicado uses **zero function keys (F1-F12)** to ensure universal keyboard compatibility across all terminal environments.
+
+### Terminal Keyboard Support
+
+| Terminal Environment | Compatibility | Notes |
+|---------------------|---------------|-------|
+| **VSCode Terminal** | ✅ Full | All shortcuts work perfectly |
+| **SSH Sessions** | ✅ Full | No function key dependencies |
+| **Tmux/Screen** | ✅ Full | Standard keys pass through cleanly |
+| **Remote Terminals** | ✅ Full | Works in any remote environment |
+| **Docker Containers** | ✅ Full | No special terminal requirements |
+| **Cloud IDEs** | ✅ Full | GitHub Codespaces, GitPod, etc. |
+
+### Why No Function Keys?
+
+Function keys (F1-F12) can be:
+- Intercepted by terminal applications
+- Mapped to different codes in different environments
+- Not available or unreliable in remote sessions
+- Conflicting with IDE or editor shortcuts
+
+Instead, Comunicado uses:
+- **Single characters**: `g` (calendar), `?` (help), `,` (settings)
+- **Ctrl combinations**: `Ctrl+S` (save), `Ctrl+R` (refresh)
+- **Modifier keys**: `Shift+Delete` (delete message)
+- **Context-aware keys**: `d` (delete in appropriate context)
 
 ## Supported Graphics Protocols
 

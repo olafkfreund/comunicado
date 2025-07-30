@@ -318,6 +318,10 @@ impl App {
 
         self.initialization_complete = true;
         self.initialization_in_progress = false;
+        
+        // Force complete startup progress now that initialization is done
+        self.startup_progress_manager.force_complete();
+        
         tracing::info!("Deferred initialization completed");
 
         // Log ready state
@@ -1442,6 +1446,14 @@ impl App {
         let mut previous_selection: Option<usize> = None;
 
         loop {
+            // Perform deferred initialization if not done yet
+            if !self.initialization_complete {
+                if let Err(e) = self.perform_deferred_initialization().await {
+                    tracing::error!("Deferred initialization failed: {}", e);
+                    // Don't fail the app, just log the error and continue
+                }
+            }
+
             // Process background task updates to prevent UI blocking
             self.process_background_updates().await;
             
@@ -1472,7 +1484,19 @@ impl App {
             }
 
             // Draw UI
-            terminal.draw(|f| self.ui.render(f))?;
+            terminal.draw(|f| {
+                if self.startup_progress_manager.is_visible() {
+                    // Show startup progress during startup
+                    self.ui.render_with_startup_progress(
+                        f, 
+                        &crate::keyboard::KeyboardManager::default(),
+                        Some(&self.startup_progress_manager)
+                    )
+                } else {
+                    // After startup, use regular render
+                    self.ui.render(f)
+                }
+            })?;
 
             // Handle events
             let timeout = tick_rate

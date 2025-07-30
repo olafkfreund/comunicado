@@ -49,6 +49,7 @@ impl StartupProgressManager {
         }
     }
 
+
     pub fn start_phase(&mut self, phase_name: &str) -> Result<(), String> {
         let phase_index = self.find_phase_by_name(phase_name)?;
         
@@ -250,6 +251,25 @@ impl StartupProgressManager {
     }
 
     pub fn hide(&mut self) {
+        self.is_visible = false;
+    }
+
+    /// Force completion of startup (for when initialization is done but phases weren't properly tracked)
+    pub fn force_complete(&mut self) {
+        let total_duration = self.started_at.elapsed();
+        let phase_duration = Duration::from_millis(total_duration.as_millis() as u64 / self.phases.len() as u64);
+        
+        // Mark all phases as completed
+        for phase in &mut self.phases {
+            match phase {
+                StartupPhase::Database { status, .. } => *status = PhaseStatus::Completed { duration: phase_duration },
+                StartupPhase::ImapManager { status, .. } => *status = PhaseStatus::Completed { duration: phase_duration },
+                StartupPhase::AccountSetup { status, .. } => *status = PhaseStatus::Completed { duration: phase_duration },
+                StartupPhase::Services { status, .. } => *status = PhaseStatus::Completed { duration: phase_duration },
+                StartupPhase::DashboardServices { status, .. } => *status = PhaseStatus::Completed { duration: phase_duration },
+            }
+        }
+        self.current_phase = self.phases.len();
         self.is_visible = false;
     }
 

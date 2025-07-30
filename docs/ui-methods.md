@@ -8,6 +8,15 @@
 
 The UI module contains 29 components responsible for rendering the terminal user interface, handling user input, and managing visual state. The architecture uses ratatui for terminal rendering with custom components for email, calendar, and dashboard functionality.
 
+### Recent Keyboard System Updates (July 2025)
+
+**BREAKING CHANGE**: All keyboard handling methods have been updated for universal terminal compatibility:
+
+- **Parameter Change**: `handle_key` methods now accept `crossterm::event::KeyEvent` instead of `KeyCode`
+- **Function Key Removal**: All F1-F12 shortcuts replaced with terminal-friendly alternatives
+- **Modifier Key Support**: New KeyEvent parameter enables Ctrl, Shift, Alt combinations
+- **Terminal Compatibility**: Works perfectly in VSCode terminal, SSH sessions, and all environments
+
 ---
 
 ## Core UI Components
@@ -60,11 +69,13 @@ The compose UI provides a full-featured email composition interface with spell c
 
 #### Input Handling
 
-**`handle_key(&mut self, key: crossterm::event::KeyCode) -> ComposeAction`**
+**`handle_key(&mut self, key: crossterm::event::KeyEvent) -> ComposeAction`**
 - **Status**: ✅ Complete
 - **Documentation**: 📝 Missing
 - **Purpose**: Processes keyboard input for composition
 - **Features**: Field navigation, text editing, spell check shortcuts
+- **Breaking Change**: Now accepts `KeyEvent` instead of `KeyCode` to support modifier keys
+- **F-Key Removal**: All function key shortcuts replaced with terminal-friendly alternatives
 - **Analysis**: Very large method (500+ lines) - needs refactoring into smaller handler functions
 
 #### Data Management

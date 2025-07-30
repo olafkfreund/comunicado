@@ -7,6 +7,7 @@ Comunicado is designed for keyboard-driven efficiency. This guide covers all ava
 ## Philosophy
 
 Comunicado's keyboard shortcuts follow these principles:
+- **Terminal compatibility first**: No function keys (F1-F12) to ensure universal compatibility
 - Familiar patterns from popular terminal applications
 - Vim-style navigation where appropriate
 - Consistent modifiers across similar actions
@@ -22,6 +23,8 @@ These shortcuts work throughout the application:
 - `Ctrl+C` - Force quit application
 - `~` - Show start page
 - `?` - Show help/keyboard shortcuts
+- `g` - Go to calendar
+- `,` - Settings/configuration (when implemented)
 - `Esc` - Cancel current operation or go back
 - `Tab` - Navigate to next panel
 - `Shift+Tab` - Navigate to previous panel
@@ -60,10 +63,11 @@ These shortcuts work throughout the application:
 ### Folder Operations
 - `Ctrl+N` - Create new folder (updated shortcut)
 - `d` - Delete selected folder
-- `R` - Refresh selected folder
-- `F5` - Refresh folder
-- `F2` - Rename folder
+- `R` - Rename folder
+- `F` - Force refresh folder (full IMAP sync)
+- `Ctrl+R` - Refresh folder
 - `Delete` - Delete folder
+- `.` - Show folder context menu
 
 ### View Controls
 - `t` - Toggle threaded view
@@ -98,15 +102,49 @@ These shortcuts work throughout the application:
 ## ✅ Contacts
 - `Ctrl+Shift+C` - Open contacts popup
 
+## ✅ Calendar Management
+
+### Calendar Navigation
+- `g` - Go to calendar (global access)
+- `Esc` - Close calendar/return to previous view
+
+### Calendar Views
+- `1` - Day view
+- `2` - Week view
+- `3` - Month view
+- `4` - Agenda view
+- `←` / `→` - Previous/Next month
+- `.` - Jump to today
+
+### Event Management
+- `e` - Create new event
+- `Enter` - View event details
+- `Ctrl+E` - Edit selected event
+- `d` - Delete selected event
+- `Ctrl+S` - Save event (in event form)
+
+### Todo Management
+- `T` - Create new todo
+- `t` - View todos
+- `Space` - Toggle todo completion
+
+## ✅ Compose Mode
+
+### Basic Actions
+- `Ctrl+S` - Send email
+- `Ctrl+D` - Save as draft
+- `Esc` - Cancel composition
+
+### Spell Checking
+- `Ctrl+Z` - Toggle spell checking
+- `Ctrl+N` - Next spelling error
+- `Ctrl+P` - Previous spelling error  
+- `Ctrl+,` - Spell check configuration
+
 ## ⚠️ Features Not Yet Implemented
 
 The following sections document features that are planned but not yet working. These shortcuts are **not functional** in the current version:
 
-### Calendar Management (Planned)
-- Calendar navigation and view switching
-- Event creation and management
-- RSVP functionality
-- Recurring event handling
 
 ### Advanced Threading (Planned)
 - Complex thread navigation
@@ -139,6 +177,26 @@ The following sections document features that are planned but not yet working. T
 
 ## Key Changes Made During Recent Updates
 
+### Terminal Compatibility Migration (July 2025)
+
+**BREAKING CHANGE**: All function keys (F1-F12) have been replaced with terminal-friendly alternatives for universal compatibility across all terminal environments, including VSCode terminal and remote SSH sessions.
+
+#### F-Key Migration Summary:
+- **F3 (Calendar)** → **`g`** (go to calendar)
+- **F1 (Help)** → **`?`** (help/shortcuts)
+- **F4 (Settings)** → **`,`** (comma, vim-style)
+- **F5 (Refresh)** → **`Ctrl+R`** (refresh)
+- **F2 (Rename)** → **`R`** (uppercase R)
+- **F1 (Save)** → **`Ctrl+S`** (save in forms)
+- **F3 (Delete)** → **`d`** (delete in forms)
+
+#### Compose Mode Migration:
+- **F1 (Send)** → **`Ctrl+S`** (send email)
+- **F2 (Save Draft)** → **`Ctrl+D`** (save draft)
+- **F7 (Spell Check)** → **`Ctrl+Z`** (toggle spell check)
+- **F8/F9 (Spell Nav)** → **`Ctrl+N`/`Ctrl+P`** (next/prev error)
+- **F10 (Spell Config)** → **`Ctrl+,`** (configuration)
+
 ### Fixed Keyboard Conflicts
 The original documentation had many conflicting shortcuts. We resolved these by:
 
@@ -156,11 +214,13 @@ The original documentation had many conflicting shortcuts. We resolved these by:
    - `Shift+Delete` deletes messages when message list is focused
 
 ### New Implementations
+- ✅ Complete calendar management system
 - ✅ Reply, Reply All, and Forward functionality
 - ✅ Message navigation (next/previous)
 - ✅ Message status changes (read/unread)
 - ✅ Archive and delete operations
-- ✅ Proper keyboard shortcut management system
+- ✅ Spell checking with comprehensive controls
+- ✅ Universal terminal compatibility
 
 ## Tips for Current Version
 
@@ -184,4 +244,4 @@ Many advanced features are planned but not yet implemented. This documentation w
 
 ---
 
-**Documentation Status**: Updated to reflect only working shortcuts as of July 2025. Features marked as "Planned" are not yet functional. For a complete list of verified working shortcuts, see `keyboard-shortcuts-working.md`.
+**Documentation Status**: Updated to reflect F-key removal and calendar implementation as of July 2025. All function keys have been replaced with terminal-friendly alternatives. Features marked as "Planned" are not yet functional. For a complete list of verified working shortcuts, see `keyboard-shortcuts-working.md`.

@@ -3,11 +3,12 @@ use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Paragraph},
+    widgets::{Block, Borders, Paragraph, LineGauge},
     Frame,
 };
 
 use crate::theme::Theme;
+use crate::startup::StartupProgressManager;
 // Widget helper functions
 fn create_border_block<'a>(title: &'a str, theme: &Theme, is_selected: bool) -> Block<'a> {
     let border_style = if is_selected {
@@ -225,9 +226,39 @@ impl StartPage {
         self.quick_actions.iter().find(|a| a.id == action_id)
     }
 
-    /// Render the start page dashboard - simplified single clock layout
+    /// Render the start page dashboard - with optional startup progress
     pub fn render(&mut self, f: &mut Frame, area: Rect, theme: &Theme) {
-        // Create simple layout focused on clock and shortcuts
+        self.render_with_startup_manager(f, area, theme, None);
+    }
+
+    /// Render the start page with startup progress manager integration
+    pub fn render_with_startup_manager(&mut self, f: &mut Frame, area: Rect, theme: &Theme, startup_manager: Option<&StartupProgressManager>) {
+        // Check if we should show startup progress
+        if let Some(manager) = startup_manager {
+            if manager.is_visible() && !manager.is_complete() {
+                // Show startup progress in upper portion
+                let main_chunks = Layout::default()
+                    .direction(Direction::Vertical)
+                    .margin(1)
+                    .constraints([
+                        Constraint::Length(8),  // Startup progress
+                        Constraint::Length(10), // Smaller datetime display
+                        Constraint::Min(4),     // Shortcuts
+                    ])
+                    .split(area);
+
+                // Render startup progress widget
+                self.render_startup_progress_block(f, main_chunks[0], theme, manager, self.selected_widget == 0);
+                // Render smaller clock
+                self.render_datetime_block(f, main_chunks[1], theme, self.selected_widget == 1);
+                // Render shortcuts
+                self.render_shortcuts_block(f, main_chunks[2], theme, self.selected_widget == 2);
+                self.widget_count = 3;
+                return;
+            }
+        }
+
+        // Default layout - simple clock and shortcuts
         let main_chunks = Layout::default()
             .direction(Direction::Vertical)
             .margin(1)
@@ -240,6 +271,7 @@ impl StartPage {
         // Render single large clock and shortcuts only
         self.render_datetime_block(f, main_chunks[0], theme, self.selected_widget == 0);
         self.render_shortcuts_block(f, main_chunks[1], theme, self.selected_widget == 1);
+        self.widget_count = 2;
     }
 
 
@@ -477,6 +509,81 @@ impl StartPage {
         f.render_widget(col2_widget, cols[1]);
         f.render_widget(col3_widget, cols[2]);
         f.render_widget(col4_widget, cols[3]);
+
+        f.render_widget(block, area);
+    }
+
+    /// Render startup progress block
+    fn render_startup_progress_block(&self, f: &mut Frame, area: Rect, theme: &Theme, manager: &StartupProgressManager, is_selected: bool) {
+        let block = create_border_block("🚀 startup progress", theme, is_selected);
+        let inner_area = block.inner(area);
+
+        let progress_chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(1), // Overall progress text
+                Constraint::Length(1), // Progress bar
+                Constraint::Min(0),    // Current phase and status
+            ])
+            .split(inner_area);
+
+        // Overall progress percentage
+        let progress_percentage = manager.overall_progress_percentage();
+        let progress_text = Paragraph::new(format!(
+            "Overall Progress: {:.1}%",
+            progress_percentage
+        ))
+        .style(Style::default().fg(theme.colors.palette.text_primary))
+        .alignment(Alignment::Center);
+
+        f.render_widget(progress_text, progress_chunks[0]);
+
+        // Animated progress bar
+        let progress_ratio = (progress_percentage / 100.0).clamp(0.0, 1.0);
+        let progress_color = if progress_percentage < 100.0 {
+            Color::Yellow
+        } else {
+            Color::Green
+        };
+
+        let progress_bar = LineGauge::default()
+            .gauge_style(Style::default().fg(progress_color))
+            .ratio(progress_ratio)
+            .label(format!("{:.0}%", progress_percentage));
+
+        f.render_widget(progress_bar, progress_chunks[1]);
+
+        // Current phase and status
+        let current_phase_name = manager.current_phase_name().unwrap_or("Initializing".to_string());
+        let status_lines = vec![
+            Line::from(vec![
+                Span::styled(
+                    "🔄 Current Phase: ",
+                    Style::default().fg(theme.colors.palette.accent)
+                ),
+                Span::styled(
+                    current_phase_name,
+                    Style::default()
+                        .fg(theme.colors.palette.text_primary)
+                        .add_modifier(Modifier::BOLD)
+                ),
+            ]),
+            Line::from(vec![
+                Span::styled(
+                    "⚡ Status: ",
+                    Style::default().fg(theme.colors.palette.accent)
+                ),
+                Span::styled(
+                    "Initializing systems...",
+                    Style::default().fg(theme.colors.palette.text_secondary)
+                ),
+            ]),
+        ];
+
+        let status_paragraph = Paragraph::new(status_lines)
+            .alignment(Alignment::Center);
+
+        f.render_widget(status_paragraph, progress_chunks[2]);
 
         f.render_widget(block, area);
     }
