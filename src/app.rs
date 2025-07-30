@@ -56,6 +56,7 @@ pub struct App {
 }
 
 impl App {
+    /// Create a new application instance with default configuration
     pub fn new() -> Result<Self> {
         Ok(Self {
             should_quit: false,
@@ -1526,6 +1527,15 @@ impl App {
                         }
                         EventResult::EmailViewerStarted(sender_email) => {
                             self.handle_email_viewer_started(&sender_email).await?;
+                        }
+                        EventResult::ReplyToMessage(message_id) => {
+                            self.handle_reply_to_message(message_id).await?;
+                        }
+                        EventResult::ReplyAllToMessage(message_id) => {
+                            self.handle_reply_all_to_message(message_id).await?;
+                        }
+                        EventResult::ForwardMessage(message_id) => {
+                            self.handle_forward_message(message_id).await?;
                         }
                     }
 
@@ -3909,6 +3919,66 @@ impl App {
             }
         } else {
             tracing::debug!("Contacts manager not available for sender lookup");
+        }
+        
+        Ok(())
+    }
+
+    /// Handle reply to message action
+    async fn handle_reply_to_message(&mut self, message_id: uuid::Uuid) -> Result<()> {
+        tracing::info!("Reply to message triggered for ID: {}", message_id);
+        
+        // Load the full message from database
+        if let Some(database) = &self.database {
+            if let Some(stored_message) = database.get_message_by_id(message_id).await? {
+            // Start compose with reply
+            let compose_action = crate::ui::ComposeAction::StartReplyFromMessage(stored_message);
+                self.handle_compose_action(compose_action).await?;
+            } else {
+                tracing::error!("Message not found for ID: {}", message_id);
+            }
+        } else {
+            tracing::error!("Database not available");
+        }
+        
+        Ok(())
+    }
+
+    /// Handle reply all to message action
+    async fn handle_reply_all_to_message(&mut self, message_id: uuid::Uuid) -> Result<()> {
+        tracing::info!("Reply all to message triggered for ID: {}", message_id);
+        
+        // Load the full message from database
+        if let Some(database) = &self.database {
+            if let Some(stored_message) = database.get_message_by_id(message_id).await? {
+            // Start compose with reply all
+            let compose_action = crate::ui::ComposeAction::StartReplyAllFromMessage(stored_message);
+                self.handle_compose_action(compose_action).await?;
+            } else {
+                tracing::error!("Message not found for ID: {}", message_id);
+            }
+        } else {
+            tracing::error!("Database not available");
+        }
+        
+        Ok(())
+    }
+
+    /// Handle forward message action
+    async fn handle_forward_message(&mut self, message_id: uuid::Uuid) -> Result<()> {
+        tracing::info!("Forward message triggered for ID: {}", message_id);
+        
+        // Load the full message from database
+        if let Some(database) = &self.database {
+            if let Some(stored_message) = database.get_message_by_id(message_id).await? {
+            // Start compose with forward
+            let compose_action = crate::ui::ComposeAction::StartForwardFromMessage(stored_message);
+                self.handle_compose_action(compose_action).await?;
+            } else {
+                tracing::error!("Message not found for ID: {}", message_id);
+            }
+        } else {
+            tracing::error!("Database not available");
         }
         
         Ok(())

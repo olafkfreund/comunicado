@@ -38,6 +38,7 @@ pub struct EmailViewer {
     show_actions: bool,
     selected_action: usize,
     actions: Vec<EmailViewerAction>,
+    #[allow(dead_code)]
     image_manager: ImageManager,
 }
 
@@ -556,6 +557,7 @@ impl EmailViewer {
     }
 
     /// Render HTML email with embedded images and animations support
+    #[allow(dead_code)]
     async fn render_html_email_with_media<'a>(&self, email: &'a EmailContent, theme: &'a Theme) -> Vec<Line<'a>> {
         let mut lines = Vec::new();
         
@@ -639,6 +641,7 @@ impl EmailViewer {
     }
 
     /// Check if a line contains technical metadata that should be filtered
+    #[allow(dead_code)]
     fn is_line_technical_metadata(line: &str) -> bool {
         let line_lower = line.to_lowercase();
         
@@ -657,6 +660,7 @@ impl EmailViewer {
     }
 
     /// Render formatted email with contact information
+    #[allow(dead_code)]
     fn render_formatted_email_with_contact<'a>(&'a self, email: &'a EmailContent, _sender_contact: Option<&'a crate::contacts::Contact>, theme: &'a Theme) -> Vec<Line<'a>> {
         let mut lines = Vec::new();
 
@@ -728,6 +732,7 @@ impl EmailViewer {
     }
 
     /// Render HTML email with contact information (non-static version)
+    #[allow(dead_code)]
     fn render_html_email<'a>(&'a self, email: &'a EmailContent, theme: &'a Theme) -> Vec<Line<'a>> {
         let mut lines = Vec::new();
 
@@ -789,6 +794,7 @@ impl EmailViewer {
     }
 
     /// Render sender box with contact information (non-static version)
+    #[allow(dead_code)]
     fn render_sender_box<'a>(&'a self, headers: &'a EmailHeader, theme: &'a Theme) -> Vec<Line<'a>> {
         let mut lines = Vec::new();
         let box_width = 70;
@@ -1001,179 +1007,306 @@ impl EmailViewer {
         lines
     }
 
-    /// Filter out email headers and technical metadata from content (aggressive cleaning)
-    fn filter_email_headers_and_metadata(content: &str) -> String {
-        let lines: Vec<&str> = content.lines().collect();
-        let mut filtered_lines: Vec<&str> = Vec::new();
-        let mut found_body_start = false;
-
-        // Enhanced patterns for email headers and technical content to filter out
-        let header_patterns = [
-            "from:",
-            "to:",
-            "cc:",
-            "bcc:",
-            "subject:",
-            "date:",
-            "reply-to:",
-            "sender:",
-            "message-id:",
-            "in-reply-to:",
-            "references:",
-            "mime-version:",
-            "content-type:",
-            "content-transfer-encoding:",
-            "content-disposition:",
-            "delivered-to:",
-            "received:",
-            "return-path:",
-            "envelope-to:",
-            "authentication-results:",
-            "received-spf:",
-            "dkim-signature:",
-            "dkim-filter:",
-            "x-received:",
-            "x-google-smtp-source:",
-            "x-gm-message-state:",
-            "x-ms-exchange-",
-            "x-originating-ip:",
-            "x-microsoft-",
-            "x-ms-",
-            "x-mailer:",
-            "x-apple-",
-            "--apple-mail",
-            "apple-mail",
-            "list-id:",
-            "list-unsubscribe:",
-            "list-archive:",
-            "list-post:",
-            "spf=pass",
-            "dkim=pass",
-            "dmarc=pass",
-            "smtp.mailfrom=",
-            "smtp.helo=",
-            "arc-authentication-results:",
-            "arc-message-signature:",
-            "arc-seal:",
-            "received-by:",
-            "received-from:",
-            "thread-topic:",
-            "thread-index:",
-            "importance:",
-            "priority:",
-            "x-priority:",
-            "x-msmail-priority:",
-            "x-mimeole:",
-            "x-ms-has-attach:",
-            "x-ms-tnef-correlator:",
-            "organization:",
-            "user-agent:",
-            "x-user-agent:",
-            "x-newsreader:",
-            "x-spam-",
-            "x-virus-",
-            "x-ham-report:",
-            "x-barracuda-",
-            "<html",
-            "</html>",
-            "<head",
-            "</head>",
-            "<body",
-            "</body>",
-            "<!doctype",
-            "<meta",
-            "content=\"text/html",
-            "charset=",
-        ];
-
-        // HTML tag patterns to strip
-        let html_tag_patterns = [
-            "<div",
-            "</div>",
-            "<span",
-            "</span>",
-            "<table",
-            "</table>",
-            "<tr",
-            "</tr>",
-            "<td",
-            "</td>",
-            "<th",
-            "</th>",
-            "<p>",
-            "</p>",
-            "<br",
-            "<hr",
-            "<img",
-            "<a ",
-            "</a>",
-            "<font",
-            "</font>",
-            "<style",
-            "</style>",
-            "<script",
-            "</script>",
-        ];
-
-        for line in lines {
-            let line_lower = line.to_lowercase();
-            let line_trimmed = line.trim();
-
-            // Skip completely empty lines before finding body
-            if line_trimmed.is_empty() && !found_body_start {
-                continue;
-            }
-
-            // Check if this line looks like a header or technical metadata
-            let is_header = header_patterns.iter().any(|&pattern| {
-                line_lower.starts_with(pattern)
-                    || line_lower.contains(pattern)
-                    || (pattern.contains(":")
-                        && line_lower.starts_with(&pattern[..pattern.len() - 1]))
-            });
-
-            // Check for HTML tags that should be stripped
-            let has_html_tags = html_tag_patterns
-                .iter()
-                .any(|&pattern| line_lower.contains(pattern));
-
-            // Skip lines that look like encoded content, boundaries, or technical metadata
-            let is_technical = line_trimmed.starts_with('=') ||
-                line_trimmed.starts_with("--") ||
-                line_trimmed.contains("boundary=") ||
-                line_trimmed.contains("charset=") ||
-                line_trimmed.contains("encoding=") ||
-                line_trimmed.contains("Content-") ||
-                line_trimmed.contains("MIME-Version") ||
-                line_trimmed.starts_with("Message-ID:") ||
-                // Long strings of alphanumeric characters (likely encoded content)
-                (line_trimmed.len() > 60 && line_trimmed.chars().filter(|c| c.is_ascii_alphanumeric()).count() > line_trimmed.len() * 3 / 4) ||
-                // Lines that are mostly special characters and numbers (encoded content)
-                (line_trimmed.len() > 40 && line_trimmed.chars().all(|c| c.is_ascii_alphanumeric() || "=+-/".contains(c)));
-
-            // Skip lines that contain only HTML tags or look like HTML structure
-            let is_html_structure = has_html_tags
-                && line_trimmed
-                    .chars()
-                    .filter(|&c| c == '<' || c == '>')
-                    .count()
-                    >= 2;
-
-            // Allow the line if it's not a header, not technical, and not HTML structure
-            if !is_header && !is_technical && !is_html_structure {
-                // Clean any remaining HTML tags from the line
-                let cleaned_line = Self::strip_html_tags_from_line(line);
-                if !cleaned_line.trim().is_empty() {
-                    filtered_lines.push(line);
-                    found_body_start = true;
-                }
-            } else if found_body_start && line_trimmed.is_empty() {
-                // Preserve empty lines within content for formatting
-                filtered_lines.push(line);
+    /// RFC-compliant email content extraction following industry best practices
+    /// Based on RFC 5322, RFC 2045-2049 (MIME), and modern email parsing libraries
+    pub fn filter_email_headers_and_metadata(content: &str) -> String {
+        // Method 1: RFC 5322 standard - find the blank line separator
+        if let Some(body_start) = Self::find_rfc_body_start(content) {
+            let body = &content[body_start..];
+            return Self::clean_email_body(body);
+        }
+        
+        // Method 2: MIME multipart parsing (for complex emails)
+        if content.contains("boundary=") {
+            if let Some(body) = Self::extract_mime_text_content(content) {
+                return Self::clean_email_body(&body);
             }
         }
-
+        
+        // Method 3: Content-type aware parsing
+        if let Some(body) = Self::extract_content_by_type(content) {
+            return Self::clean_email_body(&body);
+        }
+        
+        // Method 4: Heuristic fallback with aggressive header filtering
+        Self::heuristic_content_extraction(content)
+    }
+    
+    /// Find email body start according to RFC 5322 - blank line separates headers from body
+    fn find_rfc_body_start(content: &str) -> Option<usize> {
+        // Look for double newline (RFC standard separator)
+        if let Some(pos) = content.find("\r\n\r\n") {
+            return Some(pos + 4);
+        }
+        if let Some(pos) = content.find("\n\n") {
+            return Some(pos + 2);
+        }
+        None
+    }
+    
+    /// Extract text content from MIME multipart messages
+    fn extract_mime_text_content(content: &str) -> Option<String> {
+        // Find boundary parameter
+        let boundary = Self::extract_mime_boundary(content)?;
+        
+        // Split content by boundary
+        let parts: Vec<&str> = content.split(&format!("--{}", boundary)).collect();
+        
+        for part in &parts {
+            // Look for text/plain or text/html parts
+            if part.contains("Content-Type: text/plain") || 
+               part.contains("content-type: text/plain") {
+                // Find the blank line and extract content
+                if let Some(content_start) = Self::find_rfc_body_start(part) {
+                    return Some(part[content_start..].trim().to_string());
+                }
+            }
+        }
+        
+        // Fallback to HTML parts if no plain text found
+        for part in &parts {
+            if part.contains("Content-Type: text/html") || 
+               part.contains("content-type: text/html") {
+                if let Some(content_start) = Self::find_rfc_body_start(part) {
+                    let html_content = &part[content_start..];
+                    // Convert HTML to plain text
+                    return Some(Self::html_to_plain_text(html_content));
+                }
+            }
+        }
+        
+        None
+    }
+    
+    /// Extract MIME boundary from Content-Type header
+    fn extract_mime_boundary(content: &str) -> Option<String> {
+        for line in content.lines() {
+            let line_lower = line.to_lowercase();
+            if line_lower.starts_with("content-type:") && line_lower.contains("boundary=") {
+                // Extract boundary value
+                if let Some(boundary_start) = line.find("boundary=") {
+                    let boundary_part = &line[boundary_start + 9..];
+                    // Handle quoted and unquoted boundaries
+                    if boundary_part.starts_with('"') {
+                        // Quoted boundary
+                        if let Some(end_quote) = boundary_part[1..].find('"') {
+                            return Some(boundary_part[1..end_quote + 1].to_string());
+                        }
+                    } else {
+                        // Unquoted boundary (until semicolon or end of line)
+                        let end_pos = boundary_part.find(';').unwrap_or(boundary_part.len());
+                        return Some(boundary_part[..end_pos].trim().to_string());
+                    }
+                }
+            }
+        }
+        None
+    }
+    
+    /// Extract content based on Content-Type analysis
+    fn extract_content_by_type(content: &str) -> Option<String> {
+        let lines: Vec<&str> = content.lines().collect();
+        let mut content_type = String::new();
+        let mut in_headers = true;
+        let mut body_start_idx = 0;
+        
+        // Parse headers to find Content-Type
+        for (i, line) in lines.iter().enumerate() {
+            if in_headers {
+                if line.trim().is_empty() {
+                    in_headers = false;
+                    body_start_idx = i + 1;
+                    break;
+                }
+                
+                let line_lower = line.to_lowercase();
+                if line_lower.starts_with("content-type:") {
+                    content_type = line_lower;
+                }
+            }
+        }
+        
+        if body_start_idx < lines.len() {
+            let body_lines = &lines[body_start_idx..];
+            let body_content = body_lines.join("\n");
+            
+            if content_type.contains("text/html") {
+                return Some(Self::html_to_plain_text(&body_content));
+            } else {
+                return Some(body_content);
+            }
+        }
+        
+        None
+    }
+    
+    /// Heuristic content extraction as fallback
+    fn heuristic_content_extraction(content: &str) -> String {
+        let lines: Vec<&str> = content.lines().collect();
+        let mut filtered_lines: Vec<&str> = Vec::new();
+        let mut headers_ended = false;
+        let mut consecutive_non_headers = 0;
+        
+        for line in lines {
+            let trimmed = line.trim();
+            
+            // Check if this looks like a header (contains colon and matches header patterns)
+            let looks_like_header = trimmed.contains(':') && 
+                Self::is_likely_email_header(trimmed);
+            
+            // Check for technical metadata patterns
+            let is_technical = Self::is_technical_metadata(trimmed);
+            
+            if !headers_ended {
+                if !looks_like_header && !is_technical && !trimmed.is_empty() {
+                    consecutive_non_headers += 1;
+                    // If we see 2+ consecutive non-header lines, assume body started
+                    if consecutive_non_headers >= 2 {
+                        headers_ended = true;
+                        // Include previous lines that weren't headers
+                        filtered_lines.push(line);
+                    }
+                } else {
+                    consecutive_non_headers = 0;
+                }
+            } else {
+                // We're in the body - include everything except obvious technical stuff
+                if !is_technical {
+                    filtered_lines.push(line);
+                }
+            }
+        }
+        
         filtered_lines.join("\n")
+    }
+    
+    /// Check if a line is likely an email header
+    fn is_likely_email_header(line: &str) -> bool {
+        let line_lower = line.to_lowercase();
+        
+        // Standard email headers
+        let header_prefixes = [
+            "from:", "to:", "cc:", "bcc:", "subject:", "date:", "reply-to:",
+            "message-id:", "in-reply-to:", "references:", "mime-version:",
+            "content-type:", "content-transfer-encoding:", "content-disposition:",
+            "received:", "return-path:", "delivered-to:", "authentication-results:",
+            "dkim-signature:", "arc-", "x-", "list-", "sender:", "envelope-to:",
+        ];
+        
+        header_prefixes.iter().any(|prefix| line_lower.starts_with(prefix))
+    }
+    
+    /// Check if a line is technical metadata that should be filtered
+    fn is_technical_metadata(line: &str) -> bool {
+        let trimmed = line.trim();
+        
+        // DKIM signature data patterns
+        if trimmed.len() > 40 && 
+           (trimmed.chars().all(|c| c.is_ascii_alphanumeric() || "=+/".contains(c)) ||
+            trimmed.starts_with("bh=") || 
+            trimmed.starts_with("b=") ||
+            trimmed.contains("d=") && trimmed.contains("s=")) {
+            return true;
+        }
+        
+        // Long base64-like strings
+        if trimmed.len() > 60 && 
+           trimmed.chars().filter(|c| c.is_ascii_alphanumeric()).count() > trimmed.len() * 3 / 4 {
+            return true;
+        }
+        
+        // Timestamp patterns
+        if regex::Regex::new(r"^\s*[0-9]{2}:[0-9]{2}:[0-9]{2}\s+[+-]\d{4}").unwrap().is_match(trimmed) {
+            return true;
+        }
+        
+        false
+    }
+    
+    /// Clean email body content (remove remaining HTML tags, normalize whitespace)
+    fn clean_email_body(body: &str) -> String {
+        // Remove HTML tags but preserve content
+        let cleaned = Self::html_to_plain_text(body);
+        
+        // Normalize whitespace and remove excessive blank lines
+        let lines: Vec<&str> = cleaned.lines().collect();
+        let mut result_lines = Vec::new();
+        let mut consecutive_empty = 0;
+        
+        for line in lines {
+            let trimmed = line.trim();
+            if trimmed.is_empty() {
+                consecutive_empty += 1;
+                // Only allow up to 2 consecutive empty lines
+                if consecutive_empty <= 2 {
+                    result_lines.push(line);
+                }
+            } else {
+                consecutive_empty = 0;
+                result_lines.push(line);
+            }
+        }
+        
+        result_lines.join("\n").trim().to_string()
+    }
+    
+    /// Convert HTML to plain text (enhanced version)
+    fn html_to_plain_text(html: &str) -> String {
+        // Simple HTML to text conversion
+        // In a real implementation, you might use a proper HTML parser
+        let mut result = String::new();
+        let mut in_tag = false;
+        let mut in_script = false;
+        let mut in_style = false;
+        let mut tag_name = String::new();
+        
+        let chars: Vec<char> = html.chars().collect();
+        let mut i = 0;
+        
+        while i < chars.len() {
+            let ch = chars[i];
+            
+            match ch {
+                '<' => {
+                    // Check for script/style tags
+                    let remaining: String = chars[i..].iter().collect();
+                    if remaining.to_lowercase().starts_with("<script") {
+                        in_script = true;
+                    } else if remaining.to_lowercase().starts_with("<style") {
+                        in_style = true;
+                    } else if remaining.to_lowercase().starts_with("</script") {
+                        in_script = false;
+                    } else if remaining.to_lowercase().starts_with("</style") {
+                        in_style = false;
+                    }
+                    
+                    in_tag = true;
+                    tag_name.clear();
+                }
+                '>' => {
+                    in_tag = false;
+                    // Add space after block-level tags
+                    if ["div", "p", "br", "hr", "h1", "h2", "h3", "h4", "h5", "h6"]
+                        .contains(&tag_name.to_lowercase().as_str()) {
+                        result.push('\n');
+                    }
+                }
+                _ if in_tag => {
+                    if ch.is_ascii_alphabetic() {
+                        tag_name.push(ch);
+                    }
+                }
+                _ if !in_tag && !in_script && !in_style => {
+                    result.push(ch);
+                }
+                _ => {}
+            }
+            
+            i += 1;
+        }
+        
+        // Clean up whitespace
+        result.split_whitespace().collect::<Vec<_>>().join(" ")
     }
 
     /// Strip HTML tags from a single line

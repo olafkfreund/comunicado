@@ -8,6 +8,7 @@ pub struct MessageId {
 }
 
 impl MessageId {
+    /// Create a new message ID
     pub fn new(id: String) -> Self {
         Self { id }
     }
@@ -27,6 +28,7 @@ impl MessageId {
         }
     }
 
+    /// Get the message ID as a string reference
     pub fn as_str(&self) -> &str {
         &self.id
     }
@@ -55,6 +57,7 @@ pub struct EmailMessage {
 }
 
 impl EmailMessage {
+    /// Create a new email message with the provided details
     pub fn new(
         message_id: MessageId,
         subject: String,
@@ -79,71 +82,88 @@ impl EmailMessage {
     }
 
     // Getters
+    /// Get the message ID
     pub fn message_id(&self) -> &MessageId {
         &self.message_id
     }
 
+    /// Get the message subject
     pub fn subject(&self) -> &str {
         &self.subject
     }
 
+    /// Get the message sender
     pub fn sender(&self) -> &str {
         &self.sender
     }
 
+    /// Get the message recipients
     pub fn recipients(&self) -> &[String] {
         &self.recipients
     }
 
+    /// Get the message content
     pub fn content(&self) -> &str {
         &self.content
     }
 
+    /// Get the message timestamp
     pub fn timestamp(&self) -> &DateTime<Utc> {
         &self.timestamp
     }
 
+    /// Get the message this is in reply to
     pub fn in_reply_to(&self) -> Option<&MessageId> {
         self.in_reply_to.as_ref()
     }
 
+    /// Get the message references header
     pub fn references(&self) -> Option<&String> {
         self.references.as_ref()
     }
 
+    /// Check if the message has been read
     pub fn is_read(&self) -> bool {
         self.is_read
     }
 
+    /// Check if the message is marked as important
     pub fn is_important(&self) -> bool {
         self.is_important
     }
 
+    /// Check if the message has attachments
     pub fn has_attachments(&self) -> bool {
         self.has_attachments
     }
 
     // Setters
+    /// Set the message this is in reply to
     pub fn set_in_reply_to(&mut self, reply_to: MessageId) {
         self.in_reply_to = Some(reply_to);
     }
 
+    /// Set the message references header
     pub fn set_references(&mut self, references: String) {
         self.references = Some(references);
     }
 
+    /// Set the read status of the message
     pub fn set_read(&mut self, is_read: bool) {
         self.is_read = is_read;
     }
 
+    /// Set the importance flag of the message
     pub fn set_important(&mut self, is_important: bool) {
         self.is_important = is_important;
     }
 
+    /// Set whether the message has attachments
     pub fn set_attachments(&mut self, has_attachments: bool) {
         self.has_attachments = has_attachments;
     }
 
+    /// Update the message sender
     pub fn set_sender(&mut self, sender: String) {
         self.sender = sender;
     }

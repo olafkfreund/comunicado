@@ -72,31 +72,37 @@ impl MessageItem {
         }
     }
 
+    /// Mark this message as unread
     pub fn unread(mut self) -> Self {
         self.is_read = false;
         self
     }
 
+    /// Mark this message as important
     pub fn important(mut self) -> Self {
         self.is_important = true;
         self
     }
 
+    /// Indicate this message has attachments
     pub fn with_attachments(mut self) -> Self {
         self.has_attachments = true;
         self
     }
 
+    /// Set the number of messages in this thread
     pub fn with_thread_count(mut self, count: usize) -> Self {
         self.message_count = count;
         self
     }
 
+    /// Mark this thread as expanded
     pub fn expanded(mut self) -> Self {
         self.is_thread_expanded = true;
         self
     }
 
+    /// Mark this message as a thread root
     pub fn as_thread_root(mut self) -> Self {
         self.is_thread_root = true;
         self
@@ -351,6 +357,7 @@ impl MessageList {
         frame.render_stateful_widget(list, area, &mut self.state.clone());
     }
 
+    /// Handle up arrow key press - move selection up with wraparound
     pub fn handle_up(&mut self) {
         let message_count = if self.search_active {
             self.filtered_messages.len()
@@ -375,6 +382,7 @@ impl MessageList {
         self.state.select(selected);
     }
 
+    /// Handle down arrow key press - move selection down with wraparound
     pub fn handle_down(&mut self) {
         let message_count = if self.search_active {
             self.filtered_messages.len()
@@ -399,6 +407,7 @@ impl MessageList {
         self.state.select(selected);
     }
 
+    /// Handle enter key press - mark selected message as read
     pub fn handle_enter(&mut self) {
         if let Some(selected) = self.state.selected() {
             let messages_to_modify = if self.search_active {
@@ -415,6 +424,7 @@ impl MessageList {
         }
     }
 
+    /// Get the currently selected message
     pub fn selected_message(&self) -> Option<&MessageItem> {
         let messages_to_check = if self.search_active {
             &self.filtered_messages
@@ -425,6 +435,7 @@ impl MessageList {
         self.state.selected().and_then(|i| messages_to_check.get(i))
     }
 
+    /// Mark the currently selected message as read
     pub fn mark_selected_as_read(&mut self) {
         if let Some(selected) = self.state.selected() {
             if let Some(message) = self.messages.get_mut(selected) {
@@ -433,6 +444,7 @@ impl MessageList {
         }
     }
 
+    /// Toggle the important status of the currently selected message
     pub fn toggle_selected_important(&mut self) {
         if let Some(selected) = self.state.selected() {
             if let Some(message) = self.messages.get_mut(selected) {
@@ -443,6 +455,7 @@ impl MessageList {
 
     // Threading and view mode methods
 
+    /// Toggle between list and threaded view modes
     pub fn toggle_view_mode(&mut self) {
         self.view_mode = match self.view_mode {
             ViewMode::List => ViewMode::Threaded,
@@ -451,6 +464,7 @@ impl MessageList {
         self.rebuild_view();
     }
 
+    /// Set the view mode to list or threaded
     pub fn set_view_mode(&mut self, mode: ViewMode) {
         if self.view_mode != mode {
             self.view_mode = mode;
@@ -458,6 +472,7 @@ impl MessageList {
         }
     }
 
+    /// Get the current view mode
     pub fn current_view_mode(&self) -> ViewMode {
         self.view_mode
     }

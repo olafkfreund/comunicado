@@ -1323,44 +1323,29 @@ This is a sample email showcasing the modern email display format."
             in_reply_to: None,
         };
 
-        let mut body_start = 0;
-        let mut in_headers = true;
+        // Parse basic headers for structure (though body filtering will handle the actual content)
+        for line in lines.iter() {
+            if let Some(colon_pos) = line.find(':') {
+                let header_name = line[..colon_pos].to_lowercase();
+                let header_value = line[colon_pos + 1..].trim().to_string();
 
-        // Parse headers
-        for (i, line) in lines.iter().enumerate() {
-            if in_headers {
-                if line.is_empty() {
-                    body_start = i + 1;
-                    in_headers = false;
-                    continue;
-                }
-
-                if let Some(colon_pos) = line.find(':') {
-                    let header_name = line[..colon_pos].to_lowercase();
-                    let header_value = line[colon_pos + 1..].trim().to_string();
-
-                    match header_name.as_str() {
-                        "from" => headers.from = header_value,
-                        "to" => headers.to = vec![header_value],
-                        "cc" => headers.cc = vec![header_value],
-                        "bcc" => headers.bcc = vec![header_value],
-                        "subject" => headers.subject = header_value,
-                        "date" => headers.date = header_value,
-                        "message-id" => headers.message_id = header_value,
-                        "reply-to" => headers.reply_to = Some(header_value),
-                        "in-reply-to" => headers.in_reply_to = Some(header_value),
-                        _ => {}
-                    }
+                match header_name.as_str() {
+                    "from" => headers.from = header_value,
+                    "to" => headers.to = vec![header_value],
+                    "cc" => headers.cc = vec![header_value],
+                    "bcc" => headers.bcc = vec![header_value],
+                    "subject" => headers.subject = header_value,
+                    "date" => headers.date = header_value,
+                    "message-id" => headers.message_id = header_value,
+                    "reply-to" => headers.reply_to = Some(header_value),
+                    "in-reply-to" => headers.in_reply_to = Some(header_value),
+                    _ => {}
                 }
             }
         }
 
-        // Extract body
-        let body = if body_start < lines.len() {
-            lines[body_start..].join("\n")
-        } else {
-            String::new()
-        };
+        // Extract body using RFC-compliant email parsing to filter out all headers and metadata
+        let body = crate::ui::email_viewer::EmailViewer::filter_email_headers_and_metadata(raw_email);
 
         // Parse URLs
         let parsed_urls = self.extract_urls(&body);
@@ -2768,51 +2753,164 @@ This is a sample email showcasing the modern email display format."
     /// Filter out raw email headers from ContentLine objects
     fn filter_raw_headers_from_content(&self, content_lines: &[ContentLine]) -> Vec<ContentLine> {
         let mut filtered_lines = Vec::new();
-        let mut skip_headers = true;
-        let mut found_content_start = false;
+        let mut in_headers = true;
         
-        // Common email headers to filter out
+        // Comprehensive list of email headers and technical metadata to filter out
         let header_patterns = [
+            // Standard email headers
             "Message-ID:", "Date:", "From:", "To:", "Subject:", "Return-Path:",
-            "Received:", "Authentication-Results:", "ARC-", "Delivered-To:",
-            "DKIM-Signature:", "Reply-To:", "Cc:", "Bcc:", "In-Reply-To:",
-            "References:", "Thread-Topic:", "Thread-Index:", "Precedence:",
-            "List-", "Organization:", "User-Agent:", "X-Mailer:", "Content-",
-            "MIME-", "Boundary=", "charset=", "name=", "filename=",
+            "Received:", "Reply-To:", "Cc:", "Bcc:", "In-Reply-To:", "References:",
+            
+            // Authentication and security headers
+            "Authentication-Results:", "ARC-Authentication-Results:", "ARC-Message-Signature:",
+            "ARC-Seal:", "DKIM-Signature:", "DomainKey-Signature:", "Sender:", "X-Google-DKIM-Signature:",
+            
+            // Delivery and routing headers
+            "Delivered-To:", "Envelope-To:", "Original-Recipient:", "X-Original-To:",
+            "X-Forwarded-To:", "X-Envelope-From:", "X-Sender:",
+            
+            // Content and MIME headers
+            "Content-Type:", "Content-Transfer-Encoding:", "Content-Disposition:",
+            "Content-Description:", "Content-ID:", "Content-Length:", "MIME-Version:",
+            
+            // Server and client identification
+            "User-Agent:", "X-Mailer:", "X-MimeOLE:", "X-Originating-IP:", "X-Source-IP:",
+            "X-Remote-IP:", "X-Forwarded-For:", "X-Real-IP:",
+            
+            // List management
+            "List-ID:", "List-Unsubscribe:", "List-Subscribe:", "List-Archive:",
+            "List-Post:", "List-Help:", "List-Owner:",
+            
+            // Threading and organization
+            "Thread-Topic:", "Thread-Index:", "Precedence:", "Priority:", "Importance:",
+            "Organization:", "X-Organization:",
+            
+            // Spam and filtering
+            "X-Spam-Status:", "X-Spam-Score:", "X-Spam-Level:", "X-Spam-Checker-Version:",
+            "X-AntiVirus:", "X-Virus-Scanned:",
+            
+            // Microsoft specific
+            "X-MS-", "X-Exchange-", "X-Microsoft-", "Accept-Language:",
+            
+            // Google specific  
+            "X-Google-", "X-Gmail-", "X-Gm-Message-State:",
+            
+            // Yahoo specific
+            "X-Yahoo-", "X-YMail-",
+            
+            // Technical metadata patterns
+            "boundary=", "charset=", "name=", "filename=", "format=",
         ];
         
-        for content_line in content_lines {
+        // Patterns for technical metadata lines (not proper headers)
+        let technical_metadata_patterns = [
+            // DKIM signature data
+            r"^\s*[a-zA-Z0-9+/=]{20,}\s*$", // Base64 data
+            r"^\s*[bh]=", // DKIM hash
+            r"^\s*d=.*\.com.*s=", // DKIM domain/selector
+            r"^\s*t=\d{10}", // Unix timestamp
+            r"^\s*[0-9]{2}:[0-9]{2}:[0-9]{2}\s+[+-]\d{4}", // Timezone info alone
+        ];
+        
+        for (i, content_line) in content_lines.iter().enumerate() {
             let trimmed = content_line.text.trim();
             
-            // Skip empty lines at the start
-            if skip_headers && trimmed.is_empty() {
+            // Skip completely empty lines at the start
+            if in_headers && trimmed.is_empty() {
                 continue;
             }
             
-            // Check if this line looks like a header
-            let is_header = header_patterns.iter().any(|pattern| {
+            // Check if this looks like a standard email header
+            let is_standard_header = header_patterns.iter().any(|pattern| {
                 trimmed.starts_with(pattern) || 
                 trimmed.to_lowercase().starts_with(&pattern.to_lowercase())
             });
             
-            // Also check for header continuation lines (starting with whitespace)
-            let is_header_continuation = skip_headers && 
-                (trimmed.starts_with(' ') || trimmed.starts_with('\t')) &&
-                !found_content_start;
+            // Check if this looks like technical metadata (DKIM data, base64, etc.)
+            let is_technical_metadata = technical_metadata_patterns.iter().any(|pattern| {
+                if let Ok(regex) = regex::Regex::new(pattern) {
+                    regex.is_match(trimmed)
+                } else {
+                    trimmed.contains(pattern)
+                }
+            });
             
-            if skip_headers && (is_header || is_header_continuation) {
+            // Check for header continuation lines (RFC 5322 - lines starting with space/tab)
+            let is_header_continuation = in_headers && 
+                (trimmed.starts_with(' ') || trimmed.starts_with('\t'));
+            
+            // Skip headers and technical metadata
+            if in_headers && (is_standard_header || is_technical_metadata || is_header_continuation) {
                 continue;
             }
             
-            // If we find a line that doesn't look like a header, start including content
-            if skip_headers && !is_header && !is_header_continuation && !trimmed.is_empty() {
-                skip_headers = false;
-                found_content_start = true;
+            // Look for content start indicators
+            let looks_like_content = !trimmed.is_empty() && 
+                !is_standard_header && 
+                !is_technical_metadata &&
+                !is_header_continuation &&
+                (
+                    // Common greeting patterns
+                    trimmed.to_lowercase().starts_with("hi ") ||
+                    trimmed.to_lowercase().starts_with("hello") ||
+                    trimmed.to_lowercase().starts_with("dear ") ||
+                    trimmed.to_lowercase().starts_with("greetings") ||
+                    
+                    // Common content patterns
+                    trimmed.len() > 10 && // Substantial text
+                    !trimmed.contains(':') || // Not a header (headers have colons)
+                    
+                    // If it's a sentence (ends with punctuation)
+                    trimmed.ends_with('.') ||
+                    trimmed.ends_with('!') ||
+                    trimmed.ends_with('?') ||
+                    
+                    // Company names or signatures
+                    trimmed.to_lowercase().contains("team") ||
+                    trimmed.to_lowercase().contains("regards") ||
+                    trimmed.to_lowercase().contains("sincerely") ||
+                    
+                    // URLs in body (not headers)
+                    (trimmed.contains("http") && !trimmed.starts_with("List-"))
+                );
+            
+            // Switch to content mode if we found actual content
+            if in_headers && looks_like_content {
+                in_headers = false;
             }
             
-            // Include this line if we're past the headers
-            if !skip_headers {
+            // Include everything once we're in content mode
+            if !in_headers {
                 filtered_lines.push(content_line.clone());
+            }
+            
+            // Special case: if we're still in headers but reached the end, 
+            // include remaining lines as they might be content
+            if in_headers && i > content_lines.len() - 5 {
+                filtered_lines.push(content_line.clone());
+            }
+        }
+        
+        // If we got no content, it means our filtering was too aggressive
+        // Fall back to showing everything except the most obvious technical headers
+        if filtered_lines.is_empty() {
+            for content_line in content_lines {
+                let trimmed = content_line.text.trim();
+                
+                // Only filter out the most obviously technical lines
+                let is_obvious_technical = header_patterns[0..10].iter().any(|pattern| {
+                    trimmed.starts_with(pattern)
+                }) || technical_metadata_patterns.iter().any(|pattern| {
+                    if let Ok(regex) = regex::Regex::new(pattern) {
+                        regex.is_match(trimmed)
+                    } else {
+                        false
+                    }
+                });
+                
+                if !is_obvious_technical {
+                    filtered_lines.push(content_line.clone());
+                }
             }
         }
         

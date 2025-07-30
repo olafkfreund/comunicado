@@ -633,6 +633,27 @@ impl EmailDatabase {
         }
     }
 
+    /// Get a message by ID
+    pub async fn get_message_by_id(&self, id: uuid::Uuid) -> DatabaseResult<Option<StoredMessage>> {
+        let row = sqlx::query(r"
+            SELECT id, account_id, folder_name, imap_uid, message_id, thread_id, in_reply_to, message_references,
+                   subject, from_addr, from_name, to_addrs, cc_addrs, bcc_addrs, reply_to, date,
+                   body_text, body_html, attachments,
+                   flags, labels, size, priority,
+                   created_at, updated_at, last_synced, sync_version, is_draft, is_deleted
+            FROM messages
+            WHERE id = ?1
+        ")
+        .bind(id.to_string())
+        .fetch_optional(&self.pool)
+        .await?;
+
+        match row {
+            Some(row) => Ok(Some(self.row_to_stored_message(row)?)),
+            None => Ok(None),
+        }
+    }
+
     /// Search messages with full-text search
     pub async fn search_messages(
         &self,

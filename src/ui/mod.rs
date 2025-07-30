@@ -163,6 +163,7 @@ pub struct UI {
 }
 
 impl UI {
+    /// Create a new UI instance with default components and configuration
     pub fn new() -> Self {
         let mut ui = Self {
             focused_pane: FocusedPane::StartPage,
@@ -631,6 +632,7 @@ impl UI {
         self.update_navigation_hints();
     }
 
+    /// Get the currently focused pane
     pub fn focused_pane(&self) -> FocusedPane {
         self.focused_pane
     }

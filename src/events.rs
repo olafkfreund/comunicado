@@ -25,9 +25,13 @@ pub enum EventResult {
     ContactsAction(crate::contacts::ContactPopupAction), // Contact popup action
     AddToContacts(String, String), // Add email address and name to contacts
     EmailViewerStarted(String), // Email address of sender for contact lookup
+    ReplyToMessage(uuid::Uuid), // Message ID to reply to
+    ReplyAllToMessage(uuid::Uuid), // Message ID to reply all to
+    ForwardMessage(uuid::Uuid), // Message ID to forward
 }
 
 impl EventHandler {
+    /// Create a new event handler with default keyboard configuration
     pub fn new() -> Self {
         Self {
             should_quit: false,
@@ -236,6 +240,116 @@ impl EventHandler {
                 } else {
                     EventResult::Continue
                 }
+            }
+            KeyboardAction::ReplyEmail => {
+                if matches!(ui.focused_pane(), FocusedPane::MessageList | FocusedPane::ContentPreview) {
+                    if let Some(message) = ui.message_list().selected_message() {
+                        if let Some(message_id) = message.message_id {
+                            EventResult::ReplyToMessage(message_id)
+                        } else {
+                            EventResult::Continue
+                        }
+                    } else {
+                        EventResult::Continue
+                    }
+                } else {
+                    EventResult::Continue
+                }
+            }
+            KeyboardAction::ReplyAllEmail => {
+                if matches!(ui.focused_pane(), FocusedPane::MessageList | FocusedPane::ContentPreview) {
+                    if let Some(message) = ui.message_list().selected_message() {
+                        if let Some(message_id) = message.message_id {
+                            EventResult::ReplyAllToMessage(message_id)
+                        } else {
+                            EventResult::Continue
+                        }
+                    } else {
+                        EventResult::Continue
+                    }
+                } else {
+                    EventResult::Continue
+                }
+            }
+            KeyboardAction::ForwardEmail => {
+                if matches!(ui.focused_pane(), FocusedPane::MessageList | FocusedPane::ContentPreview) {
+                    if let Some(message) = ui.message_list().selected_message() {
+                        if let Some(message_id) = message.message_id {
+                            EventResult::ForwardMessage(message_id)
+                        } else {
+                            EventResult::Continue
+                        }
+                    } else {
+                        EventResult::Continue
+                    }
+                } else {
+                    EventResult::Continue
+                }
+            }
+            KeyboardAction::DeleteEmail => {
+                if matches!(ui.focused_pane(), FocusedPane::MessageList | FocusedPane::ContentPreview) {
+                    if let Some(message) = ui.message_list().selected_message() {
+                        // Mark message for deletion - this would need to be handled by the main app loop
+                        tracing::info!("Delete email action triggered for message: {}", message.subject);
+                        // TODO: Implement actual email deletion
+                        EventResult::Continue
+                    } else {
+                        EventResult::Continue
+                    }
+                } else {
+                    EventResult::Continue
+                }
+            }
+            KeyboardAction::ArchiveEmail => {
+                if matches!(ui.focused_pane(), FocusedPane::MessageList | FocusedPane::ContentPreview) {
+                    if let Some(message) = ui.message_list().selected_message() {
+                        tracing::info!("Archive email action triggered for message: {}", message.subject);
+                        // TODO: Implement actual email archiving
+                        EventResult::Continue
+                    } else {
+                        EventResult::Continue
+                    }
+                } else {
+                    EventResult::Continue
+                }
+            }
+            KeyboardAction::MarkAsRead => {
+                if matches!(ui.focused_pane(), FocusedPane::MessageList | FocusedPane::ContentPreview) {
+                    if let Some(message) = ui.message_list().selected_message() {
+                        tracing::info!("Mark as read action triggered for message: {}", message.subject);
+                        // TODO: Implement mark as read
+                        EventResult::Continue
+                    } else {
+                        EventResult::Continue
+                    }
+                } else {
+                    EventResult::Continue
+                }
+            }
+            KeyboardAction::MarkAsUnread => {
+                if matches!(ui.focused_pane(), FocusedPane::MessageList | FocusedPane::ContentPreview) {
+                    if let Some(message) = ui.message_list().selected_message() {
+                        tracing::info!("Mark as unread action triggered for message: {}", message.subject);
+                        // TODO: Implement mark as unread
+                        EventResult::Continue
+                    } else {
+                        EventResult::Continue
+                    }
+                } else {
+                    EventResult::Continue
+                }
+            }
+            KeyboardAction::NextMessage => {
+                if matches!(ui.focused_pane(), FocusedPane::MessageList | FocusedPane::ContentPreview) {
+                    ui.message_list_mut().handle_down();
+                }
+                EventResult::Continue
+            }
+            KeyboardAction::PreviousMessage => {
+                if matches!(ui.focused_pane(), FocusedPane::MessageList | FocusedPane::ContentPreview) {
+                    ui.message_list_mut().handle_up();
+                }
+                EventResult::Continue
             }
 
             // Account management
@@ -1655,6 +1769,7 @@ impl EventHandler {
         EventResult::Continue
     }
 
+    /// Check if the application should quit
     pub fn should_quit(&self) -> bool {
         self.should_quit
     }

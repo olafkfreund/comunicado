@@ -154,6 +154,7 @@ mod keymodifiers_serde {
 }
 
 impl KeyboardShortcut {
+    /// Create a new keyboard shortcut with the specified key and modifiers
     pub fn new(key: KeyCode, modifiers: KeyModifiers) -> Self {
         Self { key, modifiers }
     }
@@ -305,6 +306,10 @@ pub enum KeyboardAction {
     FolderRename,
     FolderDelete,
 
+    // Message navigation
+    NextMessage,
+    PreviousMessage,
+    
     // Email viewer actions
     EmailViewerReply,
     EmailViewerReplyAll,
@@ -448,6 +453,46 @@ impl KeyboardConfig {
             KeyboardShortcut::ctrl(KeyCode::Char('d')),
             KeyboardAction::ShowDraftList,
         );
+        
+        // Message actions - using context-aware shortcuts
+        self.shortcuts.insert(
+            KeyboardShortcut::ctrl(KeyCode::Char('r')),
+            KeyboardAction::ReplyEmail,
+        );
+        self.shortcuts.insert(
+            KeyboardShortcut::shift(KeyCode::Char('R')),
+            KeyboardAction::ReplyAllEmail,
+        );
+        self.shortcuts.insert(
+            KeyboardShortcut::ctrl(KeyCode::Char('f')),
+            KeyboardAction::ForwardEmail,
+        );
+        self.shortcuts.insert(
+            KeyboardShortcut::shift(KeyCode::Delete),
+            KeyboardAction::DeleteEmail,
+        );
+        self.shortcuts.insert(
+            KeyboardShortcut::shift(KeyCode::Char('A')),
+            KeyboardAction::ArchiveEmail,
+        );
+        self.shortcuts.insert(
+            KeyboardShortcut::shift(KeyCode::Char('U')),
+            KeyboardAction::MarkAsUnread,
+        );
+        self.shortcuts.insert(
+            KeyboardShortcut::shift(KeyCode::Char('M')), 
+            KeyboardAction::MarkAsRead,
+        );
+        
+        // Message navigation
+        self.shortcuts.insert(
+            KeyboardShortcut::simple(KeyCode::Char('n')),
+            KeyboardAction::NextMessage,
+        );
+        self.shortcuts.insert(
+            KeyboardShortcut::simple(KeyCode::Char('p')),
+            KeyboardAction::PreviousMessage,
+        );
 
         // Account management
         self.shortcuts.insert(
@@ -533,7 +578,7 @@ impl KeyboardConfig {
 
         // Folder operations
         self.shortcuts.insert(
-            KeyboardShortcut::simple(KeyCode::Char('n')),
+            KeyboardShortcut::ctrl(KeyCode::Char('n')),
             KeyboardAction::CreateFolder,
         );
         self.shortcuts.insert(
@@ -641,6 +686,42 @@ impl KeyboardConfig {
         );
         self.action_descriptions
             .insert(KeyboardAction::ShowDraftList, "Show draft list".to_string());
+        self.action_descriptions.insert(
+            KeyboardAction::ReplyEmail,
+            "Reply to selected message".to_string(),
+        );
+        self.action_descriptions.insert(
+            KeyboardAction::ReplyAllEmail,
+            "Reply to all recipients".to_string(),
+        );
+        self.action_descriptions.insert(
+            KeyboardAction::ForwardEmail,
+            "Forward selected message".to_string(),
+        );
+        self.action_descriptions.insert(
+            KeyboardAction::DeleteEmail,
+            "Delete selected message".to_string(),
+        );
+        self.action_descriptions.insert(
+            KeyboardAction::ArchiveEmail,
+            "Archive selected message".to_string(),
+        );
+        self.action_descriptions.insert(
+            KeyboardAction::MarkAsRead,
+            "Mark message as read".to_string(),
+        );
+        self.action_descriptions.insert(
+            KeyboardAction::MarkAsUnread,
+            "Mark message as unread".to_string(),
+        );
+        self.action_descriptions.insert(
+            KeyboardAction::NextMessage,
+            "Navigate to next message".to_string(),
+        );
+        self.action_descriptions.insert(
+            KeyboardAction::PreviousMessage,
+            "Navigate to previous message".to_string(),
+        );
 
         self.action_descriptions
             .insert(KeyboardAction::AddAccount, "Add new account".to_string());
@@ -841,7 +922,9 @@ impl KeyboardConfig {
             | KeyboardAction::DeleteEmail
             | KeyboardAction::ArchiveEmail
             | KeyboardAction::MarkAsRead
-            | KeyboardAction::MarkAsUnread => "Email".to_string(),
+            | KeyboardAction::MarkAsUnread
+            | KeyboardAction::NextMessage
+            | KeyboardAction::PreviousMessage => "Email".to_string(),
             KeyboardAction::AddAccount
             | KeyboardAction::RemoveAccount
             | KeyboardAction::RefreshAccount
