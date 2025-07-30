@@ -529,7 +529,8 @@ impl PerformanceEnhancedDatabase {
         
         // Keep only recent history (last 1000 queries)
         if monitor.query_history.len() > 1000 {
-            monitor.query_history.drain(0..monitor.query_history.len() - 1000);
+            let len = monitor.query_history.len();
+            monitor.query_history.drain(0..len - 1000);
         }
     }
 

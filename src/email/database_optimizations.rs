@@ -6,7 +6,7 @@
 
 use crate::email::database::{DatabaseResult, StoredMessage};
 use chrono::{DateTime, Utc};
-use sqlx::SqlitePool;
+use sqlx::{SqlitePool, Row};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -403,13 +403,12 @@ impl OptimizedDatabase {
             param_count += 1;
         }
         
-        // Add to sql_conditions
-        for condition in &condition_strings {
-            sql_conditions.push(condition.as_str());
-        }
-
         // Build the full query
         let base_query = if query.is_empty() {
+            // Add to sql_conditions
+            for condition in &condition_strings {
+                sql_conditions.push(condition.as_str());
+            }
             // No full-text search, just filtering
             format!(r"
                 SELECT m.id, m.account_id, m.folder_name, m.imap_uid, m.message_id, m.thread_id, m.in_reply_to, m.message_references,
@@ -425,7 +424,10 @@ impl OptimizedDatabase {
         } else {
             // Include full-text search
             condition_strings.push(format!("messages_fts MATCH ?{}", param_count));
-            sql_conditions.push(condition_strings.last().unwrap().as_str());
+            // Add to sql_conditions after the push
+            for condition in &condition_strings {
+                sql_conditions.push(condition.as_str());
+            }
             bind_params.push(query.to_string());
             param_count += 1;
 
@@ -501,7 +503,7 @@ impl OptimizedDatabase {
             let folder_name: String = row.get("folder_name");
             let latest_date_str: Option<String> = row.get("latest_message_date");
             let latest_date = latest_date_str
-                .and_then(|s| DateTime::parse_from_rfc3339(&s).ok())
+                .and_then(|s| DateTime::parse_from_rfc3339(s.as_str()).ok())
                 .map(|dt| dt.into());
 
             counts.insert(folder_name.clone(), FolderMessageCount {
@@ -739,7 +741,8 @@ impl DatabasePerformanceMonitor {
         
         // Keep only the most recent queries
         if query_stats.len() > self.max_recorded_queries {
-            query_stats.drain(0..query_stats.len() - self.max_recorded_queries);
+            let len = query_stats.len();
+            query_stats.drain(0..len - self.max_recorded_queries);
         }
     }
 

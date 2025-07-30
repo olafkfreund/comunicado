@@ -50,7 +50,7 @@ impl UnifiedNotificationManager {
         self.config = config.clone();
 
         if DesktopNotificationService::is_supported() {
-            let mut desktop_service = DesktopNotificationService::with_config(config);
+            let desktop_service = DesktopNotificationService::with_config(config);
             let receiver = self.unified_sender.subscribe();
 
             // Start the desktop notification service

@@ -88,9 +88,11 @@ impl ReminderScheduler {
                     
                     let reminder_event = NotificationEvent::Calendar {
                         event_type: crate::notifications::types::CalendarEventType::EventReminder {
-                            minutes_until: minutes as u32,
+                            minutes_until: minutes as i64,
                         },
-                        event: Some(event_clone),
+                        calendar_id: event_clone.calendar_id.clone(),
+                        event: Some(event_clone.clone()),
+                        event_id: Some(event_clone.id.clone()),
                         priority: if minutes == 0 { 
                             NotificationPriority::High 
                         } else { 
@@ -108,7 +110,7 @@ impl ReminderScheduler {
         }
         
         if !handles.is_empty() {
-            self.scheduled_reminders.write().await.insert(event.id, handles);
+            self.scheduled_reminders.write().await.insert(event.id.parse().unwrap_or_else(|_| Uuid::new_v4()), handles);
         }
         
         Ok(())
@@ -184,9 +186,9 @@ impl DesktopNotificationService {
         let event = NotificationEvent::Email {
             event_type: crate::notifications::types::EmailEventType::NewMessage,
             account_id: email.account_id.clone(),
-            folder_name: Some(email.folder.clone()),
+            folder_name: Some(email.folder_name.clone()),
             message: Some(email.clone()),
-            message_id: Some(email.id),
+            message_id: Some(email.id.to_string()),
             priority,
         };
         
@@ -203,13 +205,14 @@ impl DesktopNotificationService {
                     NotificationPriority::Normal
                 }
             }
-            crate::notifications::types::CalendarEventType::MeetingInvitation => NotificationPriority::High,
             _ => NotificationPriority::Normal,
         };
         
         let notification_event = NotificationEvent::Calendar {
             event_type,
+            calendar_id: event.calendar_id.clone(),
             event: Some(event.clone()),
+            event_id: Some(event.id.clone()),
             priority,
         };
         

@@ -491,7 +491,6 @@ impl AdvancedContactSearch {
         if let Some(synced_before) = criteria.synced_before {
             query.push_str(&format!(" AND c.synced_at <= ?{}", param_count));
             params.push(synced_before.to_rfc3339());
-            param_count += 1;
         }
 
         // Group by and sorting

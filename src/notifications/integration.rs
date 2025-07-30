@@ -102,8 +102,8 @@ impl NotificationIntegrationService {
         let tracking_info = EmailTrackingInfo {
             message_id: message.id,
             account_id: message.account_id.clone(),
-            folder: message.folder.clone(),
-            sender: message.sender.clone(),
+            folder: message.folder_name.clone(),
+            sender: message.from_addr.clone(),
             subject: message.subject.clone(),
             received_at: message.date,
             is_read: message.flags.iter().any(|flag| flag.as_str() == "\\Seen"),
@@ -117,9 +117,9 @@ impl NotificationIntegrationService {
         let event = NotificationEvent::Email {
             event_type: EmailEventType::NewMessage,
             account_id: message.account_id.clone(),
-            folder_name: Some(message.folder.clone()),
+            folder_name: Some(message.folder_name.clone()),
             message: Some(message.clone()),
-            message_id: Some(message.id),
+            message_id: Some(message.id.to_string()),
             priority,
         };
         
@@ -152,7 +152,7 @@ impl NotificationIntegrationService {
         
         // Track calendar event
         let tracking_info = CalendarTrackingInfo {
-            event_id: event.id,
+            event_id: event.id.parse().unwrap_or_else(|_| Uuid::new_v4()),
             title: event.title.clone(),
             start_time: event.start_time,
             end_time: event.end_time,
@@ -161,7 +161,7 @@ impl NotificationIntegrationService {
             last_reminder_sent: None,
         };
         
-        self.calendar_tracking.write().await.insert(event.id, tracking_info);
+        self.calendar_tracking.write().await.insert(event.id.parse().unwrap_or_else(|_| Uuid::new_v4()), tracking_info);
         
         // Schedule reminders
         self.desktop_service.schedule_calendar_reminders(event).await?;
@@ -172,7 +172,9 @@ impl NotificationIntegrationService {
                 let event_type = CalendarEventType::EventCreated;
                 let notification_event = NotificationEvent::Calendar {
                     event_type,
+                    calendar_id: event.calendar_id.clone(),
                     event: Some(event.clone()),
+                    event_id: Some(event.id.clone()),
                     priority,
                 };
                 
@@ -191,10 +193,12 @@ impl NotificationIntegrationService {
     
     /// Handle calendar event invitation
     pub async fn handle_calendar_invitation(&self, event: &Event) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let event_type = CalendarEventType::MeetingInvitation;
+        let event_type = CalendarEventType::EventCreated; // Use existing variant instead of non-existent MeetingInvitation
         let notification_event = NotificationEvent::Calendar {
             event_type,
+            calendar_id: event.calendar_id.clone(),
             event: Some(event.clone()),
+            event_id: Some(event.id.clone()),
             priority: NotificationPriority::High,
         };
         
@@ -209,6 +213,7 @@ impl NotificationIntegrationService {
     /// Handle system notification
     pub async fn handle_system_notification(&self, message: &str, priority: NotificationPriority) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let event = NotificationEvent::System {
+            event_type: crate::notifications::types::SystemEventType::ConfigurationChanged,
             message: message.to_string(),
             priority,
         };
@@ -255,7 +260,7 @@ impl NotificationIntegrationService {
         
         // Check sender (could be enhanced with VIP lists)
         // For now, just basic heuristics
-        if message.sender.contains("noreply") || message.sender.contains("no-reply") {
+        if message.from_addr.contains("noreply") || message.from_addr.contains("no-reply") {
             return false;
         }
         
@@ -324,7 +329,7 @@ impl NotificationIntegrationService {
                            (event_tracking.last_reminder_sent.is_none() || 
                             event_tracking.last_reminder_sent.unwrap() < reminder_time) {
                             
-                            let event_type = CalendarEventType::EventReminder { minutes_until: minutes_before };
+                            let event_type = CalendarEventType::EventReminder { minutes_until: minutes_before as i64 };
                             let priority = if minutes_before <= 5 {
                                 NotificationPriority::High
                             } else {

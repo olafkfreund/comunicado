@@ -72,9 +72,9 @@ impl Plugin for ExampleEmailPlugin {
         self.info.clone()
     }
 
-    fn initialize(&mut self, config: &PluginConfig) -> PluginResult<()> {
+    fn initialize(&mut self, _config: &PluginConfig) -> PluginResult<()> {
         // Load custom spam keywords from config if available
-        if let Ok(keywords) = config.get_config::<Vec<String>>("spam_keywords") {
+        if let Ok(keywords) = _config.get_config::<Vec<String>>("spam_keywords") {
             self.spam_keywords = keywords;
         }
         
@@ -237,7 +237,7 @@ impl UIPlugin for ExampleUIPlugin {
         &self,
         frame: &mut Frame,
         area: Rect,
-        context: &UIPluginContext,
+        _context: &UIPluginContext,
     ) -> PluginResult<UIComponentResult> {
         let text = format!("{} (Updates: {})", self.display_text, self.update_count);
         
@@ -323,7 +323,7 @@ impl Plugin for ExampleCalendarPlugin {
         self.info.clone()
     }
 
-    fn initialize(&mut self, config: &PluginConfig) -> PluginResult<()> {
+    fn initialize(&mut self, _config: &PluginConfig) -> PluginResult<()> {
         println!("Example Calendar Plugin initialized");
         Ok(())
     }
@@ -429,7 +429,7 @@ impl Plugin for ExampleNotificationPlugin {
         self.info.clone()
     }
 
-    fn initialize(&mut self, config: &PluginConfig) -> PluginResult<()> {
+    fn initialize(&mut self, _config: &PluginConfig) -> PluginResult<()> {
         println!("Example Notification Plugin initialized");
         Ok(())
     }

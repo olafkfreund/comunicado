@@ -3,7 +3,7 @@
 //! This module provides the high-level coordination between all major subsystems:
 //! email, calendar, notifications, plugins, search, and UI components.
 
-use crate::calendar::{Calendar, Event, EventStatus};
+use crate::calendar::{CalendarManager, Event, EventStatus};
 use crate::email::database::{EmailDatabase, StoredMessage};
 use crate::notifications::{NotificationIntegrationService, NotificationConfig};
 use crate::plugins::{PluginManager, PluginType};
@@ -252,7 +252,7 @@ pub struct SystemIntegrationService {
     
     // Core components
     email_database: Arc<EmailDatabase>,
-    calendar: Arc<Calendar>,
+    calendar: Arc<CalendarManager>,
     notification_service: Arc<NotificationIntegrationService>,
     plugin_manager: Arc<PluginManager>,
     
@@ -301,13 +301,22 @@ impl SystemIntegrationService {
         
         // Initialize core components
         let email_database = Arc::new(
-            EmailDatabase::new(&config.email_config.database_path)
+            EmailDatabase::new(config.email_config.database_path.to_str().unwrap())
                 .await
                 .map_err(|e| SystemIntegrationError::Email(e.to_string()))?
         );
         
+        // TODO: Calendar manager requires database and token manager - simplified for compilation
+        let calendar_db = crate::calendar::database::CalendarDatabase::new(
+            config.calendar_config.database_path.to_str().unwrap()
+        ).await.map_err(|e| SystemIntegrationError::Calendar(e.to_string()))?;
+        
+        let token_manager = Arc::new(crate::oauth2::token::TokenManager::new(
+            std::path::Path::new("./tokens")
+        ).map_err(|e| SystemIntegrationError::Calendar(e.to_string()))?);
+        
         let calendar = Arc::new(
-            Calendar::new(&config.calendar_config.database_path)
+            CalendarManager::new(Arc::new(calendar_db), token_manager)
                 .await
                 .map_err(|e| SystemIntegrationError::Calendar(e.to_string()))?
         );
@@ -316,7 +325,12 @@ impl SystemIntegrationService {
             NotificationIntegrationService::new(config.notification_config.clone())
         );
         
-        let plugin_manager = Arc::new(PluginManager::new());
+        let plugin_manager = PluginManager::new(
+            vec![config.plugin_config.plugin_directory.clone()],
+            "0.1.0".to_string(),
+            std::path::PathBuf::from("./data")
+        ).map_err(|e| SystemIntegrationError::Plugin(e.to_string()))?;
+        let plugin_manager = Arc::new(plugin_manager);
         
         // Initialize animation manager if enabled
         let animation_manager = if config.ui_config.enable_animations {
@@ -751,7 +765,7 @@ impl SystemIntegrationService {
     }
     
     /// Check calendar system health
-    async fn check_calendar_health(_calendar: &Calendar) -> bool {
+    async fn check_calendar_health(_calendar: &CalendarManager) -> bool {
         // This would perform actual health checks
         true // Placeholder
     }

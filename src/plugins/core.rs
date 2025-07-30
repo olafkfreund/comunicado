@@ -5,7 +5,6 @@
 
 use serde::{Deserialize, Serialize};
 use std::any::Any;
-use std::error::Error;
 use std::fmt;
 use thiserror::Error;
 use uuid::Uuid;
@@ -334,7 +333,7 @@ pub trait Plugin: Send + Sync {
 
     /// Initialize the plugin
     /// This is called once when the plugin is first loaded
-    fn initialize(&mut self, config: &PluginConfig) -> PluginResult<()> {
+    fn initialize(&mut self, _config: &PluginConfig) -> PluginResult<()> {
         // Default implementation does nothing
         Ok(())
     }
@@ -375,14 +374,14 @@ pub trait Plugin: Send + Sync {
 
     /// Validate plugin configuration
     /// This is called before applying new configuration
-    fn validate_config(&self, config: &serde_json::Value) -> PluginResult<()> {
+    fn validate_config(&self, _config: &serde_json::Value) -> PluginResult<()> {
         // Default implementation accepts any configuration
         Ok(())
     }
 
     /// Update plugin configuration
     /// This is called when the plugin configuration changes
-    fn update_config(&mut self, config: &PluginConfig) -> PluginResult<()> {
+    fn update_config(&mut self, _config: &PluginConfig) -> PluginResult<()> {
         // Default implementation does nothing
         Ok(())
     }

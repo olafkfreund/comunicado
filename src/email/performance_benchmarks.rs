@@ -665,6 +665,8 @@ impl PerformanceBenchmarkSuite {
                         size: 1024 + (i % 10000), // Variable size
                         content_id: None,
                         is_inline: false,
+                        data: None, // Empty attachment data for benchmarking
+                        file_path: None,
                     }]
                 } else {
                     Vec::new()

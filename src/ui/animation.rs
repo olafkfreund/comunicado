@@ -5,7 +5,7 @@
 
 use crate::ui::graphics::{GraphicsProtocol, ImageRenderer};
 use chrono::{DateTime, Utc};
-use image::{ImageError, DynamicImage, GenericImageView, AnimationDecoder as ImageAnimationDecoder};
+use image::{ImageError, DynamicImage, GenericImageView};
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
