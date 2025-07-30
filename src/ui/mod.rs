@@ -748,6 +748,7 @@ impl UI {
                     ("c".to_string(), "Compose".to_string()),
                     ("r".to_string(), "Reply".to_string()),
                     ("f".to_string(), "Forward".to_string()),
+                    ("F3".to_string(), "Calendar".to_string()),
                 ],
                 FocusedPane::ContentPreview => vec![
                     ("Tab".to_string(), "Switch".to_string()),
@@ -760,6 +761,7 @@ impl UI {
                     ("Home/End".to_string(), "Jump".to_string()),
                     ("r".to_string(), "Reply".to_string()),
                     ("f".to_string(), "Forward".to_string()),
+                    ("F3".to_string(), "Calendar".to_string()),
                 ],
                 FocusedPane::StartPage => vec![],
                 _ => vec![],
