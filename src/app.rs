@@ -1483,17 +1483,16 @@ impl App {
                 }
             }
 
-            // Draw UI
+            // Draw UI - show startup progress during startup, then normal UI
             terminal.draw(|f| {
                 if self.startup_progress_manager.is_visible() {
-                    // Show startup progress during startup
-                    self.ui.render_with_startup_progress(
-                        f, 
-                        &crate::keyboard::KeyboardManager::default(),
-                        Some(&self.startup_progress_manager)
-                    )
+                    // Show startup progress screen during startup
+                    use crate::startup::StartupProgressScreen;
+                    let progress_screen = StartupProgressScreen::new();
+                    let theme = crate::theme::Theme::default();
+                    progress_screen.render(f, f.size(), &self.startup_progress_manager, &theme);
                 } else {
-                    // After startup, use regular render
+                    // After startup, use regular UI
                     self.ui.render(f)
                 }
             })?;

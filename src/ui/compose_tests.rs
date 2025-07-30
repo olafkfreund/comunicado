@@ -255,7 +255,8 @@ async fn test_autocomplete_integration() {
     // (actual contact matching would require database setup)
     
     // Test @ symbol for contact lookup trigger
-    let action = compose_ui.handle_key(KeyCode::Char('@')).await;
+    let key_event = crossterm::event::KeyEvent::new(KeyCode::Char('@'), crossterm::event::KeyModifiers::empty());
+    let action = compose_ui.handle_key(key_event).await;
     assert_eq!(action, ComposeAction::Continue);
     assert_eq!(compose_ui.to_field, "test@");
 }
