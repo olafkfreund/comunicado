@@ -2808,7 +2808,7 @@ impl App {
 
         // STEP 2: Schedule background refresh (non-blocking)
         // Clone the necessary data for the background task
-        let account_id_bg = current_account_id.clone();
+        let _account_id_bg = current_account_id.clone();
         let folder_path_bg = folder_path.to_string();
         
         // TODO: In a full implementation, this would spawn a background task

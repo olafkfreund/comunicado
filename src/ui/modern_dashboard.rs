@@ -87,6 +87,7 @@ pub struct WeatherWidget {
     pub(crate) forecast: Vec<WeatherForecast>,
     pub(crate) animation_frame: usize,
     pub(crate) weather_icons: WeatherIcons,
+    #[allow(dead_code)]
     pub(crate) show_forecast: bool,
     pub(crate) update_time: Option<DateTime<Local>>,
 }
@@ -100,7 +101,9 @@ pub struct CurrentWeather {
     pub(crate) condition: WeatherCondition,
     pub(crate) humidity: u32,
     pub(crate) wind_speed: f64,
+    #[allow(dead_code)]
     pub(crate) wind_direction: u16,
+    #[allow(dead_code)]
     pub(crate) pressure: f64,
     pub(crate) visibility: f64,
     pub(crate) uv_index: u32,
@@ -124,11 +127,17 @@ pub enum WeatherCondition {
 /// Weather forecast item
 #[derive(Debug, Clone)]
 pub struct WeatherForecast {
+    #[allow(dead_code)]
     pub(crate) date: DateTime<Local>,
+    #[allow(dead_code)]
     pub(crate) high_temp: f64,
+    #[allow(dead_code)]
     pub(crate) low_temp: f64,
+    #[allow(dead_code)]
     pub(crate) condition: WeatherCondition,
+    #[allow(dead_code)]
     pub(crate) precipitation_chance: u32,
+    #[allow(dead_code)]
     pub(crate) wind_speed: f64,
 }
 
@@ -139,21 +148,29 @@ pub struct CalendarWidget {
     pub(crate) events: Vec<CalendarEvent>,
     pub(crate) view_mode: CalendarViewMode,
     pub(crate) selected_date: Option<DateTime<Local>>,
+    #[allow(dead_code)]
     pub(crate) show_week_numbers: bool,
+    #[allow(dead_code)]
     pub(crate) highlight_today: bool,
 }
 
 /// Calendar event with rich information
 #[derive(Debug, Clone)]
 pub struct CalendarEvent {
+    #[allow(dead_code)]
     pub(crate) id: String,
     pub(crate) title: String,
+    #[allow(dead_code)]
     pub(crate) description: Option<String>,
     pub(crate) start_time: DateTime<Local>,
+    #[allow(dead_code)]
     pub(crate) end_time: DateTime<Local>,
     pub(crate) event_type: EventType,
+    #[allow(dead_code)]
     pub(crate) location: Option<String>,
+    #[allow(dead_code)]
     pub(crate) attendees: Vec<String>,
+    #[allow(dead_code)]
     pub(crate) reminder: Option<Duration>,
     pub(crate) color: EventColor,
 }
@@ -206,12 +223,15 @@ pub struct ContactsWidget {
 /// Contact information with avatar
 #[derive(Debug, Clone)]
 pub struct Contact {
+    #[allow(dead_code)]
     pub(crate) id: String,
     pub(crate) name: String,
     pub(crate) email: String,
+    #[allow(dead_code)]
     pub(crate) phone: Option<String>,
     pub(crate) avatar: Option<String>,
     pub(crate) last_contact: Option<DateTime<Local>>,
+    #[allow(dead_code)]
     pub(crate) contact_frequency: u32,
     pub(crate) is_favorite: bool,
     pub(crate) status: ContactStatus,
@@ -241,6 +261,7 @@ pub struct StartupWidget {
     pub(crate) phases: Vec<StartupPhase>,
     pub(crate) current_phase: usize,
     pub(crate) overall_progress: f64,
+    #[allow(dead_code)]
     pub(crate) show_detailed_progress: bool,
     pub(crate) animation_progress: f64,
     pub(crate) estimated_time_remaining: Option<Duration>,
@@ -250,11 +271,13 @@ pub struct StartupWidget {
 #[derive(Debug, Clone)]
 pub struct StartupPhase {
     pub(crate) name: String,
+    #[allow(dead_code)]
     pub(crate) description: String,
     pub(crate) progress: f64,
     pub(crate) status: PhaseStatus,
     pub(crate) start_time: Option<Instant>,
     pub(crate) duration: Option<Duration>,
+    #[allow(dead_code)]
     pub(crate) substeps: Vec<String>,
 }
 
@@ -275,6 +298,7 @@ pub struct AnimationState {
     pub(crate) pulse_phase: f32,
     pub(crate) rotation_angle: f32,
     pub(crate) bounce_offset: f32,
+    #[allow(dead_code)]
     pub(crate) fade_alpha: f32,
     pub(crate) sparkle_positions: Vec<(f32, f32)>,
 }
@@ -300,6 +324,7 @@ pub enum DateFormat {
 #[derive(Debug, Clone)]
 pub struct WeatherIcons {
     pub(crate) clear_day: Vec<&'static str>,
+    #[allow(dead_code)]
     pub(crate) clear_night: Vec<&'static str>,
     pub(crate) cloudy: Vec<&'static str>,
     pub(crate) rain: Vec<&'static str>,
