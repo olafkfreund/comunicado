@@ -207,7 +207,7 @@ pub enum KeyboardContext {
     Search,
     /// Draft management
     DraftList,
-    /// Start page/dashboard
+    /// Start page
     StartPage,
     /// Email viewer (full screen)
     EmailViewer,

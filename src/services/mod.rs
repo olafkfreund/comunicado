@@ -1,7 +1,7 @@
 //! Services module for Comunicado
 //!
 //! This module contains various services that provide data and functionality
-//! for the start page dashboard and other application features.
+//! for the start page and other application features.
 
 pub mod system_stats;
 pub mod tasks;

@@ -1233,6 +1233,17 @@ impl EventHandler {
                 // g - Calendar (global access) - more terminal friendly than F3
                 ui.show_calendar();
             }
+            
+            // Navigation shortcuts between email/calendar/contacts
+            KeyCode::Char('e') => {
+                // e - Email interface (from any mode)
+                ui.show_email_interface();
+            }
+            KeyCode::Char('K') => {
+                // K - Contacts popup (K for Kontacts to avoid conflicts with C)
+                // TODO: Need to pass contacts_manager from app level
+                tracing::info!("Contacts shortcut pressed - contacts popup not implemented yet");
+            }
             KeyCode::Char('R') => {
                 // R - Rename (uppercase R)
                 match ui.focused_pane() {
@@ -1732,7 +1743,7 @@ impl EventHandler {
                 // TODO: Trigger account synchronization
             }
 
-            // Dashboard-specific actions
+            // Start page specific actions
             KeyCode::Char('t') if ui.focused_pane() != FocusedPane::FolderTree => {
                 // t: Tasks/Todos (switch to calendar for todo management)
                 ui.show_calendar();
@@ -1752,7 +1763,7 @@ impl EventHandler {
                 ui.show_email_interface();
             }
             KeyCode::Esc => {
-                // Esc: Nothing to escape from on dashboard, but could be used for other actions
+                // Esc: Nothing to escape from on start page, but could be used for other actions
                 // For now, just continue
             }
 
@@ -2056,6 +2067,23 @@ impl EventHandler {
             KeyCode::Esc => {
                 // Close contacts popup
                 ui.hide_contacts_popup();
+                EventResult::Continue
+            }
+            // Navigation shortcuts from contacts to other views
+            KeyCode::Char('e') => {
+                // e - Go to email interface
+                ui.hide_contacts_popup();
+                ui.show_email_interface();
+                EventResult::Continue
+            }
+            KeyCode::Char('g') => {
+                // g - Go to calendar
+                ui.hide_contacts_popup();
+                ui.show_calendar();
+                EventResult::Continue
+            }
+            KeyCode::Char('K') => {
+                // K - Stay in contacts (no-op, but documented for consistency)
                 EventResult::Continue
             }
             _ => {

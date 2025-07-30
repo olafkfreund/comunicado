@@ -216,94 +216,114 @@ impl App {
         self.initialization_in_progress = true;
         tracing::info!("Starting deferred initialization...");
 
-        // Show loading message in logs
-        tracing::info!("Initializing services...");
+        // Phase 1: Database (already completed during App::new)
+        let _ = self.startup_progress_manager.start_phase("Database");
+        let _ = self.startup_progress_manager.update_phase_progress("Database", 100.0, Some("✅ Database initialized".to_string()));
+        let _ = self.startup_progress_manager.complete_phase("Database");
 
-        // Initialize IMAP account manager
+        // Phase 2: IMAP Manager
+        let _ = self.startup_progress_manager.start_phase("IMAP Manager");
+        let _ = self.startup_progress_manager.update_phase_progress("IMAP Manager", 10.0, Some("🔄 Initializing IMAP account manager...".to_string()));
+        
         tracing::info!("Initializing IMAP account manager...");
         match tokio::time::timeout(
-            std::time::Duration::from_secs(30),
+            std::time::Duration::from_secs(5), // Reduced from 30s to 5s for faster testing
             self.initialize_imap_manager(),
         )
         .await
         {
             Ok(Ok(())) => {
                 tracing::info!("IMAP account manager initialized successfully");
+                let _ = self.startup_progress_manager.update_phase_progress("IMAP Manager", 100.0, Some("✅ IMAP Manager ready".to_string()));
+                let _ = self.startup_progress_manager.complete_phase("IMAP Manager");
             }
             Ok(Err(e)) => {
                 tracing::error!("Failed to initialize IMAP account manager: {}", e);
-                // Continue with other initialization
+                let _ = self.startup_progress_manager.fail_phase("IMAP Manager", format!("IMAP initialization failed: {}", e));
             }
             Err(_) => {
                 tracing::error!("IMAP account manager initialization timed out after 30 seconds");
-                // Continue with other initialization
+                let _ = self.startup_progress_manager.timeout_phase("IMAP Manager");
             }
         }
 
-        // Check for existing accounts and run setup wizard if needed
+        // Phase 3: Account Setup
+        let _ = self.startup_progress_manager.start_phase("Account Setup");
+        let _ = self.startup_progress_manager.update_phase_progress("Account Setup", 10.0, Some("🔄 Checking accounts and setup...".to_string()));
+        
         tracing::info!("Checking accounts and setup...");
         match tokio::time::timeout(
-            std::time::Duration::from_secs(20),
+            std::time::Duration::from_secs(3), // Reduced from 20s to 3s for faster testing
             self.check_accounts_and_setup(),
         )
         .await
         {
             Ok(Ok(())) => {
                 tracing::info!("Account check and setup completed");
+                let _ = self.startup_progress_manager.update_phase_progress("Account Setup", 100.0, Some("✅ Account setup complete".to_string()));
+                let _ = self.startup_progress_manager.complete_phase("Account Setup");
             }
             Ok(Err(e)) => {
                 tracing::error!("Failed to check accounts and setup: {}", e);
+                let _ = self.startup_progress_manager.fail_phase("Account Setup", format!("Account setup failed: {}", e));
             }
             Err(_) => {
                 tracing::error!("Account check and setup timed out after 20 seconds");
+                let _ = self.startup_progress_manager.timeout_phase("Account Setup");
             }
         }
 
-        // Initialize SMTP service and contacts manager
+        // Phase 4: Services
+        let _ = self.startup_progress_manager.start_phase("Services");
+        let _ = self.startup_progress_manager.update_phase_progress("Services", 10.0, Some("🔄 Initializing services...".to_string()));
+        
         tracing::info!("Initializing services...");
         match tokio::time::timeout(
-            std::time::Duration::from_secs(15),
+            std::time::Duration::from_secs(3), // Reduced from 15s to 3s for faster testing
             self.initialize_services(),
         )
         .await
         {
             Ok(Ok(())) => {
                 tracing::info!("Services initialized successfully");
+                let _ = self.startup_progress_manager.update_phase_progress("Services", 80.0, Some("⚙️ Initializing background processor...".to_string()));
+                
+                // Initialize background processor as part of services
+                match tokio::time::timeout(
+                    std::time::Duration::from_secs(2), // Reduced from 5s to 2s for faster testing
+                    self.initialize_background_processor(),
+                )
+                .await
+                {
+                    Ok(Ok(())) => {
+                        tracing::info!("Background processor initialized successfully");
+                        let _ = self.startup_progress_manager.update_phase_progress("Services", 100.0, Some("✅ All services ready".to_string()));
+                        let _ = self.startup_progress_manager.complete_phase("Services");
+                    }
+                    Ok(Err(e)) => {
+                        tracing::error!("Failed to initialize background processor: {}", e);
+                        let _ = self.startup_progress_manager.update_phase_progress("Services", 90.0, Some("⚠️ Background processor failed".to_string()));
+                        let _ = self.startup_progress_manager.complete_phase("Services"); // Still complete services phase
+                    }
+                    Err(_) => {
+                        tracing::error!("Background processor initialization timed out after 5 seconds");
+                        let _ = self.startup_progress_manager.update_phase_progress("Services", 90.0, Some("⏰ Background processor timeout".to_string()));
+                        let _ = self.startup_progress_manager.complete_phase("Services"); // Still complete services phase
+                    }
+                }
             }
             Ok(Err(e)) => {
                 tracing::error!("Failed to initialize services: {}", e);
+                let _ = self.startup_progress_manager.fail_phase("Services", format!("Services initialization failed: {}", e));
             }
             Err(_) => {
                 tracing::error!("Service initialization timed out after 15 seconds");
+                let _ = self.startup_progress_manager.timeout_phase("Services");
             }
         }
-
-        // Initialize background processor for non-blocking operations
-        tracing::info!("Initializing background processor...");
-        match tokio::time::timeout(
-            std::time::Duration::from_secs(5),
-            self.initialize_background_processor(),
-        )
-        .await
-        {
-            Ok(Ok(())) => {
-                tracing::info!("Background processor initialized successfully");
-            }
-            Ok(Err(e)) => {
-                tracing::error!("Failed to initialize background processor: {}", e);
-            }
-            Err(_) => {
-                tracing::error!("Background processor initialization timed out after 5 seconds");
-            }
-        }
-
-        // Dashboard services removed - using simple startup progress only
 
         self.initialization_complete = true;
         self.initialization_in_progress = false;
-        
-        // Force complete startup progress now that initialization is done
-        self.startup_progress_manager.force_complete();
         
         tracing::info!("Deferred initialization completed");
 
@@ -313,7 +333,7 @@ impl App {
         Ok(())
     }
 
-    // Dashboard services removed - using simple startup progress only
+    // Startup progress and initialization complete
 
     /// Update start page with fresh data
     pub async fn update_start_page_data(&mut self) -> Result<()> {

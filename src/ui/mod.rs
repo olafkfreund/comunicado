@@ -16,11 +16,6 @@ pub mod invitation_viewer;
 pub mod keyboard_shortcuts;
 pub mod layout;
 pub mod message_list;
-pub mod modern_dashboard;
-pub mod modern_dashboard_widgets;
-pub mod modern_dashboard_calendar;
-pub mod modern_dashboard_contacts;
-pub mod modern_dashboard_data;
 pub mod search;
 pub mod start_page;
 pub mod startup_progress;
@@ -57,7 +52,6 @@ use self::{
     layout::AppLayout,
     message_list::MessageList,
     start_page::StartPage,
-    modern_dashboard::ModernDashboard,
     status_bar::{
         CalendarStatusSegment, EmailStatusSegment, NavigationHintsSegment, StatusBar, SyncStatus,
         SystemInfoSegment,
@@ -143,7 +137,6 @@ pub struct UI {
     compose_ui: Option<ComposeUI>,
     draft_list: DraftListUI,
     start_page: StartPage,
-    modern_dashboard: ModernDashboard,
     calendar_ui: CalendarUI,
     event_form_ui: Option<crate::calendar::EventFormUI>,
     email_viewer: EmailViewer,
@@ -166,7 +159,7 @@ impl UI {
     /// Create a new UI instance with default components and configuration
     pub fn new() -> Self {
         let mut ui = Self {
-            focused_pane: FocusedPane::StartPage,
+            focused_pane: FocusedPane::AccountSwitcher,
             account_switcher: AccountSwitcher::new(),
             folder_tree: FolderTree::new(),
             message_list: MessageList::new(),
@@ -176,11 +169,10 @@ impl UI {
             status_bar: StatusBar::default(),
             email_updater: None,
             sync_progress_overlay: SyncProgressOverlay::new(),
-            mode: UIMode::StartPage,
+            mode: UIMode::Normal,
             compose_ui: None,
             draft_list: DraftListUI::new(),
             start_page: StartPage::new(),
-            modern_dashboard: ModernDashboard::new(),
             calendar_ui: CalendarUI::new(),
             event_form_ui: None,
             email_viewer: EmailViewer::new(),
@@ -698,7 +690,7 @@ impl UI {
                 FocusedPane::Calendar => "Calendar", // Shouldn't happen in normal mode
             },
             UIMode::Compose => "Compose Email",
-            UIMode::StartPage => "Dashboard",
+            UIMode::StartPage => "Start Page",
             UIMode::DraftList => "Draft Manager",
             UIMode::Calendar => "Calendar",
             UIMode::ContextAware => "Context-Aware View",
@@ -1680,15 +1672,6 @@ impl UI {
         &self.start_page
     }
 
-    /// Get mutable reference to modern dashboard for data updates
-    pub fn modern_dashboard_mut(&mut self) -> &mut ModernDashboard {
-        &mut self.modern_dashboard
-    }
-
-    /// Get reference to modern dashboard
-    pub fn modern_dashboard(&self) -> &ModernDashboard {
-        &self.modern_dashboard
-    }
 
     /// Handle start page navigation
     pub fn handle_start_page_navigation(&mut self, direction: StartPageNavigation) {

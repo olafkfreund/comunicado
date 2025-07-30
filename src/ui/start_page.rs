@@ -111,7 +111,7 @@ pub struct QuickAction {
     pub shortcut: Option<String>,
 }
 
-/// Start page dashboard state
+/// Start page state
 pub struct StartPage {
     weather: Option<WeatherInfo>,
     tasks: Vec<TaskItem>,
@@ -225,7 +225,7 @@ impl StartPage {
         self.quick_actions.iter().find(|a| a.id == action_id)
     }
 
-    /// Render the start page dashboard - with optional startup progress
+    /// Render the start page - with optional startup progress
     pub fn render(&mut self, f: &mut Frame, area: Rect, theme: &Theme) {
         // Main layout for start page
         let main_chunks = Layout::default()

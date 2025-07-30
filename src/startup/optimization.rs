@@ -85,7 +85,7 @@ pub struct UiPreferences {
     pub show_folder_tree: bool,
     pub show_preview_pane: bool,
     pub font_size: u16,
-    pub dashboard_widgets: Vec<String>,
+    pub start_page_widgets: Vec<String>,
 }
 
 /// Performance metrics for optimization
@@ -159,7 +159,7 @@ impl Default for UiPreferences {
             show_folder_tree: true,
             show_preview_pane: true,
             font_size: 14,
-            dashboard_widgets: vec![
+            start_page_widgets: vec![
                 "clock".to_string(),
                 "system_monitor".to_string(),
                 "calendar".to_string(),
@@ -635,7 +635,7 @@ mod tests {
         assert!(prefs.show_folder_tree);
         assert!(prefs.show_preview_pane);
         assert_eq!(prefs.font_size, 14);
-        assert_eq!(prefs.dashboard_widgets.len(), 3);
+        assert_eq!(prefs.start_page_widgets.len(), 3);
     }
 
     #[test]

@@ -2,7 +2,7 @@ use anyhow::Result;
 use clap::Parser;
 use comunicado::app::App;
 use comunicado::cli::{Cli, CliHandler};
-use comunicado::startup::{StartupProgressManager, StartupProgressScreen};
+use comunicado::startup::StartupProgressScreen;
 use comunicado::theme::Theme;
 use crossterm::{
     execute,
@@ -53,20 +53,44 @@ async fn main() -> Result<()> {
     print!("Initializing Comunicado...\n");
     std::io::Write::flush(&mut std::io::stdout()).unwrap();
     
-    // Create progress display components
-    let mut progress_manager = StartupProgressManager::new();
+    // Create progress display components  
     let progress_screen = StartupProgressScreen::new();
     let theme = Theme::default();
     
     // Setup terminal for progress display (only if stdout is a TTY)
     let use_progress_ui = std::io::stdout().is_tty();
     let mut terminal = if use_progress_ui {
-        enable_raw_mode()?;
-        let mut stdout = io::stdout();
-        execute!(stdout, EnterAlternateScreen)?;
-        let backend = CrosstermBackend::new(stdout);
-        Some(Terminal::new(backend)?)
+        match enable_raw_mode() {
+            Ok(()) => {
+                let mut stdout = io::stdout();
+                match execute!(stdout, EnterAlternateScreen) {
+                    Ok(()) => {
+                        let backend = CrosstermBackend::new(stdout);
+                        match Terminal::new(backend) {
+                            Ok(term) => Some(term),
+                            Err(e) => {
+                                tracing::warn!("Failed to create terminal: {}", e);
+                                println!("Terminal UI unavailable, using text progress...");
+                                None
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!("Failed to enter alternate screen: {}", e);
+                        println!("Terminal UI unavailable, using text progress...");
+                        let _ = disable_raw_mode(); // Clean up
+                        None
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::warn!("Failed to enable raw mode: {}", e);
+                println!("Terminal UI unavailable, using text progress...");
+                None
+            }
+        }
     } else {
+        println!("No TTY detected, using text progress...");
         None
     };
 
@@ -76,43 +100,27 @@ async fn main() -> Result<()> {
     let mut app = App::new()?;
 
     // Helper function to update progress display
-    let update_progress = |progress_manager: &StartupProgressManager, terminal: &mut Option<Terminal<CrosstermBackend<std::io::Stdout>>>| -> Result<()> {
+    let update_progress = |app: &App, terminal: &mut Option<Terminal<CrosstermBackend<std::io::Stdout>>>| -> Result<()> {
+        let progress_manager = app.startup_progress_manager();
         if let Some(ref mut term) = terminal {
-            term.draw(|frame| {
+            if let Err(e) = term.draw(|frame| {
                 let area = frame.size();
                 progress_screen.render(frame, area, progress_manager, &theme);
-            })?;
+            }) {
+                tracing::warn!("Failed to update progress display: {}", e);
+                // Continue without visual progress
+            }
+        } else {
+            // No terminal available, log progress instead
+            if progress_manager.is_visible() {
+                let progress = progress_manager.overall_progress_percentage();
+                if let Some(current_phase) = progress_manager.current_phase() {
+                    println!("Progress: {:.1}% - {}", progress, current_phase.name());
+                }
+            }
         }
         Ok(())
     };
-
-    // Phase 1: Initialize database connection
-    if let Err(e) = progress_manager.start_phase("Database") {
-        tracing::warn!("Failed to start Database phase: {}", e);
-    }
-    update_progress(&progress_manager, &mut terminal)?;
-    
-    match app.initialize_database().await {
-        Ok(()) => {
-            if let Err(e) = progress_manager.complete_phase("Database") {
-                tracing::warn!("Failed to complete Database phase: {}", e);
-            }
-        }
-        Err(e) => {
-            if let Err(err) = progress_manager.fail_phase("Database", format!("Database initialization failed: {}", e)) {
-                tracing::warn!("Failed to mark Database phase as failed: {}", err);
-            }
-            update_progress(&progress_manager, &mut terminal)?;
-            
-            // Restore terminal before exiting
-            if let Some(mut term) = terminal {
-                disable_raw_mode()?;
-                execute!(term.backend_mut(), LeaveAlternateScreen)?;
-            }
-            return Err(e);
-        }
-    }
-    update_progress(&progress_manager, &mut terminal)?;
 
     // Check for --clean-content flag to reprocess database content (raw args check)
     let args: Vec<String> = std::env::args().collect();
@@ -140,105 +148,29 @@ async fn main() -> Result<()> {
         return Ok(());
     }
 
-    // Phases 2-5: Initialize services with reduced timeouts for faster startup
-    tracing::info!("Starting optimized initialization of optional services...");
+    // Perform initialization
+    tracing::info!("Starting application initialization...");
     
-    // Helper macro to avoid repetitive error handling with real-time progress updates
-    macro_rules! init_phase {
-        ($phase_name:expr, $timeout_secs:expr, $init_fn:expr) => {
-            if let Err(e) = progress_manager.start_phase($phase_name) {
-                tracing::warn!("Failed to start {} phase: {}", $phase_name, e);
-            }
-            update_progress(&progress_manager, &mut terminal)?;
-            
-            // Add initial progress log
-            progress_manager.add_phase_log($phase_name, format!("📡 Connecting to services..."));
-            update_progress(&progress_manager, &mut terminal)?;
-            
-            // Spawn a task to provide progress updates during initialization
-            let mut progress_interval = tokio::time::interval(std::time::Duration::from_millis(500));
-            let mut progress_value = 10.0;
-            
-            let init_future = $init_fn;
-            tokio::pin!(init_future);
-            
-            loop {
-                tokio::select! {
-                    result = &mut init_future => {
-                        match result {
-                            Ok(()) => {
-                                tracing::info!("{} initialized successfully", $phase_name);
-                                progress_manager.update_phase_progress($phase_name, 100.0, Some("✅ Initialization complete".to_string())).ok();
-                                update_progress(&progress_manager, &mut terminal)?;
-                                tokio::time::sleep(std::time::Duration::from_millis(200)).await; // Brief pause to show completion
-                                if let Err(e) = progress_manager.complete_phase($phase_name) {
-                                    tracing::warn!("Failed to complete {} phase: {}", $phase_name, e);
-                                }
-                            }
-                            Err(e) => {
-                                tracing::error!("Failed to initialize {}: {}", $phase_name, e);
-                                progress_manager.add_phase_log($phase_name, format!("❌ Error: {}", e));
-                                update_progress(&progress_manager, &mut terminal)?;
-                                if let Err(err) = progress_manager.fail_phase($phase_name, format!("{} initialization failed: {}", $phase_name, e)) {
-                                    tracing::warn!("Failed to mark {} phase as failed: {}", $phase_name, err);
-                                }
-                            }
-                        }
-                        break;
-                    }
-                    _ = progress_interval.tick() => {
-                        progress_value = (progress_value + 15.0_f64).min(90.0_f64); // Increment progress but cap at 90%
-                        let log_messages = [
-                            "🔗 Establishing connections...",
-                            "🔍 Verifying configurations...", 
-                            "⚙️ Loading components...",
-                            "🎯 Finalizing setup..."
-                        ];
-                        let log_index = ((progress_value / 25.0) as usize).min(log_messages.len() - 1);
-                        let _ = progress_manager.update_phase_progress($phase_name, progress_value, Some(log_messages[log_index].to_string()));
-                        update_progress(&progress_manager, &mut terminal)?;
-                    }
-                    _ = tokio::time::sleep(std::time::Duration::from_secs($timeout_secs)) => {
-                        tracing::error!("{} initialization timed out after {} seconds", $phase_name, $timeout_secs);
-                        progress_manager.add_phase_log($phase_name, format!("⏰ Timeout after {}s", $timeout_secs));
-                        update_progress(&progress_manager, &mut terminal)?;
-                        if let Err(e) = progress_manager.timeout_phase($phase_name) {
-                            tracing::warn!("Failed to mark {} phase as timed out: {}", $phase_name, e);
-                        }
-                        break;
-                    }
-                }
-            }
-        };
+    // Show initial progress
+    update_progress(&app, &mut terminal)?;
+    
+    // Perform the initialization - this now handles progress tracking internally
+    if let Err(e) = app.perform_deferred_initialization().await {
+        tracing::error!("Application initialization failed: {}", e);
+        
+        // Restore terminal before exiting
+        if let Some(mut term) = terminal {
+            disable_raw_mode()?;
+            execute!(term.backend_mut(), LeaveAlternateScreen)?;
+        }
+        return Err(e);
     }
     
-    // Phase 2: IMAP Manager (reduced timeout from 10s to 5s)
-    {
-        let init_fn = app.initialize_imap_manager();
-        init_phase!("IMAP Manager", 5, init_fn);
-    }
-    
-    // Phase 3: Account Setup (reduced timeout from 15s to 8s)
-    {
-        let init_fn = app.check_accounts_and_setup();
-        init_phase!("Account Setup", 8, init_fn);
-    }
-    
-    // Phase 4: Services (reduced timeout from 5s to 3s)
-    {
-        let init_fn = app.initialize_services();
-        init_phase!("Services", 3, init_fn);
-    }
-    
-    // Dashboard services removed - using simple startup progress only
-    
-    update_progress(&progress_manager, &mut terminal)?;
-
-    // Startup is now complete - the StartupProgressManager automatically handles completion when all phases are done
-    update_progress(&progress_manager, &mut terminal)?;
+    // Show final progress state
+    update_progress(&app, &mut terminal)?;
     
     // Brief pause to show completion
-    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(800)).await;
     
     // Restore terminal before starting main app
     if let Some(mut term) = terminal {

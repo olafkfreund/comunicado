@@ -272,10 +272,6 @@ mod tests {
                 timeout: Duration::from_secs(5),
                 status: PhaseStatus::Pending,
             },
-            StartupPhase::DashboardServices {
-                timeout: Duration::from_secs(3),
-                status: PhaseStatus::Pending,
-            },
         ];
 
         assert_eq!(phases.len(), 4);
@@ -289,6 +285,5 @@ mod tests {
         assert!(!phases[1].is_critical());
         assert!(!phases[2].is_critical());
         assert!(!phases[3].is_critical());
-        assert!(!phases[4].is_critical());
     }
 }

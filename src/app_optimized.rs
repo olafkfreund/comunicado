@@ -102,11 +102,11 @@ impl OptimizedApp {
         let startup_time = Instant::now();
         
         // Initialize core components immediately (fast)
-        let mut ui = UI::new();
+        let ui = UI::new();
         let theme = Theme::default();
         
-        // Initialize dashboard with real data (no mock data)
-        ui.modern_dashboard_mut().initialize_with_real_data();
+        // Initialize start page with real data (no mock data)
+        // Note: Start page initialization is handled in StartPage::new()
         
         // Set up startup optimization
         let startup_config = StartupConfig {
