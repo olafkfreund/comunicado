@@ -142,16 +142,24 @@ impl SyncEngine {
 
         // Get folder list
         let folders = client.list_folders("", "*").await?;
-        info!("Found {} folders for account {}", folders.len(), account_id);
+        info!("🗂️  Found {} folders for account {}", folders.len(), account_id);
+        
+        // Log all folder names for debugging
+        for folder in &folders {
+            info!("📁 Folder found: '{}' (messages: {:?})", folder.name, folder.exists);
+        }
 
         // Sync each folder
         for folder in folders {
+            info!("🔄 Starting sync for folder: '{}'", folder.name);
             if let Err(e) = self
                 .sync_folder(account_id.clone(), &mut client, &folder, strategy.clone())
                 .await
             {
-                error!("Failed to sync folder {}: {}", folder.name, e);
+                error!("❌ Failed to sync folder {}: {}", folder.name, e);
                 // Continue with other folders
+            } else {
+                info!("✅ Successfully synced folder: '{}'", folder.name);
             }
         }
 
@@ -306,10 +314,15 @@ impl SyncEngine {
         // Fetch all message UIDs first
         let search_results = client.search(&SearchCriteria::All).await?;
         info!(
-            "Found {} messages in folder {}",
+            "📊 Found {} messages in folder '{}' using SearchCriteria::All",
             search_results.len(),
             folder.name
         );
+        
+        if search_results.is_empty() {
+            info!("⚠️  No messages found in folder '{}' - skipping", folder.name);
+            return Ok(());
+        }
 
         // Batch process messages to avoid overwhelming the server
         const BATCH_SIZE: usize = 50;
@@ -455,6 +468,16 @@ impl SyncEngine {
 
         // Similar to incremental sync but only fetch headers
         let search_results = client.search(&SearchCriteria::All).await?;
+        info!(
+            "📊 HeadersOnly sync found {} messages in folder '{}'",
+            search_results.len(),
+            folder.name
+        );
+        
+        if search_results.is_empty() {
+            info!("⚠️  No messages found in folder '{}' during HeadersOnly sync", folder.name);
+            return Ok(());
+        }
 
         // Fetch only headers for efficiency
         const BATCH_SIZE: usize = 100; // Larger batches for headers-only

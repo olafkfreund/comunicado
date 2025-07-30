@@ -162,7 +162,7 @@ impl App {
             account_id: "system".to_string(),
             folder_name: None,
             task_type: BackgroundTaskType::AccountSync {
-                strategy: crate::email::sync_engine::SyncStrategy::HeadersOnly,
+                strategy: crate::email::sync_engine::SyncStrategy::Full,
             },
             created_at: Instant::now(),
             estimated_duration: Some(Duration::from_secs(3)),

@@ -114,7 +114,7 @@ impl FlashFastIntegration {
             ],
             auto_sync_interval: Duration::from_secs(30), // More frequent checks
             max_concurrent_syncs: 5,  // More parallel operations
-            sync_strategy: crate::email::sync_engine::SyncStrategy::HeadersOnly,
+            sync_strategy: crate::email::sync_engine::SyncStrategy::Full,
             aggressive_preload: true,
         };
 

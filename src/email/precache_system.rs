@@ -176,7 +176,7 @@ impl EmailPrecacheSystem {
             account_id: account_id.to_string(),
             folder_name: None,
             task_type: BackgroundTaskType::AccountSync {
-                strategy: SyncStrategy::HeadersOnly, // Fast initial load
+                strategy: SyncStrategy::Full, // Complete initial load
             },
             created_at: Instant::now(),
             estimated_duration: Some(Duration::from_secs(10)),
