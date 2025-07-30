@@ -935,7 +935,7 @@ impl App {
         // Convert AccountConfig to AccountItem for the UI
         let account_items: Vec<crate::ui::AccountItem> = accounts
             .iter()
-            .map(|config| crate::ui::AccountItem::from_config(config))
+            .map(crate::ui::AccountItem::from_config)
             .collect();
 
         // Set accounts in the UI
@@ -1159,7 +1159,7 @@ impl App {
             );
 
             if message_count > 0 {
-                let sequence_set = format!("1:{}", message_count);
+                let sequence_set = format!("1:{message_count}");
                 let fetch_items = vec!["UID", "FLAGS", "ENVELOPE", "BODY.PEEK[]", "BODYSTRUCTURE"];
 
                 let messages = client
@@ -1537,6 +1537,18 @@ impl App {
                         EventResult::ForwardMessage(message_id) => {
                             self.handle_forward_message(message_id).await?;
                         }
+                        EventResult::ViewSenderContact(email) => {
+                            self.handle_view_sender_contact(&email).await?;
+                        }
+                        EventResult::EditSenderContact(email) => {
+                            self.handle_edit_sender_contact(&email).await?;
+                        }
+                        EventResult::RemoveSenderFromContacts(email) => {
+                            self.handle_remove_sender_from_contacts(&email).await?;
+                        }
+                        EventResult::ContactQuickActions(email) => {
+                            self.handle_contact_quick_actions(&email).await?;
+                        }
                     }
 
                     // Check for quit command
@@ -1657,8 +1669,12 @@ impl App {
 
             match contacts_init_result {
                 Ok(Ok(Some(contacts_manager))) => {
-                    self.contacts_manager = Some(contacts_manager);
-                    tracing::info!("Contacts manager initialized successfully");
+                    self.contacts_manager = Some(contacts_manager.clone());
+                    
+                    // Set up sender recognition in UI
+                    self.ui.set_contacts_manager(contacts_manager);
+                    
+                    tracing::info!("Contacts manager initialized successfully with sender recognition");
                 }
                 Ok(Ok(None)) => {
                     tracing::warn!("Contacts manager initialization skipped due to errors");
@@ -3193,7 +3209,7 @@ impl App {
         }
 
         // STEP 2: Queue background refresh task using the background processor
-        if let Some(folder_name) = folder_path.split('/').last() {
+        if let Some(folder_name) = folder_path.split('/').next_back() {
             use crate::performance::background_processor::{BackgroundTask, BackgroundTaskType, TaskPriority};
             
             use uuid::Uuid;
@@ -3256,7 +3272,7 @@ impl App {
         tracing::info!("Force refreshing folder: {} for account: {}", folder_path, current_account_id);
 
         // Queue a high-priority background task for full IMAP sync
-        if let Some(folder_name) = folder_path.split('/').last() {
+        if let Some(folder_name) = folder_path.split('/').next_back() {
             use crate::performance::background_processor::{BackgroundTask, BackgroundTaskType, TaskPriority};
             use crate::email::sync_engine::SyncStrategy;
             use uuid::Uuid;
@@ -3337,7 +3353,7 @@ impl App {
             }
         };
 
-        let selected_folder = self.ui.folder_tree().selected_folder().map(|f| f.clone());
+        let selected_folder = self.ui.folder_tree().selected_folder().cloned();
 
         match operation {
             FolderOperation::Refresh => {
@@ -3712,7 +3728,7 @@ impl App {
         tracing::info!("Auto-syncing {} accounts", account_ids.len());
 
         // Get the current account to reload its messages after sync
-        let current_account_id = self.ui.get_current_account_id().map(|s| s.clone());
+        let current_account_id = self.ui.get_current_account_id().cloned();
         let current_folder = self
             .ui
             .folder_tree()
@@ -3780,7 +3796,7 @@ impl App {
             let message = if new_email_count == 1 {
                 "📧 1 new email received".to_string()
             } else {
-                format!("📧 {} new emails received", new_email_count)
+                format!("📧 {new_email_count} new emails received")
             };
 
             tracing::info!("Auto-sync found {} new emails", new_email_count);
@@ -3887,6 +3903,159 @@ impl App {
             }
         } else {
             tracing::warn!("Contacts manager not initialized, cannot add to contacts");
+        }
+        
+        Ok(())
+    }
+
+    /// Handle view sender contact request
+    async fn handle_view_sender_contact(&mut self, email: &str) -> Result<()> {
+        if let Some(ref contacts_manager) = self.contacts_manager {
+            tracing::debug!("Looking up contact details for: {}", email);
+            
+            match contacts_manager.find_contact_by_email(email).await {
+                Ok(Some(contact)) => {
+                    tracing::info!("Found contact for {}: {}", email, contact.display_name);
+                    
+                    // Show contact details in contacts popup with the specific contact selected
+                    self.ui.show_contacts_popup_with_contact(contacts_manager.clone(), contact);
+                }
+                Ok(None) => {
+                    tracing::info!("No contact found for email: {}", email);
+                    self.ui.show_notification(
+                        format!("No contact found for {}", email),
+                        Duration::from_secs(3),
+                    );
+                }
+                Err(e) => {
+                    tracing::error!("Failed to lookup contact for {}: {}", email, e);
+                    self.ui.show_notification(
+                        format!("Failed to lookup contact: {}", e),
+                        Duration::from_secs(5),
+                    );
+                }
+            }
+        } else {
+            tracing::warn!("Contacts manager not initialized, cannot view contact");
+        }
+        
+        Ok(())
+    }
+
+    /// Handle edit sender contact request
+    async fn handle_edit_sender_contact(&mut self, email: &str) -> Result<()> {
+        if let Some(ref contacts_manager) = self.contacts_manager {
+            tracing::debug!("Looking up contact to edit for: {}", email);
+            
+            match contacts_manager.find_contact_by_email(email).await {
+                Ok(Some(contact)) => {
+                    tracing::info!("Found contact to edit for {}: {}", email, contact.display_name);
+                    
+                    // Show contact edit dialog/popup
+                    self.ui.show_contact_edit_dialog(contacts_manager.clone(), contact);
+                }
+                Ok(None) => {
+                    tracing::info!("No contact found to edit for email: {}", email);
+                    self.ui.show_notification(
+                        format!("No contact found for {} to edit", email),
+                        Duration::from_secs(3),
+                    );
+                }
+                Err(e) => {
+                    tracing::error!("Failed to lookup contact to edit for {}: {}", email, e);
+                    self.ui.show_notification(
+                        format!("Failed to lookup contact: {}", e),
+                        Duration::from_secs(5),
+                    );
+                }
+            }
+        } else {
+            tracing::warn!("Contacts manager not initialized, cannot edit contact");
+        }
+        
+        Ok(())
+    }
+
+    /// Handle remove sender from contacts request
+    async fn handle_remove_sender_from_contacts(&mut self, email: &str) -> Result<()> {
+        if let Some(ref contacts_manager) = self.contacts_manager {
+            tracing::debug!("Looking up contact to remove for: {}", email);
+            
+            match contacts_manager.find_contact_by_email(email).await {
+                Ok(Some(contact)) => {
+                    if let Some(contact_id) = contact.id {
+                        tracing::info!("Removing contact for {}: {}", email, contact.display_name);
+                        
+                        match contacts_manager.delete_contact(contact_id).await {
+                            Ok(_) => {
+                                self.ui.show_notification(
+                                    format!("Removed {} from contacts", contact.display_name),
+                                    Duration::from_secs(3),
+                                );
+                            }
+                            Err(e) => {
+                                tracing::error!("Failed to remove contact: {}", e);
+                                self.ui.show_notification(
+                                    format!("Failed to remove contact: {}", e),
+                                    Duration::from_secs(5),
+                                );
+                            }
+                        }
+                    } else {
+                        tracing::warn!("Contact found but has no ID, cannot remove");
+                        self.ui.show_notification(
+                            "Cannot remove contact: invalid contact data".to_string(),
+                            Duration::from_secs(5),
+                        );
+                    }
+                }
+                Ok(None) => {
+                    tracing::info!("No contact found to remove for email: {}", email);
+                    self.ui.show_notification(
+                        format!("No contact found for {} to remove", email),
+                        Duration::from_secs(3),
+                    );
+                }
+                Err(e) => {
+                    tracing::error!("Failed to lookup contact to remove for {}: {}", email, e);
+                    self.ui.show_notification(
+                        format!("Failed to lookup contact: {}", e),
+                        Duration::from_secs(5),
+                    );
+                }
+            }
+        } else {
+            tracing::warn!("Contacts manager not initialized, cannot remove contact");
+        }
+        
+        Ok(())
+    }
+
+    /// Handle contact quick actions menu request
+    async fn handle_contact_quick_actions(&mut self, email: &str) -> Result<()> {
+        if let Some(ref contacts_manager) = self.contacts_manager {
+            tracing::debug!("Showing quick actions menu for: {}", email);
+            
+            // Show context menu with available actions based on whether contact exists
+            match contacts_manager.find_contact_by_email(email).await {
+                Ok(Some(contact)) => {
+                    // Contact exists - show edit/remove/view actions
+                    self.ui.show_contact_context_menu(email.to_string(), Some(contact));
+                }
+                Ok(None) => {
+                    // No contact - show add action
+                    self.ui.show_contact_context_menu(email.to_string(), None);
+                }
+                Err(e) => {
+                    tracing::error!("Failed to lookup contact for quick actions: {}", e);
+                    self.ui.show_notification(
+                        format!("Failed to check contact status: {}", e),
+                        Duration::from_secs(5),
+                    );
+                }
+            }
+        } else {
+            tracing::warn!("Contacts manager not initialized, cannot show quick actions");
         }
         
         Ok(())

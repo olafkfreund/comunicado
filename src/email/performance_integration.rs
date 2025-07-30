@@ -10,6 +10,9 @@ use crate::email::database_optimizations::{
     SortDirection, QueryStats, BatchOperationResult, FolderMessageCount,
 };
 
+#[cfg(test)]
+use crate::email::{BenchmarkConfig, BenchmarkResults, PerformanceBenchmarkSuite};
+
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use std::collections::HashMap;

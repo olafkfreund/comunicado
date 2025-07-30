@@ -921,6 +921,17 @@ impl UI {
         self.folder_tree.set_database(database);
     }
 
+    /// Set the contacts manager and initialize sender recognition
+    pub fn set_contacts_manager(&mut self, contacts_manager: Arc<crate::contacts::ContactsManager>) {
+        use crate::contacts::SenderRecognitionService;
+        
+        // Create sender recognition service
+        let sender_recognition = Arc::new(SenderRecognitionService::new(contacts_manager));
+        
+        // Set it up in the message list
+        self.message_list.set_sender_recognition(sender_recognition);
+    }
+
     /// Set the notification manager for real-time updates
     pub fn set_notification_manager(
         &mut self,
@@ -1872,6 +1883,11 @@ impl UI {
         self.email_viewer.handle_key(key)
     }
 
+    /// Get reference to email viewer
+    pub fn email_viewer(&self) -> &crate::ui::email_viewer::EmailViewer {
+        &self.email_viewer
+    }
+
     /// Get mutable reference to email viewer
     pub fn email_viewer_mut(&mut self) -> &mut crate::ui::email_viewer::EmailViewer {
         &mut self.email_viewer
@@ -2162,6 +2178,58 @@ impl UI {
     /// Get selected contact from popup
     pub fn get_selected_contact_from_popup(&self) -> Option<&crate::contacts::Contact> {
         self.contacts_popup.as_ref()?.get_selected_contact()
+    }
+
+    /// Show contacts popup with a specific contact pre-selected
+    pub fn show_contacts_popup_with_contact(
+        &mut self,
+        contacts_manager: Arc<crate::contacts::ContactsManager>,
+        contact: crate::contacts::Contact,
+    ) {
+        let mut contacts_popup = crate::contacts::ContactPopup::new(contacts_manager);
+        contacts_popup.show_contact_details(contact);
+        self.contacts_popup = Some(contacts_popup);
+        self.mode = UIMode::ContactsPopup;
+        self.update_navigation_hints();
+    }
+
+    /// Show contact edit dialog
+    pub fn show_contact_edit_dialog(
+        &mut self,
+        contacts_manager: Arc<crate::contacts::ContactsManager>,
+        contact: crate::contacts::Contact,
+    ) {
+        let mut contacts_popup = crate::contacts::ContactPopup::new(contacts_manager);
+        contacts_popup.start_edit_contact(contact);
+        self.contacts_popup = Some(contacts_popup);
+        self.mode = UIMode::ContactsPopup;
+        self.update_navigation_hints();
+    }
+
+    /// Show contact context menu for quick actions
+    pub fn show_contact_context_menu(
+        &mut self,
+        email: String,
+        contact: Option<crate::contacts::Contact>,
+    ) {
+        // For now, show a notification with available actions
+        match contact {
+            Some(contact) => {
+                let message = format!(
+                    "Contact: {} <{}> - Press 'i' to view, Ctrl+i to edit, 'x' to remove", 
+                    contact.display_name, 
+                    email
+                );
+                self.show_notification(message, Duration::from_secs(5));
+            }
+            None => {
+                let message = format!(
+                    "Email: {} - Press 'a' to add as contact", 
+                    email
+                );
+                self.show_notification(message, Duration::from_secs(3));
+            }
+        }
     }
 }
 

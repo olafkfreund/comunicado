@@ -25,6 +25,10 @@ pub enum EventResult {
     ContactsAction(crate::contacts::ContactPopupAction), // Contact popup action
     AddToContacts(String, String), // Add email address and name to contacts
     EmailViewerStarted(String), // Email address of sender for contact lookup
+    ViewSenderContact(String), // View contact details for email address
+    EditSenderContact(String), // Edit contact for email address
+    RemoveSenderFromContacts(String), // Remove sender from contacts
+    ContactQuickActions(String), // Show quick actions menu for email address
     ReplyToMessage(uuid::Uuid), // Message ID to reply to
     ReplyAllToMessage(uuid::Uuid), // Message ID to reply all to
     ForwardMessage(uuid::Uuid), // Message ID to forward
@@ -612,6 +616,25 @@ impl EventHandler {
             KeyboardAction::ContactsPopup => {
                 EventResult::ContactsPopup
             }
+            KeyboardAction::ViewSenderContact => {
+                self.handle_sender_contact_action(ui, |email| EventResult::ViewSenderContact(email))
+            }
+            KeyboardAction::EditSenderContact => {
+                self.handle_sender_contact_action(ui, |email| EventResult::EditSenderContact(email))
+            }
+            KeyboardAction::AddSenderToContacts => {
+                self.handle_sender_contact_action(ui, |email| {
+                    // Extract name from the sender field if available
+                    let name = Self::extract_name_from_sender(&email).unwrap_or_else(|| email.clone());
+                    EventResult::AddToContacts(email, name)
+                })
+            }
+            KeyboardAction::RemoveSenderFromContacts => {
+                self.handle_sender_contact_action(ui, |email| EventResult::RemoveSenderFromContacts(email))
+            }
+            KeyboardAction::ContactQuickActions => {
+                self.handle_sender_contact_action(ui, |email| EventResult::ContactQuickActions(email))
+            }
 
             // Other actions that need specific handling
             _ => {
@@ -619,6 +642,55 @@ impl EventHandler {
                 EventResult::Continue
             }
         }
+    }
+
+    /// Handle sender contact actions - get sender email from current context
+    fn handle_sender_contact_action<F>(&self, ui: &UI, action_fn: F) -> EventResult
+    where
+        F: FnOnce(String) -> EventResult,
+    {
+        // Check if we're in email viewer mode with sender info
+        if ui.mode() == &UIMode::EmailViewer {
+            if let Some(sender_email) = ui.email_viewer().get_sender_email() {
+                return action_fn(sender_email);
+            }
+        }
+
+        // Check if we're in message list with a selected message
+        if matches!(ui.focused_pane(), FocusedPane::MessageList | FocusedPane::ContentPreview) {
+            if let Some(message) = ui.message_list().selected_message() {
+                // Extract email from sender field
+                let sender_email = Self::extract_email_from_sender(&message.sender);
+                return action_fn(sender_email);
+            }
+        }
+
+        tracing::debug!("No sender context available for contact action");
+        EventResult::Continue
+    }
+
+    /// Extract email address from sender field (handles "Name <email>" format)
+    fn extract_email_from_sender(sender: &str) -> String {
+        if let Some(start) = sender.find('<') {
+            if let Some(end) = sender.find('>') {
+                return sender[start + 1..end].to_string();
+            }
+        }
+        sender.to_string()
+    }
+
+    /// Extract name from sender field (handles "Name <email>" format)
+    fn extract_name_from_sender(sender: &str) -> Option<String> {
+        if sender.contains('<') {
+            let parts: Vec<&str> = sender.split('<').collect();
+            if !parts.is_empty() {
+                let name = parts[0].trim().trim_matches('"');
+                if !name.is_empty() && name != sender {
+                    return Some(name.to_string());
+                }
+            }
+        }
+        None
     }
 
     /// Handle attachment viewer key events

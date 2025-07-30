@@ -10,6 +10,11 @@
 use super::*;
 use crate::email::StoredMessage;
 use crate::calendar::event::Event;
+use crate::plugins::core::PluginConfig;
+use crate::plugins::types::{
+    UIPosition, UICapability, UIInputResult, CalendarCapability, 
+    NotificationMessage, NotificationType
+};
 
 use tokio_test;
 use std::path::PathBuf;

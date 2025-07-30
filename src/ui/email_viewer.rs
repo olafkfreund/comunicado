@@ -93,6 +93,17 @@ impl EmailViewer {
         self.sender_contact.is_some()
     }
 
+    /// Get sender email address from current message
+    pub fn get_sender_email(&self) -> Option<String> {
+        if let Some(ref content) = self.email_content {
+            Some(content.headers.from.clone())
+        } else if let Some(ref message) = self.current_message {
+            Some(message.from_addr.clone())
+        } else {
+            None
+        }
+    }
+
     /// Toggle view mode
     pub fn toggle_view_mode(&mut self) {
         self.view_mode = match self.view_mode {
@@ -1107,14 +1118,13 @@ impl EmailViewer {
     fn extract_content_by_type(content: &str) -> Option<String> {
         let lines: Vec<&str> = content.lines().collect();
         let mut content_type = String::new();
-        let mut in_headers = true;
+        let in_headers = true;
         let mut body_start_idx = 0;
         
         // Parse headers to find Content-Type
         for (i, line) in lines.iter().enumerate() {
             if in_headers {
                 if line.trim().is_empty() {
-                    in_headers = false;
                     body_start_idx = i + 1;
                     break;
                 }
@@ -1309,42 +1319,6 @@ impl EmailViewer {
         result.split_whitespace().collect::<Vec<_>>().join(" ")
     }
 
-    /// Strip HTML tags from a single line
-    fn strip_html_tags_from_line(line: &str) -> String {
-        let mut result = String::new();
-        let mut in_tag = false;
-        let mut tag_name = String::new();
-
-        for ch in line.chars() {
-            match ch {
-                '<' => {
-                    in_tag = true;
-                    tag_name.clear();
-                }
-                '>' => {
-                    in_tag = false;
-                    // Don't add space for self-closing tags or common inline tags
-                    if !tag_name.is_empty()
-                        && !["br", "hr", "img", "input", "meta", "link"]
-                            .contains(&tag_name.to_lowercase().as_str())
-                        && !tag_name.starts_with('/')
-                    {
-                        result.push(' ');
-                    }
-                }
-                _ if in_tag => {
-                    if ch.is_ascii_alphabetic() {
-                        tag_name.push(ch);
-                    }
-                }
-                _ if !in_tag => result.push(ch),
-                _ => {}
-            }
-        }
-
-        // Clean up excessive whitespace
-        result.split_whitespace().collect::<Vec<_>>().join(" ")
-    }
 
     /// Check if a line contains actual email content (not headers or metadata) - enhanced version
     fn is_content_line(line: &str) -> bool {

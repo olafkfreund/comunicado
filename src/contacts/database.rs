@@ -523,6 +523,60 @@ impl ContactsDatabase {
         Ok(())
     }
 
+    /// Find contact by email address
+    pub async fn find_contact_by_email(&self, email: &str) -> ContactsResult<Option<Contact>> {
+        let query = "SELECT c.*, 
+                           GROUP_CONCAT(DISTINCT e.address || '|' || e.label || '|' || e.is_primary) as emails,
+                           GROUP_CONCAT(DISTINCT p.number || '|' || p.label || '|' || p.is_primary) as phones
+                    FROM contacts c
+                    LEFT JOIN contact_emails e ON c.id = e.contact_id
+                    LEFT JOIN contact_phones p ON c.id = p.contact_id
+                    WHERE c.id IN (SELECT contact_id FROM contact_emails WHERE address = ?)
+                    GROUP BY c.id
+                    LIMIT 1";
+
+        let row = sqlx::query(query)
+            .bind(email)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|e| ContactsError::DatabaseError(e.to_string()))?;
+
+        if let Some(row) = row {
+            Ok(Some(self.contact_from_row(&row)?))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Find contacts by partial email match (for autocomplete)
+    pub async fn find_contacts_by_email_prefix(&self, email_prefix: &str, limit: usize) -> ContactsResult<Vec<Contact>> {
+        let query = "SELECT c.*, 
+                           GROUP_CONCAT(DISTINCT e.address || '|' || e.label || '|' || e.is_primary) as emails,
+                           GROUP_CONCAT(DISTINCT p.number || '|' || p.label || '|' || p.is_primary) as phones
+                    FROM contacts c
+                    LEFT JOIN contact_emails e ON c.id = e.contact_id
+                    LEFT JOIN contact_phones p ON c.id = p.contact_id
+                    WHERE c.id IN (SELECT contact_id FROM contact_emails WHERE address LIKE ?)
+                    GROUP BY c.id
+                    ORDER BY c.display_name
+                    LIMIT ?";
+
+        let rows = sqlx::query(query)
+            .bind(format!("{}%", email_prefix))
+            .bind(limit as i64)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| ContactsError::DatabaseError(e.to_string()))?;
+
+        let mut contacts = Vec::new();
+        for row in rows {
+            let contact = self.contact_from_row(&row)?;
+            contacts.push(contact);
+        }
+
+        Ok(contacts)
+    }
+
     /// Get address book statistics
     pub async fn get_stats(&self) -> ContactsResult<AddressBookStats> {
         let total_contacts: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM contacts")

@@ -104,7 +104,7 @@ impl AnimationManager {
 
     /// Set maximum frame rate to prevent terminal overload
     pub fn set_max_frame_rate(&mut self, fps: u32) {
-        self.max_frame_rate = fps.max(1).min(60); // Clamp between 1-60 FPS
+        self.max_frame_rate = fps.clamp(1, 60); // Clamp between 1-60 FPS
     }
 
     /// Check if terminal supports animations
@@ -193,7 +193,7 @@ impl AnimationManager {
             let delay = frame.delay();
 
             // Convert delay to milliseconds
-            let delay_ms = delay.numer_denom_ms().0 as u32 * 1000 / delay.numer_denom_ms().1 as u32;
+            let delay_ms = delay.numer_denom_ms().0 * 1000 / delay.numer_denom_ms().1;
 
             // Apply minimum frame delay to prevent too-fast animations
             let delay_ms = delay_ms.max(50); // Minimum 50ms (20 FPS max)
@@ -457,7 +457,7 @@ impl AnimationManager {
         let encoded = general_purpose::STANDARD.encode(&buffer);
 
         // Create Kitty graphics command with delete previous image
-        let kitty_command = format!("\x1b_Ga=T,f=100,d=A;{}\x1b\\", encoded);
+        let kitty_command = format!("\x1b_Ga=T,f=100,d=A;{encoded}\x1b\\");
 
         Ok(kitty_command)
     }
@@ -476,7 +476,7 @@ impl AnimationManager {
         sixel.push_str("#1;2;100;100;100"); // Define white color
 
         // Add some sample data (in real implementation, would properly encode pixels)
-        sixel.push_str("~"); // Sample sixel data
+        sixel.push('~'); // Sample sixel data
 
         // Sixel terminator
         sixel.push_str("\x1b\\");
@@ -487,8 +487,7 @@ impl AnimationManager {
     /// Generate placeholder for frame when encoding fails
     fn generate_frame_placeholder(&self, frame_index: u32) -> String {
         format!(
-            "┌─ GIF Frame {} ─┐\n│   [ANIMATION]   │\n│     LOADING     │\n└─────────────────┘",
-            frame_index
+            "┌─ GIF Frame {frame_index} ─┐\n│   [ANIMATION]   │\n│     LOADING     │\n└─────────────────┘"
         )
     }
 

@@ -124,7 +124,7 @@ impl CalDAVClient {
                     status: 400,
                     message: format!("Invalid HTTP method: {}", e),
                 })?,
-                &self.base_url.to_string(),
+                self.base_url.as_ref(),
                 Some(propfind_body),
                 vec![
                     ("Depth", "1"),
@@ -209,7 +209,7 @@ impl CalDAVClient {
     /// Test server connectivity and authentication
     pub async fn test_connection(&self) -> CalDAVResult<bool> {
         let response = self
-            .send_request(Method::OPTIONS, &self.base_url.to_string(), None, vec![])
+            .send_request(Method::OPTIONS, self.base_url.as_ref(), None, vec![])
             .await?;
 
         // Check for CalDAV support in response headers

@@ -1,3 +1,4 @@
+use crate::contacts::{SenderInfo, SenderRecognitionService};
 use crate::email::{
     EmailDatabase, EmailMessage, EmailThread, MessageId, MultiCriteriaSorter, SortCriteria,
     StoredMessage, ThreadingAlgorithm, ThreadingEngine,
@@ -29,6 +30,7 @@ pub struct MessageItem {
     pub is_thread_expanded: bool,
     pub is_thread_root: bool,
     pub message_id: Option<Uuid>, // Database ID for loading full content
+    pub sender_info: Option<SenderInfo>, // Contact information for sender
 }
 
 impl MessageItem {
@@ -46,6 +48,7 @@ impl MessageItem {
             is_thread_expanded: false,
             is_thread_root: false,
             message_id: None,
+            sender_info: None,
         }
     }
 
@@ -69,6 +72,7 @@ impl MessageItem {
             is_thread_expanded: false,
             is_thread_root: thread_depth == 0,
             message_id: None,
+            sender_info: None,
         }
     }
 
@@ -135,6 +139,8 @@ pub struct MessageList {
     // Threading cache to avoid blocking database calls
     threading_cache: HashMap<String, Vec<StoredMessage>>,
     threading_cache_key: Option<String>,
+    // Sender recognition service for contact lookup
+    sender_recognition: Option<Arc<SenderRecognitionService>>,
 }
 
 impl MessageList {
@@ -155,6 +161,7 @@ impl MessageList {
             search_results_count: 0,
             threading_cache: HashMap::new(),
             threading_cache_key: None,
+            sender_recognition: None,
         };
 
         // Don't initialize with sample messages initially - they will be loaded from database
@@ -320,10 +327,12 @@ impl MessageList {
                     message.subject.clone()
                 };
 
-                let sender_truncated = if message.sender.len() > 20 {
-                    format!("{}...", &message.sender[..17])
+                // Format sender with contact recognition
+                let (sender_display, sender_indicators) = self.format_sender_with_contact_info(message);
+                let sender_truncated = if sender_display.len() > 18 {
+                    format!("{}...", &sender_display[..15])
                 } else {
-                    message.sender.clone()
+                    sender_display
                 };
 
                 let line = match self.view_mode {
@@ -331,6 +340,7 @@ impl MessageList {
                         Span::raw(indicators),
                         Span::styled(subject_truncated, subject_style),
                         Span::raw("\n  "),
+                        Span::raw(sender_indicators),
                         Span::styled(format!("From: {}", sender_truncated), sender_style),
                         Span::raw(" • "),
                         Span::styled(message.date.clone(), date_style),
@@ -340,6 +350,7 @@ impl MessageList {
                         Span::raw(indicators),
                         Span::styled(subject_truncated, subject_style),
                         Span::raw("\n  "),
+                        Span::raw(sender_indicators),
                         Span::styled(format!("From: {}", sender_truncated), sender_style),
                         Span::raw(" • "),
                         Span::styled(message.date.clone(), date_style),
@@ -718,6 +729,76 @@ impl MessageList {
         self.database = Some(database);
     }
 
+    /// Set the sender recognition service for contact lookup
+    pub fn set_sender_recognition(&mut self, sender_recognition: Arc<SenderRecognitionService>) {
+        self.sender_recognition = Some(sender_recognition);
+    }
+
+    /// Enrich loaded messages with sender recognition information
+    async fn enrich_with_sender_recognition(&mut self) {
+        if let Some(ref sender_recognition) = self.sender_recognition {
+            tracing::info!("Enriching {} messages with sender recognition", self.messages.len());
+            
+            // Process messages in batches to avoid overwhelming the service
+            const BATCH_SIZE: usize = 20;
+            let total_messages = self.messages.len();
+            
+            for (batch_start, batch) in self.messages.chunks_mut(BATCH_SIZE).enumerate() {
+                let batch_end = std::cmp::min(batch_start * BATCH_SIZE + BATCH_SIZE, total_messages);
+                tracing::debug!("Processing sender recognition batch {}-{}/{}", 
+                    batch_start * BATCH_SIZE + 1, batch_end, total_messages);
+                
+                for message in batch {
+                    if let Ok(sender_info) = sender_recognition.lookup_sender(&message.sender).await {
+                        // Update the display with contact information if available
+                        if sender_info.is_known_contact {
+                            // Use the contact's display name instead of email
+                            message.sender = sender_info.best_display_name().to_string();
+                        }
+                        message.sender_info = Some(sender_info);
+                    } else {
+                        tracing::debug!("Could not lookup sender info for: {}", message.sender);
+                    }
+                }
+            }
+            
+            tracing::info!("Completed sender recognition enrichment");
+        } else {
+            tracing::debug!("Sender recognition service not available, skipping enrichment");
+        }
+    }
+
+    /// Format sender information with contact indicators
+    fn format_sender_with_contact_info(&self, message: &MessageItem) -> (String, String) {
+        if let Some(ref sender_info) = message.sender_info {
+            let mut indicators = String::new();
+            let mut display_name = sender_info.best_display_name().to_string();
+            
+            // Add contact indicator
+            if sender_info.is_known_contact {
+                indicators.push('👤'); // Person emoji for known contact
+                
+                // Add company info if available (abbreviated)
+                if let Some(company) = sender_info.company_info() {
+                    if company.len() > 10 {
+                        display_name = format!("{} ({}...)", display_name, &company[..7]);
+                    } else {
+                        display_name = format!("{} ({})", display_name, company);
+                    }
+                }
+            }
+            
+            if !indicators.is_empty() {
+                indicators.push(' ');
+            }
+            
+            (display_name, indicators)
+        } else {
+            // No sender info available, use the original sender
+            (message.sender.clone(), String::new())
+        }
+    }
+
     /// Initialize with sample messages if no database is available (for demo purposes)
     pub fn ensure_sample_messages_if_no_database(&mut self) {
         if self.database.is_none() && self.messages.is_empty() {
@@ -775,6 +856,9 @@ impl MessageList {
                 .collect();
 
             tracing::info!("Converted to {} MessageItems", self.messages.len());
+
+            // Enrich messages with sender recognition
+            self.enrich_with_sender_recognition().await;
 
             // Sort messages by date (newest first)
             self.messages.sort_by(|a, b| b.date.cmp(&a.date));
@@ -1267,6 +1351,7 @@ impl MessageItem {
             is_thread_expanded: false,
             is_thread_root: false,
             message_id: Some(stored.id),
+            sender_info: None,
         }
     }
 

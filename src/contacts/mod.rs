@@ -5,6 +5,7 @@ pub mod database;
 pub mod manager;
 pub mod popup;
 pub mod providers;
+pub mod sender_recognition;
 pub mod sync;
 pub mod ui;
 
@@ -18,6 +19,7 @@ pub use database::{Contact, ContactEmail, ContactGroup, ContactPhone, ContactsDa
 pub use manager::ContactsManager;
 pub use popup::{ContactPopup, ContactPopupAction, ContactPopupMode};
 pub use providers::{ContactsProvider, GoogleContactsProvider, OutlookContactsProvider};
+pub use sender_recognition::{SenderInfo, SenderRecognitionService};
 pub use sync::{ContactsSyncEngine, SyncProgress as ContactsSyncProgress};
 
 use serde::{Deserialize, Serialize};

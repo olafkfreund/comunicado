@@ -55,6 +55,16 @@ impl ContactsManager {
         self.database.get_contact(id).await
     }
 
+    /// Find contact by email address
+    pub async fn find_contact_by_email(&self, email: &str) -> ContactsResult<Option<Contact>> {
+        self.database.find_contact_by_email(email).await
+    }
+
+    /// Find contacts by partial email match (for autocomplete)
+    pub async fn find_contacts_by_email_prefix(&self, email_prefix: &str, limit: usize) -> ContactsResult<Vec<Contact>> {
+        self.database.find_contacts_by_email_prefix(email_prefix, limit).await
+    }
+
     /// Create a new contact
     pub async fn create_contact(&self, mut contact: Contact) -> ContactsResult<Contact> {
         // Store locally first
@@ -242,23 +252,6 @@ impl ContactsManager {
         self.search_contacts(&criteria).await
     }
 
-    /// Find contact by exact email address (for sender recognition)
-    pub async fn find_contact_by_email(&self, email_address: &str) -> ContactsResult<Option<Contact>> {
-        let criteria = ContactSearchCriteria::new()
-            .with_email(email_address.to_string())
-            .with_limit(1);
-
-        let contacts = self.search_contacts(&criteria).await?;
-        
-        // Find exact match (case-insensitive)
-        let exact_match = contacts.into_iter().find(|contact| {
-            contact.emails.iter().any(|email| 
-                email.address.to_lowercase() == email_address.to_lowercase()
-            )
-        });
-        
-        Ok(exact_match)
-    }
 
     /// Get contacts for a specific account
     pub async fn get_account_contacts(

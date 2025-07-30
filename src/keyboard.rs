@@ -336,6 +336,11 @@ pub enum KeyboardAction {
 
     // Contacts actions
     ContactsPopup,
+    ViewSenderContact,
+    EditSenderContact,
+    AddSenderToContacts,
+    RemoveSenderFromContacts,
+    ContactQuickActions,
 }
 
 /// Configuration for keyboard shortcuts
@@ -635,6 +640,28 @@ impl KeyboardConfig {
             KeyboardShortcut::new(KeyCode::Char('c'), KeyModifiers::CONTROL | KeyModifiers::SHIFT),
             KeyboardAction::ContactsPopup,
         );
+        
+        // Contact quick actions (context-aware)
+        self.shortcuts.insert(
+            KeyboardShortcut::simple(KeyCode::Char('i')),
+            KeyboardAction::ViewSenderContact,
+        );
+        self.shortcuts.insert(
+            KeyboardShortcut::ctrl(KeyCode::Char('i')),
+            KeyboardAction::EditSenderContact,
+        );
+        self.shortcuts.insert(
+            KeyboardShortcut::simple(KeyCode::Char('+')),
+            KeyboardAction::AddSenderToContacts,
+        );
+        self.shortcuts.insert(
+            KeyboardShortcut::simple(KeyCode::Char('-')),
+            KeyboardAction::RemoveSenderFromContacts,
+        );
+        self.shortcuts.insert(
+            KeyboardShortcut::shift(KeyCode::Char('C')),
+            KeyboardAction::ContactQuickActions,
+        );
     }
 
     /// Set up descriptions for each action
@@ -839,6 +866,26 @@ impl KeyboardConfig {
             KeyboardAction::ContactsPopup,
             "Open contacts popup".to_string(),
         );
+        self.action_descriptions.insert(
+            KeyboardAction::ViewSenderContact,
+            "View sender contact details".to_string(),
+        );
+        self.action_descriptions.insert(
+            KeyboardAction::EditSenderContact,
+            "Edit sender contact".to_string(),
+        );
+        self.action_descriptions.insert(
+            KeyboardAction::AddSenderToContacts,
+            "Add sender to contacts".to_string(),
+        );
+        self.action_descriptions.insert(
+            KeyboardAction::RemoveSenderFromContacts,
+            "Remove sender from contacts".to_string(),
+        );
+        self.action_descriptions.insert(
+            KeyboardAction::ContactQuickActions,
+            "Show contact quick actions menu".to_string(),
+        );
     }
 
     /// Get the action for a given keyboard shortcut
@@ -973,7 +1020,12 @@ impl KeyboardConfig {
             | KeyboardAction::StartPageSearch
             | KeyboardAction::StartPageAddressBook
             | KeyboardAction::StartPageCalendar => "Start Page".to_string(),
-            KeyboardAction::ContactsPopup => "Contacts".to_string(),
+            KeyboardAction::ContactsPopup 
+            | KeyboardAction::ViewSenderContact
+            | KeyboardAction::EditSenderContact
+            | KeyboardAction::AddSenderToContacts
+            | KeyboardAction::RemoveSenderFromContacts
+            | KeyboardAction::ContactQuickActions => "Contacts".to_string(),
         }
     }
 

@@ -532,4 +532,23 @@ impl ContactPopup {
     pub fn search_query(&self) -> &str {
         &self.search_query
     }
+
+    /// Show contact details for a specific contact
+    pub fn show_contact_details(&mut self, contact: Contact) {
+        // Clear search state and show the specific contact
+        self.contacts = vec![contact];
+        self.filtered_contacts.clear();
+        self.search_query.clear();
+        self.is_searching = false;
+        self.show_details = true;
+        self.mode = ContactPopupMode::QuickSelect;
+        self.list_state.select(Some(0));
+    }
+
+    /// Start editing a specific contact
+    pub fn start_edit_contact(&mut self, contact: Contact) {
+        // For now, show contact details (full edit functionality would need more UI work)
+        self.show_contact_details(contact);
+        // TODO: Implement full contact editing interface
+    }
 }
