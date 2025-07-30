@@ -263,9 +263,9 @@ impl UI {
 
         match self.mode {
             UIMode::StartPage => {
-                // Render modern dashboard in full screen
+                // Render simple start page with clock and shortcuts
                 let theme = self.theme_manager.current_theme();
-                self.modern_dashboard.render(frame, size, theme);
+                self.start_page.render(frame, size, theme);
             }
             UIMode::Normal => {
                 let chunks = self.layout.calculate_layout(size);

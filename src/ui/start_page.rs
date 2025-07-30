@@ -162,7 +162,7 @@ impl StartPage {
             calendar_events: Vec::new(),
             quick_actions,
             selected_widget: 0,
-            widget_count: 5, // datetime, stats, weather, tasks, shortcuts
+            widget_count: 2, // datetime, shortcuts
         }
     }
 
@@ -225,159 +225,23 @@ impl StartPage {
         self.quick_actions.iter().find(|a| a.id == action_id)
     }
 
-    /// Render the start page dashboard - inspired by terminal dashboard design
+    /// Render the start page dashboard - simplified single clock layout
     pub fn render(&mut self, f: &mut Frame, area: Rect, theme: &Theme) {
-        // Create main layout with margins for clean bordered look
+        // Create simple layout focused on clock and shortcuts
         let main_chunks = Layout::default()
             .direction(Direction::Vertical)
             .margin(1)
             .constraints([
-                Constraint::Length(12), // Top row: datetime + stats
-                Constraint::Length(10), // Middle row: weather + todoist
-                Constraint::Min(6),     // Bottom row: shortcuts
+                Constraint::Length(15), // Large datetime display
+                Constraint::Min(6),     // Shortcuts
             ])
             .split(area);
 
-        // Top row: Large datetime display + System stats
-        let top_row = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([
-                Constraint::Percentage(70), // Large datetime block
-                Constraint::Percentage(30), // Stats block
-            ])
-            .split(main_chunks[0]);
-
-        // Middle row: Weather + Todo list
-        let middle_row = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([
-                Constraint::Percentage(40), // Weather block
-                Constraint::Percentage(60), // Todo/task block
-            ])
-            .split(main_chunks[1]);
-
-        // Bottom row: Shortcuts (full width)
-        let bottom_row = main_chunks[2];
-
-        // Render all widgets with bordered blocks
-        self.render_datetime_block(f, top_row[0], theme, self.selected_widget == 0);
-        self.render_system_stats_block(f, top_row[1], theme, self.selected_widget == 1);
-        self.render_weather_block(f, middle_row[0], theme, self.selected_widget == 2);
-        self.render_tasks_block(f, middle_row[1], theme, self.selected_widget == 3);
-        self.render_shortcuts_block(f, bottom_row, theme, self.selected_widget == 4);
+        // Render single large clock and shortcuts only
+        self.render_datetime_block(f, main_chunks[0], theme, self.selected_widget == 0);
+        self.render_shortcuts_block(f, main_chunks[1], theme, self.selected_widget == 1);
     }
 
-    fn render_weather_block(&self, f: &mut Frame, area: Rect, theme: &Theme, is_selected: bool) {
-        let block = create_border_block("weather", theme, is_selected);
-        let _inner_area = block.inner(area);
-
-        // Weather display matching reference format
-        let weather_lines = vec![
-            Line::from(""),
-            Line::from(vec![Span::styled(
-                "72°",
-                Style::default()
-                    .fg(theme.colors.palette.text_primary)
-                    .add_modifier(Modifier::BOLD),
-            )]),
-            Line::from(vec![Span::styled(
-                "sunny",
-                Style::default().fg(theme.colors.palette.text_secondary),
-            )]),
-            Line::from(""),
-            Line::from(vec![Span::styled(
-                "humi 51%    wind 6 mph",
-                Style::default().fg(theme.colors.palette.text_secondary),
-            )]),
-            Line::from(vec![Span::styled(
-                "prec 1%     feel 70°",
-                Style::default().fg(theme.colors.palette.text_secondary),
-            )]),
-        ];
-
-        let weather_widget = Paragraph::new(weather_lines)
-            .block(block)
-            .alignment(Alignment::Left);
-
-        f.render_widget(weather_widget, area);
-    }
-
-    fn render_tasks_block(&self, f: &mut Frame, area: Rect, theme: &Theme, is_selected: bool) {
-        let block = create_border_block("todoist", theme, is_selected);
-        let _inner_area = block.inner(area);
-
-        // Mock task list matching reference format
-        let task_lines = vec![
-            Line::from(""),
-            Line::from(vec![Span::styled(
-                "6 tasks",
-                Style::default().fg(theme.colors.palette.text_primary),
-            )]),
-            Line::from(""),
-            Line::from(vec![
-                Span::styled(
-                    "[ ] ",
-                    Style::default().fg(theme.colors.palette.text_secondary),
-                ),
-                Span::styled(
-                    "fix midnight bug ",
-                    Style::default().fg(theme.colors.palette.text_primary),
-                ),
-                Span::styled(
-                    "today",
-                    Style::default().fg(theme.colors.palette.text_secondary),
-                ),
-            ]),
-            Line::from(vec![
-                Span::styled(
-                    "[ ] ",
-                    Style::default().fg(theme.colors.palette.text_secondary),
-                ),
-                Span::styled(
-                    "dentist reschedule xray and checkup ",
-                    Style::default().fg(theme.colors.palette.text_primary),
-                ),
-                Span::styled(
-                    "tmrw",
-                    Style::default().fg(theme.colors.palette.text_secondary),
-                ),
-            ]),
-            Line::from(vec![
-                Span::styled(
-                    "[ ] ",
-                    Style::default().fg(theme.colors.palette.text_secondary),
-                ),
-                Span::styled(
-                    "complete section 3 ",
-                    Style::default().fg(theme.colors.palette.text_primary),
-                ),
-                Span::styled(
-                    "sun",
-                    Style::default().fg(theme.colors.palette.text_secondary),
-                ),
-            ]),
-            Line::from(vec![
-                Span::styled(
-                    "[x] ",
-                    Style::default().fg(theme.colors.palette.text_secondary),
-                ),
-                Span::styled(
-                    "#re-start fix weather loading ",
-                    Style::default().fg(theme.colors.palette.text_primary),
-                ),
-                Span::styled(
-                    "today",
-                    Style::default().fg(theme.colors.palette.text_secondary),
-                ),
-            ]),
-        ];
-
-        let tasks_widget = Paragraph::new(task_lines)
-            .block(block)
-            .alignment(Alignment::Left);
-
-        f.render_widget(tasks_widget, area);
-    }
 
     fn render_datetime_block(&self, f: &mut Frame, area: Rect, theme: &Theme, is_selected: bool) {
         let block = create_border_block("datetime", theme, is_selected);
@@ -565,14 +429,21 @@ impl StartPage {
             ]),
         ];
 
-        // Column 4: Accounts & System
+        // Column 4: Calendar & System
         let col4_lines = vec![
             Line::from(vec![Span::styled(
-                "SYSTEM",
+                "CALENDAR",
                 Style::default()
                     .fg(theme.colors.palette.accent)
                     .add_modifier(Modifier::BOLD),
             )]),
+            Line::from(vec![
+                Span::styled("F3", Style::default().fg(theme.colors.palette.accent)),
+                Span::styled(
+                    " calendar",
+                    Style::default().fg(theme.colors.palette.text_primary),
+                ),
+            ]),
             Line::from(vec![
                 Span::styled("Ctrl+A", Style::default().fg(theme.colors.palette.accent)),
                 Span::styled(
@@ -584,13 +455,6 @@ impl StartPage {
                 Span::styled("Ctrl+R", Style::default().fg(theme.colors.palette.accent)),
                 Span::styled(
                     " refresh",
-                    Style::default().fg(theme.colors.palette.text_primary),
-                ),
-            ]),
-            Line::from(vec![
-                Span::styled("F5", Style::default().fg(theme.colors.palette.accent)),
-                Span::styled(
-                    " refresh folder",
                     Style::default().fg(theme.colors.palette.text_primary),
                 ),
             ]),
@@ -617,43 +481,6 @@ impl StartPage {
         f.render_widget(block, area);
     }
 
-    fn render_system_stats_block(
-        &self,
-        f: &mut Frame,
-        area: Rect,
-        theme: &Theme,
-        is_selected: bool,
-    ) {
-        let block = create_border_block("stats", theme, is_selected);
-        let _inner_area = block.inner(area);
-
-        // Mock stats that match the reference image format
-        let stats_lines = vec![
-            Line::from(""),
-            Line::from(vec![Span::styled(
-                "load 24 ms",
-                Style::default().fg(theme.colors.palette.text_primary),
-            )]),
-            Line::from(vec![Span::styled(
-                "ping 348 ms",
-                Style::default().fg(theme.colors.palette.text_primary),
-            )]),
-            Line::from(vec![Span::styled(
-                "fps 165",
-                Style::default().fg(theme.colors.palette.text_primary),
-            )]),
-            Line::from(vec![Span::styled(
-                "1673 x 901",
-                Style::default().fg(theme.colors.palette.text_primary),
-            )]),
-        ];
-
-        let stats_widget = Paragraph::new(stats_lines)
-            .block(block)
-            .alignment(Alignment::Left);
-
-        f.render_widget(stats_widget, area);
-    }
 }
 
 impl Default for StartPage {
