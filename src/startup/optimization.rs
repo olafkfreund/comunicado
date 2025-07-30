@@ -187,6 +187,7 @@ pub struct StartupOptimizer {
     cache: RwLock<Option<StartupCache>>,
     profiler: StartupProfiler,
     background_tasks: BackgroundTaskManager,
+    #[allow(dead_code)]
     lazy_manager: LazyInitManager,
 }
 
@@ -487,6 +488,7 @@ impl StartupProfiler {
         }
     }
     
+    #[allow(dead_code)]
     fn checkpoint(&mut self, name: &str) {
         if self.enabled {
             self.checkpoints.push((name.to_string(), Instant::now()));

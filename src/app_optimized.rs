@@ -71,10 +71,13 @@ pub struct OptimizedApp {
     
     // Background task coordination
     background_tasks: BackgroundTaskManager,
+    #[allow(dead_code)]
     lazy_manager: LazyInitManager,
     
     // Event system
+    #[allow(dead_code)]
     event_sender: mpsc::UnboundedSender<Event>,
+    #[allow(dead_code)]
     event_receiver: mpsc::UnboundedReceiver<Event>,
     
     // Performance tracking
@@ -376,6 +379,7 @@ impl OptimizedApp {
     }
     
     /// Handle application events
+    #[allow(dead_code)]
     async fn handle_event(&mut self, _event: crossterm::event::Event) -> Result<bool, String> {
         // Simplified event handling for now
         // Return true to continue, false to quit
@@ -383,6 +387,7 @@ impl OptimizedApp {
     }
     
     /// Handle keyboard input
+    #[allow(dead_code)]
     async fn handle_keyboard_input(&mut self, key_event: crossterm::event::KeyEvent) -> Result<bool, String> {
         use crossterm::event::KeyCode;
         
@@ -434,6 +439,7 @@ impl OptimizedApp {
 trait UIExtensions {
     fn show_startup_progress(&mut self, message: &str, progress: f64);
     fn update_startup_progress(&mut self, progress: f64);
+    #[allow(dead_code)]
     fn show_notification(&mut self, message: &str, duration: Duration);
     fn apply_layout_preferences(&mut self, preferences: &UiPreferences);
     fn show_cached_account_info(&mut self, accounts: &[AccountCacheInfo]);

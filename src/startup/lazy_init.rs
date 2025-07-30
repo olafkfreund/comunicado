@@ -293,7 +293,7 @@ where
     T: Send + Sync + Clone + 'static,
 {
     /// Create with a sync initializer function
-    pub fn with_sync_initializer<F>(name: String, init_fn: F) -> Self
+    pub fn with_sync_initializer<F>(name: String, _init_fn: F) -> Self
     where
         F: Fn() -> Result<T, String> + Send + Sync + 'static,
     {
@@ -345,6 +345,7 @@ pub struct LazyInitManager {
 }
 
 trait LazyResource {
+    #[allow(dead_code)]
     fn name(&self) -> &str;
     fn is_ready(&self) -> Pin<Box<dyn Future<Output = bool> + Send + '_>>;
     fn state(&self) -> Pin<Box<dyn Future<Output = InitializationState> + Send + '_>>;

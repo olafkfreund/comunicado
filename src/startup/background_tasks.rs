@@ -66,6 +66,7 @@ pub struct TaskHandle {
     handle: JoinHandle<TaskResult>,
     status: Arc<RwLock<TaskStatus>>,
     progress: Arc<RwLock<f64>>,
+    #[allow(dead_code)]
     status_sender: mpsc::UnboundedSender<TaskStatusUpdate>,
 }
 
@@ -114,11 +115,14 @@ pub struct TaskStatusUpdate {
 /// Background task manager for coordinating async operations
 pub struct BackgroundTaskManager {
     tasks: Arc<RwLock<HashMap<Uuid, TaskHandle>>>,
+    #[allow(dead_code)]
     task_queue: Arc<RwLock<Vec<(TaskContext, Pin<Box<dyn Future<Output = TaskResult> + Send>>)>>>,
     status_sender: mpsc::UnboundedSender<TaskStatusUpdate>,
     status_receiver: mpsc::UnboundedReceiver<TaskStatusUpdate>,
+    #[allow(dead_code)]
     max_concurrent_tasks: usize,
     semaphore: Arc<Semaphore>,
+    #[allow(dead_code)]
     is_running: Arc<RwLock<bool>>,
 }
 
@@ -230,7 +234,7 @@ impl BackgroundTaskManager {
     }
     
     /// Get task by ID
-    pub async fn get_task(&self, task_id: &Uuid) -> Option<TaskHandle> {
+    pub async fn get_task(&self, _task_id: &Uuid) -> Option<TaskHandle> {
         // Note: This would need to be implemented differently in practice
         // as TaskHandle contains non-Clone fields. For now, we'll return status info.
         None
@@ -369,6 +373,7 @@ impl BackgroundTaskManager {
 /// Progress reporter for tasks to update their status
 pub struct TaskProgressReporter {
     id: Uuid,
+    #[allow(dead_code)]
     status: Arc<RwLock<TaskStatus>>,
     progress: Arc<RwLock<f64>>,
     sender: mpsc::UnboundedSender<TaskStatusUpdate>,
