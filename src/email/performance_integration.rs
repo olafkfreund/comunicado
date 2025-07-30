@@ -9,15 +9,11 @@ use crate::email::database_optimizations::{
     OptimizedDatabase, DatabaseOptimizationConfig, PaginationConfig, SearchFilters,
     SortDirection, QueryStats, BatchOperationResult, FolderMessageCount,
 };
-use crate::email::performance_benchmarks::{
-    PerformanceBenchmarkSuite, BenchmarkResults, BenchmarkConfig,
-};
 
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use std::collections::HashMap;
 use chrono::{DateTime, Utc};
-use uuid::Uuid;
 
 /// Performance-enhanced email database manager
 pub struct PerformanceEnhancedDatabase {
@@ -69,6 +65,7 @@ struct PerformanceMonitor {
 
 /// Query performance metrics
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct QueryMetrics {
     operation: String,
     execution_time_ms: u64,
@@ -90,6 +87,7 @@ struct OperationStats {
 
 /// Optimization event record
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct OptimizationEvent {
     timestamp: DateTime<Utc>,
     operation: String,
@@ -475,8 +473,8 @@ impl PerformanceEnhancedDatabase {
     /// Private helper methods
     async fn should_use_optimization(
         &self,
-        account_id: &str,
-        folder_name: &str,
+        _account_id: &str,
+        _folder_name: &str,
     ) -> DatabaseResult<bool> {
         if !self.config.enable_optimizations {
             return Ok(false);

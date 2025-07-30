@@ -77,6 +77,7 @@ pub struct AnimatedContentManager {
     renderer: Arc<ImageRenderer>,
     email_states: Arc<RwLock<HashMap<Uuid, EmailAnimationState>>>,
     settings: AnimationSettings,
+    #[allow(dead_code)]
     max_animation_size: (u32, u32),
     max_file_size: u64,
 }
@@ -172,7 +173,7 @@ impl AnimatedContentManager {
         attachment: &crate::email::StoredAttachment,
     ) -> AnimatedContentResult<AnimatedAttachment> {
         // Validate file size
-        if attachment.size > self.max_file_size {
+        if u64::from(attachment.size) > self.max_file_size {
             return Err(AnimatedContentError::ContentExtraction(
                 format!("File too large: {} bytes", attachment.size)
             ));
@@ -183,9 +184,9 @@ impl AnimatedContentManager {
         
         // Load and decode animation
         let animation_id = if let Some(ref file_path) = attachment.file_path {
-            Some(self.animation_manager.load_animation(file_path).await?)
+            Some(self.animation_manager.load_animation(std::path::Path::new(file_path)).await?)
         } else if let Some(ref data) = attachment.data {
-            Some(self.animation_manager.load_animation_from_bytes(data, format).await?)
+            Some(self.animation_manager.load_animation_from_bytes(data, format.clone()).await?)
         } else {
             None
         };
@@ -211,7 +212,7 @@ impl AnimatedContentManager {
             filename: attachment.filename.clone(),
             content_type: attachment.content_type.clone(),
             format,
-            size: attachment.size,
+            size: u64::from(attachment.size),
             width,
             height,
             duration_ms,

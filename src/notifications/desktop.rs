@@ -15,7 +15,9 @@ use crate::email::StoredMessage;
 pub struct DesktopNotificationService {
     config: NotificationConfig,
     last_notification_times: HashMap<String, Instant>,
+    #[allow(dead_code)]
     notification_batch: Vec<NotificationEvent>,
+    #[allow(dead_code)]
     batch_timer: Option<Instant>,
     active_notifications: Arc<RwLock<HashMap<Uuid, ActiveNotification>>>,
     reminder_scheduler: ReminderScheduler,
@@ -23,7 +25,8 @@ pub struct DesktopNotificationService {
 }
 
 /// Active notification tracking
-#[derive(Debug, Clone)]
+#[derive(Debug)]
+#[allow(dead_code)]
 struct ActiveNotification {
     id: Uuid,
     handle: Option<NotificationHandle>,
@@ -35,6 +38,7 @@ struct ActiveNotification {
 
 /// Notification event types for categorization
 #[derive(Debug, Clone, PartialEq)]
+#[allow(dead_code)]
 enum NotificationEventType {
     Email,
     Calendar,
@@ -223,7 +227,7 @@ impl DesktopNotificationService {
     pub async fn dismiss_notification(&self, notification_id: Uuid) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let mut active = self.active_notifications.write().await;
         if let Some(notification) = active.remove(&notification_id) {
-            if let Some(handle) = notification.handle {
+            if let Some(_handle) = notification.handle {
                 // Note: notify-rust doesn't provide a dismiss method
                 // This would be platform-specific
                 debug!("Dismissed notification: {}", notification.title);
@@ -291,9 +295,9 @@ impl DesktopNotificationService {
         info!("Starting desktop notification service");
 
         // Clone necessary data for the async task
-        let active_notifications = Arc::clone(&self.active_notifications);
+        let _active_notifications = Arc::clone(&self.active_notifications);
         let config = self.config.clone();
-        let action_sender = self.action_sender.clone();
+        let _action_sender = self.action_sender.clone();
 
         tokio::spawn(async move {
             let service = Self::with_config(config);
@@ -420,6 +424,7 @@ impl DesktopNotificationService {
     }
 
     /// Check if a notification should be batched
+    #[allow(dead_code)]
     fn should_batch_notification(&self, event: &NotificationEvent) -> bool {
         // Don't batch high-priority notifications
         if event.priority() >= NotificationPriority::High {
@@ -445,6 +450,7 @@ impl DesktopNotificationService {
     }
 
     /// Add a notification to the batch
+    #[allow(dead_code)]
     async fn add_to_batch(
         &mut self,
         event: NotificationEvent,
@@ -470,6 +476,7 @@ impl DesktopNotificationService {
     }
 
     /// Send a batched notification
+    #[allow(dead_code)]
     async fn send_batch_notification(
         &mut self,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {

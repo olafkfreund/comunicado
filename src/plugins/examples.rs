@@ -3,7 +3,7 @@
 //! These plugins serve as reference implementations and showcase how to create
 //! plugins for different categories of functionality.
 
-use super::core::{Plugin, PluginConfig, PluginInfo, PluginResult, PluginType, PluginStatus};
+use super::core::{Plugin, PluginConfig, PluginInfo, PluginResult, PluginType};
 use super::types::{
     EmailPlugin, EmailPluginContext, EmailProcessResult, EmailCapability,
     UIPlugin, UIPluginContext, UIComponentResult, UIInputResult, UILayoutPreferences, UIPosition, UICapability,
@@ -18,7 +18,6 @@ use crate::calendar::event::Event;
 use ratatui::{Frame, layout::Rect, widgets::{Block, Borders, Paragraph}, style::{Color, Style}};
 use std::any::Any;
 use std::collections::HashMap;
-use uuid::Uuid;
 
 // ============================================================================
 // Example Email Plugin
@@ -72,9 +71,9 @@ impl Plugin for ExampleEmailPlugin {
         self.info.clone()
     }
 
-    fn initialize(&mut self, _config: &PluginConfig) -> PluginResult<()> {
+    fn initialize(&mut self, config: &PluginConfig) -> PluginResult<()> {
         // Load custom spam keywords from config if available
-        if let Ok(keywords) = _config.get_config::<Vec<String>>("spam_keywords") {
+        if let Ok(keywords) = config.get_config::<Vec<String>>("spam_keywords") {
             self.spam_keywords = keywords;
         }
         
@@ -105,7 +104,7 @@ impl EmailPlugin for ExampleEmailPlugin {
     async fn process_incoming_email(
         &mut self,
         message: &StoredMessage,
-        context: &EmailPluginContext,
+        _context: &EmailPluginContext,
     ) -> PluginResult<EmailProcessResult> {
         self.processed_count += 1;
 
@@ -131,7 +130,7 @@ impl EmailPlugin for ExampleEmailPlugin {
     async fn process_outgoing_email(
         &mut self,
         message: &StoredMessage,
-        context: &EmailPluginContext,
+        _context: &EmailPluginContext,
     ) -> PluginResult<EmailProcessResult> {
         // Add signature if not present
         if let Some(body) = &message.body_text {
@@ -151,7 +150,7 @@ impl EmailPlugin for ExampleEmailPlugin {
     async fn filter_emails(
         &self,
         messages: &[StoredMessage],
-        context: &EmailPluginContext,
+        _context: &EmailPluginContext,
     ) -> PluginResult<Vec<bool>> {
         let results = messages.iter()
             .map(|message| !self.is_spam(message))
@@ -258,7 +257,7 @@ impl UIPlugin for ExampleUIPlugin {
     async fn handle_input(
         &mut self,
         key_event: crossterm::event::KeyEvent,
-        context: &UIPluginContext,
+        _context: &UIPluginContext,
     ) -> PluginResult<UIInputResult> {
         use crossterm::event::{KeyCode, KeyModifiers};
 
@@ -351,7 +350,7 @@ impl CalendarPlugin for ExampleCalendarPlugin {
     async fn process_event(
         &mut self,
         event: &Event,
-        context: &CalendarPluginContext,
+        _context: &CalendarPluginContext,
     ) -> PluginResult<CalendarEventResult> {
         self.processed_events += 1;
 
@@ -365,8 +364,8 @@ impl CalendarPlugin for ExampleCalendarPlugin {
 
     async fn handle_invitation(
         &mut self,
-        invitation_data: &serde_json::Value,
-        context: &CalendarPluginContext,
+        _invitation_data: &serde_json::Value,
+        _context: &CalendarPluginContext,
     ) -> PluginResult<CalendarEventResult> {
         println!("Handling calendar invitation");
         Ok(CalendarEventResult::Success)
@@ -378,7 +377,7 @@ impl CalendarPlugin for ExampleCalendarPlugin {
 
     async fn sync_calendars(
         &mut self,
-        context: &CalendarPluginContext,
+        _context: &CalendarPluginContext,
     ) -> PluginResult<super::types::CalendarSyncResult> {
         Ok(super::types::CalendarSyncResult {
             events_synced: 0,
@@ -457,7 +456,7 @@ impl NotificationPlugin for ExampleNotificationPlugin {
     async fn send_notification(
         &mut self,
         notification: &NotificationMessage,
-        context: &NotificationPluginContext,
+        _context: &NotificationPluginContext,
     ) -> PluginResult<NotificationResult> {
         self.sent_notifications += 1;
 
@@ -470,7 +469,7 @@ impl NotificationPlugin for ExampleNotificationPlugin {
     async fn handle_notification_response(
         &mut self,
         response: &super::types::NotificationResponse,
-        context: &NotificationPluginContext,
+        _context: &NotificationPluginContext,
     ) -> PluginResult<NotificationResult> {
         println!("Handling notification response: {:?}", response.action_id);
         Ok(NotificationResult::Sent)
@@ -525,7 +524,7 @@ impl Plugin for ExampleSearchPlugin {
         self.info.clone()
     }
 
-    fn initialize(&mut self, config: &PluginConfig) -> PluginResult<()> {
+    fn initialize(&mut self, _config: &PluginConfig) -> PluginResult<()> {
         println!("Example Search Plugin initialized");
         Ok(())
     }
@@ -553,7 +552,7 @@ impl SearchPlugin for ExampleSearchPlugin {
     async fn search(
         &self,
         query: &SearchQuery,
-        context: &SearchPluginContext,
+        _context: &SearchPluginContext,
     ) -> PluginResult<SearchResult> {
         println!("Performing search: {}", query.query);
 
@@ -579,7 +578,7 @@ impl SearchPlugin for ExampleSearchPlugin {
     async fn index_content(
         &mut self,
         content: &super::types::SearchableContent,
-        context: &SearchPluginContext,
+        _context: &SearchPluginContext,
     ) -> PluginResult<()> {
         println!("Indexing content: {}", content.id);
         Ok(())
@@ -588,7 +587,7 @@ impl SearchPlugin for ExampleSearchPlugin {
     async fn get_suggestions(
         &self,
         partial_query: &str,
-        context: &SearchPluginContext,
+        _context: &SearchPluginContext,
     ) -> PluginResult<Vec<String>> {
         Ok(vec![
             format!("{} example", partial_query),

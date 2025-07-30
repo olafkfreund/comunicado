@@ -12,7 +12,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{broadcast, mpsc, RwLock};
-use tokio::time::{interval, sleep};
+use tokio::time::interval;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
@@ -21,6 +21,7 @@ use uuid::Uuid;
 pub struct NotificationIntegrationService {
     desktop_service: DesktopNotificationService,
     event_sender: broadcast::Sender<NotificationEvent>,
+    #[allow(dead_code)]
     action_receiver: mpsc::UnboundedReceiver<NotificationAction>,
     email_tracking: Arc<RwLock<HashMap<Uuid, EmailTrackingInfo>>>,
     calendar_tracking: Arc<RwLock<HashMap<Uuid, CalendarTrackingInfo>>>,
@@ -29,6 +30,7 @@ pub struct NotificationIntegrationService {
 
 /// Email notification tracking information
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct EmailTrackingInfo {
     message_id: Uuid,
     account_id: String,
@@ -128,7 +130,7 @@ impl NotificationIntegrationService {
         }
         
         // Mark notification as sent
-        if let Some(mut tracking) = self.email_tracking.write().await.get_mut(&message.id) {
+        if let Some(tracking) = self.email_tracking.write().await.get_mut(&message.id) {
             tracking.notification_sent = true;
         }
         
@@ -138,7 +140,7 @@ impl NotificationIntegrationService {
     
     /// Handle email read status change
     pub async fn handle_email_read(&self, message_id: Uuid) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        if let Some(mut tracking) = self.email_tracking.write().await.get_mut(&message_id) {
+        if let Some(tracking) = self.email_tracking.write().await.get_mut(&message_id) {
             tracking.is_read = true;
             debug!("Marked email {} as read", message_id);
         }
@@ -295,8 +297,8 @@ impl NotificationIntegrationService {
     
     /// Start action handler for notification actions
     async fn start_action_handler(&mut self) {
-        let email_tracking = Arc::clone(&self.email_tracking);
-        let calendar_tracking = Arc::clone(&self.calendar_tracking);
+        let _email_tracking = Arc::clone(&self.email_tracking);
+        let _calendar_tracking = Arc::clone(&self.calendar_tracking);
         
         tokio::spawn(async move {
             // In a real implementation, this would handle action_receiver
@@ -338,7 +340,8 @@ impl NotificationIntegrationService {
                             
                             // Create a basic event for the reminder
                             let reminder_event = Event {
-                                id: event_tracking.event_id,
+                                id: event_tracking.event_id.to_string(),
+                                uid: event_tracking.event_id.to_string(),
                                 title: event_tracking.title.clone(),
                                 description: None,
                                 start_time: event_tracking.start_time,
@@ -349,15 +352,22 @@ impl NotificationIntegrationService {
                                 organizer: None,
                                 status: event_tracking.status.clone(),
                                 calendar_id: "default".to_string(),
-                                recurrence_rule: None,
+                                recurrence: None,
                                 created_at: now,
                                 updated_at: now,
+                                categories: Vec::new(),
+                                priority: crate::calendar::EventPriority::Normal,
+                                reminders: Vec::new(),
+                                sequence: 0,
+                                url: None,
                                 etag: None,
                             };
                             
                             let notification_event = NotificationEvent::Calendar {
                                 event_type,
+                                calendar_id: event_tracking.title.clone(), // Use title as calendar_id placeholder
                                 event: Some(reminder_event),
+                                event_id: Some(event_tracking.event_id.to_string()),
                                 priority,
                             };
                             
@@ -471,13 +481,14 @@ mod tests {
         let urgent_message = StoredMessage {
             id: Uuid::new_v4(),
             account_id: "test".to_string(),
-            folder: "INBOX".to_string(),
-            sender: "important@example.com".to_string(),
+            folder_name: "INBOX".to_string(),
+            from_addr: "important@example.com".to_string(),
+            from_name: None,
             subject: "URGENT: Action Required".to_string(),
             date: Utc::now(),
             flags: vec!["\\Seen".to_string()],
-            text_content: Some("Important message".to_string()),
-            html_content: None,
+            body_text: Some("Important message".to_string()),
+            body_html: None,
             attachments: Vec::new(),
             message_id: "123".to_string(),
             in_reply_to: None,
@@ -501,7 +512,8 @@ mod tests {
         let service = NotificationIntegrationService::new(config);
         
         let urgent_event = Event {
-            id: Uuid::new_v4(),
+            id: Uuid::new_v4().to_string(),
+            uid: Uuid::new_v4().to_string(),
             title: "URGENT: Critical Meeting".to_string(),
             description: None,
             start_time: Utc::now() + ChronoDuration::minutes(30),
@@ -512,9 +524,14 @@ mod tests {
             organizer: None,
             status: EventStatus::Confirmed,
             calendar_id: "default".to_string(),
-            recurrence_rule: None,
+            recurrence: None,
             created_at: Utc::now(),
             updated_at: Utc::now(),
+            categories: Vec::new(),
+            priority: crate::calendar::EventPriority::Normal,
+            reminders: Vec::new(),
+            sequence: 0,
+            url: None,
             etag: None,
         };
         

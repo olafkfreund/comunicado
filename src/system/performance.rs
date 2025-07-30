@@ -9,7 +9,7 @@ use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
-use tracing::{debug, info, warn};
+use tracing::{info, warn};
 
 /// Performance monitoring thresholds
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -178,7 +178,7 @@ pub enum TrendDirection {
     Improving,
     Stable,
     Degrading,
-    Insufficient_Data,
+    InsufficientData,
 }
 
 /// Operation timing helper
@@ -215,6 +215,7 @@ pub struct PerformanceMonitor {
 
 /// Individual operation timing record
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct OperationTiming {
     component: String,
     operation: String,
@@ -661,11 +662,11 @@ impl PerformanceMonitor {
         
         if recent_metrics.len() < 2 {
             return TrendAnalysis {
-                cpu_trend: TrendDirection::Insufficient_Data,
-                memory_trend: TrendDirection::Insufficient_Data,
-                response_time_trend: TrendDirection::Insufficient_Data,
-                error_rate_trend: TrendDirection::Insufficient_Data,
-                throughput_trend: TrendDirection::Insufficient_Data,
+                cpu_trend: TrendDirection::InsufficientData,
+                memory_trend: TrendDirection::InsufficientData,
+                response_time_trend: TrendDirection::InsufficientData,
+                error_rate_trend: TrendDirection::InsufficientData,
+                throughput_trend: TrendDirection::InsufficientData,
                 analysis_period_hours: period_hours,
                 confidence_level: 0.0,
             };
@@ -693,7 +694,7 @@ impl PerformanceMonitor {
     /// Calculate trend direction for a series of values
     fn calculate_trend(values: &[f64]) -> TrendDirection {
         if values.len() < 2 {
-            return TrendDirection::Insufficient_Data;
+            return TrendDirection::InsufficientData;
         }
         
         let mid = values.len() / 2;

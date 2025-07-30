@@ -463,11 +463,11 @@ impl PerformanceBenchmarkSuite {
             let mut handles = Vec::new();
             
             for task_id in 0..10 {
-                let account_id = self.test_account_id.clone();
-                let folder_name = self.test_folder_name.clone();
+                let _account_id = self.test_account_id.clone();
+                let _folder_name = self.test_folder_name.clone();
                 
                 let handle = tokio::spawn(async move {
-                    let pagination = PaginationConfig {
+                    let _pagination = PaginationConfig {
                         page_size: 50,
                         current_page: task_id % 5,
                         sort_field: "date".to_string(),
@@ -529,7 +529,7 @@ impl PerformanceBenchmarkSuite {
     /// Benchmark memory efficiency
     async fn benchmark_memory_efficiency(
         &self,
-        config: &BenchmarkConfig,
+        _config: &BenchmarkConfig,
     ) -> Result<BenchmarkResults, Box<dyn std::error::Error>> {
         println!("🧠 Benchmarking memory efficiency");
         

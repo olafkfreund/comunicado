@@ -3,18 +3,13 @@
 //! This module defines specific interfaces for different categories of plugins,
 //! providing typed access to Comunicado's functionality.
 
-use super::core::{Plugin, PluginResult, PluginError};
-use crate::email::{StoredMessage, AttachmentInfo};
+use super::core::{Plugin, PluginResult};
+use crate::email::StoredMessage;
 use crate::calendar::event::Event;
-use crate::contacts::Contact;
 
-use ratatui::widgets::Widget;
 use ratatui::layout::Rect;
 use ratatui::Frame;
-use serde::{Deserialize, Serialize};
-use std::any::Any;
 use std::collections::HashMap;
-use tokio;
 
 // ============================================================================
 // Email Plugin Types

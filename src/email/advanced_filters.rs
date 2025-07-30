@@ -8,7 +8,7 @@
 //! - Filter templates and presets
 
 use crate::email::StoredMessage;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Utc, Datelike, Timelike};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use uuid::Uuid;

@@ -156,6 +156,7 @@ impl Default for AnimationSettings {
 /// Animation decoder for various formats
 pub struct AnimationDecoder {
     settings: AnimationSettings,
+    #[allow(dead_code)]
     supported_protocols: Vec<GraphicsProtocol>,
 }
 

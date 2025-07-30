@@ -172,6 +172,7 @@ impl Default for RenderConfig {
 /// Terminal image renderer
 pub struct ImageRenderer {
     config: RenderConfig,
+    #[allow(dead_code)]
     supported_protocols: Vec<GraphicsProtocol>,
 }
 
@@ -424,8 +425,8 @@ impl ImageRenderer {
     
     /// Render using Unicode block elements (fallback)
     async fn render_unicode(&self, image: &DynamicImage) -> GraphicsResult<Vec<u8>> {
-        let rgb_image = image.to_rgb8();
-        let (width, height) = rgb_image.dimensions();
+        let rgba_image = image.to_rgba8();
+        let (width, height) = rgba_image.dimensions();
         
         let mut output = Vec::new();
         
@@ -433,7 +434,7 @@ impl ImageRenderer {
         // Process in 2x4 pixel blocks using Unicode characters like ▀▄█
         for y in (0..height).step_by(4) {
             for x in (0..width).step_by(2) {
-                let block_char = self.get_unicode_block(&rgb_image, x, y);
+                let block_char = self.get_unicode_block(&rgba_image, x, y);
                 output.extend_from_slice(block_char.as_bytes());
             }
             output.push(b'\n');

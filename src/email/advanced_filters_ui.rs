@@ -24,6 +24,7 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 /// Advanced filters UI state
+#[allow(dead_code)]
 pub struct AdvancedFiltersUI {
     engine: Arc<AdvancedFilterEngine>,
     
@@ -92,6 +93,7 @@ pub enum FilterUIAction {
 }
 
 /// Condition editor state
+#[allow(dead_code)]
 pub struct ConditionEditor {
     current_group: ConditionGroup,
     selected_condition_index: Option<usize>,
@@ -110,6 +112,7 @@ pub struct ConditionEditor {
 }
 
 /// Action editor state
+#[allow(dead_code)]
 pub struct ActionEditor {
     current_actions: Vec<ActionRule>,
     selected_action_index: Option<usize>,

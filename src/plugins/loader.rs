@@ -39,7 +39,7 @@ type LibraryHandle = *mut std::ffi::c_void;
 type LibraryHandle = ();
 
 /// Plugin loading strategy trait
-trait PluginLoadingStrategy: Send + Sync {
+pub trait PluginLoadingStrategy: Send + Sync {
     /// Check if this strategy can load the given plugin
     fn can_load(&self, plugin_info: &PluginInfo) -> bool;
     
@@ -47,6 +47,7 @@ trait PluginLoadingStrategy: Send + Sync {
     fn load_plugin(&self, plugin_info: &PluginInfo) -> PluginResult<Box<dyn Plugin>>;
     
     /// Get the name of this loading strategy
+    #[allow(dead_code)]
     fn strategy_name(&self) -> &'static str;
 }
 
@@ -101,6 +102,7 @@ impl PluginLoader {
 }
 
 /// Strategy for loading compiled (native) plugins
+#[allow(dead_code)]
 struct CompiledPluginStrategy {
     /// Plugin creation function cache
     create_functions: HashMap<String, CreatePluginFn>,
@@ -116,6 +118,7 @@ impl CompiledPluginStrategy {
     }
 
     /// Load a dynamic library and extract the plugin creation function
+    #[allow(dead_code)]
     fn load_library(&mut self, plugin_info: &PluginInfo) -> PluginResult<CreatePluginFn> {
         // In a real implementation, this would:
         // 1. Load the dynamic library (.so/.dll/.dylib)

@@ -12,6 +12,7 @@ use std::sync::Arc;
 
 /// Email composition UI with contact autocomplete and spell checking
 pub struct ComposeUI {
+    #[allow(dead_code)]
     contacts_manager: Arc<ContactsManager>,
     spell_checker: SpellChecker,
     contact_autocomplete: ContactAutocomplete,

@@ -1,5 +1,6 @@
 pub mod animation;
 pub mod app;
+pub mod app_fast_startup;
 pub mod calendar;
 pub mod cli;
 pub mod clipboard;
@@ -14,6 +15,7 @@ pub mod maildir;
 pub mod mime;
 pub mod notifications;
 pub mod oauth2;
+pub mod performance;
 pub mod plugins;
 pub mod services;
 pub mod smtp;

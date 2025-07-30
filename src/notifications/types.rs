@@ -1,9 +1,10 @@
 // use chrono::{DateTime, Utc};
 use crate::calendar::Event;
 use crate::email::StoredMessage;
+use serde::{Deserialize, Serialize};
 
 /// Priority levels for notifications
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum NotificationPriority {
     Low,
     Normal,
@@ -78,7 +79,7 @@ pub enum SystemEventType {
 }
 
 /// Configuration for the notification system
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NotificationConfig {
     /// Whether notifications are globally enabled
     pub enabled: bool,
@@ -121,7 +122,7 @@ pub struct NotificationConfig {
 }
 
 /// Quiet hours configuration
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QuietHours {
     pub enabled: bool,
     pub start_hour: u8, // 0-23
@@ -130,7 +131,7 @@ pub struct QuietHours {
 }
 
 /// Notification sound configuration
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NotificationSounds {
     pub enabled: bool,
     pub email_sound: Option<String>,

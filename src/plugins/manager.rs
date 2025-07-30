@@ -7,11 +7,11 @@
 //! - Health monitoring
 //! - Dependency resolution
 
-use super::core::{Plugin, PluginConfig, PluginError, PluginInfo, PluginResult, PluginStatus, PluginType, PluginContext, PluginEnvironment};
+use super::core::{PluginConfig, PluginError, PluginInfo, PluginResult, PluginStatus, PluginType, PluginContext, PluginEnvironment};
 use super::registry::PluginRegistry;
 use super::loader::PluginLoader;
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
@@ -69,6 +69,7 @@ impl Default for PluginExecutionSettings {
 }
 
 /// Plugin health monitoring system
+#[allow(dead_code)]
 struct PluginHealthMonitor {
     /// Plugin health status tracking
     health_status: HashMap<Uuid, PluginHealthStatus>,
@@ -82,7 +83,7 @@ struct PluginHealthMonitor {
 
 /// Plugin health status
 #[derive(Debug, Clone, PartialEq, Eq)]
-enum PluginHealthStatus {
+pub enum PluginHealthStatus {
     Healthy,
     Degraded(String),
     Unhealthy(String),
@@ -91,23 +92,30 @@ enum PluginHealthStatus {
 
 /// Plugin performance metrics
 #[derive(Debug, Clone)]
-struct PluginMetrics {
+pub struct PluginMetrics {
     /// Total execution time
+    #[allow(dead_code)]
     total_execution_time: Duration,
     /// Number of successful executions
+    #[allow(dead_code)]
     successful_executions: u64,
     /// Number of failed executions
+    #[allow(dead_code)]
     failed_executions: u64,
     /// Average execution time
+    #[allow(dead_code)]
     average_execution_time: Duration,
     /// Memory usage statistics
+    #[allow(dead_code)]
     memory_usage: MemoryUsage,
     /// Last execution time
+    #[allow(dead_code)]
     last_execution: Option<Instant>,
 }
 
 /// Memory usage statistics
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct MemoryUsage {
     /// Current memory usage in bytes
     current: u64,
@@ -271,7 +279,7 @@ impl PluginManager {
 
     /// Initialize a loaded plugin
     async fn initialize_plugin(&mut self, plugin_id: Uuid) -> PluginResult<()> {
-        let config = {
+        let _config = {
             let configs = self.configs.read().unwrap();
             configs.get(&plugin_id).cloned()
                 .ok_or_else(|| PluginError::NotFound("Plugin config not found".to_string()))?

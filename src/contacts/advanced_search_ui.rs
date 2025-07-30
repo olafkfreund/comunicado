@@ -19,6 +19,7 @@ use ratatui::{
 use std::sync::Arc;
 
 /// Advanced search UI state
+#[allow(dead_code)]
 pub struct AdvancedSearchUI {
     manager: Arc<ContactsManager>,
     

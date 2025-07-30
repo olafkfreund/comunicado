@@ -66,6 +66,7 @@ struct MessageCache {
 
 /// Cached message with metadata
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct CachedMessage {
     message: StoredMessage,
     last_accessed: DateTime<Utc>,

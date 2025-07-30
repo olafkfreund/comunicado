@@ -6,7 +6,6 @@
 use super::core::{Plugin, PluginError, PluginInfo, PluginResult, PluginStatus, PluginType};
 
 use std::collections::HashMap;
-use std::sync::Arc;
 use uuid::Uuid;
 
 /// Registry for tracking loaded plugins

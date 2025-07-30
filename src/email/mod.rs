@@ -5,8 +5,13 @@ pub mod attachments;
 pub mod database;
 pub mod database_optimizations;
 pub mod desktop_notifications;
+pub mod email_loading_fix;
+pub mod flash_fast_integration;
+pub mod flash_fast_demo;
+pub mod flash_fast_main;
 pub mod filters;
 pub mod folder_hierarchy;
+pub mod precache_system;
 pub mod maildir;
 pub mod maildir_exporter;
 pub mod maildir_export_wizard;
@@ -51,6 +56,11 @@ pub use performance_integration::{
     PerformanceEnhancedDatabase, PerformanceConfig, PerformanceAwareResult, PerformanceStats,
 };
 pub use desktop_notifications::DesktopNotificationService;
+pub use flash_fast_integration::{
+    FlashFastIntegration, FlashFastAppExt, FlashFastDiagnostics, IntegrationStatus, DiagnosticResults,
+};
+pub use flash_fast_demo::{FlashFastDemo, FlashFastUtils};
+pub use flash_fast_main::{FlashFastMain, FlashFastMonitor};
 pub use filters::{
     EmailFilter, FilterAction, FilterCondition, FilterEngine, FilterField, FilterOperator,
     FilterResult, FilterTemplates,
