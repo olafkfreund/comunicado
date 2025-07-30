@@ -1,0 +1,7 @@
+{
+  "email": "your-email@gmail.com",
+  "display_name": "Your Name",
+  "provider": "gmail",
+  "client_id": "your-client-id.apps.googleusercontent.com",
+  "client_secret": "your-client-secret-optional-for-pkce"
+}

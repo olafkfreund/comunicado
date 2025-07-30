@@ -1,0 +1,51 @@
+{
+  "id": "550e8400-e29b-41d4-a716-446655440001",
+  "name": "Example UI Plugin",
+  "version": "1.0.0",
+  "description": "Demonstrates UI extension capabilities with custom widgets and keyboard shortcuts",
+  "author": "Comunicado Team",
+  "author_email": "plugins@comunicado.dev",
+  "homepage": "https://github.com/comunicado/plugins/example-ui",
+  "repository": "https://github.com/comunicado/plugins/example-ui",
+  "license": "MIT",
+  "plugin_type": "UI",
+  "min_comunicado_version": "1.0.0",
+  "max_comunicado_version": "2.0.0",
+  "dependencies": [],
+  "config_schema": {
+    "type": "object",
+    "properties": {
+      "display_text": {
+        "type": "string",
+        "description": "Text to display in the plugin widget",
+        "default": "Example Plugin Active"
+      },
+      "widget_position": {
+        "type": "string",
+        "enum": ["top", "bottom", "left", "right"],
+        "description": "Preferred position for the plugin widget",
+        "default": "bottom"
+      },
+      "auto_refresh_interval": {
+        "type": "integer",
+        "description": "Auto refresh interval in seconds (0 to disable)",
+        "default": 30,
+        "minimum": 0
+      }
+    }
+  },
+  "capabilities": [
+    "custom_widgets",
+    "keyboard_shortcuts",
+    "event_handling",
+    "theme_support",
+    "compiled"
+  ],
+  "tags": [
+    "ui",
+    "widget",
+    "example",
+    "built-in",
+    "status"
+  ]
+}
