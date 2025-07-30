@@ -110,10 +110,6 @@ tempfile = "3.8"
 
 [[bin]]
 name = "comunicado"
-path = "src/main_optimized.rs"
-
-[[bin]]
-name = "comunicado_legacy"
 path = "src/main.rs"
 
 [profile.release]

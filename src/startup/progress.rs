@@ -6,7 +6,6 @@ pub enum StartupPhase {
     ImapManager { timeout: Duration, status: PhaseStatus },
     AccountSetup { timeout: Duration, status: PhaseStatus },
     Services { timeout: Duration, status: PhaseStatus },
-    DashboardServices { timeout: Duration, status: PhaseStatus },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -32,7 +31,6 @@ impl StartupPhase {
             StartupPhase::ImapManager { .. } => "IMAP Manager",
             StartupPhase::AccountSetup { .. } => "Account Setup",
             StartupPhase::Services { .. } => "Services",
-            StartupPhase::DashboardServices { .. } => "Dashboard Services",
         }
     }
 
@@ -42,7 +40,6 @@ impl StartupPhase {
             StartupPhase::ImapManager { .. } => "Setting up IMAP account management",
             StartupPhase::AccountSetup { .. } => "Checking accounts and running setup wizard",
             StartupPhase::Services { .. } => "Initializing core application services",
-            StartupPhase::DashboardServices { .. } => "Starting dashboard and monitoring services",
         }
     }
 
@@ -52,7 +49,6 @@ impl StartupPhase {
             StartupPhase::ImapManager { status, .. } => status,
             StartupPhase::AccountSetup { status, .. } => status,
             StartupPhase::Services { status, .. } => status,
-            StartupPhase::DashboardServices { status, .. } => status,
         }
     }
 
@@ -62,7 +58,6 @@ impl StartupPhase {
             StartupPhase::ImapManager { status, .. } => status,
             StartupPhase::AccountSetup { status, .. } => status,
             StartupPhase::Services { status, .. } => status,
-            StartupPhase::DashboardServices { status, .. } => status,
         }
     }
 
@@ -72,7 +67,6 @@ impl StartupPhase {
             StartupPhase::ImapManager { timeout, .. } => *timeout,
             StartupPhase::AccountSetup { timeout, .. } => *timeout,
             StartupPhase::Services { timeout, .. } => *timeout,
-            StartupPhase::DashboardServices { timeout, .. } => *timeout,
         }
     }
 
@@ -82,7 +76,6 @@ impl StartupPhase {
             StartupPhase::ImapManager { .. } => false,
             StartupPhase::AccountSetup { .. } => false,
             StartupPhase::Services { .. } => false,
-            StartupPhase::DashboardServices { .. } => false,
         }
     }
 
@@ -285,12 +278,11 @@ mod tests {
             },
         ];
 
-        assert_eq!(phases.len(), 5);
+        assert_eq!(phases.len(), 4);
         assert_eq!(phases[0].name(), "Database");
         assert_eq!(phases[1].name(), "IMAP Manager");
         assert_eq!(phases[2].name(), "Account Setup");
         assert_eq!(phases[3].name(), "Services");
-        assert_eq!(phases[4].name(), "Dashboard Services");
 
         // Only database should be critical
         assert!(phases[0].is_critical());

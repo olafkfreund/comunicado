@@ -491,7 +491,7 @@ mod tests {
         let theme = create_test_theme();
         
         // Complete all phases
-        for phase_name in &["Database", "IMAP Manager", "Account Setup", "Services", "Dashboard Services"] {
+        for phase_name in &["Database", "IMAP Manager", "Account Setup", "Services"] {
             manager.start_phase(phase_name).unwrap();
             manager.complete_phase(phase_name).unwrap();
         }
@@ -524,13 +524,13 @@ mod tests {
         let theme = create_test_theme();
         
         // Complete most phases but keep one in progress
-        for phase_name in &["Database", "IMAP Manager", "Account Setup", "Services"] {
+        for phase_name in &["Database", "IMAP Manager", "Account Setup"] {
             manager.start_phase(phase_name).unwrap();
             manager.complete_phase(phase_name).unwrap();
         }
         
         // Start the last phase but don't complete it
-        manager.start_phase("Dashboard Services").unwrap();
+        manager.start_phase("Services").unwrap();
         
         terminal.draw(|frame| {
             let area = frame.size();
@@ -544,6 +544,6 @@ mod tests {
         assert!(manager.overall_progress_percentage() > 80.0);
         assert!(content.contains("✅")); // Success icons should be present for completed phases
         assert!(content.contains("🔄")); // In-progress icon for current phase
-        assert!(content.contains("Dashboard Services"));
+        assert!(content.contains("Services"));
     }
 }

@@ -297,24 +297,7 @@ impl App {
             }
         }
 
-        // Initialize dashboard services for start page
-        tracing::info!("Initializing dashboard services...");
-        match tokio::time::timeout(
-            std::time::Duration::from_secs(10),
-            self.initialize_dashboard_services(),
-        )
-        .await
-        {
-            Ok(Ok(())) => {
-                tracing::info!("Dashboard services initialized successfully");
-            }
-            Ok(Err(e)) => {
-                tracing::error!("Failed to initialize dashboard services: {}", e);
-            }
-            Err(_) => {
-                tracing::error!("Dashboard service initialization timed out after 10 seconds");
-            }
-        }
+        // Dashboard services removed - using simple startup progress only
 
         self.initialization_complete = true;
         self.initialization_in_progress = false;
@@ -330,60 +313,7 @@ impl App {
         Ok(())
     }
 
-    /// Initialize dashboard services for start page
-    pub async fn initialize_dashboard_services(&mut self) -> Result<()> {
-        // Start dashboard services initialization phase
-        self.startup_progress_manager.start_phase("Dashboard Services").map_err(|e| anyhow::anyhow!("Progress manager error: {}", e))?;
-        
-        // Perform dashboard services initialization with error handling
-        let result: Result<()> = async {
-            tracing::debug!("Initializing dashboard services");
-
-        let dashboard_init_result = tokio::time::timeout(
-            std::time::Duration::from_secs(10), // 10 second timeout for dashboard init
-            async {
-                let services = ServiceManager::new().map_err(|e| {
-                    anyhow::anyhow!("Failed to initialize dashboard services: {}", e)
-                })?;
-
-                self.services = Some(services);
-
-                // Start background service updates
-                self.update_start_page_data().await?;
-
-                Ok::<(), anyhow::Error>(())
-            },
-        )
-        .await;
-
-        match dashboard_init_result {
-            Ok(result) => {
-                result?;
-                tracing::debug!("Dashboard services initialized successfully");
-            }
-            Err(_) => {
-                tracing::error!("Dashboard services initialization timed out after 10 seconds");
-                return Err(anyhow::anyhow!(
-                    "Dashboard services initialization timed out"
-                ));
-            }
-        }
-
-            Ok(())
-        }.await;
-
-        // Report success or failure to progress manager
-        match result {
-            Ok(()) => {
-                self.startup_progress_manager.complete_phase("Dashboard Services").map_err(|e| anyhow::anyhow!("Progress manager error: {}", e))?;
-                Ok(())
-            }
-            Err(e) => {
-                self.startup_progress_manager.fail_phase("Dashboard Services", e.to_string()).map_err(|pe| anyhow::anyhow!("Progress manager error: {}", pe))?;
-                Err(e)
-            }
-        }
-    }
+    // Dashboard services removed - using simple startup progress only
 
     /// Update start page with fresh data
     pub async fn update_start_page_data(&mut self) -> Result<()> {

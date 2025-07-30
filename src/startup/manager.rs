@@ -32,10 +32,6 @@ impl StartupProgressManager {
                 timeout: Duration::from_secs(5),
                 status: PhaseStatus::Pending,
             },
-            StartupPhase::DashboardServices {
-                timeout: Duration::from_secs(3),
-                status: PhaseStatus::Pending,
-            },
         ];
 
         Self {
@@ -266,7 +262,6 @@ impl StartupProgressManager {
                 StartupPhase::ImapManager { status, .. } => *status = PhaseStatus::Completed { duration: phase_duration },
                 StartupPhase::AccountSetup { status, .. } => *status = PhaseStatus::Completed { duration: phase_duration },
                 StartupPhase::Services { status, .. } => *status = PhaseStatus::Completed { duration: phase_duration },
-                StartupPhase::DashboardServices { status, .. } => *status = PhaseStatus::Completed { duration: phase_duration },
             }
         }
         self.current_phase = self.phases.len();
@@ -375,7 +370,7 @@ mod tests {
     fn test_startup_progress_manager_creation() {
         let manager = StartupProgressManager::new();
         
-        assert_eq!(manager.phases.len(), 5);
+        assert_eq!(manager.phases.len(), 4);
         assert_eq!(manager.current_phase, 0);
         assert!(manager.is_visible());
         assert!(!manager.is_complete());
@@ -410,17 +405,17 @@ mod tests {
         // No progress initially
         assert_eq!(manager.overall_progress_percentage(), 0.0);
         
-        // Complete first phase (20% of 5 phases)
+        // Complete first phase (25% of 4 phases)
         manager.start_phase("Database").unwrap();
         manager.complete_phase("Database").unwrap();
         
-        assert_eq!(manager.overall_progress_percentage(), 20.0);
+        assert_eq!(manager.overall_progress_percentage(), 25.0); // 1/4 = 25%
         
-        // Complete second phase (40% total)
+        // Complete second phase (50% total)
         manager.start_phase("IMAP Manager").unwrap();
         manager.complete_phase("IMAP Manager").unwrap();
         
-        assert_eq!(manager.overall_progress_percentage(), 40.0);
+        assert_eq!(manager.overall_progress_percentage(), 50.0); // 2/4 = 50%
     }
 
     #[test]
@@ -481,7 +476,7 @@ mod tests {
         assert!(!manager.is_complete());
         
         // Complete all phases
-        for phase_name in &["Database", "IMAP Manager", "Account Setup", "Services", "Dashboard Services"] {
+        for phase_name in &["Database", "IMAP Manager", "Account Setup", "Services"] {
             manager.start_phase(phase_name).unwrap();
             manager.complete_phase(phase_name).unwrap();
         }
@@ -510,8 +505,6 @@ mod tests {
         manager.start_phase("Services").unwrap();
         manager.complete_phase("Services").unwrap();
         
-        manager.start_phase("Dashboard Services").unwrap();
-        manager.complete_phase("Dashboard Services").unwrap();
         
         // Should be considered complete despite non-critical failure
         assert!(manager.is_complete());

@@ -230,11 +230,7 @@ async fn main() -> Result<()> {
         init_phase!("Services", 3, init_fn);
     }
     
-    // Phase 5: Dashboard Services (reduced timeout from 3s to 2s)
-    {
-        let init_fn = app.initialize_dashboard_services();
-        init_phase!("Dashboard Services", 2, init_fn);
-    }
+    // Dashboard services removed - using simple startup progress only
     
     update_progress(&progress_manager, &mut terminal)?;
 
