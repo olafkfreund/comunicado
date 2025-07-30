@@ -125,6 +125,7 @@ pub enum UIMode {
     InvitationViewer,
     Search,
     KeyboardShortcuts,
+    ContactsPopup, // Quick contacts popup overlay
 }
 
 pub struct UI {
@@ -157,6 +158,8 @@ pub struct UI {
     // Notification system
     notification_message: Option<String>,
     notification_expires_at: Option<tokio::time::Instant>,
+    // Contacts popup
+    contacts_popup: Option<crate::contacts::ContactPopup>,
 }
 
 impl UI {
@@ -195,6 +198,8 @@ impl UI {
             // Initialize notification system
             notification_message: None,
             notification_expires_at: None,
+            // Initialize contacts popup
+            contacts_popup: None,
         };
 
         // Initialize status bar with default segments
@@ -361,6 +366,27 @@ impl UI {
                 let theme = self.theme_manager.current_theme();
                 self.keyboard_shortcuts_ui
                     .render(frame, size, theme, keyboard_manager);
+            }
+            UIMode::ContactsPopup => {
+                // Render contacts popup over the normal interface
+                let chunks = self.layout.calculate_layout(size);
+
+                // Render normal interface in background
+                self.render_account_switcher(frame, chunks[0]);
+                self.render_folder_tree(frame, chunks[1]);
+                self.render_message_list(frame, chunks[2]);
+                self.render_content_preview(frame, chunks[3]);
+
+                // Render the status bar
+                if chunks.len() > 4 {
+                    self.render_status_bar(frame, chunks[4]);
+                }
+
+                // Render contacts popup on top
+                if let Some(ref mut contacts_popup) = self.contacts_popup {
+                    let theme = self.theme_manager.current_theme();
+                    contacts_popup.render(frame, size, theme);
+                }
             }
         }
     }
@@ -684,6 +710,7 @@ impl UI {
             UIMode::InvitationViewer => "Meeting Invitation",
             UIMode::Search => "Search",
             UIMode::KeyboardShortcuts => "Keyboard Shortcuts",
+            UIMode::ContactsPopup => "Contacts",
         };
 
         let nav_segment = NavigationHintsSegment {
@@ -796,6 +823,7 @@ impl UI {
                 ("r".to_string(), "Reply".to_string()),
                 ("R".to_string(), "Reply All".to_string()),
                 ("f".to_string(), "Forward".to_string()),
+                ("c".to_string(), "Add Contact".to_string()),
                 ("Space".to_string(), "Actions".to_string()),
                 ("v".to_string(), "View Mode".to_string()),
                 ("q/Esc".to_string(), "Close".to_string()),
@@ -829,6 +857,13 @@ impl UI {
             UIMode::KeyboardShortcuts => vec![
                 ("↑↓/j/k".to_string(), "Scroll".to_string()),
                 ("?".to_string(), "Close".to_string()),
+                ("Esc".to_string(), "Close".to_string()),
+            ],
+            UIMode::ContactsPopup => vec![
+                ("↑↓/j/k".to_string(), "Navigate".to_string()),
+                ("Enter".to_string(), "Select Contact".to_string()),
+                ("/".to_string(), "Search".to_string()),
+                ("Tab".to_string(), "Change Mode".to_string()),
                 ("Esc".to_string(), "Close".to_string()),
             ],
         }
@@ -2089,6 +2124,42 @@ impl UI {
     /// Get mutable reference to unified sidebar
     pub fn unified_sidebar_mut(&mut self) -> &mut UnifiedSidebar {
         &mut self.unified_sidebar
+    }
+
+    /// Show contacts popup
+    pub fn show_contacts_popup(&mut self, contacts_manager: Arc<crate::contacts::ContactsManager>) {
+        self.contacts_popup = Some(crate::contacts::ContactPopup::new(contacts_manager));
+        self.mode = UIMode::ContactsPopup;
+        self.update_navigation_hints();
+    }
+
+    /// Hide contacts popup and return to normal mode
+    pub fn hide_contacts_popup(&mut self) {
+        self.contacts_popup = None;
+        self.mode = UIMode::Normal;
+        self.update_navigation_hints();
+    }
+
+    /// Check if contacts popup is visible
+    pub fn is_contacts_popup_visible(&self) -> bool {
+        matches!(self.mode, UIMode::ContactsPopup)
+    }
+
+    /// Handle contacts popup key input
+    pub async fn handle_contacts_popup_key(
+        &mut self,
+        key: crossterm::event::KeyCode,
+    ) -> Option<crate::contacts::ContactPopupAction> {
+        if let Some(ref mut contacts_popup) = self.contacts_popup {
+            contacts_popup.handle_key(key).await
+        } else {
+            None
+        }
+    }
+
+    /// Get selected contact from popup
+    pub fn get_selected_contact_from_popup(&self) -> Option<&crate::contacts::Contact> {
+        self.contacts_popup.as_ref()?.get_selected_contact()
     }
 }
 

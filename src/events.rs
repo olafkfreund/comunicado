@@ -21,6 +21,9 @@ pub enum EventResult {
     FolderSelect(String),   // Folder path to load messages from
     FolderForceRefresh(String), // Folder path to force refresh from IMAP
     FolderOperation(crate::ui::folder_tree::FolderOperation), // Folder operation to execute
+    ContactsPopup,          // Open contacts popup
+    ContactsAction(crate::contacts::ContactPopupAction), // Contact popup action
+    AddToContacts(String, String), // Add email address and name to contacts
 }
 
 impl EventHandler {
@@ -90,6 +93,7 @@ impl EventHandler {
             UIMode::StartPage => self.handle_start_page_keys(key, ui).await,
             UIMode::EmailViewer => self.handle_email_viewer_keys(key, ui).await,
             UIMode::KeyboardShortcuts => self.handle_keyboard_shortcuts_keys(key, ui).await,
+            UIMode::ContactsPopup => self.handle_contacts_popup_keys(key, ui).await,
             _ => EventResult::Continue,
         }
     }
@@ -487,6 +491,11 @@ impl EventHandler {
                     ui.content_preview_mut().previous_attachment();
                 }
                 EventResult::Continue
+            }
+
+            // Contacts actions
+            KeyboardAction::ContactsPopup => {
+                EventResult::ContactsPopup
             }
 
             // Other actions that need specific handling
@@ -1455,6 +1464,10 @@ impl EventHandler {
                     // Mark email as unread
                     self.handle_email_mark_unread(ui).await
                 }
+                crate::ui::email_viewer::EmailViewerAction::AddToContacts => {
+                    // Add sender to contacts
+                    self.handle_email_add_to_contacts(ui).await
+                }
                 crate::ui::email_viewer::EmailViewerAction::Close => {
                     // Exit email viewer
                     ui.exit_email_viewer();
@@ -1582,6 +1595,60 @@ impl EventHandler {
         }
     }
 
+    /// Handle add to contacts action from email viewer
+    async fn handle_email_add_to_contacts(&mut self, ui: &mut UI) -> EventResult {
+        // Get current email data from email viewer
+        if let Some(message) = ui.email_viewer_mut().current_message.clone() {
+            // Extract sender name and email address
+            let email_address = message.from_addr.clone();
+            
+            // Extract name from "Name <email>" format or use email as fallback
+            let sender_name = if message.from_name.as_ref().map_or(true, |name| name.is_empty()) {
+                // If no from_name, try to extract from from_addr if it contains < >
+                if email_address.contains('<') && email_address.contains('>') {
+                    email_address
+                        .split('<')
+                        .next()
+                        .unwrap_or(&email_address)
+                        .trim()
+                        .trim_matches('"')
+                        .to_string()
+                } else {
+                    // Use the email address before @ as the name
+                    email_address
+                        .split('@')
+                        .next()
+                        .unwrap_or(&email_address)
+                        .to_string()
+                }
+            } else {
+                message.from_name.clone().unwrap_or_default()
+            };
+
+            // Clean email address from "Name <email>" format
+            let clean_email = if email_address.contains('<') && email_address.contains('>') {
+                email_address
+                    .split('<')
+                    .nth(1)
+                    .unwrap_or(&email_address)
+                    .trim_end_matches('>')
+                    .to_string()
+            } else {
+                email_address
+            };
+
+            tracing::info!(
+                "Adding contact: {} <{}> from message: {}",
+                sender_name,
+                clean_email,
+                message.subject
+            );
+
+            return EventResult::AddToContacts(clean_email, sender_name);
+        }
+        EventResult::Continue
+    }
+
     pub fn should_quit(&self) -> bool {
         self.should_quit
     }
@@ -1605,6 +1672,24 @@ impl EventHandler {
                 EventResult::Continue
             }
             _ => EventResult::Continue,
+        }
+    }
+
+    /// Handle contacts popup key events
+    async fn handle_contacts_popup_keys(&mut self, key: KeyEvent, ui: &mut UI) -> EventResult {
+        match key.code {
+            KeyCode::Esc => {
+                // Close contacts popup
+                ui.hide_contacts_popup();
+                EventResult::Continue
+            }
+            _ => {
+                // Delegate to contacts popup for other keys
+                if let Some(action) = ui.handle_contacts_popup_key(key.code).await {
+                    return EventResult::ContactsAction(action);
+                }
+                EventResult::Continue
+            }
         }
     }
 }

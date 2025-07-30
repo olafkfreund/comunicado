@@ -1515,6 +1515,15 @@ impl App {
                         EventResult::FolderOperation(operation) => {
                             self.handle_folder_operation(operation).await?;
                         }
+                        EventResult::ContactsPopup => {
+                            self.handle_contacts_popup().await?;
+                        }
+                        EventResult::ContactsAction(action) => {
+                            self.handle_contacts_action(action).await?;
+                        }
+                        EventResult::AddToContacts(email, name) => {
+                            self.handle_add_to_contacts(&email, &name).await?;
+                        }
                     }
 
                     // Check for quit command
@@ -3518,6 +3527,94 @@ impl App {
             synced_accounts.len(),
             new_email_count
         );
+    }
+
+    /// Handle contacts popup request
+    async fn handle_contacts_popup(&mut self) -> Result<()> {
+        if let Some(ref contacts_manager) = self.contacts_manager {
+            self.ui.show_contacts_popup(contacts_manager.clone());
+        } else {
+            tracing::warn!("Contacts manager not initialized, cannot show contacts popup");
+        }
+        Ok(())
+    }
+
+    /// Handle contacts popup action
+    async fn handle_contacts_action(&mut self, action: crate::contacts::ContactPopupAction) -> Result<()> {
+        use crate::contacts::ContactPopupAction;
+        
+        match action {
+            ContactPopupAction::SelectForEmail { to, name } => {
+                // Use this contact for email composition
+                self.ui.hide_contacts_popup();
+                
+                let message = format!("Selected contact: {} <{}>", name, to);
+                self.ui.show_notification(message, Duration::from_secs(3));
+                
+                // TODO: Start email composition with this contact
+            }
+            ContactPopupAction::ViewContact(contact) => {
+                // View contact details
+                self.ui.hide_contacts_popup();
+                
+                let message = format!("Viewing contact: {} <{}>", 
+                    contact.display_name, 
+                    contact.primary_email().map(|e| e.address.as_str()).unwrap_or("no email")
+                );
+                self.ui.show_notification(message, Duration::from_secs(3));
+            }
+            ContactPopupAction::Close => {
+                // Close the popup
+                self.ui.hide_contacts_popup();
+            }
+            ContactPopupAction::OpenFullAddressBook => {
+                // Open full address book view
+                self.ui.hide_contacts_popup();
+                self.ui.show_notification(
+                    "Opening full address book...".to_string(),
+                    Duration::from_secs(3),
+                );
+                // TODO: Implement full address book view
+            }
+        }
+        
+        Ok(())
+    }
+
+    /// Handle add to contacts request
+    async fn handle_add_to_contacts(&mut self, email: &str, name: &str) -> Result<()> {
+        if let Some(ref contacts_manager) = self.contacts_manager {
+            let mut new_contact = crate::contacts::Contact::new(
+                uuid::Uuid::new_v4().to_string(),
+                crate::contacts::ContactSource::Local,
+                name.to_string(),
+            );
+            
+            new_contact.emails.push(crate::contacts::ContactEmail::new(
+                email.to_string(),
+                "primary".to_string(),
+            ));
+            
+            match contacts_manager.create_contact(new_contact).await {
+                Ok(_) => {
+                    self.ui.show_notification(
+                        format!("Added {} to contacts", name),
+                        Duration::from_secs(3),
+                    );
+                }
+                Err(e) => {
+                    tracing::error!("Failed to add contact: {}", e);
+                    self.ui.show_notification(
+                        format!("Failed to add contact: {}", e),
+                        Duration::from_secs(5),
+                    );
+                }
+            }
+        } else {
+            tracing::warn!("Contacts manager not initialized, cannot add to contacts");
+        }
+        
+        Ok(())
     }
 }
 

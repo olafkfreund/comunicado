@@ -76,7 +76,7 @@ async fn main() -> Result<()> {
     let mut app = App::new()?;
 
     // Helper function to update progress display
-    let mut update_progress = |progress_manager: &StartupProgressManager, terminal: &mut Option<Terminal<CrosstermBackend<std::io::Stdout>>>| -> Result<()> {
+    let update_progress = |progress_manager: &StartupProgressManager, terminal: &mut Option<Terminal<CrosstermBackend<std::io::Stdout>>>| -> Result<()> {
         if let Some(ref mut term) = terminal {
             term.draw(|frame| {
                 let area = frame.size();

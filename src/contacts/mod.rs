@@ -3,6 +3,7 @@ pub mod advanced_search_ui;
 pub mod autocomplete;
 pub mod database;
 pub mod manager;
+pub mod popup;
 pub mod providers;
 pub mod sync;
 pub mod ui;
@@ -15,6 +16,7 @@ pub use advanced_search_ui::{AdvancedSearchUI, SearchAction, SearchField, Search
 pub use autocomplete::{ContactAutocomplete, ContactSuggestion};
 pub use database::{Contact, ContactEmail, ContactGroup, ContactPhone, ContactsDatabase};
 pub use manager::ContactsManager;
+pub use popup::{ContactPopup, ContactPopupAction, ContactPopupMode};
 pub use providers::{ContactsProvider, GoogleContactsProvider, OutlookContactsProvider};
 pub use sync::{ContactsSyncEngine, SyncProgress as ContactsSyncProgress};
 

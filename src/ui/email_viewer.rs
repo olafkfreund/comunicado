@@ -22,6 +22,7 @@ pub enum EmailViewerAction {
     Archive,
     MarkAsRead,
     MarkAsUnread,
+    AddToContacts,
     Close,
 }
 
@@ -55,6 +56,7 @@ impl EmailViewer {
                 EmailViewerAction::Delete,
                 EmailViewerAction::Archive,
                 EmailViewerAction::MarkAsRead,
+                EmailViewerAction::AddToContacts,
                 EmailViewerAction::Close,
             ],
         }
@@ -186,6 +188,7 @@ impl EmailViewer {
             KeyCode::Char('a') => Some(EmailViewerAction::Archive),
             KeyCode::Char('m') => Some(EmailViewerAction::MarkAsRead),
             KeyCode::Char('u') => Some(EmailViewerAction::MarkAsUnread),
+            KeyCode::Char('c') => Some(EmailViewerAction::AddToContacts),
             KeyCode::Char('v') => {
                 self.toggle_view_mode();
                 None
@@ -412,6 +415,7 @@ impl EmailViewer {
                 EmailViewerAction::Archive => "Archive",
                 EmailViewerAction::MarkAsRead => "Mark Read",
                 EmailViewerAction::MarkAsUnread => "Mark Unread",
+                EmailViewerAction::AddToContacts => "Add to Contacts",
                 EmailViewerAction::Close => "Close",
             };
 
@@ -435,9 +439,9 @@ impl EmailViewer {
 
     fn render_footer_bar(&self, frame: &mut Frame, area: Rect, theme: &Theme) {
         let instructions = if self.show_actions {
-            "↑↓: Select Action | Enter: Execute | Esc: Hide Actions | r: Reply | f: Forward | q: Quit"
+            "↑↓: Select Action | Enter: Execute | Esc: Hide Actions | r: Reply | f: Forward | c: Add Contact | q: Quit"
         } else {
-            "j/k/↑↓: Scroll | PgUp/PgDn: Page | Home/End: Top/Bottom | Space: Actions | v: View | q: Quit"
+            "j/k/↑↓: Scroll | PgUp/PgDn: Page | Home/End: Top/Bottom | Space: Actions | v: View | c: Add Contact | q: Quit"
         };
 
         let footer = Paragraph::new(instructions)

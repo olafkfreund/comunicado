@@ -328,6 +328,9 @@ pub enum KeyboardAction {
     // Attachment navigation
     NextAttachment,
     PreviousAttachment,
+
+    // Contacts actions
+    ContactsPopup,
 }
 
 /// Configuration for keyboard shortcuts
@@ -581,6 +584,12 @@ impl KeyboardConfig {
             KeyboardShortcut::ctrl(KeyCode::Char('k')),
             KeyboardAction::PreviousAttachment,
         );
+
+        // Contacts actions
+        self.shortcuts.insert(
+            KeyboardShortcut::new(KeyCode::Char('c'), KeyModifiers::CONTROL | KeyModifiers::SHIFT),
+            KeyboardAction::ContactsPopup,
+        );
     }
 
     /// Set up descriptions for each action
@@ -743,6 +752,12 @@ impl KeyboardConfig {
             KeyboardAction::PreviousAttachment,
             "Previous attachment".to_string(),
         );
+
+        // Contacts actions
+        self.action_descriptions.insert(
+            KeyboardAction::ContactsPopup,
+            "Open contacts popup".to_string(),
+        );
     }
 
     /// Get the action for a given keyboard shortcut
@@ -875,6 +890,7 @@ impl KeyboardConfig {
             | KeyboardAction::StartPageSearch
             | KeyboardAction::StartPageAddressBook
             | KeyboardAction::StartPageCalendar => "Start Page".to_string(),
+            KeyboardAction::ContactsPopup => "Contacts".to_string(),
         }
     }
 
