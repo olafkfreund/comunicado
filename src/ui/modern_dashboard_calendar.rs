@@ -1,10 +1,10 @@
 //! Modern Dashboard Calendar Widget Implementation
 
 use super::modern_dashboard::*;
-use chrono::{Local, Datelike, Weekday, NaiveDate};
+use chrono::{DateTime, Local, Datelike, Weekday, NaiveDate};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
-    style::{Color, Style},
+    style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{
         Block, Borders, Paragraph, Wrap, List, ListItem,
@@ -82,7 +82,7 @@ impl ModernDashboard {
             Line::from(vec![
                 Span::styled(
                     format!("Today: {}", Local::now().format("%B %d")),
-                    Style::default().fg(theme.colors.palette.text_primary_muted)
+                    Style::default().fg(theme.colors.palette.text_muted)
                 )
             ]),
         ];
@@ -211,7 +211,7 @@ impl ModernDashboard {
             };
 
             let day_paragraph = Paragraph::new(day_text)
-                .style(Style::default().fg(theme.colors.palette.text_primary_muted))
+                .style(Style::default().fg(theme.colors.palette.text_muted))
                 .alignment(Alignment::Center);
 
             f.render_widget(day_paragraph, area);
@@ -291,7 +291,7 @@ impl ModernDashboard {
             Line::from(vec![
                 Span::styled(
                     "This week's schedule...",
-                    Style::default().fg(theme.colors.palette.text_primary_muted)
+                    Style::default().fg(theme.colors.palette.text_muted)
                 )
             ]),
         ];
@@ -317,7 +317,7 @@ impl ModernDashboard {
             Line::from(vec![
                 Span::styled(
                     "Today's detailed schedule...",
-                    Style::default().fg(theme.colors.palette.text_primary_muted)
+                    Style::default().fg(theme.colors.palette.text_muted)
                 )
             ]),
         ];
@@ -336,7 +336,7 @@ impl ModernDashboard {
                 Line::from(vec![
                     Span::styled(
                         "📋 No upcoming events",
-                        Style::default().fg(theme.colors.palette.text_primary_muted)
+                        Style::default().fg(theme.colors.palette.text_muted)
                     )
                 ])
             ];
@@ -366,7 +366,7 @@ impl ModernDashboard {
                         Line::from(vec![
                             Span::styled(
                                 format!("  📅 {}", event.start_time.format("%m/%d %H:%M")),
-                                Style::default().fg(theme.colors.palette.text_primary_muted)
+                                Style::default().fg(theme.colors.palette.text_muted)
                             )
                         ]),
                     ])
@@ -407,7 +407,7 @@ impl ModernDashboard {
             EventColor::Purple => Color::Magenta,
             EventColor::Orange => Color::LightRed,
             EventColor::Pink => Color::LightMagenta,
-            EventColor::Gray => theme.colors.palette.text_primary_muted,
+            EventColor::Gray => theme.colors.palette.text_muted,
         }
     }
 

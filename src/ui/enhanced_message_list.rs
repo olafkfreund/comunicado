@@ -287,19 +287,29 @@ impl EnhancedMessageList {
 
     // Delegate all other methods to base message list
     pub fn render(&mut self, f: &mut ratatui::Frame<'_>, area: ratatui::layout::Rect, theme: &crate::theme::Theme) {
-        self.base.render(f, area, theme)
+        use ratatui::widgets::{Block, Borders};
+        let block = Block::default().borders(Borders::ALL);
+        self.base.render(f, area, block, false, theme)
     }
 
     pub fn handle_key(&mut self, key: &crossterm::event::KeyEvent) -> bool {
-        self.base.handle_key(key)
+        // MessageList doesn't have a generic handle_key method
+        // Instead it has handle_up, handle_down, handle_enter methods
+        use crossterm::event::{KeyCode, KeyEvent};
+        match key.code {
+            KeyCode::Up => { self.base.handle_up(); true },
+            KeyCode::Down => { self.base.handle_down(); true },
+            KeyCode::Enter => { self.base.handle_enter(); true },
+            _ => false,
+        }
     }
 
     pub fn select_next(&mut self) {
-        self.base.select_next()
+        self.base.handle_down()
     }
 
     pub fn select_previous(&mut self) {
-        self.base.select_previous()
+        self.base.handle_up()
     }
 
     pub fn get_selected_message(&self) -> Option<&MessageItem> {

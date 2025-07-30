@@ -513,7 +513,7 @@ impl ModernDashboard {
         if self.startup_widget.overall_progress < 100.0 {
             self.startup_widget.overall_progress += 0.5; // Gradual progress
             self.startup_widget.animation_progress = 
-                (self.animation_state.pulse_phase.sin() + 1.0) / 2.0;
+                ((self.animation_state.pulse_phase.sin() + 1.0) / 2.0) as f64;
         }
     }
 

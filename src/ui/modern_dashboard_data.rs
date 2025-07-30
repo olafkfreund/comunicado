@@ -1,7 +1,7 @@
 //! Modern Dashboard Data Management and Initialization
 
 use super::modern_dashboard::*;
-use chrono::Local;
+use chrono::{Local, Duration as ChronoDuration};
 
 impl ModernDashboard {
     /// Initialize dashboard with sample data

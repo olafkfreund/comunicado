@@ -7,6 +7,7 @@ use chrono::{Timelike, Datelike};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
+    symbols,
     text::{Line, Span},
     widgets::{
         Block, Borders, LineGauge, Paragraph, Sparkline, Wrap,
@@ -101,7 +102,7 @@ impl ModernDashboard {
             Line::from(vec![
                 Span::styled(
                     date_str,
-                    Style::default().fg(theme.colors.palette.text_primary_muted)
+                    Style::default().fg(theme.colors.palette.text_muted)
                 )
             ]),
         ];
@@ -112,7 +113,7 @@ impl ModernDashboard {
             lines.push(Line::from(vec![
                 Span::styled(
                     format!("🌍 {}", time.format("%Z")),
-                    Style::default().fg(theme.colors.palette.text_primary_muted)
+                    Style::default().fg(theme.colors.palette.text_muted)
                 )
             ]));
         }
@@ -127,7 +128,7 @@ impl ModernDashboard {
                 ),
                 Span::styled(
                     "░".repeat((inner.width - seconds_bar_width) as usize),
-                    Style::default().fg(theme.colors.palette.text_primary_muted)
+                    Style::default().fg(theme.colors.palette.text_muted)
                 )
             ]));
         }
@@ -166,7 +167,7 @@ impl ModernDashboard {
                     ),
                     Span::styled(
                         format!(" (feels like {}°C)", weather.feels_like as i32),
-                        Style::default().fg(theme.colors.palette.text_primary_muted)
+                        Style::default().fg(theme.colors.palette.text_muted)
                     )
                 ]),
                 Line::from(vec![
@@ -189,7 +190,7 @@ impl ModernDashboard {
                         weather.wind_speed,
                         weather.visibility
                     ),
-                    Style::default().fg(theme.colors.palette.text_primary_muted)
+                    Style::default().fg(theme.colors.palette.text_muted)
                 )
             ]));
 
@@ -219,7 +220,7 @@ impl ModernDashboard {
                 Line::from(vec![
                     Span::styled(
                         "🔄 Loading weather data...",
-                        Style::default().fg(theme.colors.palette.text_primary_muted)
+                        Style::default().fg(theme.colors.palette.text_muted)
                     )
                 ])
             ];
@@ -363,7 +364,7 @@ impl ModernDashboard {
             self.system_monitor.network_activity.total_upload / 1024 / 1024,
             self.system_monitor.network_activity.total_download / 1024 / 1024
         ))
-        .style(Style::default().fg(theme.colors.palette.text_primary_muted));
+        .style(Style::default().fg(theme.colors.palette.text_muted));
         f.render_widget(total_text, net_chunks[2]);
     }
 
@@ -431,7 +432,7 @@ impl ModernDashboard {
             Line::from(vec![
                 Span::styled(
                     format!("📊 Load: {:.2}", self.system_monitor.load_average[0]),
-                    Style::default().fg(theme.colors.palette.text_primary_muted)
+                    Style::default().fg(theme.colors.palette.text_muted)
                 )
             ]),
         ];

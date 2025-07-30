@@ -1,10 +1,10 @@
 //! Modern Dashboard Contacts and Startup Widgets
 
 use super::modern_dashboard::*;
-use chrono::Local;
+use chrono::{DateTime, Local};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
-    style::{Color, Style},
+    style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{
         Block, Borders, Paragraph, Wrap, List, ListItem, LineGauge,
@@ -61,7 +61,7 @@ impl ModernDashboard {
             ),
             Span::styled(
                 format!(" ({})", self.contacts_widget.contact_count),
-                Style::default().fg(theme.colors.palette.text_primary_muted)
+                Style::default().fg(theme.colors.palette.text_muted)
             )
         ]);
 
@@ -161,7 +161,7 @@ impl ModernDashboard {
             lines.push(Line::from(vec![
                 Span::styled(
                     format!("  📧 {}", contact.email),
-                    Style::default().fg(theme.colors.palette.text_primary_muted)
+                    Style::default().fg(theme.colors.palette.text_muted)
                 )
             ]));
         }
@@ -172,7 +172,7 @@ impl ModernDashboard {
             lines.push(Line::from(vec![
                 Span::styled(
                     format!("  🕒 {}", time_ago),
-                    Style::default().fg(theme.colors.palette.text_primary_muted)
+                    Style::default().fg(theme.colors.palette.text_muted)
                 )
             ]));
         }
@@ -186,7 +186,7 @@ impl ModernDashboard {
             Line::from(vec![
                 Span::styled(
                     message,
-                    Style::default().fg(theme.colors.palette.text_primary_muted)
+                    Style::default().fg(theme.colors.palette.text_muted)
                 )
             ])
         ];
@@ -227,8 +227,8 @@ impl ModernDashboard {
             ContactStatus::Online => Color::Green,
             ContactStatus::Away => Color::Yellow,
             ContactStatus::Busy => Color::Red,
-            ContactStatus::Offline => theme.colors.palette.text_primary_muted,
-            ContactStatus::Unknown => theme.colors.palette.text_primary_muted,
+            ContactStatus::Offline => theme.colors.palette.text_muted,
+            ContactStatus::Unknown => theme.colors.palette.text_muted,
         }
     }
 
@@ -253,9 +253,9 @@ impl ModernDashboard {
         let pulse_intensity = (self.animation_state.pulse_phase.sin() + 1.0) / 2.0;
         let border_color = if self.startup_widget.overall_progress < 100.0 {
             Color::Rgb(
-                (theme.colors.palette.accent.r as f32 * (0.7 + pulse_intensity * 0.3)) as u8,
-                (theme.colors.palette.accent.g as f32 * (0.7 + pulse_intensity * 0.3)) as u8,
-                (theme.colors.palette.accent.b as f32 * (0.7 + pulse_intensity * 0.3)) as u8,
+                (match theme.colors.palette.accent { Color::Rgb(r, _, _) => r, _ => 88 } as f32 * (0.7 + pulse_intensity * 0.3)) as u8,
+                (match theme.colors.palette.accent { Color::Rgb(_, g, _) => g, _ => 166 } as f32 * (0.7 + pulse_intensity * 0.3)) as u8,
+                (match theme.colors.palette.accent { Color::Rgb(_, _, b) => b, _ => 255 } as f32 * (0.7 + pulse_intensity * 0.3)) as u8,
             )
         } else {
             Color::Green
@@ -334,7 +334,7 @@ impl ModernDashboard {
                         format!("📊 {} updates/sec", 
                             (1000.0 / self.update_interval.as_millis() as f64) as u32
                         ),
-                        Style::default().fg(theme.colors.palette.text_primary_muted)
+                        Style::default().fg(theme.colors.palette.text_muted)
                     )
                 ]),
             ]
@@ -411,11 +411,11 @@ impl ModernDashboard {
                 };
 
                 let status_color = match phase.status {
-                    PhaseStatus::Pending => theme.colors.palette.text_primary_muted,
+                    PhaseStatus::Pending => theme.colors.palette.text_muted,
                     PhaseStatus::InProgress => Color::Yellow,
                     PhaseStatus::Completed => Color::Green,
                     PhaseStatus::Error => Color::Red,
-                    PhaseStatus::Skipped => theme.colors.palette.text_primary_muted,
+                    PhaseStatus::Skipped => theme.colors.palette.text_muted,
                 };
 
                 let is_current = i == self.startup_widget.current_phase;
