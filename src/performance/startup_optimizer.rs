@@ -244,7 +244,7 @@ impl StartupOptimizer {
 
         // Start deferred tasks in background
         if self.settings.enable_deferred_loading {
-            self.start_deferred_tasks().await;
+            let _ = self.start_deferred_tasks().await;
         }
 
         Ok(())

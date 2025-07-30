@@ -83,6 +83,7 @@ impl FlashFastIntegration {
     }
 
     /// Setup IMAP manager with flash speed
+    #[allow(dead_code)]
     async fn setup_imap_manager_fast(_app: &mut App) -> Result<()> {
         // IMAP manager setup is handled by initialize_imap_manager
         Ok(())
@@ -126,6 +127,7 @@ impl FlashFastIntegration {
     }
 
     /// Create enhanced message list (for future UI integration)
+    #[allow(dead_code)]
     async fn create_enhanced_message_list(
         database: Arc<EmailDatabase>,
         precache_system: Arc<EmailPrecacheSystem>,
@@ -208,7 +210,7 @@ impl IntegrationStatus {
 /// Extension trait for App to add flash fast integration
 pub trait FlashFastAppExt {
     /// Apply flash fast email loading integration
-    async fn flash_fast_email_integration(&mut self) -> Result<()>;
+    fn flash_fast_email_integration(&mut self) -> impl std::future::Future<Output = Result<()>>;
     
     /// Check if flash fast integration is active
     fn is_flash_fast_integrated(&self) -> bool;
@@ -218,8 +220,8 @@ pub trait FlashFastAppExt {
 }
 
 impl FlashFastAppExt for App {
-    async fn flash_fast_email_integration(&mut self) -> Result<()> {
-        FlashFastIntegration::flash_integrate(self).await
+    fn flash_fast_email_integration(&mut self) -> impl std::future::Future<Output = Result<()>> {
+        FlashFastIntegration::flash_integrate(self)
     }
     
     fn is_flash_fast_integrated(&self) -> bool {

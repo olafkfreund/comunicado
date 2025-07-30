@@ -3,7 +3,6 @@
 //! Shows users real-time startup progress with progress bars and status updates
 
 use ratatui::{
-    backend::Backend,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Style},
     text::{Line, Span},

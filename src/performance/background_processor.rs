@@ -501,6 +501,7 @@ impl BackgroundProcessor {
     }
 
     /// Clean up old task results
+    #[allow(dead_code)]
     async fn cleanup_old_results(
         _task_results: &Arc<RwLock<HashMap<Uuid, TaskResult>>>,
         max_results: usize,

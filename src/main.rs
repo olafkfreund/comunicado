@@ -140,143 +140,55 @@ async fn main() -> Result<()> {
         return Ok(());
     }
 
-    // Phase 2: Initialize IMAP account manager with reduced timeout
-    if let Err(e) = progress_manager.start_phase("IMAP Manager") {
-        tracing::warn!("Failed to start IMAP Manager phase: {}", e);
-    }
-    update_progress(&progress_manager, &mut terminal)?;
+    // Phases 2-5: Initialize services with reduced timeouts for faster startup
+    tracing::info!("Starting optimized initialization of optional services...");
     
-    tracing::info!("Initializing IMAP account manager with reduced timeout...");
-    match tokio::time::timeout(
-        std::time::Duration::from_secs(10), // Reduced from default
-        app.initialize_imap_manager(),
-    )
-    .await
-    {
-        Ok(Ok(())) => {
-            tracing::info!("IMAP account manager initialized successfully");
-            if let Err(e) = progress_manager.complete_phase("IMAP Manager") {
-                tracing::warn!("Failed to complete IMAP Manager phase: {}", e);
+    // Helper macro to avoid repetitive error handling
+    macro_rules! init_phase {
+        ($phase_name:expr, $timeout_secs:expr, $init_fn:expr) => {
+            if let Err(e) = progress_manager.start_phase($phase_name) {
+                tracing::warn!("Failed to start {} phase: {}", $phase_name, e);
             }
-        }
-        Ok(Err(e)) => {
-            tracing::error!("Failed to initialize IMAP account manager: {}", e);
-            if let Err(err) = progress_manager.fail_phase("IMAP Manager", format!("IMAP initialization failed: {}", e)) {
-                tracing::warn!("Failed to mark IMAP Manager phase as failed: {}", err);
+            update_progress(&progress_manager, &mut terminal)?;
+            
+            match tokio::time::timeout(
+                std::time::Duration::from_secs($timeout_secs),
+                $init_fn
+            ).await {
+                Ok(Ok(())) => {
+                    tracing::info!("{} initialized successfully", $phase_name);
+                    if let Err(e) = progress_manager.complete_phase($phase_name) {
+                        tracing::warn!("Failed to complete {} phase: {}", $phase_name, e);
+                    }
+                }
+                Ok(Err(e)) => {
+                    tracing::error!("Failed to initialize {}: {}", $phase_name, e);
+                    if let Err(err) = progress_manager.fail_phase($phase_name, format!("{} initialization failed: {}", $phase_name, e)) {
+                        tracing::warn!("Failed to mark {} phase as failed: {}", $phase_name, err);
+                    }
+                }
+                Err(_) => {
+                    tracing::error!("{} initialization timed out after {} seconds", $phase_name, $timeout_secs);
+                    if let Err(e) = progress_manager.timeout_phase($phase_name) {
+                        tracing::warn!("Failed to mark {} phase as timed out: {}", $phase_name, e);
+                    }
+                }
             }
-            // Continue without IMAP manager
-        }
-        Err(_) => {
-            tracing::error!("IMAP account manager initialization timed out after 10 seconds");
-            if let Err(e) = progress_manager.timeout_phase("IMAP Manager") {
-                tracing::warn!("Failed to mark IMAP Manager phase as timed out: {}", e);
-            }
-            // Continue without IMAP manager
-        }
+        };
     }
-    update_progress(&progress_manager, &mut terminal)?;
-
-    // Phase 3: Check for existing accounts and run setup wizard if needed
-    if let Err(e) = progress_manager.start_phase("Account Setup") {
-        tracing::warn!("Failed to start Account Setup phase: {}", e);
-    }
-    update_progress(&progress_manager, &mut terminal)?;
     
-    tracing::info!("Checking accounts and setup with timeout...");
-    match tokio::time::timeout(
-        std::time::Duration::from_secs(15),
-        app.check_accounts_and_setup(),
-    )
-    .await
-    {
-        Ok(Ok(())) => {
-            tracing::info!("Account check and setup completed");
-            if let Err(e) = progress_manager.complete_phase("Account Setup") {
-                tracing::warn!("Failed to complete Account Setup phase: {}", e);
-            }
-        }
-        Ok(Err(e)) => {
-            tracing::error!("Failed to check accounts and setup: {}", e);
-            if let Err(err) = progress_manager.fail_phase("Account Setup", format!("Account setup failed: {}", e)) {
-                tracing::warn!("Failed to mark Account Setup phase as failed: {}", err);
-            }
-            // Continue - UI will show setup wizard if needed
-        }
-        Err(_) => {
-            tracing::error!("Account check and setup timed out after 15 seconds");
-            if let Err(e) = progress_manager.timeout_phase("Account Setup") {
-                tracing::warn!("Failed to mark Account Setup phase as timed out: {}", e);
-            }
-            // Continue - UI will show setup wizard if needed
-        }
-    }
-    update_progress(&progress_manager, &mut terminal)?;
-
-    // Phase 4: Initialize other services quickly (with short timeout)
-    if let Err(e) = progress_manager.start_phase("Services") {
-        tracing::warn!("Failed to start Services phase: {}", e);
-    }
-    update_progress(&progress_manager, &mut terminal)?;
+    // Phase 2: IMAP Manager (reduced timeout from 10s to 5s)
+    init_phase!("IMAP Manager", 5, app.initialize_imap_manager());
     
-    tracing::info!("Initializing services with timeout...");
-    match tokio::time::timeout(std::time::Duration::from_secs(5), app.initialize_services()).await {
-        Ok(Ok(())) => {
-            tracing::info!("Services initialized successfully");
-            if let Err(e) = progress_manager.complete_phase("Services") {
-                tracing::warn!("Failed to complete Services phase: {}", e);
-            }
-        }
-        Ok(Err(e)) => {
-            tracing::error!("Failed to initialize services: {}", e);
-            if let Err(err) = progress_manager.fail_phase("Services", format!("Services initialization failed: {}", e)) {
-                tracing::warn!("Failed to mark Services phase as failed: {}", err);
-            }
-            // Continue without some services
-        }
-        Err(_) => {
-            tracing::error!("Service initialization timed out after 5 seconds");
-            if let Err(e) = progress_manager.timeout_phase("Services") {
-                tracing::warn!("Failed to mark Services phase as timed out: {}", e);
-            }
-            // Continue without some services
-        }
-    }
-    update_progress(&progress_manager, &mut terminal)?;
-
-    // Phase 5: Initialize dashboard services (non-critical, short timeout)
-    if let Err(e) = progress_manager.start_phase("Dashboard Services") {
-        tracing::warn!("Failed to start Dashboard Services phase: {}", e);
-    }
-    update_progress(&progress_manager, &mut terminal)?;
+    // Phase 3: Account Setup (reduced timeout from 15s to 8s)
+    init_phase!("Account Setup", 8, app.check_accounts_and_setup());
     
-    tracing::info!("Initializing dashboard services with timeout...");
-    match tokio::time::timeout(
-        std::time::Duration::from_secs(3),
-        app.initialize_dashboard_services(),
-    )
-    .await
-    {
-        Ok(Ok(())) => {
-            tracing::info!("Dashboard services initialized successfully");
-            if let Err(e) = progress_manager.complete_phase("Dashboard Services") {
-                tracing::warn!("Failed to complete Dashboard Services phase: {}", e);
-            }
-        }
-        Ok(Err(e)) => {
-            tracing::error!("Failed to initialize dashboard services: {}", e);
-            if let Err(err) = progress_manager.fail_phase("Dashboard Services", format!("Dashboard services failed: {}", e)) {
-                tracing::warn!("Failed to mark Dashboard Services phase as failed: {}", err);
-            }
-            // Continue without dashboard services
-        }
-        Err(_) => {
-            tracing::error!("Dashboard service initialization timed out after 3 seconds");
-            if let Err(e) = progress_manager.timeout_phase("Dashboard Services") {
-                tracing::warn!("Failed to mark Dashboard Services phase as timed out: {}", e);
-            }
-            // Continue without dashboard services
-        }
-    }
+    // Phase 4: Services (reduced timeout from 5s to 3s)
+    init_phase!("Services", 3, app.initialize_services());
+    
+    // Phase 5: Dashboard Services (reduced timeout from 3s to 2s)
+    init_phase!("Dashboard Services", 2, app.initialize_dashboard_services());
+    
     update_progress(&progress_manager, &mut terminal)?;
 
     // Startup is now complete - the StartupProgressManager automatically handles completion when all phases are done

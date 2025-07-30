@@ -12,7 +12,7 @@ use chrono::{DateTime, Local, Timelike};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Style},
-    widgets::{Block, Borders, Paragraph, Wrap},
+    widgets::{Paragraph, Wrap},
     Frame,
 };
 use std::collections::VecDeque;
@@ -62,8 +62,10 @@ pub struct SystemMonitor {
     pub(crate) network_activity: NetworkActivity,
     pub(crate) cpu_history: VecDeque<f64>,
     pub(crate) memory_history: VecDeque<f64>,
+    #[allow(dead_code)]
     pub(crate) temperature: Option<f64>,
     pub(crate) load_average: [f64; 3],
+    #[allow(dead_code)]
     pub(crate) uptime: Duration,
 }
 

@@ -369,7 +369,7 @@ impl ModernDashboard {
     }
 
     /// Render system performance graphs
-    fn render_system_graphs(&self, f: &mut Frame<'_>, area: Rect, theme: &Theme) {
+    fn render_system_graphs(&self, f: &mut Frame<'_>, area: Rect, _theme: &Theme) {
         let graph_chunks = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])

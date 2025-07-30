@@ -295,7 +295,7 @@ impl EnhancedMessageList {
     pub fn handle_key(&mut self, key: &crossterm::event::KeyEvent) -> bool {
         // MessageList doesn't have a generic handle_key method
         // Instead it has handle_up, handle_down, handle_enter methods
-        use crossterm::event::{KeyCode, KeyEvent};
+        use crossterm::event::KeyCode;
         match key.code {
             KeyCode::Up => { self.base.handle_up(); true },
             KeyCode::Down => { self.base.handle_down(); true },

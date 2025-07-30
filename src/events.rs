@@ -19,6 +19,7 @@ pub enum EventResult {
     RefreshAccount(String), // Account ID to refresh connection
     SyncAccount(String),    // Account ID to manually sync
     FolderSelect(String),   // Folder path to load messages from
+    FolderForceRefresh(String), // Folder path to force refresh from IMAP
     FolderOperation(crate::ui::folder_tree::FolderOperation), // Folder operation to execute
 }
 
@@ -1195,13 +1196,11 @@ impl EventHandler {
                 }
             }
             KeyCode::Char('R') => {
-                // Refresh folder (capital R)
+                // Force refresh folder (capital R) - full IMAP sync
                 if let FocusedPane::FolderTree = ui.focused_pane() {
                     let folder_path = ui.folder_tree().selected_folder().map(|f| f.path.clone());
                     if let Some(path) = folder_path {
-                        ui.folder_tree_mut().refresh_folder(&path);
-                        // Simulate sync completion after a moment (in production this would be async)
-                        ui.folder_tree_mut().mark_folder_synced(&path, 0, 42);
+                        return EventResult::FolderForceRefresh(path);
                     }
                 }
             }

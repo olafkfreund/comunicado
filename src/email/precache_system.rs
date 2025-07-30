@@ -17,10 +17,12 @@ pub struct EmailPrecacheSystem {
     /// Database for storing emails
     database: Arc<EmailDatabase>,
     /// IMAP account manager
+    #[allow(dead_code)]
     imap_manager: Arc<ImapAccountManager>,
     /// Background processor for async operations
     background_processor: Arc<BackgroundProcessor>,
     /// Sync engine for IMAP operations
+    #[allow(dead_code)]
     sync_engine: Arc<SyncEngine>,
     /// Progress tracker for UI updates
     progress_tracker: Arc<ProgressTracker>,
@@ -34,13 +36,17 @@ pub struct EmailPrecacheSystem {
 
 /// Account synchronization state
 #[derive(Debug, Clone)]
-struct AccountSyncState {
+pub struct AccountSyncState {
+    #[allow(dead_code)]
     account_id: String,
     last_sync: Option<Instant>,
+    #[allow(dead_code)]
     sync_interval: Duration,
+    #[allow(dead_code)]
     priority_folders: Vec<String>,
     is_syncing: bool,
     total_messages: u32,
+    #[allow(dead_code)]
     unread_count: u32,
 }
 
@@ -233,7 +239,7 @@ impl EmailPrecacheSystem {
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         
         // Start progress tracking
-        let progress = self.progress_tracker
+        let _progress = self.progress_tracker
             .start_folder_sync(account_id, folder_name)
             .await;
 
@@ -299,7 +305,7 @@ impl EmailPrecacheSystem {
         &self,
         account_id: &str,
         folder_name: Option<&str>,
-        strategy: SyncStrategy,
+        _strategy: SyncStrategy,
     ) -> Result<u32, Box<dyn std::error::Error + Send + Sync>> {
         
         // This is a simulation - in real implementation you would:

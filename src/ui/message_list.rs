@@ -12,6 +12,7 @@ use ratatui::{
     Frame,
 };
 use std::sync::Arc;
+use std::collections::HashMap;
 use uuid::Uuid;
 
 #[derive(Debug, Clone)]
@@ -125,6 +126,9 @@ pub struct MessageList {
     search_query: String,
     search_active: bool,
     search_results_count: usize,
+    // Threading cache to avoid blocking database calls
+    threading_cache: HashMap<String, Vec<StoredMessage>>,
+    threading_cache_key: Option<String>,
 }
 
 impl MessageList {
@@ -143,6 +147,8 @@ impl MessageList {
             search_query: String::new(),
             search_active: false,
             search_results_count: 0,
+            threading_cache: HashMap::new(),
+            threading_cache_key: None,
         };
 
         // Don't initialize with sample messages initially - they will be loaded from database
@@ -720,6 +726,14 @@ impl MessageList {
             folder_name
         );
 
+        // Check if we're switching folders - if so, clear threading cache
+        let folder_changed = self.current_account.as_ref() != Some(&account_id) 
+            || self.current_folder.as_ref() != Some(&folder_name);
+        
+        if folder_changed {
+            self.clear_threading_cache();
+        }
+        
         if let Some(ref database) = self.database {
             self.current_account = Some(account_id.clone());
             self.current_folder = Some(folder_name.clone());
@@ -756,6 +770,11 @@ impl MessageList {
         } else {
             tracing::error!("Database not available in MessageList");
             return Err("Database not available".into());
+        }
+
+        // Preload threading cache for better performance on view mode changes
+        if folder_changed {
+            self.preload_threading_cache().await;
         }
 
         Ok(())
@@ -937,66 +956,88 @@ impl MessageList {
         }
     }
 
-    /// Apply threading algorithm to real messages loaded from the database
+    /// Clear the threading cache (call when switching folders)
+    pub fn clear_threading_cache(&mut self) {
+        self.threading_cache.clear();
+        self.threading_cache_key = None;
+        tracing::info!("Threading cache cleared");
+    }
+
+    /// Preload threading data into cache (call this asynchronously when folder changes)
+    pub async fn preload_threading_cache(&mut self) {
+        if let Some(ref database) = self.database {
+            if let (Some(ref account_id), Some(ref folder_name)) =
+                (self.current_account.as_ref(), self.current_folder.as_ref())
+            {
+                let cache_key = format!("{}:{}", account_id, folder_name);
+                
+                // Only load if not already cached
+                if self.threading_cache_key.as_ref() != Some(&cache_key) {
+                    tracing::info!("Preloading threading cache for {}", cache_key);
+                    
+                    match database.get_messages(account_id, folder_name, Some(1000), None).await {
+                        Ok(stored_messages) => {
+                            tracing::info!("Cached {} messages for threading", stored_messages.len());
+                            self.threading_cache.insert(cache_key.clone(), stored_messages);
+                            self.threading_cache_key = Some(cache_key);
+                        }
+                        Err(e) => {
+                            tracing::error!("Failed to preload threading cache: {}", e);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Apply threading algorithm to real messages using cached data (non-blocking)
     fn apply_threading_to_real_messages(&mut self) {
         tracing::info!(
             "Applying threading algorithm to {} real messages",
             self.messages.len()
         );
 
-        // Step 1: Convert MessageItems back to stored messages and then to EmailMessages
-        // We need the stored messages to get threading information
-        if let Some(ref database) = self.database {
-            if let (Some(ref account_id), Some(ref folder_name)) =
-                (self.current_account.as_ref(), self.current_folder.as_ref())
-            {
-                // Load stored messages from database to get threading info
-                let stored_messages_result = tokio::task::block_in_place(|| {
-                    tokio::runtime::Handle::current().block_on(async {
-                        database
-                            .get_messages(account_id, folder_name, Some(1000), None)
-                            .await
-                    })
-                });
+        // Step 1: Use cached stored messages for threading (non-blocking)
+        if let (Some(ref account_id), Some(ref folder_name)) =
+            (self.current_account.as_ref(), self.current_folder.as_ref())
+        {
+            let cache_key = format!("{}:{}", account_id, folder_name);
+            
+            // Try to get stored messages from cache first
+            if let Some(stored_messages) = self.threading_cache.get(&cache_key) {
+                tracing::info!(
+                    "Using cached {} stored messages for threading",
+                    stored_messages.len()
+                );
 
-                match stored_messages_result {
-                    Ok(stored_messages) => {
-                        tracing::info!(
-                            "Retrieved {} stored messages for threading",
-                            stored_messages.len()
-                        );
+                // Convert to EmailMessage objects
+                let email_messages: Vec<EmailMessage> = stored_messages
+                    .iter()
+                    .filter_map(|stored| Self::stored_message_to_email_message(stored))
+                    .collect();
 
-                        // Convert to EmailMessage objects
-                        let email_messages: Vec<EmailMessage> = stored_messages
-                            .iter()
-                            .filter_map(|stored| Self::stored_message_to_email_message(stored))
-                            .collect();
+                tracing::info!(
+                    "Converted {} stored messages to EmailMessage objects",
+                    email_messages.len()
+                );
 
-                        tracing::info!(
-                            "Converted {} stored messages to EmailMessage objects",
-                            email_messages.len()
-                        );
+                // Apply threading algorithm using the ThreadingEngine
+                let threads = self.threading_engine.thread_messages(email_messages);
+                tracing::info!("Threading algorithm produced {} threads", threads.len());
 
-                        // Apply threading algorithm using the ThreadingEngine
-                        let threads = self.threading_engine.thread_messages(email_messages);
-                        tracing::info!("Threading algorithm produced {} threads", threads.len());
+                // Convert threads back to MessageItems for display
+                self.messages = Self::threads_to_message_items(threads, &stored_messages);
+                tracing::info!(
+                    "Converted threads to {} MessageItems for display",
+                    self.messages.len()
+                );
 
-                        // Convert threads back to MessageItems for display
-                        self.messages = Self::threads_to_message_items(threads, &stored_messages);
-                        tracing::info!(
-                            "Converted threads to {} MessageItems for display",
-                            self.messages.len()
-                        );
-
-                        // Sort threads by latest message date (newest first)
-                        self.messages.sort_by(|a, b| b.date.cmp(&a.date));
-                    }
-                    Err(e) => {
-                        tracing::error!("Failed to load stored messages for threading: {}", e);
-                        // Fall back to flat view
-                        self.messages.sort_by(|a, b| b.date.cmp(&a.date));
-                    }
-                }
+                // Sort threads by latest message date (newest first)
+                self.messages.sort_by(|a, b| b.date.cmp(&a.date));
+            } else {
+                tracing::warn!("Threading cache not available for {}. Threading disabled until cache is populated.", cache_key);
+                // Fall back to flat view without threading
+                self.messages.sort_by(|a, b| b.date.cmp(&a.date));
             }
         }
     }
