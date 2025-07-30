@@ -1,6 +1,7 @@
 use crate::keyboard::{KeyboardAction, KeyboardManager};
 use crate::ui::{ComposeAction, DraftAction, FocusedPane, StartPageNavigation, UIMode, UI};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use chrono::{Datelike, NaiveDate};
 
 pub struct EventHandler {
     should_quit: bool,
@@ -636,6 +637,128 @@ impl EventHandler {
                 self.handle_sender_contact_action(ui, |email| EventResult::ContactQuickActions(email))
             }
 
+            // Calendar actions
+            KeyboardAction::ShowCalendar => {
+                ui.show_calendar();
+                EventResult::Continue
+            }
+            KeyboardAction::CreateEvent => {
+                if ui.mode() == &UIMode::Calendar {
+                    // TODO: Implement event creation - for now just show a notification
+                    tracing::info!("Create event action triggered in calendar mode");
+                } else {
+                    ui.show_calendar();
+                    tracing::info!("Switched to calendar and triggered create event");
+                }
+                EventResult::Continue
+            }
+            KeyboardAction::EditEvent => {
+                if ui.mode() == &UIMode::Calendar {
+                    // TODO: Implement event editing
+                    tracing::info!("Edit event action triggered in calendar mode");
+                }
+                EventResult::Continue
+            }
+            KeyboardAction::DeleteEvent => {
+                if ui.mode() == &UIMode::Calendar {
+                    // TODO: Implement event deletion
+                    tracing::info!("Delete event action triggered in calendar mode");
+                }
+                EventResult::Continue
+            }
+            KeyboardAction::ViewEventDetails => {
+                if ui.mode() == &UIMode::Calendar {
+                    // TODO: Implement event details view
+                    tracing::info!("View event details action triggered in calendar mode");
+                }
+                EventResult::Continue
+            }
+            KeyboardAction::CreateTodo => {
+                if ui.mode() == &UIMode::Calendar {
+                    // TODO: Implement todo creation
+                    tracing::info!("Create todo action triggered in calendar mode");
+                } else {
+                    ui.show_calendar();
+                    tracing::info!("Switched to calendar and triggered create todo");
+                }
+                EventResult::Continue
+            }
+            KeyboardAction::ToggleTodoComplete => {
+                if ui.mode() == &UIMode::Calendar {
+                    // TODO: Implement todo toggle
+                    tracing::info!("Toggle todo complete action triggered in calendar mode");
+                }
+                EventResult::Continue
+            }
+            KeyboardAction::ViewTodos => {
+                if ui.mode() == &UIMode::Calendar {
+                    // TODO: Implement todos view
+                    tracing::info!("View todos action triggered in calendar mode");
+                } else {
+                    ui.show_calendar();
+                    tracing::info!("Switched to calendar and triggered view todos");
+                }
+                EventResult::Continue
+            }
+            KeyboardAction::CalendarNextMonth => {
+                if ui.mode() == &UIMode::Calendar {
+                    // Navigate to next month using existing date logic
+                    let current_date = ui.calendar_ui_mut().selected_date();
+                    let next_month = if current_date.month() == 12 {
+                        chrono::NaiveDate::from_ymd_opt(current_date.year() + 1, 1, 1).unwrap_or(current_date)
+                    } else {
+                        chrono::NaiveDate::from_ymd_opt(current_date.year(), current_date.month() + 1, 1).unwrap_or(current_date)
+                    };
+                    ui.calendar_ui_mut().set_selected_date(next_month);
+                    tracing::info!("Calendar navigated to next month: {}", next_month);
+                }
+                EventResult::Continue
+            }
+            KeyboardAction::CalendarPrevMonth => {
+                if ui.mode() == &UIMode::Calendar {
+                    // Navigate to previous month using existing date logic
+                    let current_date = ui.calendar_ui_mut().selected_date();
+                    let prev_month = if current_date.month() == 1 {
+                        chrono::NaiveDate::from_ymd_opt(current_date.year() - 1, 12, 1).unwrap_or(current_date)
+                    } else {
+                        chrono::NaiveDate::from_ymd_opt(current_date.year(), current_date.month() - 1, 1).unwrap_or(current_date)
+                    };
+                    ui.calendar_ui_mut().set_selected_date(prev_month);
+                    tracing::info!("Calendar navigated to previous month: {}", prev_month);
+                }
+                EventResult::Continue
+            }
+            KeyboardAction::CalendarToday => {
+                if ui.mode() == &UIMode::Calendar {
+                    ui.calendar_ui_mut().navigate_to_today();
+                }
+                EventResult::Continue
+            }
+            KeyboardAction::CalendarWeekView => {
+                if ui.mode() == &UIMode::Calendar {
+                    ui.calendar_ui_mut().set_view_mode(crate::ui::CalendarViewMode::Week);
+                }
+                EventResult::Continue
+            }
+            KeyboardAction::CalendarMonthView => {
+                if ui.mode() == &UIMode::Calendar {
+                    ui.calendar_ui_mut().set_view_mode(crate::ui::CalendarViewMode::Month);
+                }
+                EventResult::Continue
+            }
+            KeyboardAction::CalendarDayView => {
+                if ui.mode() == &UIMode::Calendar {
+                    ui.calendar_ui_mut().set_view_mode(crate::ui::CalendarViewMode::Day);
+                }
+                EventResult::Continue
+            }
+            KeyboardAction::CalendarAgendaView => {
+                if ui.mode() == &UIMode::Calendar {
+                    ui.calendar_ui_mut().set_view_mode(crate::ui::CalendarViewMode::Agenda);
+                }
+                EventResult::Continue
+            }
+
             // Other actions that need specific handling
             _ => {
                 tracing::debug!("Unhandled keyboard action: {:?}", action);
@@ -1106,6 +1229,10 @@ impl EventHandler {
                     }
                 }
             }
+            KeyCode::F(3) => {
+                // F3 - Calendar (global access)
+                ui.show_calendar();
+            }
             KeyCode::F(2) => {
                 // F2 - Rename
                 match ui.focused_pane() {
@@ -1354,12 +1481,13 @@ impl EventHandler {
             // Search interface F-keys (when search is active)
             // TODO: These are documented but not yet implemented - the current search
             // is a simple text filter, not the advanced SearchUI with different modes
-            KeyCode::F(1 | 3 | 4) => {
+            KeyCode::F(1 | 4) => {
                 if ui.focused_pane() == FocusedPane::MessageList
                     && ui.message_list().is_search_active()
                 {
-                    // F1, F3, F4: Search mode switching (not yet implemented)
+                    // F1, F4: Search mode switching (not yet implemented)
                     // Note: F2 is handled above for folder rename operations
+                    // Note: F3 is handled above for calendar access
                     tracing::info!("Search mode switching F-keys not yet implemented");
                 }
             }

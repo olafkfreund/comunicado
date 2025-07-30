@@ -330,6 +330,23 @@ pub enum KeyboardAction {
     StartPageAddressBook,
     StartPageCalendar,
 
+    // Calendar actions
+    ShowCalendar,
+    CreateEvent,
+    EditEvent,
+    DeleteEvent,
+    ViewEventDetails,
+    CreateTodo,
+    ToggleTodoComplete,
+    ViewTodos,
+    CalendarNextMonth,
+    CalendarPrevMonth,
+    CalendarToday,
+    CalendarWeekView,
+    CalendarMonthView,
+    CalendarDayView,
+    CalendarAgendaView,
+
     // Attachment navigation
     NextAttachment,
     PreviousAttachment,
@@ -635,6 +652,68 @@ impl KeyboardConfig {
             KeyboardAction::PreviousAttachment,
         );
 
+        // Calendar actions
+        self.shortcuts.insert(
+            KeyboardShortcut::simple(KeyCode::F(3)),
+            KeyboardAction::ShowCalendar,
+        );
+        self.shortcuts.insert(
+            KeyboardShortcut::simple(KeyCode::Char('e')),
+            KeyboardAction::CreateEvent,
+        );
+        self.shortcuts.insert(
+            KeyboardShortcut::ctrl(KeyCode::Char('e')),
+            KeyboardAction::EditEvent,
+        );
+        self.shortcuts.insert(
+            KeyboardShortcut::simple(KeyCode::Delete),
+            KeyboardAction::DeleteEvent,
+        );
+        self.shortcuts.insert(
+            KeyboardShortcut::simple(KeyCode::Enter),
+            KeyboardAction::ViewEventDetails,
+        );
+        self.shortcuts.insert(
+            KeyboardShortcut::simple(KeyCode::Char('T')),
+            KeyboardAction::CreateTodo,
+        );
+        self.shortcuts.insert(
+            KeyboardShortcut::simple(KeyCode::Char(' ')),
+            KeyboardAction::ToggleTodoComplete,
+        );
+        self.shortcuts.insert(
+            KeyboardShortcut::simple(KeyCode::Char('t')),
+            KeyboardAction::ViewTodos,
+        );
+        self.shortcuts.insert(
+            KeyboardShortcut::simple(KeyCode::Right),
+            KeyboardAction::CalendarNextMonth,
+        );
+        self.shortcuts.insert(
+            KeyboardShortcut::simple(KeyCode::Left),
+            KeyboardAction::CalendarPrevMonth,
+        );
+        self.shortcuts.insert(
+            KeyboardShortcut::simple(KeyCode::Char('.')),
+            KeyboardAction::CalendarToday,
+        );
+        self.shortcuts.insert(
+            KeyboardShortcut::simple(KeyCode::Char('1')),
+            KeyboardAction::CalendarDayView,
+        );
+        self.shortcuts.insert(
+            KeyboardShortcut::simple(KeyCode::Char('2')),
+            KeyboardAction::CalendarWeekView,
+        );
+        self.shortcuts.insert(
+            KeyboardShortcut::simple(KeyCode::Char('3')),
+            KeyboardAction::CalendarMonthView,
+        );
+        self.shortcuts.insert(
+            KeyboardShortcut::simple(KeyCode::Char('4')),
+            KeyboardAction::CalendarAgendaView,
+        );
+
         // Contacts actions
         self.shortcuts.insert(
             KeyboardShortcut::new(KeyCode::Char('c'), KeyModifiers::CONTROL | KeyModifiers::SHIFT),
@@ -861,6 +940,68 @@ impl KeyboardConfig {
             "Previous attachment".to_string(),
         );
 
+        // Calendar actions
+        self.action_descriptions.insert(
+            KeyboardAction::ShowCalendar,
+            "Show calendar interface".to_string(),
+        );
+        self.action_descriptions.insert(
+            KeyboardAction::CreateEvent,
+            "Create new calendar event".to_string(),
+        );
+        self.action_descriptions.insert(
+            KeyboardAction::EditEvent,
+            "Edit selected event".to_string(),
+        );
+        self.action_descriptions.insert(
+            KeyboardAction::DeleteEvent,
+            "Delete selected event".to_string(),
+        );
+        self.action_descriptions.insert(
+            KeyboardAction::ViewEventDetails,
+            "View event details".to_string(),
+        );
+        self.action_descriptions.insert(
+            KeyboardAction::CreateTodo,
+            "Create new todo/task".to_string(),
+        );
+        self.action_descriptions.insert(
+            KeyboardAction::ToggleTodoComplete,
+            "Toggle todo completion status".to_string(),
+        );
+        self.action_descriptions.insert(
+            KeyboardAction::ViewTodos,
+            "View todos and tasks".to_string(),
+        );
+        self.action_descriptions.insert(
+            KeyboardAction::CalendarNextMonth,
+            "Navigate to next month".to_string(),
+        );
+        self.action_descriptions.insert(
+            KeyboardAction::CalendarPrevMonth,
+            "Navigate to previous month".to_string(),
+        );
+        self.action_descriptions.insert(
+            KeyboardAction::CalendarToday,
+            "Go to today's date".to_string(),
+        );
+        self.action_descriptions.insert(
+            KeyboardAction::CalendarDayView,
+            "Switch to day view".to_string(),
+        );
+        self.action_descriptions.insert(
+            KeyboardAction::CalendarWeekView,
+            "Switch to week view".to_string(),
+        );
+        self.action_descriptions.insert(
+            KeyboardAction::CalendarMonthView,
+            "Switch to month view".to_string(),
+        );
+        self.action_descriptions.insert(
+            KeyboardAction::CalendarAgendaView,
+            "Switch to agenda view".to_string(),
+        );
+
         // Contacts actions
         self.action_descriptions.insert(
             KeyboardAction::ContactsPopup,
@@ -1020,6 +1161,21 @@ impl KeyboardConfig {
             | KeyboardAction::StartPageSearch
             | KeyboardAction::StartPageAddressBook
             | KeyboardAction::StartPageCalendar => "Start Page".to_string(),
+            KeyboardAction::ShowCalendar
+            | KeyboardAction::CreateEvent
+            | KeyboardAction::EditEvent
+            | KeyboardAction::DeleteEvent
+            | KeyboardAction::ViewEventDetails
+            | KeyboardAction::CreateTodo
+            | KeyboardAction::ToggleTodoComplete
+            | KeyboardAction::ViewTodos
+            | KeyboardAction::CalendarNextMonth
+            | KeyboardAction::CalendarPrevMonth
+            | KeyboardAction::CalendarToday
+            | KeyboardAction::CalendarWeekView
+            | KeyboardAction::CalendarMonthView
+            | KeyboardAction::CalendarDayView
+            | KeyboardAction::CalendarAgendaView => "Calendar".to_string(),
             KeyboardAction::ContactsPopup 
             | KeyboardAction::ViewSenderContact
             | KeyboardAction::EditSenderContact
