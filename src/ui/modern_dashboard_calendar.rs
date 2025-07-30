@@ -1,13 +1,13 @@
 //! Modern Dashboard Calendar Widget Implementation
 
 use super::modern_dashboard::*;
-use chrono::{DateTime, Local, Datelike, Weekday, NaiveDate, Duration as ChronoDuration};
+use chrono::{Local, Datelike, Weekday, NaiveDate};
 use ratatui::{
-    layout::{Alignment, Constraint, Direction, Layout, Margin, Rect},
-    style::{Color, Modifier, Style},
-    text::{Line, Span, Text},
+    layout::{Alignment, Constraint, Direction, Layout, Rect},
+    style::{Color, Style},
+    text::{Line, Span},
     widgets::{
-        Block, Borders, Clear, Paragraph, Wrap, List, ListItem, Row, Table, Cell,
+        Block, Borders, Paragraph, Wrap, List, ListItem,
     },
     Frame,
 };
@@ -71,7 +71,7 @@ impl ModernDashboard {
                 Span::styled(
                     month_year,
                     Style::default()
-                        .fg(theme.colors.palette.primary)
+                        .fg(theme.colors.palette.accent)
                         .add_modifier(Modifier::BOLD)
                 ),
                 Span::styled(
@@ -82,7 +82,7 @@ impl ModernDashboard {
             Line::from(vec![
                 Span::styled(
                     format!("Today: {}", Local::now().format("%B %d")),
-                    Style::default().fg(theme.colors.palette.text_dim)
+                    Style::default().fg(theme.colors.palette.text_primary_muted)
                 )
             ]),
         ];
@@ -104,7 +104,7 @@ impl ModernDashboard {
                 let style = if i >= 5 { // Weekend
                     Style::default().fg(theme.colors.palette.accent)
                 } else {
-                    Style::default().fg(theme.colors.palette.text)
+                    Style::default().fg(theme.colors.palette.text_primary)
                 };
                 
                 Span::styled(
@@ -142,7 +142,7 @@ impl ModernDashboard {
         };
 
         // Create calendar rows
-        let weeks_to_show = ((days_from_prev + self.days_in_month(date.year(), date.month()) as usize + 6) / 7);
+        let weeks_to_show = (days_from_prev + self.days_in_month(date.year(), date.month()) as usize + 6) / 7;
         let row_height = area.height / weeks_to_show as u16;
 
         for week in 0..weeks_to_show {
@@ -205,13 +205,13 @@ impl ModernDashboard {
                 } else {
                     self.days_in_month(current_month.year(), current_month.month() - 1)
                 };
-                format!("{}", prev_month_days + day_number)
+                format!("{}", prev_month_days + day_number as u32)
             } else {
                 format!("{}", day_number - days_in_month as i32)
             };
 
             let day_paragraph = Paragraph::new(day_text)
-                .style(Style::default().fg(theme.colors.palette.text_dim))
+                .style(Style::default().fg(theme.colors.palette.text_primary_muted))
                 .alignment(Alignment::Center);
 
             f.render_widget(day_paragraph, area);
@@ -231,12 +231,12 @@ impl ModernDashboard {
                     .add_modifier(Modifier::BOLD)
             } else if is_selected {
                 Style::default()
-                    .fg(theme.colors.palette.primary)
+                    .fg(theme.colors.palette.accent)
                     .add_modifier(Modifier::BOLD)
             } else if is_weekend {
                 Style::default().fg(theme.colors.palette.accent)
             } else {
-                Style::default().fg(theme.colors.palette.text)
+                Style::default().fg(theme.colors.palette.text_primary)
             };
 
             // Check for events on this day
@@ -265,7 +265,7 @@ impl ModernDashboard {
                 day_content.push(Line::from(vec![
                     Span::styled(
                         format!("{:^3}", event_indicator),
-                        Style::default().fg(theme.colors.palette.primary)
+                        Style::default().fg(theme.colors.palette.accent)
                     )
                 ]));
             }
@@ -284,14 +284,14 @@ impl ModernDashboard {
                 Span::styled(
                     "📅 Week View",
                     Style::default()
-                        .fg(theme.colors.palette.primary)
+                        .fg(theme.colors.palette.accent)
                         .add_modifier(Modifier::BOLD)
                 )
             ]),
             Line::from(vec![
                 Span::styled(
                     "This week's schedule...",
-                    Style::default().fg(theme.colors.palette.text_dim)
+                    Style::default().fg(theme.colors.palette.text_primary_muted)
                 )
             ]),
         ];
@@ -310,14 +310,14 @@ impl ModernDashboard {
                 Span::styled(
                     "📋 Day View",
                     Style::default()
-                        .fg(theme.colors.palette.primary)
+                        .fg(theme.colors.palette.accent)
                         .add_modifier(Modifier::BOLD)
                 )
             ]),
             Line::from(vec![
                 Span::styled(
                     "Today's detailed schedule...",
-                    Style::default().fg(theme.colors.palette.text_dim)
+                    Style::default().fg(theme.colors.palette.text_primary_muted)
                 )
             ]),
         ];
@@ -336,7 +336,7 @@ impl ModernDashboard {
                 Line::from(vec![
                     Span::styled(
                         "📋 No upcoming events",
-                        Style::default().fg(theme.colors.palette.text_dim)
+                        Style::default().fg(theme.colors.palette.text_primary_muted)
                     )
                 ])
             ];
@@ -366,7 +366,7 @@ impl ModernDashboard {
                         Line::from(vec![
                             Span::styled(
                                 format!("  📅 {}", event.start_time.format("%m/%d %H:%M")),
-                                Style::default().fg(theme.colors.palette.text_dim)
+                                Style::default().fg(theme.colors.palette.text_primary_muted)
                             )
                         ]),
                     ])
@@ -374,7 +374,7 @@ impl ModernDashboard {
                 .collect();
 
             let events_list = List::new(event_items)
-                .style(Style::default().fg(theme.colors.palette.text));
+                .style(Style::default().fg(theme.colors.palette.text_primary));
 
             f.render_widget(events_list, area);
         }
@@ -407,7 +407,7 @@ impl ModernDashboard {
             EventColor::Purple => Color::Magenta,
             EventColor::Orange => Color::LightRed,
             EventColor::Pink => Color::LightMagenta,
-            EventColor::Gray => theme.colors.palette.text_dim,
+            EventColor::Gray => theme.colors.palette.text_primary_muted,
         }
     }
 

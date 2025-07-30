@@ -1,8 +1,7 @@
 //! Modern Dashboard Data Management and Initialization
 
 use super::modern_dashboard::*;
-use chrono::{DateTime, Local, Duration as ChronoDuration};
-use std::collections::VecDeque;
+use chrono::Local;
 
 impl ModernDashboard {
     /// Initialize dashboard with sample data
@@ -30,7 +29,7 @@ impl ModernDashboard {
 
         self.weather_widget.forecast = vec![
             WeatherForecast {
-                date: Local::now() + ChronoDuration::days(1),
+                date: Local::now() + std::time::Duration::from_secs(24 * 60 * 60),
                 high_temp: 25.0,
                 low_temp: 18.0,
                 condition: WeatherCondition::Clear,
@@ -38,7 +37,7 @@ impl ModernDashboard {
                 wind_speed: 8.0,
             },
             WeatherForecast {
-                date: Local::now() + ChronoDuration::days(2),
+                date: Local::now() + std::time::Duration::from_secs(2 * 24 * 60 * 60),
                 high_temp: 23.0,
                 low_temp: 16.0,
                 condition: WeatherCondition::Rain,
@@ -72,19 +71,19 @@ impl ModernDashboard {
                 event_type: EventType::Meeting,
                 location: Some("Conference Room A".to_string()),
                 attendees: vec!["Alice".to_string(), "Bob".to_string(), "Charlie".to_string()],
-                reminder: Some(ChronoDuration::minutes(15)),
+                reminder: Some(std::time::Duration::from_secs(15 * 60)),
                 color: EventColor::Blue,
             },
             CalendarEvent {
                 id: "2".to_string(),
                 title: "Doctor Appointment".to_string(),
                 description: Some("Annual checkup".to_string()),
-                start_time: now + ChronoDuration::days(1) + ChronoDuration::hours(10),
-                end_time: now + ChronoDuration::days(1) + ChronoDuration::hours(11),
+                start_time: now + std::time::Duration::from_secs(24 * 60 * 60) + ChronoDuration::hours(10),
+                end_time: now + std::time::Duration::from_secs(24 * 60 * 60) + ChronoDuration::hours(11),
                 event_type: EventType::Appointment,
                 location: Some("Medical Center".to_string()),
                 attendees: vec![],
-                reminder: Some(ChronoDuration::hours(1)),
+                reminder: Some(std::time::Duration::from_secs(60 * 60)),
                 color: EventColor::Red,
             },
             CalendarEvent {
@@ -96,7 +95,7 @@ impl ModernDashboard {
                 event_type: EventType::Work,
                 location: None,
                 attendees: vec![],
-                reminder: Some(ChronoDuration::days(1)),
+                reminder: Some(std::time::Duration::from_secs(24 * 60 * 60)),
                 color: EventColor::Orange,
             },
             CalendarEvent {
@@ -108,7 +107,7 @@ impl ModernDashboard {
                 event_type: EventType::Birthday,
                 location: None,
                 attendees: vec!["Sarah".to_string()],
-                reminder: Some(ChronoDuration::days(1)),
+                reminder: Some(std::time::Duration::from_secs(24 * 60 * 60)),
                 color: EventColor::Pink,
             },
             CalendarEvent {
@@ -120,7 +119,7 @@ impl ModernDashboard {
                 event_type: EventType::Travel,
                 location: Some("Yosemite National Park".to_string()),
                 attendees: vec!["Family".to_string()],
-                reminder: Some(ChronoDuration::days(2)),
+                reminder: Some(std::time::Duration::from_secs(2 * 24 * 60 * 60)),
                 color: EventColor::Green,
             },
         ];
@@ -148,7 +147,7 @@ impl ModernDashboard {
                 email: "bob.smith@email.com".to_string(),
                 phone: Some("+1 (555) 234-5678".to_string()),
                 avatar: None,
-                last_contact: Some(now - ChronoDuration::days(1)),
+                last_contact: Some(now - std::time::Duration::from_secs(24 * 60 * 60)),
                 contact_frequency: 18,
                 is_favorite: false,
                 status: ContactStatus::Away,

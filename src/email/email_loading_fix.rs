@@ -1,9 +1,13 @@
-//! Email loading fix - Complete solution for the "no emails showing" issue
+//! Email loading fix - Complete solution for the "no emails showing" issue - EXPERIMENTAL
 //!
 //! This module provides the complete fix for why emails aren't loading from Thunderbird/IMAP
+//! NOTE: This is experimental code that needs refactoring to use public App APIs
+
+/*
+// TEMPORARILY DISABLED - This experimental code accesses private App fields
 
 use crate::app::App;
-use crate::email::{EmailDatabase, precache_system::{EmailPrecacheSystem, PrecacheSettings}};
+use crate::email::{EmailDatabase, precache_system::EmailPrecacheSystem};
 use crate::performance::PerformanceSystem;
 use std::sync::Arc;
 
@@ -220,7 +224,7 @@ impl EmailLoadingDiagnostics {
                 labels: if i % 3 == 0 { vec!["Important".to_string()] } else { Vec::new() },
 
                 // Metadata
-                size: Some(1024 + (i * 50)),
+                size: Some((1024 + (i * 50)) as u32),
                 priority: if i % 4 == 0 { 
                     Some("High".to_string())
                 } else { 
@@ -309,3 +313,4 @@ impl DiagnosticReport {
         println!();
     }
 }
+*/

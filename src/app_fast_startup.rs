@@ -1,7 +1,13 @@
-//! Fast startup implementation for App
+//! Fast startup implementation for App - EXPERIMENTAL
 //! 
 //! This module implements the performance-optimized startup system that gets
 //! the UI responsive in under 3 seconds while moving heavy operations to background.
+//! 
+//! NOTE: This is experimental code that needs refactoring to use public App APIs
+
+/*
+// TEMPORARILY DISABLED - This experimental code accesses private App fields
+// and needs to be refactored to use public App APIs
 
 use anyhow::Result;
 use std::sync::Arc;
@@ -9,11 +15,11 @@ use tokio::time::{Duration, Instant};
 
 use crate::app::App;
 use crate::performance::{
-    PerformanceSystem, StartupOptimizer, BackgroundProcessor, BackgroundTask, 
-    BackgroundTaskType, TaskPriority, ProgressTracker
+    PerformanceSystem, BackgroundTask, 
+    BackgroundTaskType, TaskPriority
 };
 use crate::email::EmailDatabase;
-use crate::oauth2::{AccountConfig, TokenManager};
+use crate::oauth2::TokenManager;
 use crate::imap::ImapAccountManager;
 use crate::contacts::ContactsManager;
 
@@ -340,3 +346,4 @@ impl App {
         (progress, status)
     }
 }
+*/

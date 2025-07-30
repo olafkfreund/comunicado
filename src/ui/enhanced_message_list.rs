@@ -286,7 +286,7 @@ impl EnhancedMessageList {
     }
 
     // Delegate all other methods to base message list
-    pub fn render<B: ratatui::backend::Backend>(&mut self, f: &mut ratatui::Frame<B>, area: ratatui::layout::Rect, theme: &crate::theme::Theme) {
+    pub fn render(&mut self, f: &mut ratatui::Frame<'_>, area: ratatui::layout::Rect, theme: &crate::theme::Theme) {
         self.base.render(f, area, theme)
     }
 

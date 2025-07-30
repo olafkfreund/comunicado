@@ -5,9 +5,9 @@
 use ratatui::{
     backend::Backend,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
-    style::{Color, Modifier, Style},
+    style::{Color, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Clear, Gauge, Paragraph, Wrap},
+    widgets::{Block, Borders, Clear, Gauge, Paragraph},
     Frame,
 };
 use std::time::{Duration, Instant};
@@ -97,7 +97,7 @@ impl StartupProgressWidget {
     }
 
     /// Render the startup progress UI
-    pub fn render<B: Backend>(&self, f: &mut Frame<B>, area: Rect) {
+    pub fn render(&self, f: &mut Frame<'_>, area: Rect) {
         // Create centered popup area
         let popup_area = self.centered_rect(80, if self.show_details { 80 } else { 50 }, area);
         
@@ -143,7 +143,7 @@ impl StartupProgressWidget {
     }
 
     /// Render simple startup view
-    fn render_simple_view<B: Backend>(&self, f: &mut Frame<B>, area: Rect) {
+    fn render_simple_view(&self, f: &mut Frame<'_>, area: Rect) {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
@@ -208,7 +208,7 @@ impl StartupProgressWidget {
     }
 
     /// Render detailed startup view with background tasks
-    fn render_detailed_view<B: Backend>(&self, f: &mut Frame<B>, area: Rect) {
+    fn render_detailed_view(&self, f: &mut Frame<'_>, area: Rect) {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
@@ -278,7 +278,7 @@ impl StartupProgressWidget {
     }
 
     /// Render individual background task
-    fn render_background_task<B: Backend>(&self, f: &mut Frame<B>, area: Rect, task: &BackgroundTaskStatus) {
+    fn render_background_task(&self, f: &mut Frame<'_>, area: Rect, task: &BackgroundTaskStatus) {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([Constraint::Length(1), Constraint::Length(1)])

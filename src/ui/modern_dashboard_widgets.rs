@@ -3,16 +3,13 @@
 //! Individual widget rendering implementations for the modern dashboard
 
 use super::modern_dashboard::*;
-use chrono::{DateTime, Local, Timelike, Datelike};
+use chrono::{Timelike, Datelike};
 use ratatui::{
-    layout::{Alignment, Constraint, Direction, Layout, Margin, Rect},
+    layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
-    symbols,
-    text::{Line, Span, Text},
+    text::{Line, Span},
     widgets::{
-        Block, Borders, Clear, Gauge, LineGauge, Paragraph, Sparkline, Wrap,
-        canvas::{Canvas, Context, Line as CanvasLine, Points, Rectangle},
-        List, ListItem, Row, Table, Cell,
+        Block, Borders, LineGauge, Paragraph, Sparkline, Wrap,
     },
     Frame,
 };
@@ -27,9 +24,9 @@ impl ModernDashboard {
         // Create animated border with pulse effect
         let pulse_intensity = (self.animation_state.pulse_phase.sin() + 1.0) / 2.0;
         let border_color = Color::Rgb(
-            (theme.colors.palette.accent.r as f32 * (0.5 + pulse_intensity * 0.5)) as u8,
-            (theme.colors.palette.accent.g as f32 * (0.5 + pulse_intensity * 0.5)) as u8,
-            (theme.colors.palette.accent.b as f32 * (0.5 + pulse_intensity * 0.5)) as u8,
+            (match theme.colors.palette.accent { Color::Rgb(r, _, _) => r, _ => 88 } as f32 * (0.5 + pulse_intensity * 0.5)) as u8,
+            (match theme.colors.palette.accent { Color::Rgb(_, g, _) => g, _ => 166 } as f32 * (0.5 + pulse_intensity * 0.5)) as u8,
+            (match theme.colors.palette.accent { Color::Rgb(_, _, b) => b, _ => 255 } as f32 * (0.5 + pulse_intensity * 0.5)) as u8,
         );
 
         let block = Block::default()
@@ -97,14 +94,14 @@ impl ModernDashboard {
                 Span::styled(
                     time_str,
                     Style::default()
-                        .fg(theme.colors.palette.primary)
+                        .fg(theme.colors.palette.accent)
                         .add_modifier(Modifier::BOLD)
                 )
             ]),
             Line::from(vec![
                 Span::styled(
                     date_str,
-                    Style::default().fg(theme.colors.palette.text_dim)
+                    Style::default().fg(theme.colors.palette.text_primary_muted)
                 )
             ]),
         ];
@@ -115,7 +112,7 @@ impl ModernDashboard {
             lines.push(Line::from(vec![
                 Span::styled(
                     format!("🌍 {}", time.format("%Z")),
-                    Style::default().fg(theme.colors.palette.text_dim)
+                    Style::default().fg(theme.colors.palette.text_primary_muted)
                 )
             ]));
         }
@@ -130,7 +127,7 @@ impl ModernDashboard {
                 ),
                 Span::styled(
                     "░".repeat((inner.width - seconds_bar_width) as usize),
-                    Style::default().fg(theme.colors.palette.text_dim)
+                    Style::default().fg(theme.colors.palette.text_primary_muted)
                 )
             ]));
         }
@@ -157,19 +154,19 @@ impl ModernDashboard {
                 Line::from(vec![
                     Span::styled(
                         format!("📍 {}", weather.location),
-                        Style::default().fg(theme.colors.palette.text)
+                        Style::default().fg(theme.colors.palette.text_primary)
                     )
                 ]),
                 Line::from(vec![
                     Span::styled(
                         format!("{}°C", weather.temperature as i32),
                         Style::default()
-                            .fg(theme.colors.palette.primary)
+                            .fg(theme.colors.palette.accent)
                             .add_modifier(Modifier::BOLD)
                     ),
                     Span::styled(
                         format!(" (feels like {}°C)", weather.feels_like as i32),
-                        Style::default().fg(theme.colors.palette.text_dim)
+                        Style::default().fg(theme.colors.palette.text_primary_muted)
                     )
                 ]),
                 Line::from(vec![
@@ -179,7 +176,7 @@ impl ModernDashboard {
                     ),
                     Span::styled(
                         format!(" {}", self.format_weather_condition(&weather.condition)),
-                        Style::default().fg(theme.colors.palette.text)
+                        Style::default().fg(theme.colors.palette.text_primary)
                     )
                 ]),
             ];
@@ -192,7 +189,7 @@ impl ModernDashboard {
                         weather.wind_speed,
                         weather.visibility
                     ),
-                    Style::default().fg(theme.colors.palette.text_dim)
+                    Style::default().fg(theme.colors.palette.text_primary_muted)
                 )
             ]));
 
@@ -222,7 +219,7 @@ impl ModernDashboard {
                 Line::from(vec![
                     Span::styled(
                         "🔄 Loading weather data...",
-                        Style::default().fg(theme.colors.palette.text_dim)
+                        Style::default().fg(theme.colors.palette.text_primary_muted)
                     )
                 ])
             ];
@@ -315,7 +312,7 @@ impl ModernDashboard {
 
         // Label
         let label_text = Paragraph::new(format!("{} {}:", icon, label))
-            .style(Style::default().fg(theme.colors.palette.text));
+            .style(Style::default().fg(theme.colors.palette.text_primary));
         f.render_widget(label_text, gauge_chunks[0]);
 
         // Gauge
@@ -349,7 +346,7 @@ impl ModernDashboard {
             "📤 Upload: {:.1} KB/s",
             self.system_monitor.network_activity.upload_speed
         ))
-        .style(Style::default().fg(theme.colors.palette.text));
+        .style(Style::default().fg(theme.colors.palette.text_primary));
         f.render_widget(upload_text, net_chunks[0]);
 
         // Download
@@ -357,7 +354,7 @@ impl ModernDashboard {
             "📥 Download: {:.1} KB/s",
             self.system_monitor.network_activity.download_speed
         ))
-        .style(Style::default().fg(theme.colors.palette.text));
+        .style(Style::default().fg(theme.colors.palette.text_primary));
         f.render_widget(download_text, net_chunks[1]);
 
         // Total
@@ -366,7 +363,7 @@ impl ModernDashboard {
             self.system_monitor.network_activity.total_upload / 1024 / 1024,
             self.system_monitor.network_activity.total_download / 1024 / 1024
         ))
-        .style(Style::default().fg(theme.colors.palette.text_dim));
+        .style(Style::default().fg(theme.colors.palette.text_primary_muted));
         f.render_widget(total_text, net_chunks[2]);
     }
 
@@ -434,7 +431,7 @@ impl ModernDashboard {
             Line::from(vec![
                 Span::styled(
                     format!("📊 Load: {:.2}", self.system_monitor.load_average[0]),
-                    Style::default().fg(theme.colors.palette.text_dim)
+                    Style::default().fg(theme.colors.palette.text_primary_muted)
                 )
             ]),
         ];
@@ -453,7 +450,7 @@ impl ModernDashboard {
         } else if usage > 60.0 {
             Color::Yellow
         } else {
-            theme.colors.palette.primary
+            theme.colors.palette.accent
         }
     }
 
@@ -483,7 +480,7 @@ impl ModernDashboard {
             WeatherCondition::Snow => Color::White,
             WeatherCondition::Thunderstorm => Color::Magenta,
             WeatherCondition::Fog => Color::Gray,
-            _ => theme.colors.palette.text,
+            _ => theme.colors.palette.text_primary,
         }
     }
 

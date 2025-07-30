@@ -1,13 +1,13 @@
 //! Modern Dashboard Contacts and Startup Widgets
 
 use super::modern_dashboard::*;
-use chrono::{DateTime, Local};
+use chrono::Local;
 use ratatui::{
-    layout::{Alignment, Constraint, Direction, Layout, Margin, Rect},
-    style::{Color, Modifier, Style},
-    text::{Line, Span, Text},
+    layout::{Alignment, Constraint, Direction, Layout, Rect},
+    style::{Color, Style},
+    text::{Line, Span},
     widgets::{
-        Block, Borders, Clear, Paragraph, Wrap, List, ListItem, Gauge, LineGauge,
+        Block, Borders, Paragraph, Wrap, List, ListItem, LineGauge,
     },
     Frame,
 };
@@ -56,12 +56,12 @@ impl ModernDashboard {
             Span::styled(
                 view_mode_text,
                 Style::default()
-                    .fg(theme.colors.palette.primary)
+                    .fg(theme.colors.palette.accent)
                     .add_modifier(Modifier::BOLD)
             ),
             Span::styled(
                 format!(" ({})", self.contacts_widget.contact_count),
-                Style::default().fg(theme.colors.palette.text_dim)
+                Style::default().fg(theme.colors.palette.text_primary_muted)
             )
         ]);
 
@@ -83,7 +83,7 @@ impl ModernDashboard {
                 .collect();
 
             let contacts_list = List::new(contact_items)
-                .style(Style::default().fg(theme.colors.palette.text));
+                .style(Style::default().fg(theme.colors.palette.text_primary));
 
             f.render_widget(contacts_list, area);
         }
@@ -101,7 +101,7 @@ impl ModernDashboard {
                 .collect();
 
             let contacts_list = List::new(contact_items)
-                .style(Style::default().fg(theme.colors.palette.text));
+                .style(Style::default().fg(theme.colors.palette.text_primary));
 
             f.render_widget(contacts_list, area);
         }
@@ -124,7 +124,7 @@ impl ModernDashboard {
                 .collect();
 
             let contacts_list = List::new(contact_items)
-                .style(Style::default().fg(theme.colors.palette.text));
+                .style(Style::default().fg(theme.colors.palette.text_primary));
 
             f.render_widget(contacts_list, area);
         }
@@ -146,7 +146,7 @@ impl ModernDashboard {
                         favorite_icon
                     ),
                     Style::default()
-                        .fg(theme.colors.palette.text)
+                        .fg(theme.colors.palette.text_primary)
                         .add_modifier(Modifier::BOLD)
                 ),
                 Span::styled(
@@ -161,7 +161,7 @@ impl ModernDashboard {
             lines.push(Line::from(vec![
                 Span::styled(
                     format!("  📧 {}", contact.email),
-                    Style::default().fg(theme.colors.palette.text_dim)
+                    Style::default().fg(theme.colors.palette.text_primary_muted)
                 )
             ]));
         }
@@ -172,7 +172,7 @@ impl ModernDashboard {
             lines.push(Line::from(vec![
                 Span::styled(
                     format!("  🕒 {}", time_ago),
-                    Style::default().fg(theme.colors.palette.text_dim)
+                    Style::default().fg(theme.colors.palette.text_primary_muted)
                 )
             ]));
         }
@@ -186,7 +186,7 @@ impl ModernDashboard {
             Line::from(vec![
                 Span::styled(
                     message,
-                    Style::default().fg(theme.colors.palette.text_dim)
+                    Style::default().fg(theme.colors.palette.text_primary_muted)
                 )
             ])
         ];
@@ -227,8 +227,8 @@ impl ModernDashboard {
             ContactStatus::Online => Color::Green,
             ContactStatus::Away => Color::Yellow,
             ContactStatus::Busy => Color::Red,
-            ContactStatus::Offline => theme.colors.palette.text_dim,
-            ContactStatus::Unknown => theme.colors.palette.text_dim,
+            ContactStatus::Offline => theme.colors.palette.text_primary_muted,
+            ContactStatus::Unknown => theme.colors.palette.text_primary_muted,
         }
     }
 
@@ -253,9 +253,9 @@ impl ModernDashboard {
         let pulse_intensity = (self.animation_state.pulse_phase.sin() + 1.0) / 2.0;
         let border_color = if self.startup_widget.overall_progress < 100.0 {
             Color::Rgb(
-                (theme.colors.palette.primary.r as f32 * (0.7 + pulse_intensity * 0.3)) as u8,
-                (theme.colors.palette.primary.g as f32 * (0.7 + pulse_intensity * 0.3)) as u8,
-                (theme.colors.palette.primary.b as f32 * (0.7 + pulse_intensity * 0.3)) as u8,
+                (theme.colors.palette.accent.r as f32 * (0.7 + pulse_intensity * 0.3)) as u8,
+                (theme.colors.palette.accent.g as f32 * (0.7 + pulse_intensity * 0.3)) as u8,
+                (theme.colors.palette.accent.b as f32 * (0.7 + pulse_intensity * 0.3)) as u8,
             )
         } else {
             Color::Green
@@ -294,7 +294,7 @@ impl ModernDashboard {
             "Overall Progress: {:.1}%",
             self.startup_widget.overall_progress
         ))
-        .style(Style::default().fg(theme.colors.palette.text))
+        .style(Style::default().fg(theme.colors.palette.text_primary))
         .alignment(Alignment::Center);
 
         f.render_widget(progress_text, startup_chunks[0]);
@@ -320,7 +320,7 @@ impl ModernDashboard {
                 Line::from(vec![
                     Span::styled(
                         "🔄 Initializing systems...",
-                        Style::default().fg(theme.colors.palette.primary)
+                        Style::default().fg(theme.colors.palette.accent)
                     )
                 ]),
                 Line::from(vec![
@@ -334,7 +334,7 @@ impl ModernDashboard {
                         format!("📊 {} updates/sec", 
                             (1000.0 / self.update_interval.as_millis() as f64) as u32
                         ),
-                        Style::default().fg(theme.colors.palette.text_dim)
+                        Style::default().fg(theme.colors.palette.text_primary_muted)
                     )
                 ]),
             ]
@@ -351,7 +351,7 @@ impl ModernDashboard {
                 Line::from(vec![
                     Span::styled(
                         "🚀 All systems operational",
-                        Style::default().fg(theme.colors.palette.primary)
+                        Style::default().fg(theme.colors.palette.accent)
                     )
                 ]),
                 Line::from(vec![
@@ -386,7 +386,7 @@ impl ModernDashboard {
                 Span::styled(
                     format!("Overall: {:.1}%", self.startup_widget.overall_progress),
                     Style::default()
-                        .fg(theme.colors.palette.primary)
+                        .fg(theme.colors.palette.accent)
                         .add_modifier(Modifier::BOLD)
                 )
             ])
@@ -411,20 +411,20 @@ impl ModernDashboard {
                 };
 
                 let status_color = match phase.status {
-                    PhaseStatus::Pending => theme.colors.palette.text_dim,
+                    PhaseStatus::Pending => theme.colors.palette.text_primary_muted,
                     PhaseStatus::InProgress => Color::Yellow,
                     PhaseStatus::Completed => Color::Green,
                     PhaseStatus::Error => Color::Red,
-                    PhaseStatus::Skipped => theme.colors.palette.text_dim,
+                    PhaseStatus::Skipped => theme.colors.palette.text_primary_muted,
                 };
 
                 let is_current = i == self.startup_widget.current_phase;
                 let name_style = if is_current {
                     Style::default()
-                        .fg(theme.colors.palette.primary)
+                        .fg(theme.colors.palette.accent)
                         .add_modifier(Modifier::BOLD)
                 } else {
-                    Style::default().fg(theme.colors.palette.text)
+                    Style::default().fg(theme.colors.palette.text_primary)
                 };
 
                 ListItem::new(vec![
@@ -445,7 +445,7 @@ impl ModernDashboard {
             .collect();
 
         let phases_list = List::new(phase_items)
-            .style(Style::default().fg(theme.colors.palette.text));
+            .style(Style::default().fg(theme.colors.palette.text_primary));
 
         f.render_widget(phases_list, progress_chunks[1]);
     }

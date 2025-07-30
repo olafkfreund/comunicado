@@ -3,13 +3,13 @@
 //! This module implements intelligent email preloading and background synchronization
 //! to ensure users see their emails immediately and new emails are fetched automatically.
 
-use crate::email::{EmailDatabase, sync_engine::{SyncEngine, SyncStrategy, SyncProgress}};
-use crate::imap::{ImapClient, ImapAccountManager};
+use crate::email::{EmailDatabase, sync_engine::{SyncEngine, SyncStrategy}};
+use crate::imap::ImapAccountManager;
 use crate::performance::{BackgroundProcessor, BackgroundTask, BackgroundTaskType, TaskPriority, ProgressTracker};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::{mpsc, RwLock, Mutex};
+use tokio::sync::{mpsc, RwLock};
 use uuid::Uuid;
 
 /// Email precaching and sync system
@@ -365,7 +365,7 @@ impl EmailPrecacheSystem {
                 labels: Vec::new(),
 
                 // Metadata
-                size: Some(1024 + (i * 100)),
+                size: Some((1024 + (i * 100)) as u32),
                 priority: Some("Normal".to_string()),
                 created_at: now - ChronoDuration::minutes(i * 30),
                 updated_at: now,

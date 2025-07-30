@@ -8,16 +8,11 @@
 //! - Contact cards with avatars
 //! - Startup progress with real-time updates
 
-use chrono::{DateTime, Local, Timelike, Weekday};
+use chrono::{DateTime, Local, Timelike};
 use ratatui::{
-    layout::{Alignment, Constraint, Direction, Layout, Margin, Rect},
-    style::{Color, Modifier, Style},
-    symbols,
-    text::{Line, Span, Text},
-    widgets::{
-        Block, Borders, Clear, Gauge, LineGauge, Paragraph, Sparkline, Wrap,
-        canvas::{Canvas, Context, Line as CanvasLine, Points, Rectangle},
-    },
+    layout::{Alignment, Constraint, Direction, Layout, Rect},
+    style::{Style},
+    widgets::{Block, Borders, Paragraph, Wrap},
     Frame,
 };
 use std::collections::VecDeque;
@@ -28,85 +23,85 @@ use crate::theme::Theme;
 /// Modern dashboard with real-time updates and animations
 pub struct ModernDashboard {
     /// Real-time clock state
-    clock_state: ClockState,
+    pub(crate) clock_state: ClockState,
     /// System monitoring
-    system_monitor: SystemMonitor,
+    pub(crate) system_monitor: SystemMonitor,
     /// Weather widget
-    weather_widget: WeatherWidget,
+    pub(crate) weather_widget: WeatherWidget,
     /// Calendar widget
-    calendar_widget: CalendarWidget,
+    pub(crate) calendar_widget: CalendarWidget,
     /// Contacts widget
-    contacts_widget: ContactsWidget,
+    pub(crate) contacts_widget: ContactsWidget,
     /// Startup progress widget
-    startup_widget: StartupWidget,
+    pub(crate) startup_widget: StartupWidget,
     /// Animation state
-    animation_state: AnimationState,
+    pub(crate) animation_state: AnimationState,
     /// Last update time
-    last_update: Instant,
+    pub(crate) last_update: Instant,
     /// Update interval
-    update_interval: Duration,
+    pub(crate) update_interval: Duration,
 }
 
 /// Real-time clock with animations
 #[derive(Debug, Clone)]
 pub struct ClockState {
-    current_time: DateTime<Local>,
-    time_format: TimeFormat,
-    show_seconds: bool,
-    animation_phase: f32,
-    timezone_display: bool,
-    date_format: DateFormat,
+    pub(crate) current_time: DateTime<Local>,
+    pub(crate) time_format: TimeFormat,
+    pub(crate) show_seconds: bool,
+    pub(crate) animation_phase: f32,
+    pub(crate) timezone_display: bool,
+    pub(crate) date_format: DateFormat,
 }
 
 /// System monitoring with visual gauges
 #[derive(Debug, Clone)]
 pub struct SystemMonitor {
-    cpu_usage: f64,
-    memory_usage: f64,
-    disk_usage: f64,
-    network_activity: NetworkActivity,
-    cpu_history: VecDeque<f64>,
-    memory_history: VecDeque<f64>,
-    temperature: Option<f64>,
-    load_average: [f64; 3],
-    uptime: Duration,
+    pub(crate) cpu_usage: f64,
+    pub(crate) memory_usage: f64,
+    pub(crate) disk_usage: f64,
+    pub(crate) network_activity: NetworkActivity,
+    pub(crate) cpu_history: VecDeque<f64>,
+    pub(crate) memory_history: VecDeque<f64>,
+    pub(crate) temperature: Option<f64>,
+    pub(crate) load_average: [f64; 3],
+    pub(crate) uptime: Duration,
 }
 
 /// Network activity tracking
 #[derive(Debug, Clone)]
 pub struct NetworkActivity {
-    upload_speed: f64,
-    download_speed: f64,
-    upload_history: VecDeque<f64>,
-    download_history: VecDeque<f64>,
-    total_upload: u64,
-    total_download: u64,
+    pub(crate) upload_speed: f64,
+    pub(crate) download_speed: f64,
+    pub(crate) upload_history: VecDeque<f64>,
+    pub(crate) download_history: VecDeque<f64>,
+    pub(crate) total_upload: u64,
+    pub(crate) total_download: u64,
 }
 
 /// Enhanced weather widget with animations
 #[derive(Debug, Clone)]
 pub struct WeatherWidget {
-    current_weather: Option<CurrentWeather>,
-    forecast: Vec<WeatherForecast>,
-    animation_frame: usize,
-    weather_icons: WeatherIcons,
-    show_forecast: bool,
-    update_time: Option<DateTime<Local>>,
+    pub(crate) current_weather: Option<CurrentWeather>,
+    pub(crate) forecast: Vec<WeatherForecast>,
+    pub(crate) animation_frame: usize,
+    pub(crate) weather_icons: WeatherIcons,
+    pub(crate) show_forecast: bool,
+    pub(crate) update_time: Option<DateTime<Local>>,
 }
 
 /// Current weather information
 #[derive(Debug, Clone)]
 pub struct CurrentWeather {
-    location: String,
-    temperature: f64,
-    feels_like: f64,
-    condition: WeatherCondition,
-    humidity: u32,
-    wind_speed: f64,
-    wind_direction: u16,
-    pressure: f64,
-    visibility: f64,
-    uv_index: u32,
+    pub(crate) location: String,
+    pub(crate) temperature: f64,
+    pub(crate) feels_like: f64,
+    pub(crate) condition: WeatherCondition,
+    pub(crate) humidity: u32,
+    pub(crate) wind_speed: f64,
+    pub(crate) wind_direction: u16,
+    pub(crate) pressure: f64,
+    pub(crate) visibility: f64,
+    pub(crate) uv_index: u32,
 }
 
 /// Weather conditions with visual representations
@@ -127,38 +122,38 @@ pub enum WeatherCondition {
 /// Weather forecast item
 #[derive(Debug, Clone)]
 pub struct WeatherForecast {
-    date: DateTime<Local>,
-    high_temp: f64,
-    low_temp: f64,
-    condition: WeatherCondition,
-    precipitation_chance: u32,
-    wind_speed: f64,
+    pub(crate) date: DateTime<Local>,
+    pub(crate) high_temp: f64,
+    pub(crate) low_temp: f64,
+    pub(crate) condition: WeatherCondition,
+    pub(crate) precipitation_chance: u32,
+    pub(crate) wind_speed: f64,
 }
 
 /// Enhanced calendar widget
 #[derive(Debug, Clone)]
 pub struct CalendarWidget {
-    current_date: DateTime<Local>,
-    events: Vec<CalendarEvent>,
-    view_mode: CalendarViewMode,
-    selected_date: Option<DateTime<Local>>,
-    show_week_numbers: bool,
-    highlight_today: bool,
+    pub(crate) current_date: DateTime<Local>,
+    pub(crate) events: Vec<CalendarEvent>,
+    pub(crate) view_mode: CalendarViewMode,
+    pub(crate) selected_date: Option<DateTime<Local>>,
+    pub(crate) show_week_numbers: bool,
+    pub(crate) highlight_today: bool,
 }
 
 /// Calendar event with rich information
 #[derive(Debug, Clone)]
 pub struct CalendarEvent {
-    id: String,
-    title: String,
-    description: Option<String>,
-    start_time: DateTime<Local>,
-    end_time: DateTime<Local>,
-    event_type: EventType,
-    location: Option<String>,
-    attendees: Vec<String>,
-    reminder: Option<Duration>,
-    color: EventColor,
+    pub(crate) id: String,
+    pub(crate) title: String,
+    pub(crate) description: Option<String>,
+    pub(crate) start_time: DateTime<Local>,
+    pub(crate) end_time: DateTime<Local>,
+    pub(crate) event_type: EventType,
+    pub(crate) location: Option<String>,
+    pub(crate) attendees: Vec<String>,
+    pub(crate) reminder: Option<Duration>,
+    pub(crate) color: EventColor,
 }
 
 /// Event types with different visual styles
@@ -199,25 +194,25 @@ pub enum CalendarViewMode {
 /// Modern contacts widget
 #[derive(Debug, Clone)]
 pub struct ContactsWidget {
-    recent_contacts: Vec<Contact>,
-    favorite_contacts: Vec<Contact>,
-    contact_count: usize,
-    show_avatars: bool,
-    view_mode: ContactViewMode,
+    pub(crate) recent_contacts: Vec<Contact>,
+    pub(crate) favorite_contacts: Vec<Contact>,
+    pub(crate) contact_count: usize,
+    pub(crate) show_avatars: bool,
+    pub(crate) view_mode: ContactViewMode,
 }
 
 /// Contact information with avatar
 #[derive(Debug, Clone)]
 pub struct Contact {
-    id: String,
-    name: String,
-    email: String,
-    phone: Option<String>,
-    avatar: Option<String>,
-    last_contact: Option<DateTime<Local>>,
-    contact_frequency: u32,
-    is_favorite: bool,
-    status: ContactStatus,
+    pub(crate) id: String,
+    pub(crate) name: String,
+    pub(crate) email: String,
+    pub(crate) phone: Option<String>,
+    pub(crate) avatar: Option<String>,
+    pub(crate) last_contact: Option<DateTime<Local>>,
+    pub(crate) contact_frequency: u32,
+    pub(crate) is_favorite: bool,
+    pub(crate) status: ContactStatus,
 }
 
 /// Contact status indicators
@@ -241,24 +236,24 @@ pub enum ContactViewMode {
 /// Startup progress with real-time updates
 #[derive(Debug, Clone)]
 pub struct StartupWidget {
-    phases: Vec<StartupPhase>,
-    current_phase: usize,
-    overall_progress: f64,
-    show_detailed_progress: bool,
-    animation_progress: f64,
-    estimated_time_remaining: Option<Duration>,
+    pub(crate) phases: Vec<StartupPhase>,
+    pub(crate) current_phase: usize,
+    pub(crate) overall_progress: f64,
+    pub(crate) show_detailed_progress: bool,
+    pub(crate) animation_progress: f64,
+    pub(crate) estimated_time_remaining: Option<Duration>,
 }
 
 /// Startup phase information
 #[derive(Debug, Clone)]
 pub struct StartupPhase {
-    name: String,
-    description: String,
-    progress: f64,
-    status: PhaseStatus,
-    start_time: Option<Instant>,
-    duration: Option<Duration>,
-    substeps: Vec<String>,
+    pub(crate) name: String,
+    pub(crate) description: String,
+    pub(crate) progress: f64,
+    pub(crate) status: PhaseStatus,
+    pub(crate) start_time: Option<Instant>,
+    pub(crate) duration: Option<Duration>,
+    pub(crate) substeps: Vec<String>,
 }
 
 /// Phase status indicators
@@ -274,12 +269,12 @@ pub enum PhaseStatus {
 /// Animation state for smooth transitions
 #[derive(Debug, Clone)]
 pub struct AnimationState {
-    time_elapsed: Duration,
-    pulse_phase: f32,
-    rotation_angle: f32,
-    bounce_offset: f32,
-    fade_alpha: f32,
-    sparkle_positions: Vec<(f32, f32)>,
+    pub(crate) time_elapsed: Duration,
+    pub(crate) pulse_phase: f32,
+    pub(crate) rotation_angle: f32,
+    pub(crate) bounce_offset: f32,
+    pub(crate) fade_alpha: f32,
+    pub(crate) sparkle_positions: Vec<(f32, f32)>,
 }
 
 /// Time display formats
@@ -302,12 +297,12 @@ pub enum DateFormat {
 /// Weather icon representations
 #[derive(Debug, Clone)]
 pub struct WeatherIcons {
-    clear_day: Vec<&'static str>,
-    clear_night: Vec<&'static str>,
-    cloudy: Vec<&'static str>,
-    rain: Vec<&'static str>,
-    snow: Vec<&'static str>,
-    thunderstorm: Vec<&'static str>,
+    pub(crate) clear_day: Vec<&'static str>,
+    pub(crate) clear_night: Vec<&'static str>,
+    pub(crate) cloudy: Vec<&'static str>,
+    pub(crate) rain: Vec<&'static str>,
+    pub(crate) snow: Vec<&'static str>,
+    pub(crate) thunderstorm: Vec<&'static str>,
 }
 
 impl Default for WeatherIcons {
@@ -523,7 +518,7 @@ impl ModernDashboard {
     }
 
     /// Render the complete modern dashboard
-    pub fn render<B: ratatui::backend::Backend>(&mut self, f: &mut Frame<B>, area: Rect, theme: &Theme) {
+    pub fn render(&mut self, f: &mut Frame<'_>, area: Rect, theme: &Theme) {
         // Update before rendering
         self.update();
 
@@ -610,7 +605,7 @@ impl ModernDashboard {
         );
 
         let footer = Paragraph::new(footer_text)
-            .style(Style::default().fg(theme.colors.palette.text_dim))
+            .style(Style::default().fg(theme.colors.palette.text_muted))
             .alignment(Alignment::Center)
             .wrap(Wrap { trim: true });
 
