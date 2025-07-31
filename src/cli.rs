@@ -98,6 +98,8 @@ pub enum Commands {
 
     /// Maildir import/export operations
     Maildir(MaildirArgs),
+    /// Offline storage management operations
+    Offline(OfflineArgs),
 }
 
 #[derive(Args)]
@@ -510,6 +512,51 @@ pub enum MaildirCommands {
     },
 }
 
+#[derive(Args)]
+pub struct OfflineArgs {
+    #[command(subcommand)]
+    pub command: OfflineCommands,
+}
+
+#[derive(Subcommand)]
+pub enum OfflineCommands {
+    /// Export calendars and contacts to offline storage
+    Export {
+        /// Path to export directory
+        #[arg(short, long)]
+        path: PathBuf,
+        
+        /// Include calendars in export
+        #[arg(long, default_value_t = true)]
+        calendars: bool,
+        
+        /// Include contacts in export
+        #[arg(long, default_value_t = true)]
+        contacts: bool,
+    },
+    
+    /// Import calendars and contacts from offline storage
+    Import {
+        /// Path to import directory
+        #[arg(short, long)]
+        path: PathBuf,
+        
+        /// Overwrite existing data
+        #[arg(long)]
+        force: bool,
+    },
+    
+    /// Show offline storage statistics
+    Stats,
+    
+    /// Sync online services with offline storage
+    Sync {
+        /// Force full sync (ignore timestamps)
+        #[arg(long)]
+        force: bool,
+    },
+}
+
 /// Command-line interface handler
 pub struct CliHandler {
     database: Arc<EmailDatabase>,
@@ -556,6 +603,7 @@ impl CliHandler {
             Commands::Account(args) => self.handle_account(args, dry_run).await,
             Commands::Keyboard(args) => self.handle_keyboard(args, dry_run).await,
             Commands::Maildir(args) => self.handle_maildir(args, dry_run).await,
+            Commands::Offline(args) => self.handle_offline(args, dry_run).await,
         }
     }
 
@@ -2054,6 +2102,134 @@ impl CliHandler {
                 }
             } else {
                 println!("💡 Use --fix to create missing directories");
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Handle offline storage commands
+    async fn handle_offline(&self, args: OfflineArgs, dry_run: bool) -> Result<()> {
+        use crate::offline_integration::OfflineIntegrationManager;
+
+        match args.command {
+            OfflineCommands::Export { path, calendars, contacts } => {
+                if dry_run {
+                    println!("🔍 Dry run: Would export to {}", path.display());
+                    if calendars { println!("   • Calendars would be exported"); }
+                    if contacts { println!("   • Contacts would be exported"); }
+                    return Ok(());
+                }
+
+                println!("📦 Exporting to offline storage: {}", path.display());
+                
+                let integration_manager = OfflineIntegrationManager::new(None, None).await
+                    .map_err(|e| anyhow::anyhow!("Failed to create integration manager: {}", e))?;
+
+                if calendars || contacts {
+                    let results = integration_manager.export_all(&path).await
+                        .map_err(|e| anyhow::anyhow!("Export failed: {}", e))?;
+                    
+                    println!("✅ Export completed:");
+                    println!("   • {} calendars exported", results.calendar_count);
+                    println!("   • {} contacts exported", results.contact_count);
+                    println!("   • Exported to: {}", results.export_path.display());
+                } else {
+                    println!("⚠️  No data types selected for export");
+                }
+            }
+
+            OfflineCommands::Import { path, force } => {
+                if dry_run {
+                    println!("🔍 Dry run: Would import from {}", path.display());
+                    if force { println!("   • Would overwrite existing data"); }
+                    return Ok(());
+                }
+
+                if !path.exists() {
+                    return Err(anyhow::anyhow!("Import directory does not exist: {}", path.display()));
+                }
+
+                println!("📥 Importing from offline storage: {}", path.display());
+                
+                let integration_manager = OfflineIntegrationManager::new(None, None).await
+                    .map_err(|e| anyhow::anyhow!("Failed to create integration manager: {}", e))?;
+
+                let results = integration_manager.import_all(&path).await
+                    .map_err(|e| anyhow::anyhow!("Import failed: {}", e))?;
+                
+                println!("✅ Import completed:");
+                println!("   • {} calendars imported", results.calendar_count);
+                println!("   • {} contacts imported", results.contact_count);
+                println!("   • Imported from: {}", results.import_path.display());
+            }
+
+            OfflineCommands::Stats => {
+                if dry_run {
+                    println!("🔍 Dry run: Would show offline storage statistics");
+                    return Ok(());
+                }
+
+                println!("📊 Offline Storage Statistics");
+                
+                let integration_manager = OfflineIntegrationManager::new(None, None).await
+                    .map_err(|e| anyhow::anyhow!("Failed to create integration manager: {}", e))?;
+
+                let stats = integration_manager.get_storage_stats().await
+                    .map_err(|e| anyhow::anyhow!("Failed to get statistics: {}", e))?;
+                
+                println!("┌─────────────────────────────┬──────────────┐");
+                println!("│ Item                        │ Count        │");
+                println!("├─────────────────────────────┼──────────────┤");
+                println!("│ Calendars                   │ {:>12} │", stats.calendar_count);
+                println!("│ Contacts                    │ {:>12} │", stats.contact_count);
+                println!("├─────────────────────────────┼──────────────┤");
+                println!("│ Calendar storage size       │ {:>12} │", stats.calendar_size_human());
+                println!("│ Contact storage size        │ {:>12} │", stats.contact_size_human());
+                println!("│ Total storage size          │ {:>12} │", stats.total_size_human());
+                println!("└─────────────────────────────┴──────────────┘");
+                println!("Last updated: {}", stats.last_updated.format("%Y-%m-%d %H:%M:%S UTC"));
+            }
+
+            OfflineCommands::Sync { force } => {
+                if dry_run {
+                    println!("🔍 Dry run: Would sync offline storage with online services");
+                    if force { println!("   • Would force full sync (ignore timestamps)"); }
+                    return Ok(());
+                }
+
+                println!("🔄 Syncing offline storage with online services...");
+                
+                let integration_manager = OfflineIntegrationManager::new(None, None).await
+                    .map_err(|e| anyhow::anyhow!("Failed to create integration manager: {}", e))?;
+
+                let results = integration_manager.full_sync().await
+                    .map_err(|e| anyhow::anyhow!("Sync failed: {}", e))?;
+                
+                println!("✅ Sync completed:");
+                println!("   • {} calendars synchronized", results.calendars_synced);
+                println!("   • {} contacts synchronized", results.contacts_synced);
+                
+                if results.calendar_conflicts > 0 || results.contact_conflicts > 0 {
+                    println!("⚠️  Conflicts detected:");
+                    if results.calendar_conflicts > 0 {
+                        println!("   • {} calendar conflicts", results.calendar_conflicts);
+                    }
+                    if results.contact_conflicts > 0 {
+                        println!("   • {} contact conflicts", results.contact_conflicts);
+                    }
+                }
+                
+                if !results.errors.is_empty() {
+                    println!("❌ Errors occurred:");
+                    for error in &results.errors {
+                        println!("   • {}", error);
+                    }
+                }
+                
+                if let Some(completed_at) = results.sync_completed_at {
+                    println!("Sync completed at: {}", completed_at.format("%Y-%m-%d %H:%M:%S UTC"));
+                }
             }
         }
 

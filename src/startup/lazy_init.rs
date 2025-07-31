@@ -544,8 +544,8 @@ mod tests {
     async fn test_lazy_init_manager() {
         let manager = LazyInitManager::new();
         
-        let lazy1 = LazyInit::new("resource1".to_string());
-        let lazy2 = LazyInit::new("resource2".to_string());
+        let lazy1: LazyInit<String> = LazyInit::new("resource1".to_string());
+        let lazy2: LazyInit<String> = LazyInit::new("resource2".to_string());
         
         manager.register(lazy1).await;
         manager.register(lazy2).await;

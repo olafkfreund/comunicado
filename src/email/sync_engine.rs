@@ -66,6 +66,8 @@ pub enum SyncStrategy {
     Incremental,
     /// Headers only - download headers but not bodies
     HeadersOnly,
+    /// Flags only - sync message flags without downloading content
+    FlagsOnly,
     /// Recent messages - only recent messages (last N days)
     Recent(u32),
 }
@@ -274,6 +276,15 @@ impl SyncEngine {
                     &selected_folder,
                     &mut sync_state,
                     days,
+                )
+                .await?;
+            }
+            (false, SyncStrategy::FlagsOnly) => {
+                self.flags_only_sync_folder(
+                    &account_id,
+                    client,
+                    &selected_folder,
+                    &mut sync_state,
                 )
                 .await?;
             }
@@ -554,6 +565,40 @@ impl SyncEngine {
         Ok(())
     }
 
+    /// Sync only message flags (for IDLE updates)
+    async fn flags_only_sync_folder(
+        &self,
+        account_id: &str,
+        client: &mut ImapClient,
+        folder: &ImapFolder,
+        sync_state: &mut FolderSyncState,
+    ) -> SyncResult<()> {
+        debug!("Starting flags-only sync for folder: {}", folder.name);
+
+        // Get all messages in the folder
+        let all_uids = client.search(&SearchCriteria::All).await?;
+
+        if !all_uids.is_empty() {
+            info!(
+                "Syncing flags for {} messages in folder {}",
+                all_uids.len(),
+                folder.name
+            );
+
+            self.process_message_batch(
+                account_id,
+                client,
+                &folder.name,
+                &all_uids,
+                SyncStrategy::FlagsOnly,
+            )
+            .await?;
+        }
+
+        sync_state.message_count = all_uids.len() as u32;
+        Ok(())
+    }
+
     /// Process a batch of messages
     async fn process_message_batch(
         &self,
@@ -577,6 +622,9 @@ impl SyncEngine {
         let fetch_items = match strategy {
             SyncStrategy::HeadersOnly => {
                 vec!["UID", "FLAGS", "ENVELOPE", "INTERNALDATE", "RFC822.SIZE"]
+            }
+            SyncStrategy::FlagsOnly => {
+                vec!["UID", "FLAGS"]
             }
             _ => vec![
                 "UID",

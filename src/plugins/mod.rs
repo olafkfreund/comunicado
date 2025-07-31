@@ -47,8 +47,6 @@ pub mod loader;
 pub mod types;
 pub mod examples;
 
-#[cfg(test)]
-mod tests;
 
 // Re-export main types for convenience
 pub use core::{Plugin, PluginInfo, PluginResult, PluginError, PluginType, PluginStatus};

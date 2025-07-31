@@ -1413,6 +1413,18 @@ impl App {
             }
 
             if last_tick.elapsed() >= tick_rate {
+                // Periodic updates on each tick
+                self.ui.refresh_status_bar();
+                
+                // Process pending email notifications
+                self.ui.process_notifications().await;
+                
+                // Clean up expired notifications
+                self.ui.update_notifications();
+                
+                // Clean up old sync progress entries
+                self.ui.cleanup_sync_progress();
+                
                 last_tick = Instant::now();
             }
 

@@ -197,7 +197,7 @@ mod tests {
         let database_url = format!("sqlite:{}", db_path.display());
         
         let database = ContactsDatabase::new(&database_url).await.unwrap();
-        let token_manager = TokenManager::new(&database_url).await.unwrap();
+        let token_manager = TokenManager::new();
         let contacts_manager = ContactsManager::new(database, token_manager).await.unwrap();
         
         SenderRecognitionService::new(Arc::new(contacts_manager))

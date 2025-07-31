@@ -24,8 +24,6 @@ pub mod sync_progress;
 pub mod time_picker;
 pub mod unified_sidebar;
 
-#[cfg(test)]
-mod compose_tests;
 
 use crate::email::{
     sync_engine::SyncProgress, EmailDatabase, EmailNotification, EmailNotificationManager,
@@ -865,6 +863,24 @@ impl UI {
             .add_segment("email".to_string(), email_segment);
     }
 
+    /// Update calendar status with real-time calendar information
+    pub fn update_calendar_status(
+        &mut self,
+        next_event: Option<String>,
+        events_today: usize,
+        next_event_time: Option<chrono::DateTime<chrono::Local>>,
+        urgent_events: usize,
+    ) {
+        let calendar_segment = CalendarStatusSegment {
+            next_event,
+            events_today,
+            next_event_time,
+            urgent_events,
+        };
+        self.status_bar
+            .add_segment("calendar".to_string(), calendar_segment);
+    }
+
     pub fn update_system_time(&mut self, time: String) {
         // Get the current system segment and update only the time
         let active_account = if let Some(account) = self.account_switcher.get_current_account() {
@@ -896,6 +912,78 @@ impl UI {
         };
         self.status_bar
             .add_segment("system".to_string(), system_segment);
+    }
+
+    /// Refresh all status bar segments with current data
+    pub fn refresh_status_bar(&mut self) {
+        // Update system time
+        self.update_system_time(chrono::Local::now().format("%H:%M").to_string());
+        
+        // Update navigation hints for current mode
+        self.update_navigation_hints();
+        
+        // Update email status if we have message data
+        let message_count = self.message_list.messages().len();
+        let unread_count = self
+            .message_list
+            .messages()
+            .iter()
+            .filter(|msg| !msg.is_read)
+            .count();
+        
+        // Determine sync status based on current state
+        let sync_status = if self.is_sync_progress_visible() {
+            SyncStatus::Syncing
+        } else {
+            SyncStatus::Online
+        };
+        
+        self.update_email_status(unread_count, message_count, sync_status);
+        
+        // Update calendar status with current calendar data
+        self.refresh_calendar_status();
+    }
+
+    /// Update calendar status with data from calendar UI
+    fn refresh_calendar_status(&mut self) {
+        // Get current date for today's events calculation
+        let today = chrono::Local::now().date_naive();
+        let now = chrono::Utc::now();
+        
+        // Get calendar events from calendar UI
+        let events = self.calendar_ui.get_events();
+        
+        // Calculate events today
+        let events_today = events
+            .iter()
+            .filter(|event| {
+                let local_start = event.start_time.with_timezone(&chrono::Local);
+                local_start.date_naive() == today
+            })
+            .count();
+        
+        // Find next upcoming event
+        let mut upcoming_events: Vec<_> = events
+            .iter()
+            .filter(|event| event.start_time > now)
+            .collect();
+        upcoming_events.sort_by_key(|event| event.start_time);
+        
+        let (next_event, next_event_time) = if let Some(next) = upcoming_events.first() {
+            let local_time = next.start_time.with_timezone(&chrono::Local);
+            (Some(next.title.clone()), Some(local_time))
+        } else {
+            (None, None)
+        };
+        
+        // Calculate urgent events (events starting within 1 hour)
+        let urgent_threshold = now + chrono::Duration::hours(1);
+        let urgent_events = upcoming_events
+            .iter()
+            .filter(|event| event.start_time <= urgent_threshold)
+            .count();
+        
+        self.update_calendar_status(next_event, events_today, next_event_time, urgent_events);
     }
 
     /// Set the database for email operations

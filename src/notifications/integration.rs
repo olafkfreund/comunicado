@@ -482,18 +482,40 @@ mod tests {
             id: Uuid::new_v4(),
             account_id: "test".to_string(),
             folder_name: "INBOX".to_string(),
+            imap_uid: 1,
+            message_id: Some("123".to_string()),
+            thread_id: None,
+            in_reply_to: None,
+            references: Vec::new(),
+            
+            // Headers
+            subject: "URGENT: Action Required".to_string(),
             from_addr: "important@example.com".to_string(),
             from_name: None,
-            subject: "URGENT: Action Required".to_string(),
+            to_addrs: vec!["user@example.com".to_string()],
+            cc_addrs: Vec::new(),
+            bcc_addrs: Vec::new(),
+            reply_to: None,
             date: Utc::now(),
-            flags: vec!["\\Seen".to_string()],
+            
+            // Content
             body_text: Some("Important message".to_string()),
             body_html: None,
             attachments: Vec::new(),
-            message_id: "123".to_string(),
-            in_reply_to: None,
-            references: Vec::new(),
-            thread_id: None,
+            
+            // Metadata
+            flags: vec!["\\Seen".to_string()],
+            labels: Vec::new(),
+            size: Some(100),
+            priority: Some("urgent".to_string()),
+            
+            // Sync metadata
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+            last_synced: Utc::now(),
+            sync_version: 1,
+            is_draft: false,
+            is_deleted: false,
         };
         
         assert!(service.determine_email_importance(&urgent_message));

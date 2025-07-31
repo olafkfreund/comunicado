@@ -1186,6 +1186,11 @@ impl CalendarUI {
         self.events = events;
     }
 
+    /// Get current events
+    pub fn get_events(&self) -> &Vec<Event> {
+        &self.events
+    }
+
     /// Set available calendars
     pub fn set_calendars(&mut self, calendars: Vec<crate::calendar::Calendar>) {
         self.calendars = calendars;

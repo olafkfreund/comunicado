@@ -99,6 +99,64 @@ impl CalendarManager {
         Ok(calendar)
     }
 
+    /// Add Google calendars for an account
+    pub async fn add_google_calendars(&self, account_id: String) -> CalendarResult<Vec<Calendar>> {
+        tracing::info!("Adding Google calendars for account: {}", account_id);
+
+        // Get list of calendars from Google Calendar API
+        let google_calendars = self.google_client.list_calendars(&account_id).await?;
+
+        let mut created_calendars = Vec::new();
+
+        for google_cal in google_calendars {
+            let source = CalendarSource::Google {
+                account_id: account_id.clone(),
+                calendar_id: google_cal.id.clone(),
+            };
+
+            let mut calendar = Calendar::new(
+                uuid::Uuid::new_v4().to_string(),
+                google_cal.summary,
+                source,
+            );
+
+            calendar.description = google_cal.description;
+            calendar.color = google_cal.background_color;
+            calendar.read_only = google_cal.access_role == "reader";
+
+            // Mark primary calendar
+            if google_cal.primary.unwrap_or(false) {
+                calendar.name = format!("{} (Primary)", calendar.name);
+            }
+
+            // Store in database
+            self.database
+                .store_calendar(&calendar)
+                .await
+                .map_err(|e| CalendarError::DatabaseError(e.to_string()))?;
+
+            // Add to local cache
+            let mut calendars = self.calendars.write().await;
+            calendars.insert(calendar.id.clone(), calendar.clone());
+
+            tracing::debug!(
+                "Added Google calendar: {} ({})",
+                calendar.name,
+                google_cal.id
+            );
+
+            created_calendars.push(calendar);
+        }
+
+        tracing::info!(
+            "Successfully added {} Google calendars for account {}",
+            created_calendars.len(),
+            account_id
+        );
+
+        Ok(created_calendars)
+    }
+
     /// Add a CalDAV calendar
     pub async fn add_caldav_calendar(&self, config: CalDAVConfig) -> CalendarResult<Vec<Calendar>> {
         // Create CalDAV client
@@ -155,12 +213,10 @@ impl CalendarManager {
     /// Create a new event
     pub async fn create_event(&self, mut event: Event) -> CalendarResult<Event> {
         // Validate that the calendar exists
-        if !self.calendars.read().await.contains_key(&event.calendar_id) {
-            return Err(CalendarError::InvalidData(format!(
-                "Calendar {} not found",
-                event.calendar_id
-            )));
-        }
+        let calendar = self.calendars.read().await.get(&event.calendar_id).cloned();
+        let calendar = calendar.ok_or_else(|| {
+            CalendarError::InvalidData(format!("Calendar {} not found", event.calendar_id))
+        })?;
 
         // Generate new ID if not set
         if event.id.is_empty() {
@@ -173,7 +229,36 @@ impl CalendarManager {
         event.updated_at = now;
         event.sequence = 0;
 
-        // Store in database
+        // If this is a Google calendar, create the event on Google Calendar first
+        if let CalendarSource::Google {
+            account_id,
+            calendar_id,
+        } = &calendar.source
+        {
+            let google_event: crate::calendar::google::GoogleEvent = (&event).into();
+            let created_google_event = self
+                .google_client
+                .create_event(account_id, calendar_id, &google_event)
+                .await?;
+
+            // Update event with Google-assigned ID
+            event.uid = created_google_event.id.clone();
+            event.id = created_google_event.id;
+            if let Some(created) = created_google_event.created {
+                event.created_at = created;
+            }
+            if let Some(updated) = created_google_event.updated {
+                event.updated_at = updated;
+            }
+
+            tracing::debug!(
+                "Created event on Google Calendar: {} ({})",
+                event.title,
+                event.id
+            );
+        }
+
+        // Store in local database
         self.database
             .store_event(&event)
             .await
@@ -185,18 +270,40 @@ impl CalendarManager {
     /// Update an existing event
     pub async fn update_event(&self, mut event: Event) -> CalendarResult<Event> {
         // Validate that the calendar exists
-        if !self.calendars.read().await.contains_key(&event.calendar_id) {
-            return Err(CalendarError::InvalidData(format!(
-                "Calendar {} not found",
-                event.calendar_id
-            )));
-        }
+        let calendar = self.calendars.read().await.get(&event.calendar_id).cloned();
+        let calendar = calendar.ok_or_else(|| {
+            CalendarError::InvalidData(format!("Calendar {} not found", event.calendar_id))
+        })?;
 
         // Update timestamp and sequence
         event.updated_at = Utc::now();
         event.sequence += 1;
 
-        // Store in database
+        // If this is a Google calendar, update the event on Google Calendar first
+        if let CalendarSource::Google {
+            account_id,
+            calendar_id,
+        } = &calendar.source
+        {
+            let google_event: crate::calendar::google::GoogleEvent = (&event).into();
+            let updated_google_event = self
+                .google_client
+                .update_event(account_id, calendar_id, &event.id, &google_event)
+                .await?;
+
+            // Update event with Google response data
+            if let Some(updated) = updated_google_event.updated {
+                event.updated_at = updated;
+            }
+
+            tracing::debug!(
+                "Updated event on Google Calendar: {} ({})",
+                event.title,
+                event.id
+            );
+        }
+
+        // Store in local database
         self.database
             .store_event(&event)
             .await
@@ -207,6 +314,40 @@ impl CalendarManager {
 
     /// Delete an event
     pub async fn delete_event(&self, event_id: &str) -> CalendarResult<bool> {
+        // Get the event first to determine if it's from Google Calendar
+        if let Ok(Some(event)) = self.database.get_event(event_id).await {
+            if let Some(calendar) = self.calendars.read().await.get(&event.calendar_id) {
+                // If this is a Google calendar, delete from Google Calendar first
+                if let CalendarSource::Google {
+                    account_id,
+                    calendar_id,
+                } = &calendar.source
+                {
+                    match self
+                        .google_client
+                        .delete_event(account_id, calendar_id, event_id)
+                        .await
+                    {
+                        Ok(_) => {
+                            tracing::debug!(
+                                "Deleted event from Google Calendar: {} ({})",
+                                event.title,
+                                event_id
+                            );
+                        }
+                        Err(e) => {
+                            tracing::error!(
+                                "Failed to delete event from Google Calendar: {}",
+                                e
+                            );
+                            // Continue with local deletion even if Google deletion fails
+                        }
+                    }
+                }
+            }
+        }
+
+        // Delete from local database
         self.database
             .delete_event(event_id)
             .await

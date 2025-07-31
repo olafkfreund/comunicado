@@ -28,6 +28,7 @@ pub mod performance_benchmarks;
 pub mod performance_integration;
 pub mod sorting;
 pub mod sync_engine;
+pub mod imap_service;
 pub mod thread;
 pub mod threading_engine;
 pub mod timestamp_utils;
@@ -103,6 +104,7 @@ pub use sorting::{MultiCriteriaSorter, SortCriteria, SortOrder};
 pub use sync_engine::{
     ConflictResolution, SyncEngine, SyncError, SyncPhase, SyncProgress, SyncResult, SyncStrategy,
 };
+pub use imap_service::{ImapService, IdleUpdate};
 pub use thread::{EmailThread, ThreadStatistics};
 pub use threading_engine::{ThreadingAlgorithm, ThreadingEngine};
 pub use timestamp_utils::{TimestampError, TimestampPreserver, TimestampResult, TimestampUtils};
