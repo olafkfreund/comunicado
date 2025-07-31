@@ -1,5 +1,7 @@
 use anyhow::{anyhow, Result};
+use base64::Engine;
 use clap::{Args, Parser, Subcommand};
+use std::io::Write;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::time::Duration;
@@ -92,6 +94,40 @@ pub enum Commands {
 
     /// Account management operations
     Account(AccountArgs),
+
+    /// OAuth2 account setup commands
+    SetupGmail {
+        /// Google OAuth2 client secret JSON file path
+        #[arg(long)]
+        client_secret: Option<PathBuf>,
+        
+        /// Gmail email address
+        #[arg(long)]
+        email: Option<String>,
+        
+        /// Display name for the account
+        #[arg(long)]
+        name: Option<String>,
+        
+        /// Skip browser opening (show URL only)
+        #[arg(long)]
+        no_browser: bool,
+    },
+
+    /// Setup Microsoft/Outlook account with OAuth2
+    SetupOutlook {
+        /// Microsoft OAuth2 client secret JSON file path
+        #[arg(long)]
+        client_secret: Option<PathBuf>,
+        
+        /// Display name for the account
+        #[arg(long)]
+        name: Option<String>,
+        
+        /// Skip browser opening (show URL only)
+        #[arg(long)]
+        no_browser: bool,
+    },
 
     /// Keyboard shortcut management
     Keyboard(KeyboardArgs),
@@ -601,6 +637,12 @@ impl CliHandler {
             Commands::Database(args) => self.handle_database(args, dry_run).await,
             Commands::Config(args) => self.handle_config(args, dry_run).await,
             Commands::Account(args) => self.handle_account(args, dry_run).await,
+            Commands::SetupGmail { client_secret, email, name, no_browser } => {
+                self.handle_setup_gmail(client_secret, email, name, no_browser, dry_run).await
+            }
+            Commands::SetupOutlook { client_secret, name, no_browser } => {
+                self.handle_setup_outlook(client_secret, name, no_browser, dry_run).await
+            }
             Commands::Keyboard(args) => self.handle_keyboard(args, dry_run).await,
             Commands::Maildir(args) => self.handle_maildir(args, dry_run).await,
             Commands::Offline(args) => self.handle_offline(args, dry_run).await,
@@ -1422,6 +1464,172 @@ impl CliHandler {
         // TODO: Implement account management
         println!("   ⚠️  CLI account management not yet implemented");
         println!("   💡 Use the TUI interface to manage accounts");
+        println!("   💡 Or use dedicated setup commands:");
+        println!("      comunicado setup-gmail --help");
+        println!("      comunicado setup-outlook --help");
+
+        Ok(())
+    }
+
+    /// Handle Gmail OAuth2 setup
+    async fn handle_setup_gmail(
+        &self,
+        client_secret: Option<PathBuf>,
+        email: Option<String>,
+        name: Option<String>,
+        no_browser: bool,
+        dry_run: bool,
+    ) -> Result<()> {
+        println!("📧 Gmail OAuth2 Account Setup");
+        println!("=============================\n");
+
+        if dry_run {
+            println!("🧪 Dry run mode - showing what would be done");
+        }
+
+        // Find client secret file
+        let client_secret_path = if let Some(path) = client_secret {
+            if !path.exists() {
+                return Err(anyhow!("Client secret file not found: {}", path.display()));
+            }
+            path
+        } else {
+            // Auto-detect client secret file in common locations
+            let home_dir = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
+            let possible_paths = [
+                format!("{}/client_secret*.json", home_dir),
+                "./client_secret*.json".to_string(),
+                format!("{}/.config/comunicado/client_secret*.json", home_dir),
+            ];
+
+            let mut found_path = None;
+            for pattern in &possible_paths {
+                if let Ok(paths) = glob::glob(pattern) {
+                    for path in paths.flatten() {
+                        if path.exists() {
+                            found_path = Some(path);
+                            break;
+                        }
+                    }
+                    if found_path.is_some() {
+                        break;
+                    }
+                }
+            }
+
+            match found_path {
+                Some(path) => path,
+                None => {
+                    println!("❌ No client secret file found!");
+                    println!("   Please specify the path with --client-secret <path>");
+                    println!("   Or place it in one of these locations:");
+                    for pattern in &possible_paths {
+                        println!("     {}", pattern);
+                    }
+                    return Ok(());
+                }
+            }
+        };
+
+        println!("✅ Found client secret file: {}", client_secret_path.display());
+
+        // Read and parse client secret
+        let client_data = std::fs::read_to_string(&client_secret_path)
+            .map_err(|e| anyhow!("Failed to read client secret file: {}", e))?;
+
+        let client_json: serde_json::Value = serde_json::from_str(&client_data)
+            .map_err(|e| anyhow!("Failed to parse client secret JSON: {}", e))?;
+
+        let client_id = client_json["installed"]["client_id"]
+            .as_str()
+            .ok_or_else(|| anyhow!("Missing client_id in client secret file"))?;
+
+        let client_secret_value = client_json["installed"]["client_secret"]
+            .as_str()
+            .ok_or_else(|| anyhow!("Missing client_secret in client secret file"))?;
+
+        println!("   Client ID: {}...", &client_id[..20.min(client_id.len())]);
+
+        // Get email address
+        let email = if let Some(email) = email {
+            if email.is_empty() || !email.contains('@') {
+                return Err(anyhow!("Invalid email address: {}", email));
+            }
+            email
+        } else {
+            print!("📧 Enter your Gmail address: ");
+            std::io::stdout().flush()?;
+            
+            let mut input_email = String::new();
+            std::io::stdin().read_line(&mut input_email)?;
+            let input_email = input_email.trim().to_string();
+
+            if input_email.is_empty() || !input_email.contains('@') {
+                return Err(anyhow!("Invalid email address"));
+            }
+            input_email
+        };
+
+        println!("   Email: {}", email);
+
+        // Use provided name or default
+        let display_name = name.unwrap_or_else(|| {
+            email.split('@').next().unwrap_or("Gmail User").to_string()
+        });
+
+        println!("   Display name: {}", display_name);
+
+        if dry_run {
+            println!("\n🧪 Dry run complete - would set up OAuth2 for:");
+            println!("   Email: {}", email);
+            println!("   Display: {}", display_name);
+            println!("   Client ID: {}...", &client_id[..20]);
+            return Ok(());
+        }
+
+        // Run OAuth2 flow
+        println!("\n🚀 Starting OAuth2 authorization...");
+        
+        match self.run_oauth2_flow(
+            &email,
+            &display_name,
+            client_id,
+            client_secret_value,
+            "gmail",
+            no_browser,
+        ).await {
+            Ok(()) => {
+                println!("\n🎉 Gmail account setup complete!");
+                println!("   Account: {} ({})", display_name, email);
+                println!("   You can now use: cargo run --bin comunicado");
+            }
+            Err(e) => {
+                println!("\n❌ Setup failed: {}", e);
+                return Err(e);
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Handle Outlook OAuth2 setup
+    async fn handle_setup_outlook(
+        &self,
+        _client_secret: Option<PathBuf>,
+        _name: Option<String>,
+        _no_browser: bool,
+        dry_run: bool,
+    ) -> Result<()> {
+        println!("📬 Outlook OAuth2 Account Setup");
+        println!("===============================\n");
+
+        if dry_run {
+            println!("🧪 Dry run mode - showing what would be done");
+        }
+
+        // TODO: Implement Outlook OAuth2 setup similar to Gmail
+        println!("   ⚠️  Outlook OAuth2 setup not yet implemented");
+        println!("   💡 Gmail setup is available with: comunicado setup-gmail");
 
         Ok(())
     }
@@ -2231,6 +2439,364 @@ impl CliHandler {
                     println!("Sync completed at: {}", completed_at.format("%Y-%m-%d %H:%M:%S UTC"));
                 }
             }
+        }
+
+        Ok(())
+    }
+
+    /// Run OAuth2 authorization flow for account setup
+    async fn run_oauth2_flow(
+        &self,
+        email: &str,
+        display_name: &str,
+        client_id: &str,
+        client_secret: &str,
+        provider: &str,
+        no_browser: bool,
+    ) -> Result<()> {
+        use std::collections::HashMap;
+        use std::sync::{Arc, Mutex};
+        use std::time::Duration;
+        use tokio::net::TcpListener;
+        use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+
+        const REDIRECT_PORT: u16 = 8181;
+        const REDIRECT_URI: &str = "http://localhost:8181/oauth/callback";
+
+        // Build authorization URL based on provider
+        let (auth_url, token_url) = match provider {
+            "gmail" => {
+                let auth_params = [
+                    ("client_id", client_id),
+                    ("redirect_uri", REDIRECT_URI),
+                    ("scope", "https://mail.google.com/ https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile"),
+                    ("response_type", "code"),
+                    ("access_type", "offline"),
+                    ("prompt", "consent"),
+                ];
+                
+                let query: String = auth_params
+                    .iter()
+                    .map(|(k, v)| format!("{}={}", k, urlencoding::encode(v)))
+                    .collect::<Vec<_>>()
+                    .join("&");
+                
+                let auth_url = format!("https://accounts.google.com/o/oauth2/auth?{}", query);
+                let token_url = "https://oauth2.googleapis.com/token";
+                (auth_url, token_url)
+            }
+            _ => return Err(anyhow!("Unsupported provider: {}", provider)),
+        };
+
+        println!("🌐 OAuth2 Authorization Flow");
+        println!("1. Starting callback server on localhost:{}", REDIRECT_PORT);
+        println!("2. Opening browser for authorization");
+        println!("3. Waiting for authorization callback");
+        println!();
+
+        // Store the authorization code
+        let auth_code: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
+        let server_running = Arc::new(Mutex::new(true));
+        
+        let auth_code_clone = Arc::clone(&auth_code);
+        let server_running_clone = Arc::clone(&server_running);
+
+        // Start callback server
+        let server_handle = tokio::spawn(async move {
+            let listener = match TcpListener::bind(format!("127.0.0.1:{}", REDIRECT_PORT)).await {
+                Ok(listener) => listener,
+                Err(e) => {
+                    eprintln!("❌ Failed to bind to port {}: {}", REDIRECT_PORT, e);
+                    return;
+                }
+            };
+
+            println!("✅ Callback server started on port {}", REDIRECT_PORT);
+
+            while *server_running_clone.lock().unwrap() {
+                match tokio::time::timeout(Duration::from_millis(100), listener.accept()).await {
+                    Ok(Ok((mut stream, _))) => {
+                        let mut reader = BufReader::new(&mut stream);
+                        let mut request_line = String::new();
+                        
+                        if reader.read_line(&mut request_line).await.is_ok() {
+                            if request_line.contains("/oauth/callback") {
+                                // Parse the callback URL
+                                if let Some(query_start) = request_line.find('?') {
+                                    if let Some(query_end) = request_line[query_start..].find(' ') {
+                                        let query = &request_line[query_start + 1..query_start + query_end];
+                                        let params: HashMap<String, String> = query
+                                            .split('&')
+                                            .filter_map(|param| {
+                                                let mut parts = param.split('=');
+                                                if let (Some(key), Some(value)) = (parts.next(), parts.next()) {
+                                                    Some((key.to_string(), urlencoding::decode(value).unwrap_or_default().to_string()))
+                                                } else {
+                                                    None
+                                                }
+                                            })
+                                            .collect();
+
+                                        if let Some(code) = params.get("code") {
+                                            *auth_code_clone.lock().unwrap() = Some(code.clone());
+                                            
+                                            // Send success response
+                                            let response = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n\
+                                                <html><head><title>Authorization Successful</title></head>\
+                                                <body style=\"font-family: Arial, sans-serif; text-align: center; padding: 50px;\">\
+                                                <h1 style=\"color: green;\">✅ Authorization Successful!</h1>\
+                                                <p>You can now close this browser window and return to the terminal.</p>\
+                                                <p>Comunicado will complete the setup automatically.</p>\
+                                                </body></html>";
+                                            let _ = stream.write_all(response.as_bytes()).await;
+                                        } else if let Some(error) = params.get("error") {
+                                            // Send error response
+                                            let response = format!(
+                                                "HTTP/1.1 400 Bad Request\r\nContent-Type: text/html\r\n\r\n\
+                                                <html><head><title>Authorization Failed</title></head>\
+                                                <body style=\"font-family: Arial, sans-serif; text-align: center; padding: 50px;\">\
+                                                <h1 style=\"color: red;\">❌ Authorization Failed</h1>\
+                                                <p>Error: {}</p>\
+                                                <p>Please close this window and try again.</p>\
+                                                </body></html>", error
+                                            );
+                                            let _ = stream.write_all(response.as_bytes()).await;
+                                        }
+                                        
+                                        *server_running_clone.lock().unwrap() = false;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    _ => {
+                        // Timeout or error, continue loop
+                        continue;
+                    }
+                }
+            }
+        });
+
+        // Open browser or show URL
+        if no_browser {
+            println!("🔗 Please visit this URL to authorize access:");
+            println!("{}", auth_url);
+            println!();
+        } else {
+            println!("🌐 Opening browser for authorization...");
+            if let Err(e) = webbrowser::open(&auth_url) {
+                println!("⚠️  Could not open browser automatically: {}", e);
+                println!("   Please visit this URL manually: {}", auth_url);
+            }
+        }
+
+        // Wait for authorization code
+        println!("⏳ Waiting for authorization... (timeout: 5 minutes)");
+        let timeout_duration = Duration::from_secs(300); // 5 minutes
+        let start_time = tokio::time::Instant::now();
+
+        loop {
+            if let Some(code) = auth_code.lock().unwrap().clone() {
+                println!("✅ Got authorization code: {}...", &code[..10.min(code.len())]);
+                break;
+            }
+
+            if tokio::time::Instant::now() - start_time > timeout_duration {
+                *server_running.lock().unwrap() = false;
+                server_handle.abort();
+                return Err(anyhow!("Authorization timeout! Please try again."));
+            }
+
+            tokio::time::sleep(Duration::from_millis(500)).await;
+        }
+
+        // Stop the server
+        *server_running.lock().unwrap() = false;
+        let _ = server_handle.await;
+
+        let final_auth_code = auth_code.lock().unwrap().clone().unwrap();
+
+        // Exchange code for tokens
+        println!("🔄 Exchanging authorization code for tokens...");
+
+        let token_data = [
+            ("client_id", client_id),
+            ("client_secret", client_secret),
+            ("code", &final_auth_code),
+            ("grant_type", "authorization_code"),
+            ("redirect_uri", REDIRECT_URI),
+        ];
+
+        let client = reqwest::Client::new();
+        let response = client
+            .post(token_url)
+            .header("Content-Type", "application/x-www-form-urlencoded")
+            .form(&token_data)
+            .send()
+            .await
+            .map_err(|e| anyhow!("Token exchange request failed: {}", e))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let error_text = response.text().await.unwrap_or_default();
+            return Err(anyhow!("Token exchange failed: HTTP {} - {}", status, error_text));
+        }
+
+        let token_response: serde_json::Value = response
+            .json()
+            .await
+            .map_err(|e| anyhow!("Failed to parse token response: {}", e))?;
+
+        if let Some(error) = token_response.get("error") {
+            let error_desc = token_response
+                .get("error_description")
+                .and_then(|v| v.as_str())
+                .unwrap_or("Unknown error");
+            return Err(anyhow!("Token exchange error: {} - {}", error, error_desc));
+        }
+
+        let access_token = token_response["access_token"]
+            .as_str()
+            .ok_or_else(|| anyhow!("Missing access_token in response"))?;
+
+        let refresh_token = token_response
+            .get("refresh_token")
+            .and_then(|v| v.as_str());
+
+        let expires_in = token_response["expires_in"]
+            .as_u64()
+            .unwrap_or(3600);
+
+        println!("✅ Got OAuth2 tokens successfully!");
+        println!("   Access token: {}...", &access_token[..20.min(access_token.len())]);
+        if let Some(refresh) = refresh_token {
+            println!("   Refresh token: {}...", &refresh[..20.min(refresh.len())]);
+        }
+
+        // Calculate expiration time
+        let expires_at = chrono::Utc::now() + chrono::Duration::seconds(expires_in as i64);
+
+        // Create account ID from email
+        let account_id = email.replace('@', "_").replace('.', "_");
+
+        // Create account configuration
+        let account_config = serde_json::json!({
+            "account_id": account_id,
+            "display_name": display_name,
+            "email_address": email,
+            "provider": provider,
+            "imap_server": match provider {
+                "gmail" => "imap.gmail.com",
+                _ => "unknown",
+            },
+            "imap_port": match provider {
+                "gmail" => 993,
+                _ => 993,
+            },
+            "smtp_server": match provider {
+                "gmail" => "smtp.gmail.com",
+                _ => "unknown",
+            },
+            "smtp_port": match provider {
+                "gmail" => 587,
+                _ => 587,
+            },
+            "token_expires_at": expires_at.to_rfc3339(),
+            "scopes": match provider {
+                "gmail" => vec![
+                    "https://mail.google.com/",
+                    "https://www.googleapis.com/auth/userinfo.email",
+                    "https://www.googleapis.com/auth/userinfo.profile"
+                ],
+                _ => vec![],
+            }
+        });
+
+        // Write account configuration
+        let config_dir = dirs::config_dir()
+            .ok_or_else(|| anyhow!("Could not find config directory"))?
+            .join("comunicado");
+
+        std::fs::create_dir_all(&config_dir)
+            .map_err(|e| anyhow!("Failed to create config directory: {}", e))?;
+
+        let config_path = config_dir.join(format!("{}.json", account_id));
+        std::fs::write(&config_path, serde_json::to_string_pretty(&account_config)?)
+            .map_err(|e| anyhow!("Failed to write account config: {}", e))?;
+
+        println!("✅ Account config written to: {}", config_path.display());
+
+        // Store tokens using the storage system
+        let account_storage = SecureStorage::new("comunicado".to_string())
+            .map_err(|e| anyhow!("Failed to create secure storage: {}", e))?;
+
+        // Store OAuth2 credentials
+        if let Err(e) = account_storage.store_oauth_credentials(&account_id, client_id, client_secret) {
+            println!("⚠️  Failed to store OAuth2 credentials: {}", e);
+            println!("   Falling back to file storage...");
+            
+            // Fallback to file storage
+            let client_id_encoded = base64::prelude::BASE64_STANDARD.encode(client_id);
+            let client_secret_encoded = base64::prelude::BASE64_STANDARD.encode(client_secret);
+            
+            let client_id_path = config_dir.join(format!("{}.client_id.cred", account_id));
+            let client_secret_path = config_dir.join(format!("{}.client_secret.cred", account_id));
+            
+            std::fs::write(&client_id_path, client_id_encoded)
+                .map_err(|e| anyhow!("Failed to write client ID file: {}", e))?;
+            std::fs::write(&client_secret_path, client_secret_encoded)
+                .map_err(|e| anyhow!("Failed to write client secret file: {}", e))?;
+            
+            // Set proper permissions
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                for path in [&client_id_path, &client_secret_path] {
+                    let mut perms = std::fs::metadata(path)?.permissions();
+                    perms.set_mode(0o600);
+                    std::fs::set_permissions(path, perms)?;
+                }
+            }
+            
+            println!("✅ OAuth2 credentials stored securely");
+        } else {
+            println!("✅ OAuth2 credentials stored in system keyring");
+        }
+
+        // Store tokens manually in files (for compatibility with existing setup)
+        let access_token_encoded = base64::prelude::BASE64_STANDARD.encode(access_token);
+        let access_token_path = config_dir.join(format!("{}.access.token", account_id));
+        std::fs::write(&access_token_path, access_token_encoded)
+            .map_err(|e| anyhow!("Failed to write access token file: {}", e))?;
+        
+        // Set proper permissions
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = std::fs::metadata(&access_token_path)?.permissions();
+            perms.set_mode(0o600);
+            std::fs::set_permissions(&access_token_path, perms)?;
+        }
+        
+        println!("✅ Access token written to: {}", access_token_path.display());
+
+        // Store refresh token if available
+        if let Some(refresh_token) = refresh_token {
+            let refresh_token_encoded = base64::prelude::BASE64_STANDARD.encode(refresh_token);
+            let refresh_token_path = config_dir.join(format!("{}.refresh.token", account_id));
+            std::fs::write(&refresh_token_path, refresh_token_encoded)
+                .map_err(|e| anyhow!("Failed to write refresh token file: {}", e))?;
+            
+            // Set proper permissions
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let mut perms = std::fs::metadata(&refresh_token_path)?.permissions();
+                perms.set_mode(0o600);
+                std::fs::set_permissions(&refresh_token_path, perms)?;
+            }
+            
+            println!("✅ Refresh token written to: {}", refresh_token_path.display());
         }
 
         Ok(())

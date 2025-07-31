@@ -88,6 +88,9 @@ uuid = { version = "1.6", features = ["v4", "v5", "serde"] }
 
 # System directories
 dirs = "5.0"
+glob = "0.3"
+webbrowser = "0.8"
+urlencoding = "2.1"
 
 # System monitoring
 sysinfo = "0.30"
