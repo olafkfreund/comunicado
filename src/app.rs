@@ -16,7 +16,7 @@ use crate::email::{EmailDatabase, EmailNotificationManager};
 use crate::events::{EventHandler, EventResult};
 use crate::imap::ImapAccountManager;
 use crate::notifications::{NotificationConfig, UnifiedNotificationManager};
-use crate::oauth2::{AccountConfig, SecureStorage, SetupWizard, TokenManager};
+use crate::oauth2::{AccountConfig, SecureStorage, TokenManager};
 use crate::smtp::{SmtpService, SmtpServiceBuilder};
 use crate::startup::StartupProgressManager;
 use crate::ui::{ComposeAction, DraftAction, UI};
@@ -551,19 +551,9 @@ impl App {
         tracing::debug!("Found {} existing account IDs", account_ids.len());
 
         if account_ids.is_empty() {
-            tracing::info!("No existing accounts found, running setup wizard");
-            // No accounts found, run setup wizard
-            match tokio::time::timeout(
-                std::time::Duration::from_secs(300), // 5 minute timeout for setup
-                self.run_setup_wizard(),
-            )
-            .await
-            {
-                Ok(result) => result?,
-                Err(_) => {
-                    return Err(anyhow::anyhow!("Setup wizard timed out after 5 minutes"));
-                }
-            }
+            tracing::info!("No existing accounts found - starting without accounts");
+            // No accounts found, continue without running setup wizard
+            // Users can use CLI commands to add accounts
         } else {
             tracing::info!("Loading existing accounts");
             // Load existing accounts
@@ -598,98 +588,7 @@ impl App {
         }
     }
 
-    /// Run the OAuth2 setup wizard
-    async fn run_setup_wizard(&mut self) -> Result<()> {
-        tracing::info!("Starting OAuth2 setup wizard");
 
-        // Try TUI wizard first, fallback to file-based setup
-        match self.try_tui_setup_wizard().await {
-            Ok(Some(account_config)) => {
-                self.setup_oauth2_account(&account_config).await?;
-                tracing::info!("Account setup completed successfully!");
-                tracing::info!(
-                    "Account: {} ({})",
-                    account_config.display_name,
-                    account_config.email_address
-                );
-                Ok(())
-            }
-            Ok(None) => Err(anyhow::anyhow!("Account setup was cancelled")),
-            Err(e) => {
-                tracing::error!("TUI setup wizard failed: {}", e);
-                Err(anyhow::anyhow!("Account setup failed: {}", e))
-            }
-        }
-    }
-
-    /// Try to run the TUI-based setup wizard
-    async fn try_tui_setup_wizard(&mut self) -> Result<Option<crate::oauth2::AccountConfig>> {
-        let mut wizard = crate::oauth2::SetupWizard::new()
-            .map_err(|e| anyhow::anyhow!("Failed to create setup wizard: {}", e))?;
-        tracing::info!("Setup wizard created successfully");
-
-        let account_config = wizard
-            .run()
-            .await
-            .map_err(|e| anyhow::anyhow!("Setup wizard failed: {}", e))?;
-
-        Ok(account_config)
-    }
-
-    /// Setup OAuth2 account (shared between TUI and file setup)
-    async fn setup_oauth2_account(
-        &mut self,
-        account_config: &crate::oauth2::AccountConfig,
-    ) -> Result<()> {
-        // Store the account configuration in secure storage
-        self.storage
-            .store_account(account_config)
-            .map_err(|e| anyhow::anyhow!("Failed to store account: {}", e))?;
-
-        // Store OAuth2 tokens in TokenManager for IMAP/SMTP authentication
-        if let Some(ref token_manager) = self.token_manager {
-            // Create TokenResponse from AccountConfig for TokenManager storage
-            let token_response = crate::oauth2::TokenResponse {
-                access_token: account_config.access_token.clone(),
-                refresh_token: account_config.refresh_token.clone(),
-                token_type: "Bearer".to_string(),
-                expires_in: account_config.token_expires_at.map(|expires_at| {
-                    let now = chrono::Utc::now();
-                    let duration = expires_at.signed_duration_since(now);
-                    duration.num_seconds().max(0) as u64
-                }),
-                scope: Some(account_config.scopes.join(" ")),
-            };
-
-            token_manager
-                .store_tokens(
-                    account_config.account_id.clone(),
-                    account_config.provider.clone(),
-                    &token_response,
-                )
-                .await
-                .map_err(|e| anyhow::anyhow!("Failed to store tokens in TokenManager: {}", e))?;
-
-            tracing::info!(
-                "OAuth2 tokens stored in TokenManager for account: {}",
-                account_config.account_id
-            );
-        } else {
-            tracing::warn!("TokenManager not initialized, OAuth2 tokens not stored for IMAP/SMTP");
-        }
-
-        // Create account in database using existing method
-        self.create_account_from_config(account_config).await?;
-
-        // Convert AccountConfig to AccountItem for the UI
-        let account_item = crate::ui::AccountItem::from_config(account_config);
-
-        // Add account to the UI
-        let accounts = vec![account_item];
-        self.ui.set_accounts(accounts);
-
-        Ok(())
-    }
 
     /// Load existing accounts from storage
     async fn load_existing_accounts(&mut self) -> Result<()> {
@@ -2050,39 +1949,15 @@ impl App {
         }
     }
 
-    /// Handle adding a new account by launching the setup wizard
+    /// Handle account management - direct users to CLI setup
     async fn handle_add_account(&mut self) -> Result<()> {
-        tracing::info!("Launching account setup wizard");
+        tracing::info!("Account management requested - directing to CLI setup");
 
-        // Create and run the setup wizard
-        let mut wizard = SetupWizard::new()
-            .map_err(|e| anyhow::anyhow!("Failed to create setup wizard: {}", e))?;
-
-        if let Some(account_config) = wizard
-            .run()
-            .await
-            .map_err(|e| anyhow::anyhow!("Setup wizard failed: {}", e))?
-        {
-            // Create the account in the database
-            self.create_account_from_config(&account_config).await?;
-
-            // Convert to AccountItem for the UI
-            let account_item = crate::ui::AccountItem::from_config(&account_config);
-
-            // Add the account to the UI
-            self.ui.add_account(account_item);
-
-            tracing::info!(
-                "New account added successfully: {} ({})",
-                account_config.display_name,
-                account_config.email_address
-            );
-
-            // Optionally switch to the new account immediately
-            self.handle_account_switch(&account_config.account_id).await;
-        } else {
-            tracing::info!("Account setup was cancelled by user");
-        }
+        // Show message directing users to CLI commands
+        self.ui.show_notification(
+            "Use CLI to add accounts: 'comunicado setup-gmail' or 'comunicado setup-outlook'".to_string(),
+            tokio::time::Duration::from_secs(10)
+        );
 
         Ok(())
     }

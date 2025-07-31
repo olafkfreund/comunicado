@@ -1,3 +1,4 @@
+pub mod account_inspector;
 pub mod account_switcher;
 pub mod animated_content;
 pub mod animation;
