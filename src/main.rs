@@ -1,7 +1,7 @@
 use anyhow::Result;
 use clap::Parser;
 use comunicado::app::App;
-use comunicado::cli::{Cli, CliHandler, StartupMode};
+use comunicado::cli::{Cli, CliHandler};
 use comunicado::startup::StartupProgressScreen;
 use comunicado::theme::Theme;
 use crossterm::{

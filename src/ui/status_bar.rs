@@ -43,6 +43,8 @@ pub struct EmailStatusSegment {
 pub struct CalendarStatusSegment {
     pub next_event: Option<String>,
     pub events_today: usize,
+    pub next_event_time: Option<chrono::DateTime<chrono::Local>>,
+    pub urgent_events: usize,
 }
 
 /// System information segment
@@ -128,10 +130,28 @@ impl StatusSegment for EmailStatusSegment {
 impl StatusSegment for CalendarStatusSegment {
     fn content(&self) -> String {
         match &self.next_event {
-            Some(event) => format!("Cal: Next {} ({} today)", event, self.events_today),
+            Some(event) => {
+                let urgency_indicator = if self.urgent_events > 0 { "🔴" } else { "" };
+                let time_info = match &self.next_event_time {
+                    Some(time) => {
+                        let now = chrono::Local::now();
+                        let duration = time.signed_duration_since(now);
+                        if duration.num_minutes() < 60 {
+                            format!(" in {}m", duration.num_minutes())
+                        } else if duration.num_hours() < 24 {
+                            format!(" in {}h", duration.num_hours())
+                        } else {
+                            format!(" {}", time.format("%m/%d"))
+                        }
+                    }
+                    None => String::new(),
+                };
+                format!("Cal{}: {}{} ({} today)", urgency_indicator, event, time_info, self.events_today)
+            }
             None => {
                 if self.events_today > 0 {
-                    format!("Cal: {} events today", self.events_today)
+                    let urgency_indicator = if self.urgent_events > 0 { "🔴" } else { "" };
+                    format!("Cal{}: {} events today", urgency_indicator, self.events_today)
                 } else {
                     "Cal: No events".to_string()
                 }

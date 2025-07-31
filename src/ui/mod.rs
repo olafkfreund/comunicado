@@ -5,6 +5,7 @@ pub mod calendar;
 pub mod compose;
 pub mod content_preview;
 pub mod context_calendar;
+pub mod context_shortcuts;
 pub mod date_picker;
 pub mod draft_list;
 pub mod email_viewer;
@@ -45,6 +46,7 @@ use self::{
     account_switcher::AccountSwitcher,
     compose::ComposeUI,
     content_preview::ContentPreview,
+    context_shortcuts::ContextShortcutsPopup,
     draft_list::DraftListUI,
     folder_tree::FolderTree,
     keyboard_shortcuts::KeyboardShortcutsUI,
@@ -139,6 +141,7 @@ pub struct UI {
     search_ui: SearchUI,
     search_engine: Option<SearchEngine>,
     keyboard_shortcuts_ui: KeyboardShortcutsUI,
+    context_shortcuts_popup: ContextShortcutsPopup,
     // Context-aware integration components
     context_calendar: ContextAwareCalendar,
     integrated_layout: IntegratedLayoutManager,
@@ -174,6 +177,7 @@ impl UI {
             search_ui: SearchUI::new(),
             search_engine: None,
             keyboard_shortcuts_ui: KeyboardShortcutsUI::new(),
+            context_shortcuts_popup: ContextShortcutsPopup::new(),
             // Initialize context-aware integration components
             context_calendar: ContextAwareCalendar::new(),
             integrated_layout: IntegratedLayoutManager::new(),
@@ -202,8 +206,10 @@ impl UI {
 
         // Add calendar segment
         let calendar_segment = CalendarStatusSegment {
-            next_event: Some("Team Meeting".to_string()),
-            events_today: 3,
+            next_event: None,
+            events_today: 0,
+            next_event_time: None,
+            urgent_events: 0,
         };
         self.status_bar
             .add_segment("calendar".to_string(), calendar_segment);
@@ -368,6 +374,10 @@ impl UI {
                 }
             }
         }
+
+        // Render context shortcuts popup on top of everything if visible
+        let theme = self.theme_manager.current_theme();
+        self.context_shortcuts_popup.render(frame, size, theme, &self.mode);
     }
 
     /// Render context-aware email-calendar integrated layout
@@ -1617,6 +1627,36 @@ impl UI {
     /// Show keyboard shortcuts popup
     pub fn show_keyboard_shortcuts(&mut self) {
         self.mode = UIMode::KeyboardShortcuts;
+    }
+
+    /// Toggle context shortcuts popup visibility
+    pub fn toggle_context_shortcuts(&mut self) {
+        self.context_shortcuts_popup.toggle();
+    }
+
+    /// Show context shortcuts popup
+    pub fn show_context_shortcuts(&mut self) {
+        self.context_shortcuts_popup.show();
+    }
+
+    /// Hide context shortcuts popup
+    pub fn hide_context_shortcuts(&mut self) {
+        self.context_shortcuts_popup.hide();
+    }
+
+    /// Check if context shortcuts popup is visible
+    pub fn is_context_shortcuts_visible(&self) -> bool {
+        self.context_shortcuts_popup.is_visible()
+    }
+
+    /// Handle context shortcuts popup navigation
+    pub fn context_shortcuts_scroll_up(&mut self) {
+        self.context_shortcuts_popup.scroll_up();
+    }
+
+    /// Handle context shortcuts popup navigation
+    pub fn context_shortcuts_scroll_down(&mut self) {
+        self.context_shortcuts_popup.scroll_down();
     }
 
     /// Set initial UI mode based on CLI arguments

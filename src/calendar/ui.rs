@@ -4,7 +4,7 @@ use crate::{
 };
 use chrono::{DateTime, Datelike, Duration, Local, NaiveDate, Timelike, Utc};
 use ratatui::{
-    layout::{Constraint, Direction, Layout, Margin, Rect},
+    layout::{Alignment, Constraint, Direction, Layout, Margin, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span, Text},
     widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Tabs, Wrap},
@@ -319,94 +319,192 @@ impl CalendarUI {
 
         // Render custom calendar grid
         self.render_custom_calendar_grid(frame, area.inner(&Margin::new(1, 1)), theme);
-
-        // Overlay events on calendar days
-        self.render_calendar_events_overlay(frame, area, theme);
     }
 
     /// Render custom calendar grid
     fn render_custom_calendar_grid(&self, frame: &mut Frame, area: Rect, theme: &Theme) {
-        // Create a simple text-based calendar grid
-        let calendar_text = self.generate_calendar_text();
+        // Calculate dimensions for calendar cells
+        let cell_width = area.width / 7;
+        let cell_height = (area.height - 1) / 6; // -1 for header row
+        
+        // Render day header row
+        let header_area = Rect::new(area.x, area.y, area.width, 1);
+        let header_text = "Mo     Tu     We     Th     Fr     Sa     Su";
+        let header_para = Paragraph::new(header_text)
+            .style(theme.get_component_style("calendar_day_header", false))
+            .block(Block::default());
+        frame.render_widget(header_para, header_area);
 
-        let calendar_para = Paragraph::new(calendar_text)
-            .style(theme.get_component_style("calendar_grid", false))
-            .wrap(Wrap { trim: false });
-
-        frame.render_widget(calendar_para, area);
-    }
-
-    /// Generate calendar text for the current month
-    fn generate_calendar_text(&self) -> Text {
-        let mut lines = Vec::new();
-
-        // Add header with day names
-        lines.push(Line::from("Mo Tu We Th Fr Sa Su"));
-
-        // Get first day of the month
-        let first_of_month =
-            NaiveDate::from_ymd_opt(self.selected_date.year(), self.selected_date.month(), 1)
-                .unwrap();
-
+        // Get first day of the month and calculate start date
+        let first_of_month = NaiveDate::from_ymd_opt(
+            self.selected_date.year(), 
+            self.selected_date.month(), 
+            1
+        ).unwrap();
         let days_from_monday = first_of_month.weekday().num_days_from_monday();
         let start_date = first_of_month - Duration::days(days_from_monday as i64);
 
-        // Generate calendar weeks
-        for week in 0..6 {
-            let mut week_line = String::new();
-            for day in 0..7 {
-                let current_date = start_date + Duration::days((week * 7 + day) as i64);
-                if day > 0 {
-                    week_line.push(' ');
-                }
-                week_line.push_str(&format!("{:2}", current_date.day()));
-            }
-            lines.push(Line::from(week_line));
-        }
-
-        Text::from(lines)
-    }
-
-    /// Render events overlay on calendar
-    fn render_calendar_events_overlay(&self, frame: &mut Frame, area: Rect, theme: &Theme) {
-        // This would require custom rendering of events on calendar days
-        // For now, we'll show a simple indicator for days with events
-
+        // Get events grouped by date for easy lookup
         let events_by_date = self.group_events_by_date();
+        let today = Local::now().date_naive();
 
-        // Calculate calendar grid positions
-        let inner_area = area.inner(&Margin::new(1, 1));
-        let cell_width = inner_area.width / 7;
-        let cell_height = (inner_area.height - 1) / 6; // -1 for header row
-
-        // Start from the first Monday of the month view
-        let first_of_month =
-            NaiveDate::from_ymd_opt(self.selected_date.year(), self.selected_date.month(), 1)
-                .unwrap();
-
-        let days_from_monday = first_of_month.weekday().num_days_from_monday();
-        let start_date = first_of_month - Duration::days(days_from_monday as i64);
-
-        // Render event indicators for each day
+        // Render calendar cells
         for week in 0..6 {
             for day in 0..7 {
                 let current_date = start_date + Duration::days((week * 7 + day) as i64);
-
-                if let Some(day_events) = events_by_date.get(&current_date) {
-                    let x = inner_area.x + (day as u16) * cell_width;
-                    let y = inner_area.y + 1 + (week as u16) * cell_height; // +1 for header
-
-                    if day_events.len() > 0 {
-                        let indicator_area = Rect::new(x + cell_width - 3, y, 2, 1);
-                        let indicator_text = format!("{}", day_events.len().min(9));
-                        let indicator = Paragraph::new(indicator_text)
-                            .style(theme.get_component_style("calendar_event_indicator", false));
-                        frame.render_widget(indicator, indicator_area);
-                    }
-                }
+                
+                let x = area.x + (day as u16) * cell_width;
+                let y = area.y + 1 + (week as u16) * cell_height; // +1 for header
+                let cell_area = Rect::new(x, y, cell_width, cell_height);
+                
+                self.render_calendar_day_cell(
+                    frame, 
+                    cell_area, 
+                    current_date, 
+                    &events_by_date,
+                    today,
+                    theme
+                );
             }
         }
     }
+
+    /// Render a single calendar day cell with events
+    fn render_calendar_day_cell(
+        &self,
+        frame: &mut Frame,
+        area: Rect,
+        date: NaiveDate,
+        events_by_date: &HashMap<NaiveDate, Vec<&Event>>,
+        today: NaiveDate,
+        theme: &Theme,
+    ) {
+        // Determine cell styling
+        let is_today = date == today;
+        let is_selected = date == self.selected_date;
+        let is_current_month = date.month() == self.selected_date.month();
+        
+        let border_style = if is_selected {
+            theme.get_component_style("calendar_selected", true)
+        } else if is_today {
+            theme.get_component_style("calendar_today", true)
+        } else {
+            theme.get_component_style("calendar_grid", false)
+        };
+
+        let day_style = if is_current_month {
+            if is_today {
+                theme.get_component_style("calendar_today", true)
+            } else {
+                theme.get_component_style("calendar_day", false)
+            }
+        } else {
+            theme.get_component_style("calendar_day_other_month", false)
+        };
+
+        // Create cell block with border
+        let cell_block = Block::default()
+            .borders(Borders::ALL)
+            .border_style(border_style);
+        
+        frame.render_widget(cell_block, area);
+        
+        // Get inner area for content
+        let inner_area = area.inner(&Margin::new(1, 1));
+        
+        if inner_area.height == 0 {
+            return; // No space for content
+        }
+
+        // Render day number at the top
+        let day_number = format!("{:2}", date.day());
+        let day_area = Rect::new(inner_area.x, inner_area.y, inner_area.width, 1);
+        let day_para = Paragraph::new(day_number)
+            .style(day_style)
+            .alignment(Alignment::Left);
+        frame.render_widget(day_para, day_area);
+
+        // Render events if there's space
+        if inner_area.height > 1 {
+            let events_area = Rect::new(
+                inner_area.x, 
+                inner_area.y + 1, 
+                inner_area.width, 
+                inner_area.height - 1
+            );
+            
+            if let Some(day_events) = events_by_date.get(&date) {
+                self.render_day_cell_events(frame, events_area, day_events, theme);
+            }
+        }
+    }
+
+    /// Render events within a day cell
+    fn render_day_cell_events(
+        &self,
+        frame: &mut Frame,
+        area: Rect,
+        events: &[&Event],
+        theme: &Theme,
+    ) {
+        let max_events = area.height as usize;
+        let visible_events = &events[..events.len().min(max_events)];
+        
+        for (i, event) in visible_events.iter().enumerate() {
+            let y = area.y + i as u16;
+            let event_area = Rect::new(area.x, y, area.width, 1);
+            
+            // Create event display text
+            let event_text = if event.all_day {
+                if event.title.len() > area.width as usize {
+                    format!("{}…", &event.title[..area.width.saturating_sub(1) as usize])
+                } else {
+                    event.title.clone()
+                }
+            } else {
+                let time_str = event.start_time.format("%H:%M").to_string();
+                let title_space = area.width.saturating_sub(6) as usize; // 6 chars for time + space
+                let title = if event.title.len() > title_space {
+                    format!("{}…", &event.title[..title_space.saturating_sub(1)])
+                } else {
+                    event.title.clone()
+                };
+                format!("{} {}", time_str, title)
+            };
+
+            // Style based on event priority and status
+            let event_style = match event.priority {
+                EventPriority::High => Style::default()
+                    .fg(Color::Red)
+                    .add_modifier(Modifier::BOLD),
+                EventPriority::Normal => match event.status {
+                    EventStatus::Confirmed => Style::default().fg(Color::Cyan),
+                    EventStatus::Tentative => Style::default().fg(Color::Yellow),
+                    EventStatus::Cancelled => Style::default()
+                        .fg(Color::Gray)
+                        .add_modifier(Modifier::CROSSED_OUT),
+                },
+                EventPriority::Low => Style::default().fg(Color::Gray),
+            };
+
+            let event_para = Paragraph::new(event_text)
+                .style(event_style);
+            
+            frame.render_widget(event_para, event_area);
+        }
+        
+        // Show overflow indicator if there are more events
+        if events.len() > max_events {
+            let overflow_y = area.y + (max_events.saturating_sub(1)) as u16;
+            let overflow_area = Rect::new(area.x, overflow_y, area.width, 1);
+            let overflow_text = format!("+{} more", events.len() - max_events);
+            let overflow_para = Paragraph::new(overflow_text)
+                .style(theme.get_component_style("calendar_event_overflow", false));
+            frame.render_widget(overflow_para, overflow_area);
+        }
+    }
+
+
 
     /// Group events by date for calendar display
     fn group_events_by_date(&self) -> HashMap<NaiveDate, Vec<&Event>> {
