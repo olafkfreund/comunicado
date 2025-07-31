@@ -155,6 +155,19 @@ impl SecureStorage {
         let access_token = self.load_access_token(account_id).unwrap_or_default();
         let refresh_token = self.load_refresh_token(account_id);
 
+        // Check if tokens are missing or expired
+        let has_tokens = !access_token.is_empty() || refresh_token.is_some();
+        let is_expired = config_without_tokens.token_expires_at
+            .map(|expires| expires < chrono::Utc::now())
+            .unwrap_or(false);
+
+        if !has_tokens || is_expired {
+            tracing::warn!(
+                "Account {} has missing or expired tokens (has_tokens: {}, is_expired: {}). Account will be shown with error status for re-authentication.",
+                account_id, has_tokens, is_expired
+            );
+        }
+
         let account = AccountConfig {
             account_id: config_without_tokens.account_id,
             display_name: config_without_tokens.display_name,
@@ -192,8 +205,16 @@ impl SecureStorage {
             let path = entry.path();
             if path.extension().and_then(|s| s.to_str()) == Some("json") {
                 if let Some(account_id) = path.file_stem().and_then(|s| s.to_str()) {
-                    if let Ok(Some(account)) = self.load_account(account_id) {
-                        accounts.push(account);
+                    match self.load_account(account_id) {
+                        Ok(Some(account)) => {
+                            accounts.push(account);
+                        }
+                        Ok(None) => {
+                            tracing::debug!("Account config file exists but load_account returned None for {}", account_id);
+                        }
+                        Err(e) => {
+                            tracing::warn!("Failed to load account {}: {}. Account will be skipped.", account_id, e);
+                        }
                     }
                 }
             }
@@ -828,5 +849,35 @@ mod tests {
         let account_ids = storage.list_account_ids().unwrap();
         assert_eq!(account_ids.len(), 1);
         assert_eq!(account_ids[0], "test-account");
+    }
+
+    #[test]
+    fn test_expired_account_loading() {
+        let (storage, _temp_dir) = create_test_storage();
+
+        // Create an expired account config (similar to the user's gmail account)
+        let expired_time = chrono::Utc::now() - chrono::Duration::hours(1);
+        let config_json = format!(
+            r#"{{"account_id":"gmail_test","display_name":"Test User","email_address":"test@gmail.com","provider":"gmail","imap_server":"imap.gmail.com","imap_port":993,"smtp_server":"smtp.gmail.com","smtp_port":587,"token_expires_at":"{}","scopes":[]}}"#,
+            expired_time.to_rfc3339()
+        );
+        
+        let test_path = storage.get_account_config_path("gmail_test");
+        fs::write(&test_path, config_json).unwrap();
+
+        // Account should load even with missing tokens
+        let account = storage.load_account("gmail_test").unwrap();
+        assert!(account.is_some());
+        
+        let account = account.unwrap();
+        assert_eq!(account.account_id, "gmail_test");
+        assert_eq!(account.email_address, "test@gmail.com");
+        assert!(account.access_token.is_empty()); // No tokens stored
+        assert!(account.is_token_expired()); // Should be considered expired
+        
+        // Should appear in load_all_accounts
+        let all_accounts = storage.load_all_accounts().unwrap();
+        assert_eq!(all_accounts.len(), 1);
+        assert!(all_accounts[0].is_token_expired());
     }
 }

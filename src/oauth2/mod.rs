@@ -245,6 +245,12 @@ impl AccountConfig {
     }
 
     pub fn is_token_expired(&self) -> bool {
+        // Consider expired if access token is missing or empty
+        if self.access_token.is_empty() {
+            return true;
+        }
+        
+        // Check expiration time
         if let Some(expires_at) = self.token_expires_at {
             chrono::Utc::now() > expires_at
         } else {
