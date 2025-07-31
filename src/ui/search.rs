@@ -66,6 +66,17 @@ pub enum SearchAction {
     ClearSearch,
     /// Toggle search mode selector
     ToggleModeSelector,
+    /// Toggle between regular and fuzzy search
+    ToggleFuzzySearch,
+}
+
+/// Search engine type
+#[derive(Debug, Clone, PartialEq)]
+pub enum SearchEngineType {
+    /// Regular FTS5 search
+    Regular,
+    /// Fuzzy search with live search-as-you-type
+    Fuzzy,
 }
 
 /// Search UI component
@@ -75,6 +86,9 @@ pub struct SearchUI {
 
     /// Current search mode
     mode: SearchMode,
+
+    /// Current search engine type
+    engine_type: SearchEngineType,
 
     /// Search results
     results: Vec<SearchResult>,
@@ -142,6 +156,7 @@ impl SearchUI {
         Self {
             query: String::new(),
             mode: SearchMode::FullText,
+            engine_type: SearchEngineType::Regular,
             results: Vec::new(),
             selected_index: 0,
             is_active: false,
@@ -201,6 +216,37 @@ impl SearchUI {
             .position(|(m, _, _)| m == &mode)
             .unwrap_or(0);
         self.mode = mode;
+    }
+
+    /// Get current search engine type
+    pub fn engine_type(&self) -> &SearchEngineType {
+        &self.engine_type
+    }
+
+    /// Set search engine type
+    pub fn set_engine_type(&mut self, engine_type: SearchEngineType) {
+        self.engine_type = engine_type;
+        // Clear results when switching engine types
+        self.clear_results();
+    }
+
+    /// Toggle between regular and fuzzy search
+    pub fn toggle_engine_type(&mut self) {
+        self.engine_type = match self.engine_type {
+            SearchEngineType::Regular => SearchEngineType::Fuzzy,
+            SearchEngineType::Fuzzy => SearchEngineType::Regular,
+        };
+        // Clear results when switching engine types
+        self.clear_results();
+    }
+
+    /// Clear search results
+    pub fn clear_results(&mut self) {
+        self.results.clear();
+        self.selected_index = 0;
+        self.total_results = 0;
+        self.error_message = None;
+        self.last_query.clear();
     }
 
     /// Check if search is active
@@ -338,6 +384,10 @@ impl SearchUI {
                 self.set_mode(SearchMode::Body);
                 Some(SearchAction::ChangeMode(SearchMode::Body))
             }
+            crossterm::event::KeyCode::F(5) => {
+                self.toggle_engine_type();
+                Some(SearchAction::ToggleFuzzySearch)
+            }
             crossterm::event::KeyCode::Char('k') => {
                 self.previous_result();
                 None
@@ -440,6 +490,7 @@ impl SearchUI {
             .constraints([
                 Constraint::Min(20),    // Query input
                 Constraint::Length(15), // Mode indicator
+                Constraint::Length(12), // Engine type indicator
             ])
             .split(area);
 
@@ -479,6 +530,28 @@ impl SearchUI {
             );
 
         frame.render_widget(mode_paragraph, chunks[1]);
+
+        // Engine type indicator
+        let engine_text = match self.engine_type {
+            SearchEngineType::Regular => "🎯 Exact",
+            SearchEngineType::Fuzzy => "🔍 Fuzzy",
+        };
+
+        let engine_style = match self.engine_type {
+            SearchEngineType::Regular => Style::default().fg(theme.colors.palette.text_muted),
+            SearchEngineType::Fuzzy => Style::default().fg(theme.colors.palette.accent),
+        };
+
+        let engine_paragraph = Paragraph::new(engine_text)
+            .style(engine_style)
+            .alignment(Alignment::Center)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_style(engine_style),
+            );
+
+        frame.render_widget(engine_paragraph, chunks[2]);
     }
 
     /// Render search status line
@@ -668,7 +741,7 @@ impl SearchUI {
         let help_text = if self.show_mode_selector {
             "↑↓: Navigate • Enter: Select • Esc/Tab: Close"
         } else {
-            "Type: Search • ↑↓: Navigate • Enter: Open • Tab: Mode • F1-F4: Quick Mode • Esc: Close"
+            "Type: Search • ↑↓: Navigate • Enter: Open • Tab: Mode • F1-F4: Quick Mode • F5: Fuzzy • Esc: Close"
         };
 
         let help_paragraph = Paragraph::new(help_text)

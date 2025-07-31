@@ -12,6 +12,7 @@ pub mod draft_list;
 pub mod email_viewer;
 pub mod enhanced_message_list;
 pub mod folder_tree;
+pub mod fuzzy_search;
 pub mod graphics;
 pub mod help;
 pub mod integrated_layout;
@@ -85,7 +86,10 @@ pub use email_viewer::{EmailViewer, EmailViewerAction};
 pub use invitation_viewer::{InvitationAction, InvitationViewer};
 
 // Re-export search types
-pub use search::{SearchAction, SearchEngine, SearchMode, SearchResult, SearchUI};
+pub use search::{SearchAction, SearchEngine, SearchEngineType, SearchMode, SearchResult, SearchUI};
+
+// Re-export fuzzy search types
+pub use fuzzy_search::{FuzzySearchEngine, FuzzySearchConfig};
 
 // Re-export animation and graphics types
 pub use animated_content::{AnimatedContentManager, AnimatedEmailContent, AnimationControlWidget};
@@ -148,6 +152,7 @@ pub struct UI {
     invitation_viewer: InvitationViewer,
     search_ui: SearchUI,
     search_engine: Option<SearchEngine>,
+    fuzzy_search_engine: Option<FuzzySearchEngine>,
     keyboard_shortcuts_ui: KeyboardShortcutsUI,
     context_shortcuts_popup: ContextShortcutsPopup,
     // Context-aware integration components
@@ -190,6 +195,7 @@ impl UI {
             invitation_viewer: InvitationViewer::new(),
             search_ui: SearchUI::new(),
             search_engine: None,
+            fuzzy_search_engine: None,
             keyboard_shortcuts_ui: KeyboardShortcutsUI::new(),
             context_shortcuts_popup: ContextShortcutsPopup::new(),
             // Initialize context-aware integration components
@@ -1022,7 +1028,11 @@ impl UI {
     pub fn set_database(&mut self, database: Arc<EmailDatabase>) {
         self.message_list.set_database(database.clone());
         self.content_preview.set_database(database.clone());
-        self.folder_tree.set_database(database);
+        self.folder_tree.set_database(database.clone());
+        
+        // Initialize search engines with database
+        self.search_engine = Some(SearchEngine::new(database.clone()));
+        self.fuzzy_search_engine = Some(FuzzySearchEngine::new(database));
     }
 
     /// Set the contacts manager and initialize sender recognition
@@ -2145,6 +2155,68 @@ impl UI {
         }
 
         Ok(())
+    }
+
+    /// Perform fuzzy search with current query and live search-as-you-type
+    pub async fn perform_fuzzy_search(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        // Get necessary data before borrowing fuzzy_search_engine
+        let account_id = self.get_current_account_id().cloned();
+        let query = self.search_ui.query().to_string();
+        let mode = self.search_ui.mode().clone();
+        let should_search = self.search_ui.should_search();
+
+        if let Some(ref mut fuzzy_search_engine) = self.fuzzy_search_engine {
+            if let Some(account_id) = account_id {
+                if should_search {
+                    self.search_ui.set_searching(true);
+
+                    let search_start = std::time::Instant::now();
+                    match fuzzy_search_engine
+                        .live_search(&account_id, &query, &mode)
+                        .await
+                    {
+                        Ok(results) => {
+                            let search_time = search_start.elapsed().as_millis() as u64;
+                            self.search_ui.set_results(results, search_time);
+                        }
+                        Err(e) => {
+                            self.search_ui.set_error(format!("Fuzzy search failed: {}", e));
+                        }
+                    }
+                }
+            } else {
+                self.search_ui.set_error("No account selected".to_string());
+            }
+        } else {
+            self.search_ui
+                .set_error("Fuzzy search engine not initialized".to_string());
+        }
+
+        Ok(())
+    }
+
+    /// Get fuzzy search engine for configuration
+    pub fn fuzzy_search_engine(&self) -> Option<&FuzzySearchEngine> {
+        self.fuzzy_search_engine.as_ref()
+    }
+
+    /// Get mutable fuzzy search engine for configuration updates
+    pub fn fuzzy_search_engine_mut(&mut self) -> Option<&mut FuzzySearchEngine> {
+        self.fuzzy_search_engine.as_mut()
+    }
+
+    /// Update fuzzy search configuration
+    pub fn update_fuzzy_search_config(&mut self, config: FuzzySearchConfig) {
+        if let Some(ref mut fuzzy_search_engine) = self.fuzzy_search_engine {
+            fuzzy_search_engine.update_config(config);
+        }
+    }
+
+    /// Clear fuzzy search cache
+    pub fn clear_fuzzy_search_cache(&mut self) {
+        if let Some(ref mut fuzzy_search_engine) = self.fuzzy_search_engine {
+            fuzzy_search_engine.clear_cache();
+        }
     }
 
     /// Show a notification message on the bottom powerline
