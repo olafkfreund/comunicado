@@ -12,10 +12,8 @@ use std::time::{Duration, Instant};
 use tokio::fs;
 use tokio::sync::RwLock;
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 use chrono::{DateTime, Utc};
 
-use crate::startup::background_tasks::{BackgroundTaskManager, TaskContext, TaskPriority};
 use crate::startup::lazy_init::LazyInitManager;
 
 /// Cached startup data for faster subsequent launches
@@ -85,7 +83,6 @@ pub struct UiPreferences {
     pub show_folder_tree: bool,
     pub show_preview_pane: bool,
     pub font_size: u16,
-    pub start_page_widgets: Vec<String>,
 }
 
 /// Performance metrics for optimization
@@ -159,11 +156,6 @@ impl Default for UiPreferences {
             show_folder_tree: true,
             show_preview_pane: true,
             font_size: 14,
-            start_page_widgets: vec![
-                "clock".to_string(),
-                "system_monitor".to_string(),
-                "calendar".to_string(),
-            ],
         }
     }
 }
@@ -186,7 +178,6 @@ pub struct StartupOptimizer {
     config: StartupConfig,
     cache: RwLock<Option<StartupCache>>,
     profiler: StartupProfiler,
-    background_tasks: BackgroundTaskManager,
     #[allow(dead_code)]
     lazy_manager: LazyInitManager,
 }
@@ -197,7 +188,6 @@ impl StartupOptimizer {
         Self {
             cache: RwLock::new(None),
             profiler: StartupProfiler::new(config.enable_profiling),
-            background_tasks: BackgroundTaskManager::new(4),
             lazy_manager: LazyInitManager::new(),
             config,
         }
@@ -243,88 +233,6 @@ impl StartupOptimizer {
         }
     }
     
-    /// Start background initialization tasks
-    pub async fn start_background_tasks(&mut self) -> Vec<Uuid> {
-        let mut task_ids = Vec::new();
-        
-        if self.config.enable_background_optimization {
-            // Database optimization task
-            let db_task = TaskContext::new(
-                "Database Optimization".to_string(),
-                "Optimize database indices and cleanup".to_string(),
-                TaskPriority::Low,
-            ).with_timeout(Duration::from_secs(30));
-            
-            let task_id = self.background_tasks.spawn_task(db_task, |reporter| async move {
-                reporter.send_message("Starting database optimization".to_string());
-                reporter.update_progress(0.3).await;
-                
-                // Simulate database optimization
-                tokio::time::sleep(Duration::from_millis(100)).await;
-                
-                reporter.update_progress(0.7).await;
-                reporter.send_message("Rebuilding indices".to_string());
-                
-                tokio::time::sleep(Duration::from_millis(50)).await;
-                
-                reporter.update_progress(1.0).await;
-                reporter.send_message("Database optimization complete".to_string());
-                
-                Ok(())
-            }).await;
-            
-            task_ids.push(task_id);
-            
-            // Email sync preparation task
-            let sync_task = TaskContext::new(
-                "Email Sync Preparation".to_string(),
-                "Prepare email synchronization in background".to_string(),
-                TaskPriority::Medium,
-            ).with_timeout(Duration::from_secs(15));
-            
-            let task_id = self.background_tasks.spawn_task(sync_task, |reporter| async move {
-                reporter.send_message("Preparing email sync".to_string());
-                reporter.update_progress(0.2).await;
-                
-                // Simulate sync preparation
-                tokio::time::sleep(Duration::from_millis(200)).await;
-                
-                reporter.update_progress(0.8).await;
-                reporter.send_message("Email sync ready".to_string());
-                
-                tokio::time::sleep(Duration::from_millis(50)).await;
-                
-                reporter.update_progress(1.0).await;
-                
-                Ok(())
-            }).await;
-            
-            task_ids.push(task_id);
-            
-            // Calendar sync preparation task
-            let calendar_task = TaskContext::new(
-                "Calendar Sync Preparation".to_string(),
-                "Prepare calendar synchronization".to_string(),
-                TaskPriority::Medium,
-            ).with_timeout(Duration::from_secs(10));
-            
-            let task_id = self.background_tasks.spawn_task(calendar_task, |reporter| async move {
-                reporter.send_message("Preparing calendar sync".to_string());
-                reporter.update_progress(0.4).await;
-                
-                tokio::time::sleep(Duration::from_millis(150)).await;
-                
-                reporter.update_progress(1.0).await;
-                reporter.send_message("Calendar sync ready".to_string());
-                
-                Ok(())
-            }).await;
-            
-            task_ids.push(task_id);
-        }
-        
-        task_ids
-    }
     
     /// Record an operation's performance
     pub fn record_operation(&mut self, operation: &str, duration: Duration) {
@@ -424,10 +332,6 @@ impl StartupOptimizer {
         true
     }
     
-    /// Get background task manager
-    pub fn background_tasks(&mut self) -> &mut BackgroundTaskManager {
-        &mut self.background_tasks
-    }
     
     /// Finalize startup optimization and save metrics
     pub async fn finalize(&mut self) -> Result<PerformanceMetrics, String> {
@@ -635,7 +539,6 @@ mod tests {
         assert!(prefs.show_folder_tree);
         assert!(prefs.show_preview_pane);
         assert_eq!(prefs.font_size, 14);
-        assert_eq!(prefs.start_page_widgets.len(), 3);
     }
 
     #[test]

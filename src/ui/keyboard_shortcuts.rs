@@ -167,7 +167,6 @@ impl KeyboardShortcutsUI {
             let category_index = match action {
                 KeyboardAction::Quit
                 | KeyboardAction::ForceQuit
-                | KeyboardAction::ShowStartPage
                 | KeyboardAction::ShowKeyboardShortcuts => 0,
                 KeyboardAction::NextPane
                 | KeyboardAction::PreviousPane
@@ -215,7 +214,6 @@ impl KeyboardShortcutsUI {
         match action {
             KeyboardAction::Quit => "Quit application",
             KeyboardAction::ForceQuit => "Force quit application",
-            KeyboardAction::ShowStartPage => "Show start page",
             KeyboardAction::ShowKeyboardShortcuts => "Show this shortcuts dialog",
             KeyboardAction::NextPane => "Move to next pane",
             KeyboardAction::PreviousPane => "Move to previous pane",

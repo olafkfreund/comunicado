@@ -17,7 +17,6 @@ pub mod keyboard_shortcuts;
 pub mod layout;
 pub mod message_list;
 pub mod search;
-pub mod start_page;
 pub mod startup_progress;
 pub mod status_bar;
 pub mod sync_progress;
@@ -51,7 +50,6 @@ use self::{
     keyboard_shortcuts::KeyboardShortcutsUI,
     layout::AppLayout,
     message_list::MessageList,
-    start_page::StartPage,
     status_bar::{
         CalendarStatusSegment, EmailStatusSegment, NavigationHintsSegment, StatusBar, SyncStatus,
         SystemInfoSegment,
@@ -99,14 +97,12 @@ pub enum FocusedPane {
     MessageList,
     ContentPreview,
     Compose,
-    StartPage,
     DraftList,
     Calendar,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum UIMode {
-    StartPage,
     Normal,
     Compose,
     DraftList,
@@ -136,7 +132,6 @@ pub struct UI {
     mode: UIMode,
     compose_ui: Option<ComposeUI>,
     draft_list: DraftListUI,
-    start_page: StartPage,
     calendar_ui: CalendarUI,
     event_form_ui: Option<crate::calendar::EventFormUI>,
     email_viewer: EmailViewer,
@@ -172,7 +167,6 @@ impl UI {
             mode: UIMode::Normal,
             compose_ui: None,
             draft_list: DraftListUI::new(),
-            start_page: StartPage::new(),
             calendar_ui: CalendarUI::new(),
             event_form_ui: None,
             email_viewer: EmailViewer::new(),
@@ -255,11 +249,6 @@ impl UI {
         let size = frame.size();
 
         match self.mode {
-            UIMode::StartPage => {
-                // Render start page with clock and shortcuts (and startup progress if available)
-                let theme = self.theme_manager.current_theme();
-                self.start_page.render(frame, size, theme);
-            }
             UIMode::Normal => {
                 let chunks = self.layout.calculate_layout(size);
 
@@ -596,7 +585,6 @@ impl UI {
             FocusedPane::MessageList => FocusedPane::ContentPreview,
             FocusedPane::ContentPreview => FocusedPane::AccountSwitcher,
             FocusedPane::Compose => FocusedPane::Compose, // Stay in compose
-            FocusedPane::StartPage => FocusedPane::StartPage, // Stay in start page
             FocusedPane::DraftList => FocusedPane::DraftList, // Stay in draft list
             FocusedPane::Calendar => FocusedPane::Calendar, // Stay in calendar
         };
@@ -614,7 +602,6 @@ impl UI {
             FocusedPane::MessageList => FocusedPane::FolderTree,
             FocusedPane::ContentPreview => FocusedPane::MessageList,
             FocusedPane::Compose => FocusedPane::Compose, // Stay in compose
-            FocusedPane::StartPage => FocusedPane::StartPage, // Stay in start page
             FocusedPane::DraftList => FocusedPane::DraftList, // Stay in draft list
             FocusedPane::Calendar => FocusedPane::Calendar, // Stay in calendar
         };
@@ -685,12 +672,10 @@ impl UI {
                 FocusedPane::MessageList => "Messages",
                 FocusedPane::ContentPreview => "Content",
                 FocusedPane::Compose => "Compose", // Shouldn't happen in normal mode
-                FocusedPane::StartPage => "Start Page", // Shouldn't happen in normal mode
                 FocusedPane::DraftList => "Draft List", // Shouldn't happen in normal mode
                 FocusedPane::Calendar => "Calendar", // Shouldn't happen in normal mode
             },
             UIMode::Compose => "Compose Email",
-            UIMode::StartPage => "Start Page",
             UIMode::DraftList => "Draft Manager",
             UIMode::Calendar => "Calendar",
             UIMode::ContextAware => "Context-Aware View",
@@ -756,7 +741,6 @@ impl UI {
                     ("f".to_string(), "Forward".to_string()),
                     ("g".to_string(), "Calendar".to_string()),
                 ],
-                FocusedPane::StartPage => vec![],
                 _ => vec![],
             },
             UIMode::Compose => vec![
@@ -765,17 +749,6 @@ impl UI {
                 ("F2".to_string(), "Save Draft".to_string()),
                 ("@".to_string(), "Contact Lookup".to_string()),
                 ("Esc".to_string(), "Cancel".to_string()),
-            ],
-            UIMode::StartPage => vec![
-                ("F1".to_string(), "Help".to_string()),
-                ("F3".to_string(), "Calendar".to_string()),
-                ("Enter/e".to_string(), "Email".to_string()),
-                ("c/n".to_string(), "Compose".to_string()),
-                ("C/t".to_string(), "Calendar".to_string()),
-                ("/".to_string(), "Search".to_string()),
-                ("r".to_string(), "Refresh".to_string()),
-                ("?".to_string(), "Help".to_string()),
-                ("q".to_string(), "Quit".to_string()),
             ],
             UIMode::DraftList => vec![
                 ("↑↓".to_string(), "Navigate".to_string()),
@@ -1640,20 +1613,30 @@ impl UI {
         matches!(self.mode, UIMode::Compose)
     }
 
-    /// Check if currently on start page
-    pub fn is_on_start_page(&self) -> bool {
-        matches!(self.mode, UIMode::StartPage)
-    }
-
-    /// Switch to start page mode
-    pub fn show_start_page(&mut self) {
-        self.mode = UIMode::StartPage;
-        self.focused_pane = FocusedPane::StartPage;
-    }
 
     /// Show keyboard shortcuts popup
     pub fn show_keyboard_shortcuts(&mut self) {
         self.mode = UIMode::KeyboardShortcuts;
+    }
+
+    /// Set initial UI mode based on CLI arguments
+    pub fn set_initial_mode(&mut self, mode: crate::cli::StartupMode) {
+        use crate::cli::StartupMode;
+        match mode {
+            StartupMode::Default | StartupMode::Email => {
+                self.mode = UIMode::Normal;
+                self.focused_pane = FocusedPane::AccountSwitcher;
+            }
+            StartupMode::Calendar => {
+                self.show_calendar();
+            }
+            StartupMode::Contacts => {
+                // TODO: Implement contacts mode when available
+                // For now, fall back to email mode
+                self.mode = UIMode::Normal;
+                self.focused_pane = FocusedPane::AccountSwitcher;
+            }
+        }
     }
 
     /// Switch to normal email mode
@@ -1662,32 +1645,6 @@ impl UI {
         self.focused_pane = FocusedPane::AccountSwitcher;
     }
 
-    /// Get mutable reference to start page for data updates
-    pub fn start_page_mut(&mut self) -> &mut StartPage {
-        &mut self.start_page
-    }
-
-    /// Get reference to start page
-    pub fn start_page(&self) -> &StartPage {
-        &self.start_page
-    }
-
-
-    /// Handle start page navigation
-    pub fn handle_start_page_navigation(&mut self, direction: StartPageNavigation) {
-        match direction {
-            StartPageNavigation::Next => self.start_page.next_widget(),
-            StartPageNavigation::Previous => self.start_page.previous_widget(),
-        }
-    }
-
-    /// Get selected quick action from start page
-    pub fn get_start_page_quick_action(
-        &self,
-        action_id: &str,
-    ) -> Option<&crate::ui::start_page::QuickAction> {
-        self.start_page.get_quick_action(action_id)
-    }
 
     // Calendar mode methods
 
@@ -2227,12 +2184,6 @@ impl UI {
     }
 }
 
-/// Navigation directions for start page
-#[derive(Debug, Clone, Copy)]
-pub enum StartPageNavigation {
-    Next,
-    Previous,
-}
 
 impl Default for UI {
     fn default() -> Self {

@@ -207,8 +207,6 @@ pub enum KeyboardContext {
     Search,
     /// Draft management
     DraftList,
-    /// Start page
-    StartPage,
     /// Email viewer (full screen)
     EmailViewer,
     /// Invitation viewer
@@ -231,7 +229,6 @@ impl fmt::Display for KeyboardContext {
             KeyboardContext::EventForm => write!(f, "Event Form"),
             KeyboardContext::Search => write!(f, "Search"),
             KeyboardContext::DraftList => write!(f, "Draft List"),
-            KeyboardContext::StartPage => write!(f, "Start Page"),
             KeyboardContext::EmailViewer => write!(f, "Email Viewer"),
             KeyboardContext::InvitationViewer => write!(f, "Invitation Viewer"),
             KeyboardContext::KeyboardShortcuts => write!(f, "Keyboard Shortcuts"),

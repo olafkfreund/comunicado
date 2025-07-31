@@ -1,5 +1,5 @@
 use crate::keyboard::{KeyboardAction, KeyboardManager};
-use crate::ui::{ComposeAction, DraftAction, FocusedPane, StartPageNavigation, UIMode, UI};
+use crate::ui::{ComposeAction, DraftAction, FocusedPane, UIMode, UI};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use chrono::Datelike;
 
@@ -100,7 +100,6 @@ impl EventHandler {
 
         // Handle mode-specific keys that don't have actions
         match ui.mode() {
-            UIMode::StartPage => self.handle_start_page_keys(key, ui).await,
             UIMode::EmailViewer => self.handle_email_viewer_keys(key, ui).await,
             UIMode::KeyboardShortcuts => self.handle_keyboard_shortcuts_keys(key, ui).await,
             UIMode::ContactsPopup => self.handle_contacts_popup_keys(key, ui).await,
@@ -161,10 +160,6 @@ impl EventHandler {
             }
             KeyboardAction::ForceQuit => {
                 self.should_quit = true;
-                EventResult::Continue
-            }
-            KeyboardAction::ShowStartPage => {
-                ui.show_start_page();
                 EventResult::Continue
             }
             KeyboardAction::ShowKeyboardShortcuts => {
@@ -963,10 +958,6 @@ impl EventHandler {
             return EventResult::Continue;
         }
 
-        // Handle start page mode
-        if ui.mode() == &UIMode::StartPage {
-            return self.handle_start_page_keys(key, ui).await;
-        }
 
         // Handle email viewer mode
         if ui.mode() == &UIMode::EmailViewer {
@@ -1069,10 +1060,6 @@ impl EventHandler {
                 return EventResult::Continue;
             }
 
-            // Go back to start page
-            KeyCode::Char('~') => {
-                ui.show_start_page();
-            }
 
             // Navigation between panes
             KeyCode::Tab => {
@@ -1135,9 +1122,6 @@ impl EventHandler {
                     FocusedPane::Compose => {
                         // Handled separately in compose mode
                     }
-                    FocusedPane::StartPage => {
-                        // Should not happen in normal mode
-                    }
                     FocusedPane::DraftList => {
                         // Draft list navigation handled in draft list mode
                     }
@@ -1173,9 +1157,6 @@ impl EventHandler {
                     }
                     FocusedPane::Compose => {
                         // Handled separately in compose mode
-                    }
-                    FocusedPane::StartPage => {
-                        // Should not happen in normal mode
                     }
                     FocusedPane::DraftList => {
                         // Draft list navigation handled in draft list mode
@@ -1297,9 +1278,6 @@ impl EventHandler {
                     }
                     FocusedPane::Compose => {
                         // Handled separately in compose mode
-                    }
-                    FocusedPane::StartPage => {
-                        // Should not happen in normal mode
                     }
                     FocusedPane::DraftList => {
                         // Draft list navigation handled in draft list mode
@@ -1648,170 +1626,6 @@ impl EventHandler {
         EventResult::Continue
     }
 
-    /// Handle key events for start page mode
-    async fn handle_start_page_keys(&mut self, key: KeyEvent, ui: &mut UI) -> EventResult {
-        match key.code {
-            // Global quit commands
-            KeyCode::Char('q') => {
-                self.should_quit = true;
-            }
-            KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                self.should_quit = true;
-            }
-
-            // Navigate between widgets on start page
-            KeyCode::Left | KeyCode::Char('h') => {
-                ui.handle_start_page_navigation(StartPageNavigation::Previous);
-            }
-            KeyCode::Right | KeyCode::Char('l') => {
-                ui.handle_start_page_navigation(StartPageNavigation::Next);
-            }
-            KeyCode::Up | KeyCode::Char('k') => {
-                ui.handle_start_page_navigation(StartPageNavigation::Previous);
-            }
-            KeyCode::Down | KeyCode::Char('j') => {
-                ui.handle_start_page_navigation(StartPageNavigation::Next);
-            }
-            KeyCode::Tab => {
-                ui.handle_start_page_navigation(StartPageNavigation::Next);
-            }
-            KeyCode::BackTab => {
-                ui.handle_start_page_navigation(StartPageNavigation::Previous);
-            }
-
-            // Function keys for direct access
-            KeyCode::Char('?') => {
-                // ?: Help/Keyboard shortcuts  
-                ui.show_keyboard_shortcuts();
-            }
-            KeyCode::Char('g') => {
-                // g: Expect 'c' next for 'go to calendar'
-                // We'll handle this as a two-key sequence in the future
-                // For now, treat as direct calendar access
-                ui.show_calendar();
-            }
-            KeyCode::Char(',') => {
-                // ,: Settings/Configuration (like vim)
-                // TODO: Implement settings mode
-            }
-
-            // Primary actions
-            KeyCode::Enter | KeyCode::Char('e') => {
-                // Enter/e: Switch to email interface
-                ui.show_email_interface();
-            }
-            KeyCode::Char('c') => {
-                // c: Compose email
-                ui.show_email_interface();
-                return EventResult::ComposeAction(crate::ui::ComposeAction::StartCompose);
-            }
-
-            // Navigation and view modes
-            KeyCode::Char('E') if ui.focused_pane() != FocusedPane::FolderTree => {
-                // E: Email interface
-                ui.show_email_interface();
-            }
-            KeyCode::Char('C') => {
-                // C: Calendar view
-                ui.show_calendar();
-            }
-
-            // Search and filtering
-            KeyCode::Char('/') => {
-                // /: Search - switch to email interface and activate search
-                ui.show_email_interface();
-                // TODO: Focus search when implemented
-            }
-            KeyCode::Char('f') => {
-                // f: Filter/Find
-                ui.show_email_interface();
-                // TODO: Activate filter mode
-            }
-
-            // Quick productivity actions
-            KeyCode::Char('n') if ui.focused_pane() != FocusedPane::FolderTree => {
-                // n: New (compose email)
-                ui.show_email_interface();
-                return EventResult::ComposeAction(crate::ui::ComposeAction::StartCompose);
-            }
-            KeyCode::Char('r') => {
-                // r: Refresh all data
-                // TODO: Add refresh functionality to app events
-            }
-            KeyCode::Char('s') => {
-                // s: Sync/Synchronize accounts
-                // TODO: Trigger account synchronization
-            }
-
-            // Start page specific actions
-            KeyCode::Char('t') if ui.focused_pane() != FocusedPane::FolderTree => {
-                // t: Tasks/Todos (switch to calendar for todo management)
-                ui.show_calendar();
-            }
-            KeyCode::Char('w') if ui.focused_pane() != FocusedPane::FolderTree => {
-                // w: Weather refresh
-                // TODO: Refresh weather data
-            }
-            KeyCode::Char('M') if ui.focused_pane() != FocusedPane::FolderTree => {
-                // M: Monitor system resources (uppercase to avoid conflict)
-                // TODO: Toggle detailed system monitor view
-            }
-
-            // Space and Escape for common actions
-            KeyCode::Char(' ') => {
-                // Space: Quick action (same as Enter)
-                ui.show_email_interface();
-            }
-            KeyCode::Esc => {
-                // Esc: Nothing to escape from on start page, but could be used for other actions
-                // For now, just continue
-            }
-
-            // Folder-specific character keys (only when folder tree is focused)
-            KeyCode::Char('m') if ui.focused_pane() == FocusedPane::FolderTree => {
-                if let Some(operation) = ui.folder_tree_mut().handle_char_key('m') {
-                    return EventResult::FolderOperation(operation);
-                }
-            }
-            KeyCode::Char('n') if ui.focused_pane() == FocusedPane::FolderTree => {
-                if let Some(operation) = ui.folder_tree_mut().handle_char_key('n') {
-                    return EventResult::FolderOperation(operation);
-                }
-            }
-            KeyCode::Char('N') if ui.focused_pane() == FocusedPane::FolderTree => {
-                if let Some(operation) = ui.folder_tree_mut().handle_char_key('N') {
-                    return EventResult::FolderOperation(operation);
-                }
-            }
-            KeyCode::Char('d') if ui.focused_pane() == FocusedPane::FolderTree => {
-                if let Some(operation) = ui.folder_tree_mut().handle_char_key('d') {
-                    return EventResult::FolderOperation(operation);
-                }
-            }
-            KeyCode::Char('R') if ui.focused_pane() == FocusedPane::FolderTree => {
-                if let Some(operation) = ui.folder_tree_mut().handle_char_key('R') {
-                    return EventResult::FolderOperation(operation);
-                }
-            }
-            KeyCode::Char('E') if ui.focused_pane() == FocusedPane::FolderTree => {
-                if let Some(operation) = ui.folder_tree_mut().handle_char_key('E') {
-                    return EventResult::FolderOperation(operation);
-                }
-            }
-            KeyCode::Char('p') if ui.focused_pane() == FocusedPane::FolderTree => {
-                if let Some(operation) = ui.folder_tree_mut().handle_char_key('p') {
-                    return EventResult::FolderOperation(operation);
-                }
-            }
-            KeyCode::Char('.') if ui.focused_pane() == FocusedPane::FolderTree => {
-                ui.folder_tree_mut().handle_char_key('.'); // Show context menu (changed from '?' to '.' for menu)
-            }
-
-            _ => {}
-        }
-
-        EventResult::Continue
-    }
 
     /// Handle email viewer mode key events
     async fn handle_email_viewer_keys(&mut self, key: KeyEvent, ui: &mut UI) -> EventResult {

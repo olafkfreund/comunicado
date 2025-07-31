@@ -230,7 +230,6 @@ pub enum KeyboardAction {
     // Global actions
     Quit,
     ForceQuit,
-    ShowStartPage,
     ShowKeyboardShortcuts,
 
     // Navigation
@@ -321,14 +320,6 @@ pub enum KeyboardAction {
     EmailViewerMarkUnread,
     EmailViewerClose,
 
-    // Start page navigation
-    StartPagePrevious,
-    StartPageNext,
-    StartPageEnter,
-    StartPageCompose,
-    StartPageSearch,
-    StartPageAddressBook,
-    StartPageCalendar,
 
     // Calendar actions
     ShowCalendar,
@@ -400,10 +391,6 @@ impl KeyboardConfig {
         self.shortcuts.insert(
             KeyboardShortcut::ctrl(KeyCode::Char('c')),
             KeyboardAction::ForceQuit,
-        );
-        self.shortcuts.insert(
-            KeyboardShortcut::simple(KeyCode::Char('~')),
-            KeyboardAction::ShowStartPage,
         );
         self.shortcuts.insert(
             KeyboardShortcut::simple(KeyCode::Char('?')),
@@ -751,8 +738,6 @@ impl KeyboardConfig {
             KeyboardAction::ForceQuit,
             "Force quit application".to_string(),
         );
-        self.action_descriptions
-            .insert(KeyboardAction::ShowStartPage, "Show start page".to_string());
 
         self.action_descriptions
             .insert(KeyboardAction::NextPane, "Move to next pane".to_string());
@@ -1087,7 +1072,6 @@ impl KeyboardConfig {
         match action {
             KeyboardAction::Quit
             | KeyboardAction::ForceQuit
-            | KeyboardAction::ShowStartPage
             | KeyboardAction::ShowKeyboardShortcuts => "Global".to_string(),
             KeyboardAction::NextPane
             | KeyboardAction::PreviousPane
@@ -1154,13 +1138,6 @@ impl KeyboardConfig {
             | KeyboardAction::EmailViewerMarkRead
             | KeyboardAction::EmailViewerMarkUnread
             | KeyboardAction::EmailViewerClose => "Email Viewer".to_string(),
-            KeyboardAction::StartPagePrevious
-            | KeyboardAction::StartPageNext
-            | KeyboardAction::StartPageEnter
-            | KeyboardAction::StartPageCompose
-            | KeyboardAction::StartPageSearch
-            | KeyboardAction::StartPageAddressBook
-            | KeyboardAction::StartPageCalendar => "Start Page".to_string(),
             KeyboardAction::ShowCalendar
             | KeyboardAction::CreateEvent
             | KeyboardAction::EditEvent
@@ -1445,11 +1422,11 @@ mod tests {
 
         // Add a custom shortcut
         let custom_shortcut = KeyboardShortcut::ctrl(KeyCode::Char('z'));
-        config.set_shortcut(custom_shortcut.clone(), KeyboardAction::ShowStartPage);
+        config.set_shortcut(custom_shortcut.clone(), KeyboardAction::ShowKeyboardShortcuts);
 
         assert_eq!(
             config.get_action(&custom_shortcut),
-            Some(&KeyboardAction::ShowStartPage)
+            Some(&KeyboardAction::ShowKeyboardShortcuts)
         );
 
         // Remove the shortcut

@@ -190,6 +190,11 @@ impl App {
         tracing::info!("Note: Runtime notification configuration changes require restart");
     }
 
+    /// Set the initial UI mode based on CLI startup arguments
+    pub fn set_initial_mode(&mut self, mode: crate::cli::StartupMode) {
+        self.ui.set_initial_mode(mode);
+    }
+
     /// Send a test desktop notification
     pub async fn send_test_notification(&self) {
         if let Some(unified_manager) = &self.unified_notification_manager {
@@ -335,54 +340,6 @@ impl App {
 
     // Startup progress and initialization complete
 
-    /// Update start page with fresh data
-    pub async fn update_start_page_data(&mut self) -> Result<()> {
-        if let Some(ref mut services) = self.services {
-            tracing::debug!("Updating start page data");
-
-            // Update weather with timeout
-            let weather_result = tokio::time::timeout(
-                std::time::Duration::from_secs(5), // 5 second timeout for weather
-                services.weather.get_weather(None),
-            )
-            .await;
-
-            match weather_result {
-                Ok(Ok(weather)) => {
-                    self.ui.start_page_mut().set_weather(weather);
-                    tracing::debug!("Weather data updated successfully");
-                }
-                Ok(Err(e)) => {
-                    tracing::warn!("Failed to get weather data: {}", e);
-                }
-                Err(_) => {
-                    tracing::warn!("Weather update timed out after 5 seconds");
-                }
-            }
-
-            // Update system stats (this should be fast)
-            let stats = services.system_stats.get_stats();
-            self.ui.start_page_mut().set_system_stats(stats);
-
-            // Update tasks
-            let tasks = services
-                .tasks
-                .get_pending_tasks()
-                .into_iter()
-                .take(8) // Limit for display
-                .cloned()
-                .collect();
-            self.ui.start_page_mut().set_tasks(tasks);
-
-            // TODO: Update calendar events when CalDAV is implemented
-            // For now, set empty calendar events
-            self.ui.start_page_mut().set_calendar_events(vec![]);
-
-            tracing::debug!("Start page data update completed");
-        }
-
-        Ok(())
-    }
 
     /// Initialize IMAP account manager with OAuth2 support
     pub async fn initialize_imap_manager(&mut self) -> Result<()> {

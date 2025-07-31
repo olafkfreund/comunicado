@@ -1,7 +1,7 @@
 use anyhow::Result;
 use clap::Parser;
 use comunicado::app::App;
-use comunicado::cli::{Cli, CliHandler};
+use comunicado::cli::{Cli, CliHandler, StartupMode};
 use comunicado::startup::StartupProgressScreen;
 use comunicado::theme::Theme;
 use crossterm::{
@@ -24,6 +24,7 @@ async fn main() -> Result<()> {
 
     // Continue with normal TUI application
     let debug_mode = cli.debug;
+    let startup_mode = cli.get_startup_mode();
 
     // Initialize tracing for logging - write to file to avoid interfering with TUI
     let log_file = std::fs::OpenOptions::new()
@@ -98,6 +99,9 @@ async fn main() -> Result<()> {
 
     // Create and initialize the application
     let mut app = App::new()?;
+    
+    // Set initial UI mode based on CLI arguments
+    app.set_initial_mode(startup_mode);
 
     // Helper function to update progress display
     let update_progress = |app: &App, terminal: &mut Option<Terminal<CrosstermBackend<std::io::Stdout>>>| -> Result<()> {

@@ -30,6 +30,47 @@ pub struct Cli {
     /// Dry run mode (don't make changes)
     #[arg(long, global = true)]
     pub dry_run: bool,
+
+    /// Start in email mode
+    #[arg(long = "mail")]
+    pub start_mail: bool,
+
+    /// Start in calendar mode  
+    #[arg(long = "cal")]
+    pub start_calendar: bool,
+
+    /// Start in contacts mode
+    #[arg(long = "con")]
+    pub start_contacts: bool,
+}
+
+impl Cli {
+    /// Determine the startup mode based on CLI arguments
+    pub fn get_startup_mode(&self) -> StartupMode {
+        // Only one mode can be selected - priority: contacts > calendar > mail > default
+        if self.start_contacts {
+            StartupMode::Contacts
+        } else if self.start_calendar {
+            StartupMode::Calendar
+        } else if self.start_mail {
+            StartupMode::Email
+        } else {
+            StartupMode::Default
+        }
+    }
+}
+
+/// Available startup modes from CLI
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum StartupMode {
+    /// Default mode (email interface)
+    Default,
+    /// Start in email interface
+    Email,
+    /// Start in calendar mode
+    Calendar,
+    /// Start in contacts mode
+    Contacts,
 }
 
 #[derive(Subcommand)]
@@ -1675,7 +1716,6 @@ impl CliHandler {
         match action_str.to_lowercase().as_str() {
             "quit" => Ok(KeyboardAction::Quit),
             "force_quit" | "forcequit" => Ok(KeyboardAction::ForceQuit),
-            "show_start_page" | "startpage" => Ok(KeyboardAction::ShowStartPage),
             "next_pane" | "nextpane" => Ok(KeyboardAction::NextPane),
             "previous_pane" | "previouspane" | "prev_pane" => Ok(KeyboardAction::PreviousPane),
             "vim_move_left" | "vimleft" => Ok(KeyboardAction::VimMoveLeft),
