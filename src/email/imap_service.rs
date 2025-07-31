@@ -13,6 +13,7 @@ use tracing::{debug, error, info, warn};
 pub struct ImapService {
     account_manager: Arc<ImapAccountManager>,
     sync_engine: Arc<SyncEngine>,
+    #[allow(dead_code)]
     database: Arc<EmailDatabase>,
     
     // IDLE management
@@ -24,6 +25,7 @@ pub struct ImapService {
     idle_notification_receiver: Arc<Mutex<mpsc::UnboundedReceiver<IdleUpdate>>>,
     
     // Sync coordination
+    #[allow(dead_code)]
     sync_progress_sender: mpsc::UnboundedSender<SyncProgress>,
     
     // Background task management

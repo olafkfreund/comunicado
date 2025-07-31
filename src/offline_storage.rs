@@ -15,6 +15,7 @@ use uuid::Uuid;
 /// Offline storage manager for calendars and contacts
 pub struct OfflineStorageManager {
     /// Base directory for all offline storage
+    #[allow(dead_code)]
     base_dir: PathBuf,
     /// Calendar storage directory (.ics files)
     calendar_dir: PathBuf,

@@ -245,16 +245,16 @@ impl RfcStandardsParser {
     /// Parse iCalendar data (RFC 5545) into Event objects
     pub fn parse_icalendar_to_event(
         icalendar_data: &str,
-        calendar_id: String,
+        _calendar_id: String,
     ) -> Result<Vec<Event>, RfcStandardsError> {
         debug!("Parsing iCalendar data with RFC 5545 compliance");
 
         let mut parser = Parser::new(icalendar_data);
-        let mut events = Vec::new();
+        let events = Vec::new();
 
         loop {
             match parser.entry() {
-                Entry::ICalendar(icalendar) => {
+                Entry::ICalendar(_icalendar) => {
                     // TODO: Implement iCalendar to Event conversion
                     // For now, just skip iCalendar entries
                     debug!("Found iCalendar entry, parsing not yet implemented");
@@ -330,7 +330,7 @@ impl RfcStandardsParser {
 
     /// Convert our internal Event to calcard Event - TODO: Implement
     #[allow(dead_code)]
-    fn convert_event_to_cal_event(event: &Event) -> Result<ICalendar, RfcStandardsError> {
+    fn convert_event_to_cal_event(_event: &Event) -> Result<ICalendar, RfcStandardsError> {
         // TODO: Implement Event to ICalendar conversion using calcard writer
         // For now, return an empty ICalendar
         Ok(ICalendar::default())
