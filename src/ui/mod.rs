@@ -6,7 +6,10 @@ pub mod calendar;
 pub mod compose;
 pub mod content_preview;
 pub mod context_calendar;
+pub mod context_menu;
 pub mod context_shortcuts;
+pub mod dynamic_shortcuts;
+pub mod progressive_disclosure;
 pub mod date_picker;
 pub mod draft_list;
 pub mod email_viewer;
@@ -51,6 +54,8 @@ use self::{
     content_preview::ContentPreview,
     context_shortcuts::ContextShortcutsPopup,
     draft_list::DraftListUI,
+    dynamic_shortcuts::{DynamicShortcutsManager, DynamicShortcutsRenderer, ShortcutContext, ShortcutDisplayMode, KeyboardShortcut, ShortcutCategory},
+    progressive_disclosure::{ProgressiveDisclosureManager, ProgressiveDisclosureRenderer, Section, ExpandableSection, SectionContent},
     folder_tree::FolderTree,
     help::HelpOverlay,
     keyboard_shortcuts::KeyboardShortcutsUI,
@@ -90,6 +95,15 @@ pub use search::{SearchAction, SearchEngine, SearchEngineType, SearchMode, Searc
 
 // Re-export fuzzy search types
 pub use fuzzy_search::{FuzzySearchEngine, FuzzySearchConfig};
+
+// Re-export context menu types
+pub use context_menu::{ContextMenu, ContextMenuAction, ContextMenuItem, ContextType};
+
+// Re-export dynamic shortcuts types
+// (Types already imported above in use self::dynamic_shortcuts::...)
+
+// Re-export progressive disclosure types  
+// (Types already imported above in use self::progressive_disclosure::...)
 
 // Re-export animation and graphics types
 pub use animated_content::{AnimatedContentManager, AnimatedEmailContent, AnimationControlWidget};
@@ -165,6 +179,12 @@ pub struct UI {
     typography: TypographySystem,
     // Contextual help overlay system
     help_overlay: HelpOverlay,
+    // Context menu system
+    context_menu: ContextMenu,
+    // Progressive disclosure system
+    progressive_disclosure_manager: ProgressiveDisclosureManager,
+    // Dynamic shortcuts system
+    dynamic_shortcuts_manager: DynamicShortcutsManager,
     // Legacy notification system (to be phased out)
     notification_message: Option<String>,
     notification_expires_at: Option<tokio::time::Instant>,
@@ -208,6 +228,12 @@ impl UI {
             typography: TypographySystem::new(),
             // Initialize contextual help overlay system
             help_overlay: HelpOverlay::new(),
+            // Initialize context menu system
+            context_menu: ContextMenu::new(),
+            // Initialize progressive disclosure system
+            progressive_disclosure_manager: ProgressiveDisclosureManager::new(),
+            // Initialize dynamic shortcuts system
+            dynamic_shortcuts_manager: DynamicShortcutsManager::new(),
             // Initialize legacy notification system (to be phased out)
             notification_message: None,
             notification_expires_at: None,
@@ -413,6 +439,11 @@ impl UI {
         // Render help overlay on top of everything if visible
         if self.help_overlay.is_visible() {
             self.help_overlay.render(frame, size, theme, &self.typography);
+        }
+
+        // Render context menu on top of everything if visible
+        if self.context_menu.is_visible() {
+            self.context_menu.render(frame, size, theme, &self.typography);
         }
     }
 
@@ -2219,6 +2250,111 @@ impl UI {
         }
     }
 
+    /// Show context menu at specific position
+    pub fn show_context_menu_at(&mut self, x: u16, y: u16, context_type: ContextType) {
+        self.context_menu.show_at_position(x, y, context_type);
+    }
+
+    /// Show context menu at cursor position (keyboard triggered)
+    pub fn show_context_menu(&mut self, context_type: ContextType) {
+        self.context_menu.show_at_cursor(context_type);
+    }
+
+    /// Hide context menu
+    pub fn hide_context_menu(&mut self) {
+        self.context_menu.hide();
+    }
+
+    /// Check if context menu is visible
+    pub fn is_context_menu_visible(&self) -> bool {
+        self.context_menu.is_visible()
+    }
+
+    /// Handle context menu key input
+    pub fn handle_context_menu_key(&mut self, key: crossterm::event::KeyCode) -> Option<ContextMenuAction> {
+        self.context_menu.handle_key(key)
+    }
+
+    /// Handle context menu mouse click
+    pub fn handle_context_menu_click(&mut self, x: u16, y: u16) -> Option<ContextMenuAction> {
+        self.context_menu.handle_mouse_click(x, y)
+    }
+
+    /// Get context menu for direct access
+    pub fn context_menu(&self) -> &ContextMenu {
+        &self.context_menu
+    }
+
+    /// Get mutable context menu for direct access
+    pub fn context_menu_mut(&mut self) -> &mut ContextMenu {
+        &mut self.context_menu
+    }
+
+    /// Get current context type based on UI state
+    pub fn get_current_context_type(&self) -> ContextType {
+        match self.focused_pane {
+            FocusedPane::MessageList => {
+                // Check if there's a selected message
+                if let Some(selected_message) = self.message_list.selected_message() {
+                    ContextType::EmailMessage {
+                        is_read: selected_message.is_read,
+                        is_draft: false, // TODO: Determine if message is draft
+                        has_attachments: selected_message.has_attachments,
+                        folder_name: "INBOX".to_string(), // TODO: Get actual folder name
+                    }
+                } else {
+                    ContextType::General
+                }
+            }
+            FocusedPane::FolderTree => {
+                // Check if there's a selected folder
+                if let Some(selected_folder) = self.folder_tree.selected_folder() {
+                    let is_special = matches!(selected_folder.name.as_str(), "INBOX" | "Sent" | "Drafts" | "Trash" | "Spam");
+                    let unread_count = selected_folder.unread_count;
+                    
+                    ContextType::EmailFolder {
+                        folder_name: selected_folder.name.clone(),
+                        is_special,
+                        unread_count,
+                    }
+                } else {
+                    ContextType::General
+                }
+            }
+            FocusedPane::AccountSwitcher => {
+                // Check if there's a current account
+                if let Some(account) = self.account_switcher.get_current_account() {
+                    ContextType::Account {
+                        account_id: account.account_id.clone(),
+                        is_online: matches!(account.sync_status, AccountSyncStatus::Online | AccountSyncStatus::Syncing),
+                    }
+                } else {
+                    ContextType::General
+                }
+            }
+            _ => ContextType::General,
+        }
+    }
+
+    /// Get context type for calendar events
+    pub fn get_calendar_context_type(&self, event_id: Option<String>) -> ContextType {
+        if let Some(event_id) = event_id {
+            ContextType::CalendarEvent {
+                event_id,
+                is_recurring: false, // TODO: Determine if event is recurring
+                is_editable: true,   // TODO: Determine if event is editable
+            }
+        } else {
+            ContextType::General
+        }
+    }
+
+    /// Show context menu for current selection with keyboard trigger
+    pub fn show_context_menu_for_current(&mut self) {
+        let context_type = self.get_current_context_type();
+        self.show_context_menu(context_type);
+    }
+
     /// Show a notification message on the bottom powerline
     pub fn show_notification(&mut self, message: String, duration: Duration) {
         tracing::debug!("Showing notification: {}", message);
@@ -2553,6 +2689,388 @@ impl UI {
     /// Check if help overlay is currently visible
     pub fn is_help_visible(&self) -> bool {
         self.help_overlay.is_visible()
+    }
+
+    /// Get mutable reference to progressive disclosure manager
+    pub fn progressive_disclosure_manager_mut(&mut self) -> &mut ProgressiveDisclosureManager {
+        &mut self.progressive_disclosure_manager
+    }
+
+    /// Get reference to progressive disclosure manager  
+    pub fn progressive_disclosure_manager(&self) -> &ProgressiveDisclosureManager {
+        &self.progressive_disclosure_manager
+    }
+
+    /// Add a section to progressive disclosure
+    pub fn add_disclosure_section(&mut self, section: Section) {
+        self.progressive_disclosure_manager.add_section(section);
+    }
+
+    /// Toggle a section's expanded state
+    pub fn toggle_disclosure_section(&mut self, section_id: &str) -> bool {
+        let result = self.progressive_disclosure_manager.toggle_section(section_id);
+        if result {
+            let section = self.progressive_disclosure_manager.get_section(section_id);
+            if let Some(section) = section {
+                let state = if section.is_expanded() { "expanded" } else { "collapsed" };
+                self.show_toast_info(format!("Section '{}' {}", section.meta.title, state));
+            }
+        }
+        result
+    }
+
+    /// Expand all disclosure sections
+    pub fn expand_all_sections(&mut self) {
+        self.progressive_disclosure_manager.expand_all();
+        self.show_toast_info("All sections expanded".to_string());
+    }
+
+    /// Collapse all disclosure sections
+    pub fn collapse_all_sections(&mut self) {
+        self.progressive_disclosure_manager.collapse_all();
+        self.show_toast_info("All sections collapsed".to_string());
+    }
+
+    /// Toggle global disclosure state
+    pub fn toggle_global_disclosure(&mut self) {
+        let was_expanded = self.progressive_disclosure_manager.expanded_section_count() > 0;
+        self.progressive_disclosure_manager.toggle_global();
+        let message = if was_expanded {
+            "All sections collapsed"
+        } else {
+            "All sections expanded"
+        };
+        self.show_toast_info(message.to_string());
+    }
+
+    /// Navigate to next disclosure section
+    pub fn next_disclosure_section(&mut self) -> Option<String> {
+        let result = self.progressive_disclosure_manager.next_section();
+        if let Some(ref section_id) = result {
+            if let Some(section) = self.progressive_disclosure_manager.get_section(section_id) {
+                self.show_toast_info(format!("Focused: {}", section.meta.title));
+            }
+        }
+        result 
+    }
+
+    /// Navigate to previous disclosure section
+    pub fn prev_disclosure_section(&mut self) -> Option<String> {
+        let result = self.progressive_disclosure_manager.previous_section();
+        if let Some(ref section_id) = result {
+            if let Some(section) = self.progressive_disclosure_manager.get_section(section_id) {
+                self.show_toast_info(format!("Focused: {}", section.meta.title));
+            }
+        }
+        result
+    }
+
+    /// Setup default progressive disclosure sections for email view
+    pub fn setup_email_disclosure_sections(&mut self) {
+        // Email metadata section
+        let email_meta = ExpandableSection::new(
+            "email_metadata".to_string(),
+            "Email Metadata".to_string()
+        )
+        .with_subtitle("Headers and technical details".to_string())
+        .expanded(false)
+        .with_priority(1);
+
+        let meta_content = SectionContent::KeyValue(vec![
+            ("From".to_string(), "sender@example.com".to_string()),
+            ("To".to_string(), "recipient@example.com".to_string()),
+            ("Subject".to_string(), "Email subject line".to_string()),
+            ("Date".to_string(), "2025-01-31 12:00:00".to_string()),
+        ]);
+
+        self.add_disclosure_section(Section::new(email_meta, meta_content));
+
+        // Attachments section
+        let attachments = ExpandableSection::new(
+            "attachments".to_string(),
+            "Attachments".to_string()
+        )
+        .with_item_count(3)
+        .expanded(true)
+        .with_priority(2);
+
+        let attachment_content = SectionContent::List(vec![
+            "document.pdf (1.2 MB)".to_string(),
+            "image.jpg (850 KB)".to_string(),
+            "spreadsheet.xlsx (2.1 MB)".to_string(),
+        ]);
+
+        self.add_disclosure_section(Section::new(attachments, attachment_content));
+
+        // Email actions section
+        let actions = ExpandableSection::new(
+            "email_actions".to_string(),
+            "Quick Actions".to_string()
+        )
+        .expanded(false)
+        .with_priority(3);
+
+        let action_content = SectionContent::List(vec![
+            "Reply (R)".to_string(),
+            "Forward (F)".to_string(),
+            "Archive (A)".to_string(),
+            "Delete (Del)".to_string(),
+            "Mark as unread (U)".to_string(),
+        ]);
+
+        self.add_disclosure_section(Section::new(actions, action_content));
+    }
+
+    /// Setup default progressive disclosure sections for calendar view
+    pub fn setup_calendar_disclosure_sections(&mut self) {
+        // Event details section
+        let event_details = ExpandableSection::new(
+            "event_details".to_string(),
+            "Event Details".to_string()
+        )
+        .expanded(true)
+        .with_priority(1);
+
+        let details_content = SectionContent::KeyValue(vec![
+            ("Title".to_string(), "Team Meeting".to_string()),
+            ("Start".to_string(), "2025-01-31 14:00".to_string()),
+            ("End".to_string(), "2025-01-31 15:00".to_string()),
+            ("Location".to_string(), "Conference Room A".to_string()),
+            ("Attendees".to_string(), "5 people".to_string()),
+        ]);
+
+        self.add_disclosure_section(Section::new(event_details, details_content));
+
+        // Calendar views section
+        let views = ExpandableSection::new(
+            "calendar_views".to_string(),
+            "View Options".to_string()
+        )
+        .expanded(false)
+        .with_priority(2);
+
+        let views_content = SectionContent::List(vec![
+            "Day view (D)".to_string(),
+            "Week view (W)".to_string(),
+            "Month view (M)".to_string(),
+            "Agenda view (A)".to_string(),
+        ]);
+
+        self.add_disclosure_section(Section::new(views, views_content));
+
+        // Calendar actions section  
+        let cal_actions = ExpandableSection::new(
+            "calendar_actions".to_string(),
+            "Calendar Actions".to_string()
+        )
+        .expanded(false)
+        .with_priority(3);
+
+        let cal_action_content = SectionContent::List(vec![
+            "Create event (N)".to_string(),
+            "Edit event (E)".to_string(),
+            "Delete event (Del)".to_string(),
+            "Export calendar (Ctrl+E)".to_string(),
+            "Sync calendars (F5)".to_string(),
+        ]);
+
+        self.add_disclosure_section(Section::new(cal_actions, cal_action_content));
+    }
+
+    /// Render progressive disclosure sections in a given area
+    pub fn render_progressive_disclosure(&self, frame: &mut Frame, area: Rect) {
+        let theme = self.theme_manager.current_theme();
+        ProgressiveDisclosureRenderer::render_sections(
+            frame,
+            area, 
+            &self.progressive_disclosure_manager,
+            theme,
+            &self.typography
+        );
+    }
+
+    /// Get mutable reference to dynamic shortcuts manager
+    pub fn dynamic_shortcuts_manager_mut(&mut self) -> &mut DynamicShortcutsManager {
+        &mut self.dynamic_shortcuts_manager
+    }
+
+    /// Get reference to dynamic shortcuts manager
+    pub fn dynamic_shortcuts_manager(&self) -> &DynamicShortcutsManager {
+        &self.dynamic_shortcuts_manager
+    }
+
+    /// Set shortcut context and update available shortcuts
+    pub fn set_shortcut_context(&mut self, context: ShortcutContext) {
+        self.dynamic_shortcuts_manager.set_context(context);
+    }
+
+    /// Set shortcut display mode
+    pub fn set_shortcut_display_mode(&mut self, mode: ShortcutDisplayMode) {
+        self.dynamic_shortcuts_manager.set_display_mode(mode);
+        
+        let mode_name = match mode {
+            ShortcutDisplayMode::StatusBar => "Status bar",
+            ShortcutDisplayMode::Popup => "Popup",
+            ShortcutDisplayMode::Overlay => "Full overlay",
+            ShortcutDisplayMode::Inline => "Inline hints",
+            ShortcutDisplayMode::Hidden => "Hidden",
+        };
+        self.show_toast_info(format!("Shortcut hints: {}", mode_name));
+    }
+
+    /// Toggle shortcut display mode
+    pub fn toggle_shortcut_display_mode(&mut self) {
+        let current_mode = self.dynamic_shortcuts_manager.display_mode();
+        let next_mode = match current_mode {
+            ShortcutDisplayMode::StatusBar => ShortcutDisplayMode::Popup,
+            ShortcutDisplayMode::Popup => ShortcutDisplayMode::Overlay,
+            ShortcutDisplayMode::Overlay => ShortcutDisplayMode::Inline,
+            ShortcutDisplayMode::Inline => ShortcutDisplayMode::Hidden,
+            ShortcutDisplayMode::Hidden => ShortcutDisplayMode::StatusBar,
+        };
+        self.set_shortcut_display_mode(next_mode);
+    }
+
+    /// Force show shortcut hints (reset auto-hide timer)
+    pub fn show_shortcut_hints(&mut self) {
+        self.dynamic_shortcuts_manager.show_hints();
+        self.show_toast_info("Shortcut hints displayed".to_string());
+    }
+
+    /// Add custom shortcut
+    pub fn add_custom_shortcut(&mut self, id: String, shortcut: KeyboardShortcut) {
+        self.dynamic_shortcuts_manager.add_custom_shortcut(id, shortcut);
+    }
+
+    /// Setup contextual shortcuts for email list view
+    pub fn setup_email_list_shortcuts(&mut self, has_selection: bool, can_compose: bool, folder_name: String) {
+        let context = ShortcutContext::EmailList {
+            has_selection,
+            can_compose,
+            folder_name,
+        };
+        self.set_shortcut_context(context);
+    }
+
+    /// Setup contextual shortcuts for email reading view
+    pub fn setup_email_reading_shortcuts(&mut self, is_draft: bool, has_attachments: bool, can_reply: bool) {
+        let context = ShortcutContext::EmailReading {
+            is_draft,
+            has_attachments,
+            can_reply,
+        };
+        self.set_shortcut_context(context);
+    }
+
+    /// Setup contextual shortcuts for calendar view
+    pub fn setup_calendar_shortcuts(&mut self, view_mode: crate::calendar::CalendarViewMode, has_selection: bool, can_create: bool) {
+        let shortcut_view_mode = match view_mode {
+            crate::calendar::CalendarViewMode::Day => crate::ui::dynamic_shortcuts::CalendarViewMode::Day,
+            crate::calendar::CalendarViewMode::Week => crate::ui::dynamic_shortcuts::CalendarViewMode::Week,
+            crate::calendar::CalendarViewMode::Month => crate::ui::dynamic_shortcuts::CalendarViewMode::Month,
+            crate::calendar::CalendarViewMode::Agenda => crate::ui::dynamic_shortcuts::CalendarViewMode::Agenda,
+        };
+        
+        let context = ShortcutContext::Calendar {
+            view_mode: shortcut_view_mode,
+            has_selection,
+            can_create,
+        };
+        self.set_shortcut_context(context);
+    }
+
+    /// Setup contextual shortcuts for contacts view
+    pub fn setup_contacts_shortcuts(&mut self, has_selection: bool, can_edit: bool) {
+        let context = ShortcutContext::Contacts {
+            has_selection,
+            can_edit,
+        };
+        self.set_shortcut_context(context);
+    }
+
+    /// Setup contextual shortcuts for search interface
+    pub fn setup_search_shortcuts(&mut self, is_active: bool, has_results: bool, search_type: String) {
+        let shortcut_search_type = match search_type.as_str() {
+            "email" => crate::ui::dynamic_shortcuts::SearchType::Email,
+            "calendar" => crate::ui::dynamic_shortcuts::SearchType::Calendar,
+            "contacts" => crate::ui::dynamic_shortcuts::SearchType::Contacts,
+            _ => crate::ui::dynamic_shortcuts::SearchType::Global,
+        };
+        
+        let context = ShortcutContext::Search {
+            is_active,
+            has_results,
+            search_type: shortcut_search_type,
+        };
+        self.set_shortcut_context(context);
+    }
+
+    /// Setup contextual shortcuts for compose interface
+    pub fn setup_compose_shortcuts(&mut self, is_draft: bool, has_content: bool, can_send: bool) {
+        let context = ShortcutContext::Compose {
+            is_draft,
+            has_content,
+            can_send,
+        };
+        self.set_shortcut_context(context);
+    }
+
+    /// Render dynamic shortcut hints in status bar
+    pub fn render_shortcut_hints_status_bar(&self, frame: &mut Frame, area: Rect) {
+        let theme = self.theme_manager.current_theme();
+        DynamicShortcutsRenderer::render_status_bar(
+            frame,
+            area,
+            &self.dynamic_shortcuts_manager,
+            theme,
+            &self.typography
+        );
+    }
+
+    /// Render dynamic shortcut hints as popup
+    pub fn render_shortcut_hints_popup(&self, frame: &mut Frame, area: Rect) {
+        let theme = self.theme_manager.current_theme();
+        DynamicShortcutsRenderer::render_popup(
+            frame,
+            area,
+            &self.dynamic_shortcuts_manager,
+            theme,
+            &self.typography
+        );
+    }
+
+    /// Render dynamic shortcut hints as full overlay
+    pub fn render_shortcut_hints_overlay(&self, frame: &mut Frame, area: Rect) {
+        let theme = self.theme_manager.current_theme();
+        DynamicShortcutsRenderer::render_overlay(
+            frame,
+            area,
+            &self.dynamic_shortcuts_manager,
+            theme,
+            &self.typography
+        );
+    }
+
+    /// Render inline shortcut hint for a specific shortcut
+    pub fn render_inline_shortcut_hint(&self, frame: &mut Frame, area: Rect, shortcut: &KeyboardShortcut) {
+        let theme = self.theme_manager.current_theme();
+        DynamicShortcutsRenderer::render_inline_hint(
+            frame,
+            area,
+            shortcut,
+            theme,
+            &self.typography
+        );
+    }
+
+    /// Get current contextual shortcuts
+    pub fn get_contextual_shortcuts(&self) -> Vec<KeyboardShortcut> {
+        self.dynamic_shortcuts_manager.get_contextual_shortcuts()
+    }
+
+    /// Get top shortcuts for compact display
+    pub fn get_top_shortcuts(&self, limit: usize) -> Vec<KeyboardShortcut> {
+        self.dynamic_shortcuts_manager.get_top_shortcuts(limit)
     }
 }
 
