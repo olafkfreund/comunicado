@@ -44,6 +44,10 @@ pub struct Cli {
     /// Start in contacts mode
     #[arg(long = "con")]
     pub start_contacts: bool,
+
+    /// Reprocess all email content in the database for clean display
+    #[arg(long, global = true)]
+    pub clean_content: bool,
 }
 
 impl Cli {
@@ -618,8 +622,8 @@ impl CliHandler {
 
         let database = Arc::new(EmailDatabase::new(db_path.to_str().unwrap()).await?);
 
-        // Initialize token manager
-        let token_manager = Some(TokenManager::new());
+        // Initialize token manager with storage for access to saved tokens
+        let token_manager = Some(TokenManager::new_with_storage(Arc::new(storage.clone())));
 
         Ok(Self {
             database,
@@ -647,6 +651,26 @@ impl CliHandler {
             Commands::Maildir(args) => self.handle_maildir(args, dry_run).await,
             Commands::Offline(args) => self.handle_offline(args, dry_run).await,
         }
+    }
+
+    /// Handle database content cleaning
+    pub async fn handle_clean_content(&self) -> Result<()> {
+        println!("🧹 Starting database content cleaning...");
+
+        match self.database.reprocess_message_content().await {
+            Ok(count) => {
+                println!("✅ Successfully cleaned {} messages", count);
+                println!("   - Raw HTML/CSS content converted to plain text");
+                println!("   - Email headers and technical metadata removed");
+                println!("   - Content should now display cleanly in the email viewer");
+                println!("\nRestart the application to see the changes.");
+            }
+            Err(e) => {
+                eprintln!("❌ Error cleaning content: {}", e);
+                std::process::exit(1);
+            }
+        }
+        Ok(())
     }
 
     /// Handle test commands
@@ -808,7 +832,7 @@ impl CliHandler {
                 if let Some(ref token_manager) = self.token_manager {
                     // Check if we have valid tokens
                     match token_manager
-                        .get_valid_access_token(&account.email_address)
+                        .get_valid_access_token(&account.account_id)
                         .await?
                     {
                         Some(_token) => Ok(()),

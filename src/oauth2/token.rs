@@ -158,16 +158,53 @@ impl TokenManager {
         &self,
         account_id: &str,
     ) -> OAuth2Result<Option<AccessToken>> {
-        let (needs_refresh, is_expired) = {
+        // First check if token exists in cache
+        let token_in_cache = {
             let tokens = self.tokens.read().await;
-            if let Some(token_pair) = tokens.get(account_id) {
-                (
-                    token_pair.access_token.needs_refresh(5), // 5 minute buffer
-                    token_pair.access_token.is_expired(),
-                )
-            } else {
-                return Ok(None);
+            tokens.get(account_id).cloned()
+        };
+        
+        let (needs_refresh, is_expired) = if let Some(token_pair) = token_in_cache {
+            (
+                token_pair.access_token.needs_refresh(5), // 5 minute buffer
+                token_pair.access_token.is_expired(),
+            )
+        } else {
+            // Token not found in cache, try loading from storage as fallback
+            if let Some(ref storage) = self.storage {
+                if let Ok(Some(account)) = storage.load_account(account_id) {
+                    if !account.access_token.is_empty() && !account.is_token_expired() {
+                        tracing::debug!("Loading token from storage for account: {}", account_id);
+                        
+                        // Create tokens from storage and cache them
+                        let access_token = AccessToken {
+                            token: account.access_token.clone(),
+                            token_type: "Bearer".to_string(),
+                            expires_at: account.token_expires_at,
+                            scopes: account.scopes.clone(),
+                        };
+                        
+                        let refresh_token = account.refresh_token.as_ref()
+                            .map(|token| RefreshToken::new(token.clone()));
+                        
+                        let token_pair = TokenPair {
+                            access_token: access_token.clone(),
+                            refresh_token,
+                            account_id: account_id.to_string(),
+                            provider: account.provider,
+                        };
+                        
+                        // Cache the tokens for future use
+                        {
+                            let mut tokens = self.tokens.write().await;
+                            tokens.insert(account_id.to_string(), token_pair);
+                        }
+                        
+                        return Ok(Some(access_token));
+                    }
+                }
             }
+            return Ok(None);
         };
 
         if needs_refresh || is_expired {

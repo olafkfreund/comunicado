@@ -327,24 +327,32 @@ impl SecureStorage {
 
     /// Load access token from keyring or file fallback
     fn load_access_token(&self, account_id: &str) -> Option<String> {
+        tracing::debug!("Loading access token for account: {}", account_id);
+        
         // Try keyring first, but catch all keyring-related errors gracefully
         let service = format!("{}-access-token", self.app_name);
         match Entry::new(&service, account_id) {
             Ok(entry) => {
                 if let Ok(token) = entry.get_password() {
-                    tracing::debug!("Successfully loaded access token from keyring");
+                    tracing::debug!("Successfully loaded access token from keyring for {}", account_id);
                     return Some(token);
                 } else {
-                    tracing::debug!("No access token found in keyring, trying file fallback");
+                    tracing::debug!("No access token found in keyring for {}, trying file fallback", account_id);
                 }
             }
             Err(e) => {
-                tracing::debug!("Keyring Entry::new failed ({}), trying file fallback", e);
+                tracing::debug!("Keyring Entry::new failed for {} ({}), trying file fallback", account_id, e);
             }
         }
 
         // Fallback to file storage
-        self.load_token_from_file(account_id, "access")
+        tracing::debug!("Attempting to load access token from file for {}", account_id);
+        let token = self.load_token_from_file(account_id, "access");
+        match &token {
+            Some(t) => tracing::debug!("File token load successful for {}, token starts with: {}...", account_id, &t[..10.min(t.len())]),
+            None => tracing::debug!("File token load failed for {}", account_id),
+        }
+        token
     }
 
     /// Delete access token from file storage (keyring temporarily disabled)
@@ -533,14 +541,31 @@ impl SecureStorage {
             .join(format!("{}.{}.token", account_id, token_type));
 
         if !token_file.exists() {
+            tracing::debug!("Token file does not exist: {:?}", token_file);
             return None;
         }
 
         let encoded_token = fs::read_to_string(&token_file).ok()?;
-        base64::prelude::BASE64_STANDARD
-            .decode(encoded_token.trim())
-            .ok()
-            .and_then(|decoded| String::from_utf8(decoded).ok())
+        tracing::debug!("Loading {} token for {}, file size: {} bytes", token_type, account_id, encoded_token.len());
+        
+        match base64::prelude::BASE64_STANDARD.decode(encoded_token.trim()) {
+            Ok(decoded) => {
+                match String::from_utf8(decoded) {
+                    Ok(token) => {
+                        tracing::debug!("Successfully decoded {} token for {}, token length: {}", token_type, account_id, token.len());
+                        Some(token)
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to convert decoded token to UTF-8 for {}: {}", account_id, e);
+                        None
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::error!("Failed to decode base64 token for {}: {}", account_id, e);
+                None
+            }
+        }
     }
 
     /// Store OAuth2 credential to encrypted file
