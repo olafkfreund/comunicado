@@ -201,8 +201,6 @@ pub struct DynamicShortcutsManager {
     display_mode: ShortcutDisplayMode,
     /// Maximum shortcuts to show in compact mode
     max_compact_shortcuts: usize,
-    /// Whether to show category headers
-    show_categories: bool,
     /// Custom shortcut overrides
     custom_shortcuts: HashMap<String, KeyboardShortcut>,
     /// Hint visibility duration (for auto-hide)
@@ -219,7 +217,6 @@ impl DynamicShortcutsManager {
             current_context: None,
             display_mode: ShortcutDisplayMode::StatusBar,
             max_compact_shortcuts: 4,
-            show_categories: true,
             custom_shortcuts: HashMap::new(),
             hint_duration_ms: 3000, // 3 seconds
             last_context_change: None,

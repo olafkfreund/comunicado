@@ -15,7 +15,6 @@ pub mod mime;
 pub mod notifications;
 pub mod oauth2;
 pub mod offline_storage;
-pub mod offline_integration;
 pub mod performance;
 pub mod rfc_standards;
 pub mod plugins;

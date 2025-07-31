@@ -13,7 +13,6 @@ pub mod progressive_disclosure;
 pub mod date_picker;
 pub mod draft_list;
 pub mod email_viewer;
-pub mod enhanced_message_list;
 pub mod folder_tree;
 pub mod fuzzy_search;
 pub mod graphics;
@@ -54,7 +53,7 @@ use self::{
     content_preview::ContentPreview,
     context_shortcuts::ContextShortcutsPopup,
     draft_list::DraftListUI,
-    dynamic_shortcuts::{DynamicShortcutsManager, DynamicShortcutsRenderer, ShortcutContext, ShortcutDisplayMode, KeyboardShortcut, ShortcutCategory},
+    dynamic_shortcuts::{DynamicShortcutsManager, DynamicShortcutsRenderer, ShortcutContext, ShortcutDisplayMode, KeyboardShortcut},
     progressive_disclosure::{ProgressiveDisclosureManager, ProgressiveDisclosureRenderer, Section, ExpandableSection, SectionContent},
     folder_tree::FolderTree,
     help::HelpOverlay,
@@ -1846,6 +1845,10 @@ impl UI {
         self.focused_pane = FocusedPane::AccountSwitcher;
     }
 
+    /// Return to email view from other modes
+    pub fn show_email(&mut self) {
+        self.show_email_interface();
+    }
 
     // Calendar mode methods
 

@@ -45,7 +45,6 @@ pub mod manager;
 pub mod registry;
 pub mod loader;
 pub mod types;
-pub mod examples;
 
 
 // Re-export main types for convenience

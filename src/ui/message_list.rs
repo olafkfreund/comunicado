@@ -1058,10 +1058,21 @@ impl MessageList {
 
             // Load messages from database
             tracing::info!("Loading messages from database...");
+            tracing::info!("Database query params: account_id='{}', folder_name='{}'", account_id, folder_name);
             let stored_messages = database
                 .get_messages(&account_id, &folder_name, Some(100), None)
                 .await?;
             tracing::info!("Loaded {} messages from database", stored_messages.len());
+            
+            // Debug: Log first few message subjects if any
+            if !stored_messages.is_empty() {
+                tracing::info!("First 3 message subjects:");
+                for (i, msg) in stored_messages.iter().take(3).enumerate() {
+                    tracing::info!("  {}: {}", i + 1, msg.subject);
+                }
+            } else {
+                tracing::warn!("No messages returned from database query");
+            }
             
             // If no messages in database for this folder, it means it hasn't been synced yet
             // This happens for non-inbox folders that user is accessing for the first time

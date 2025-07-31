@@ -277,6 +277,7 @@ pub enum KeyboardAction {
     CollapseThread,
     ToggleViewMode,
     ToggleHeaders,
+    OpenEmailViewer,
 
     // Sorting
     SortByDate,
@@ -323,6 +324,7 @@ pub enum KeyboardAction {
 
     // Calendar actions
     ShowCalendar,
+    ShowEmail,
     CreateEvent,
     EditEvent,
     DeleteEvent,
@@ -548,6 +550,10 @@ impl KeyboardConfig {
             KeyboardShortcut::simple(KeyCode::Char('H')),
             KeyboardAction::ToggleHeaders,
         );
+        self.shortcuts.insert(
+            KeyboardShortcut::simple(KeyCode::Char('P')),
+            KeyboardAction::OpenEmailViewer,
+        );
 
         // Sorting
         self.shortcuts.insert(
@@ -611,11 +617,11 @@ impl KeyboardConfig {
 
         // Function keys
         self.shortcuts.insert(
-            KeyboardShortcut::simple(KeyCode::F(5)),
+            KeyboardShortcut::alt(KeyCode::Char('r')),
             KeyboardAction::FolderRefresh,
         );
         self.shortcuts.insert(
-            KeyboardShortcut::simple(KeyCode::F(2)),
+            KeyboardShortcut::alt(KeyCode::Char('n')),
             KeyboardAction::FolderRename,
         );
         self.shortcuts.insert(
@@ -625,7 +631,7 @@ impl KeyboardConfig {
 
         // Email viewer shortcuts
         self.shortcuts.insert(
-            KeyboardShortcut::simple(KeyCode::Char('p')),
+            KeyboardShortcut::simple(KeyCode::Char('q')),
             KeyboardAction::EmailViewerClose,
         );
 
@@ -641,8 +647,12 @@ impl KeyboardConfig {
 
         // Calendar actions
         self.shortcuts.insert(
-            KeyboardShortcut::simple(KeyCode::F(3)),
+            KeyboardShortcut::ctrl(KeyCode::Char('l')),
             KeyboardAction::ShowCalendar,
+        );
+        self.shortcuts.insert(
+            KeyboardShortcut::ctrl(KeyCode::Char('m')),
+            KeyboardAction::ShowEmail,
         );
         self.shortcuts.insert(
             KeyboardShortcut::simple(KeyCode::Char('e')),
@@ -854,6 +864,10 @@ impl KeyboardConfig {
             KeyboardAction::ToggleHeaders,
             "Toggle extended headers".to_string(),
         );
+        self.action_descriptions.insert(
+            KeyboardAction::OpenEmailViewer,
+            "Open email in full-screen viewer".to_string(),
+        );
 
         self.action_descriptions.insert(
             KeyboardAction::SortByDate,
@@ -910,9 +924,9 @@ impl KeyboardConfig {
         );
 
         self.action_descriptions
-            .insert(KeyboardAction::FolderRefresh, "Refresh (F5)".to_string());
+            .insert(KeyboardAction::FolderRefresh, "Refresh folder".to_string());
         self.action_descriptions
-            .insert(KeyboardAction::FolderRename, "Rename (F2)".to_string());
+            .insert(KeyboardAction::FolderRename, "Rename folder".to_string());
         self.action_descriptions
             .insert(KeyboardAction::FolderDelete, "Delete (Del)".to_string());
 
@@ -928,7 +942,11 @@ impl KeyboardConfig {
         // Calendar actions
         self.action_descriptions.insert(
             KeyboardAction::ShowCalendar,
-            "Show calendar interface".to_string(),
+            "Open calendar view".to_string(),
+        );
+        self.action_descriptions.insert(
+            KeyboardAction::ShowEmail,
+            "Return to email view".to_string(),
         );
         self.action_descriptions.insert(
             KeyboardAction::CreateEvent,
@@ -1108,7 +1126,8 @@ impl KeyboardConfig {
             | KeyboardAction::ExpandThread
             | KeyboardAction::CollapseThread
             | KeyboardAction::ToggleViewMode
-            | KeyboardAction::ToggleHeaders => "View Controls".to_string(),
+            | KeyboardAction::ToggleHeaders
+            | KeyboardAction::OpenEmailViewer => "View Controls".to_string(),
             KeyboardAction::SortByDate
             | KeyboardAction::SortBySender
             | KeyboardAction::SortBySubject => "Sorting".to_string(),
@@ -1139,6 +1158,7 @@ impl KeyboardConfig {
             | KeyboardAction::EmailViewerMarkUnread
             | KeyboardAction::EmailViewerClose => "Email Viewer".to_string(),
             KeyboardAction::ShowCalendar
+            | KeyboardAction::ShowEmail
             | KeyboardAction::CreateEvent
             | KeyboardAction::EditEvent
             | KeyboardAction::DeleteEvent

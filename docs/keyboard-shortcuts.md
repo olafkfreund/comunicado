@@ -23,7 +23,7 @@ These shortcuts work throughout the application:
 - `Ctrl+C` - Force quit application
 - `~` - Show start page
 - `?` - Show help/keyboard shortcuts
-- `g` - Go to calendar
+- `P` - Open email in full-screen viewer (**NEW - Fixed!**)
 - `,` - Settings/configuration (when implemented)
 - `Esc` - Cancel current operation or go back
 - `Tab` - Navigate to next panel
@@ -105,7 +105,8 @@ These shortcuts work throughout the application:
 ## ✅ Calendar Management
 
 ### Calendar Navigation
-- `g` - Go to calendar (global access)
+- `Ctrl+L` - Open calendar view
+- `Ctrl+M` - Return to email view
 - `Esc` - Close calendar/return to previous view
 
 ### Calendar Views
@@ -182,11 +183,11 @@ The following sections document features that are planned but not yet working. T
 **BREAKING CHANGE**: All function keys (F1-F12) have been replaced with terminal-friendly alternatives for universal compatibility across all terminal environments, including VSCode terminal and remote SSH sessions.
 
 #### F-Key Migration Summary:
-- **F3 (Calendar)** → **`g`** (go to calendar)
+- **F3 (Calendar)** → **`Ctrl+L`** (go to calendar)
 - **F1 (Help)** → **`?`** (help/shortcuts)
 - **F4 (Settings)** → **`,`** (comma, vim-style)
-- **F5 (Refresh)** → **`Ctrl+R`** (refresh)
-- **F2 (Rename)** → **`R`** (uppercase R)
+- **F5 (Refresh)** → **`Alt+R`** (refresh folder)
+- **F2 (Rename)** → **`Alt+N`** (rename folder)
 - **F1 (Save)** → **`Ctrl+S`** (save in forms)
 - **F3 (Delete)** → **`d`** (delete in forms)
 

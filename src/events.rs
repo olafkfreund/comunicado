@@ -34,6 +34,7 @@ pub enum EventResult {
     ReplyToMessage(uuid::Uuid), // Message ID to reply to
     ReplyAllToMessage(uuid::Uuid), // Message ID to reply all to
     ForwardMessage(uuid::Uuid), // Message ID to forward
+    RetryInitialization, // Retry failed initialization
 }
 
 impl EventHandler {
@@ -457,6 +458,68 @@ impl EventHandler {
                 }
                 EventResult::Continue
             }
+            KeyboardAction::OpenEmailViewer => {
+                // Open email popup viewer for reply/forward/edit actions
+                if ui.focused_pane() == FocusedPane::ContentPreview {
+                    if let Some(selected_message_item) = ui.message_list().selected_message() {
+                        // We need the email content to start the viewer
+                        if let Some(email_content) = ui.content_preview().get_email_content() {
+                            // Create a minimal StoredMessage from MessageItem and EmailContent
+                            // TODO: This should be improved to fetch the full StoredMessage from database
+                            if let Some(message_id) = selected_message_item.message_id {
+                                let stored_message = crate::email::StoredMessage {
+                                    id: message_id,
+                                    account_id: "default".to_string(), // TODO: Get actual account ID
+                                    folder_name: "INBOX".to_string(),  // TODO: Get actual folder
+                                    imap_uid: 0,                       // TODO: Get actual UID
+                                    subject: email_content.headers.subject.clone(),
+                                    from_name: Some(email_content.headers.from.clone()),
+                                    from_addr: email_content.headers.from.clone(),
+                                    to_addrs: email_content.headers.to.clone(),
+                                    cc_addrs: email_content.headers.cc.clone(),
+                                    bcc_addrs: email_content.headers.bcc.clone(),
+                                    date: chrono::Utc::now(), // TODO: Parse actual date
+                                    body_text: Some(email_content.body.clone()),
+                                    body_html: if email_content.content_type
+                                        == crate::ui::content_preview::ContentType::Html
+                                    {
+                                        Some(email_content.body.clone())
+                                    } else {
+                                        None
+                                    },
+                                    attachments: Vec::new(), // TODO: Convert attachments
+                                    flags: if selected_message_item.is_read {
+                                        vec!["\\Seen".to_string()]
+                                    } else {
+                                        Vec::new()
+                                    },
+                                    labels: Vec::new(),
+                                    size: None,
+                                    priority: None,
+                                    is_draft: false,
+                                    is_deleted: false,
+                                    reply_to: email_content.headers.reply_to.clone(),
+                                    message_id: Some(email_content.headers.message_id.clone()),
+                                    thread_id: None,
+                                    in_reply_to: email_content.headers.in_reply_to.clone(),
+                                    references: Vec::new(),
+                                    created_at: chrono::Utc::now(),
+                                    updated_at: chrono::Utc::now(),
+                                    last_synced: chrono::Utc::now(),
+                                    sync_version: 1,
+                                };
+                                // Extract sender email for contact lookup before starting viewer
+                                let sender_email = Self::extract_email_from_address(&email_content.headers.from);
+                                
+                                ui.start_email_viewer(stored_message, email_content.clone());
+                                
+                                return EventResult::EmailViewerStarted(sender_email);
+                            }
+                        }
+                    }
+                }
+                EventResult::Continue
+            }
 
             // Sorting
             KeyboardAction::SortByDate => {
@@ -666,6 +729,10 @@ impl EventHandler {
             // Calendar actions
             KeyboardAction::ShowCalendar => {
                 ui.show_calendar();
+                EventResult::Continue
+            }
+            KeyboardAction::ShowEmail => {
+                ui.show_email();
                 EventResult::Continue
             }
             KeyboardAction::CreateEvent => {
@@ -948,8 +1015,19 @@ impl EventHandler {
         }
     }
 
-    /// Handle escape action for different panes
+    /// Handle escape action for different panes and modes
     fn handle_escape(&mut self, ui: &mut UI) {
+        // First check UI mode for mode-specific escape handling
+        match ui.mode() {
+            UIMode::Calendar => {
+                // Return to email view from calendar
+                ui.show_email();
+                return;
+            }
+            _ => {}
+        }
+
+        // Then handle pane-specific escape actions
         match ui.focused_pane() {
             FocusedPane::FolderTree => {
                 if ui.folder_tree().is_in_search_mode() {
@@ -1200,6 +1278,13 @@ impl EventHandler {
 
             // Escape key handling
             KeyCode::Esc => {
+                // Check if sync progress overlay is visible and close it first
+                if ui.is_sync_progress_visible() {
+                    ui.toggle_sync_progress_overlay();
+                    ui.show_toast_info("Sync progress overlay closed");
+                    return EventResult::Continue;
+                }
+
                 match ui.focused_pane() {
                     FocusedPane::FolderTree => {
                         // Check if in search mode first
@@ -1283,6 +1368,7 @@ impl EventHandler {
 
             // Enter key for selection
             KeyCode::Enter => {
+                eprintln!("🔍 DEBUG: Enter key pressed, focused pane: {:?}", ui.focused_pane());
                 match ui.focused_pane() {
                     FocusedPane::AccountSwitcher => {
                         if let Some(account_id) = ui.account_switcher_mut().select_current() {
@@ -1297,6 +1383,7 @@ impl EventHandler {
                             ui.folder_tree_mut().exit_search_mode(true); // Apply search
                         } else {
                             if let Some(folder_path) = ui.folder_tree_mut().handle_enter() {
+                                eprintln!("🔍 DEBUG: Folder selected: '{}'", folder_path);
                                 return EventResult::FolderSelect(folder_path);
                             }
                         }
@@ -1342,67 +1429,6 @@ impl EventHandler {
                 // Open/expand thread
                 if let FocusedPane::MessageList = ui.focused_pane() {
                     ui.message_list_mut().expand_selected_thread();
-                }
-            }
-            KeyCode::Char('p' | 'P') => {
-                // Open email popup viewer for reply/forward/edit actions
-                if ui.focused_pane() == FocusedPane::ContentPreview {
-                    if let Some(selected_message_item) = ui.message_list().selected_message() {
-                        // We need the email content to start the viewer
-                        if let Some(email_content) = ui.content_preview().get_email_content() {
-                            // Create a minimal StoredMessage from MessageItem and EmailContent
-                            // TODO: This should be improved to fetch the full StoredMessage from database
-                            if let Some(message_id) = selected_message_item.message_id {
-                                let stored_message = crate::email::StoredMessage {
-                                    id: message_id,
-                                    account_id: "default".to_string(), // TODO: Get actual account ID
-                                    folder_name: "INBOX".to_string(),  // TODO: Get actual folder
-                                    imap_uid: 0,                       // TODO: Get actual UID
-                                    subject: email_content.headers.subject.clone(),
-                                    from_name: Some(email_content.headers.from.clone()),
-                                    from_addr: email_content.headers.from.clone(),
-                                    to_addrs: email_content.headers.to.clone(),
-                                    cc_addrs: email_content.headers.cc.clone(),
-                                    bcc_addrs: email_content.headers.bcc.clone(),
-                                    date: chrono::Utc::now(), // TODO: Parse actual date
-                                    body_text: Some(email_content.body.clone()),
-                                    body_html: if email_content.content_type
-                                        == crate::ui::content_preview::ContentType::Html
-                                    {
-                                        Some(email_content.body.clone())
-                                    } else {
-                                        None
-                                    },
-                                    attachments: Vec::new(), // TODO: Convert attachments
-                                    flags: if selected_message_item.is_read {
-                                        vec!["\\Seen".to_string()]
-                                    } else {
-                                        Vec::new()
-                                    },
-                                    labels: Vec::new(),
-                                    size: None,
-                                    priority: None,
-                                    is_draft: false,
-                                    is_deleted: false,
-                                    reply_to: email_content.headers.reply_to.clone(),
-                                    message_id: Some(email_content.headers.message_id.clone()),
-                                    thread_id: None,
-                                    in_reply_to: email_content.headers.in_reply_to.clone(),
-                                    references: Vec::new(),
-                                    created_at: chrono::Utc::now(),
-                                    updated_at: chrono::Utc::now(),
-                                    last_synced: chrono::Utc::now(),
-                                    sync_version: 1,
-                                };
-                                // Extract sender email for contact lookup before starting viewer
-                                let sender_email = Self::extract_email_from_address(&email_content.headers.from);
-                                
-                                ui.start_email_viewer(stored_message, email_content.clone());
-                                
-                                return EventResult::EmailViewerStarted(sender_email);
-                            }
-                        }
-                    }
                 }
             }
             KeyCode::Char('C') => {
@@ -1472,11 +1498,21 @@ impl EventHandler {
                 }
             }
             KeyCode::Char('r') if !key.modifiers.contains(KeyModifiers::CONTROL) => {
-                // Sort by sender (only when Ctrl is not pressed)
-                if let FocusedPane::MessageList = ui.focused_pane() {
-                    use crate::email::{SortCriteria, SortOrder};
-                    ui.message_list_mut()
-                        .set_sort_criteria(SortCriteria::Sender(SortOrder::Ascending));
+                // Handle 'r' key based on focused pane
+                match ui.focused_pane() {
+                    FocusedPane::FolderTree => {
+                        // 'r' in folder tree = refresh
+                        if let Some(operation) = ui.folder_tree_mut().handle_char_key('r') {
+                            return EventResult::FolderOperation(operation);
+                        }
+                    }
+                    FocusedPane::MessageList => {
+                        // 'r' in message list = sort by sender
+                        use crate::email::{SortCriteria, SortOrder};
+                        ui.message_list_mut()
+                            .set_sort_criteria(SortCriteria::Sender(SortOrder::Ascending));
+                    }
+                    _ => {}
                 }
             }
             KeyCode::Char('u') => {
@@ -1631,6 +1667,13 @@ impl EventHandler {
                         return EventResult::RefreshAccount(account_id.clone());
                     }
                 }
+            }
+
+            // Retry initialization shortcut
+            KeyCode::Char('i') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                // Ctrl+I to retry initialization (for when startup was skipped)
+                ui.show_toast_info("Retrying initialization...");
+                return EventResult::RetryInitialization;
             }
 
             // Copy functionality

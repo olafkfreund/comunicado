@@ -150,6 +150,11 @@ pub struct EmailDatabase {
 impl EmailDatabase {
     /// Create a new email database
     pub async fn new(db_path: &str) -> DatabaseResult<Self> {
+        Self::new_with_mode(db_path, false).await
+    }
+
+    /// Create a new email database with quick initialization option
+    pub async fn new_with_mode(db_path: &str, quick_mode: bool) -> DatabaseResult<Self> {
         // Create database if it doesn't exist
         if !sqlx::Sqlite::database_exists(db_path)
             .await
@@ -160,9 +165,9 @@ impl EmailDatabase {
             })?;
         }
 
-        // Create connection pool
+        // Create connection pool with reduced connections in quick mode
         let pool = SqlitePoolOptions::new()
-            .max_connections(20)
+            .max_connections(if quick_mode { 5 } else { 20 })
             .connect(db_path)
             .await
             .map_err(DatabaseError::Connection)?;
@@ -172,8 +177,12 @@ impl EmailDatabase {
             db_path: db_path.to_string(),
         };
 
-        // Run migrations
-        db.migrate().await?;
+        // Run migrations (skip expensive operations in quick mode)
+        if quick_mode {
+            db.migrate_quick().await?;
+        } else {
+            db.migrate().await?;
+        }
 
         Ok(db)
     }
@@ -453,6 +462,116 @@ impl EmailDatabase {
         Ok(())
     }
 
+    /// Run quick database migrations (skip expensive operations)
+    async fn migrate_quick(&self) -> DatabaseResult<()> {
+        // Enable foreign key constraints
+        sqlx::query("PRAGMA foreign_keys = ON")
+            .execute(&self.pool)
+            .await?;
+
+        // Create essential tables only
+        sqlx::query(
+            r"
+            CREATE TABLE IF NOT EXISTS accounts (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                email TEXT NOT NULL,
+                provider TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+        ",
+        )
+        .execute(&self.pool)
+        .await?;
+
+        sqlx::query(
+            r"
+            CREATE TABLE IF NOT EXISTS folders (
+                account_id TEXT NOT NULL,
+                name TEXT NOT NULL,
+                full_name TEXT NOT NULL,
+                delimiter TEXT,
+                attributes TEXT NOT NULL, -- JSON array
+                uid_validity INTEGER,
+                uid_next INTEGER,
+                exists_count INTEGER,
+                recent_count INTEGER,
+                unseen_count INTEGER,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY (account_id, name)
+            )
+        ",
+        )
+        .execute(&self.pool)
+        .await?;
+
+        sqlx::query(
+            r"
+            CREATE TABLE IF NOT EXISTS messages (
+                id TEXT PRIMARY KEY,
+                account_id TEXT NOT NULL,
+                folder_name TEXT NOT NULL,
+                imap_uid INTEGER NOT NULL,
+                message_id TEXT,
+                thread_id TEXT,
+                in_reply_to TEXT,
+                message_references TEXT NOT NULL, -- JSON array
+                
+                -- Headers
+                subject TEXT NOT NULL,
+                from_addr TEXT NOT NULL,
+                from_name TEXT,
+                to_addrs TEXT NOT NULL, -- JSON array
+                cc_addrs TEXT NOT NULL, -- JSON array
+                bcc_addrs TEXT NOT NULL, -- JSON array
+                reply_to TEXT,
+                date TEXT NOT NULL,
+                
+                -- Content
+                body_text TEXT,
+                body_html TEXT,
+                attachments TEXT NOT NULL, -- JSON array
+                
+                -- Metadata
+                flags TEXT NOT NULL, -- JSON array
+                labels TEXT NOT NULL, -- JSON array
+                size INTEGER,
+                priority TEXT,
+                
+                -- Sync metadata
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                last_synced TEXT NOT NULL,
+                sync_version INTEGER NOT NULL DEFAULT 1,
+                is_draft BOOLEAN NOT NULL DEFAULT FALSE,
+                is_deleted BOOLEAN NOT NULL DEFAULT FALSE
+            )
+        ",
+        )
+        .execute(&self.pool)
+        .await?;
+
+        // Skip expensive operations like:
+        // - Duplicate cleanup
+        // - Complex indexes creation
+        // - Full-text search setup
+        // - Foreign key constraints
+        // - Triggers
+
+        // Add only essential indexes for basic functionality
+        sqlx::query("CREATE INDEX IF NOT EXISTS idx_messages_account_folder ON messages(account_id, folder_name)")
+            .execute(&self.pool)
+            .await?;
+
+        sqlx::query("CREATE INDEX IF NOT EXISTS idx_messages_uid ON messages(account_id, folder_name, imap_uid)")
+            .execute(&self.pool)
+            .await?;
+
+        Ok(())
+    }
+
     /// Store a message in the database
     pub async fn store_message(&self, message: &StoredMessage) -> DatabaseResult<()> {
         let now = Utc::now().to_rfc3339();
@@ -566,6 +685,33 @@ impl EmailDatabase {
             }
             Err(e) => Err(DatabaseError::Connection(e)),
         }
+    }
+
+    /// Update message body content (for on-demand IMAP fetching)
+    pub async fn update_message_body(
+        &self,
+        message_id: uuid::Uuid,
+        body_text: Option<String>,
+        body_html: Option<String>,
+    ) -> DatabaseResult<()> {
+        let now = chrono::Utc::now().to_rfc3339();
+        
+        sqlx::query(r"
+            UPDATE messages SET
+                body_text = COALESCE(?1, body_text),
+                body_html = COALESCE(?2, body_html),
+                updated_at = ?3
+            WHERE id = ?4
+        ")
+        .bind(&body_text)
+        .bind(&body_html)
+        .bind(&now)
+        .bind(message_id.to_string())
+        .execute(&self.pool)
+        .await?;
+
+        tracing::debug!("Updated message body for message ID: {}", message_id);
+        Ok(())
     }
 
     /// Get messages from a folder
@@ -750,6 +896,29 @@ impl EmailDatabase {
         }
 
         Ok(folders)
+    }
+
+    /// Store or update a folder in the database
+    pub async fn store_folder(&self, folder: &StoredFolder) -> DatabaseResult<()> {
+        // Use INSERT OR REPLACE to handle both insert and update cases
+        let attributes_json = serde_json::to_string(&folder.attributes)?;
+        
+        sqlx::query(r"
+            INSERT OR REPLACE INTO folders 
+            (account_id, name, full_name, delimiter, attributes, created_at, updated_at)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+        ")
+        .bind(&folder.account_id)
+        .bind(&folder.name)
+        .bind(&folder.full_name)
+        .bind(&folder.delimiter)
+        .bind(&attributes_json)
+        .bind(folder.created_at.to_rfc3339())
+        .bind(folder.updated_at.to_rfc3339())
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
     }
 
     /// Get folder sync state

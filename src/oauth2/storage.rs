@@ -146,8 +146,11 @@ impl SecureStorage {
             OAuth2Error::StorageError(format!("Failed to read account config: {}", e))
         })?;
 
+        tracing::debug!("Config file content for {}: {}", account_id, config_json);
+
         let config_without_tokens: AccountConfigForStorage = serde_json::from_str(&config_json)
             .map_err(|e| {
+                tracing::error!("Failed to parse account config for {}: {}. Config content: {}", account_id, e, config_json);
                 OAuth2Error::StorageError(format!("Failed to parse account config: {}", e))
             })?;
 
@@ -160,6 +163,17 @@ impl SecureStorage {
         let is_expired = config_without_tokens.token_expires_at
             .map(|expires| expires < chrono::Utc::now())
             .unwrap_or(false);
+
+        // Enhanced debug logging for token loading
+        tracing::debug!(
+            "Account {} token status: access_token_len={}, has_refresh_token={}, expires_at={:?}, is_expired={}, has_tokens={}",
+            account_id, 
+            access_token.len(),
+            refresh_token.is_some(),
+            config_without_tokens.token_expires_at,
+            is_expired,
+            has_tokens
+        );
 
         if !has_tokens || is_expired {
             tracing::warn!(
@@ -192,9 +206,11 @@ impl SecureStorage {
     pub fn load_all_accounts(&self) -> OAuth2Result<Vec<AccountConfig>> {
         let mut accounts = Vec::new();
 
+        tracing::debug!("Loading accounts from config directory: {:?}", self.config_dir);
+
         // Read all .json files in config directory
         let entries = fs::read_dir(&self.config_dir).map_err(|e| {
-            OAuth2Error::StorageError(format!("Failed to read config directory: {}", e))
+            OAuth2Error::StorageError(format!("Failed to read config directory {:?}: {}", self.config_dir, e))
         })?;
 
         for entry in entries {
@@ -203,10 +219,14 @@ impl SecureStorage {
             })?;
 
             let path = entry.path();
+            tracing::debug!("Processing entry: {:?}", path);
+            
             if path.extension().and_then(|s| s.to_str()) == Some("json") {
                 if let Some(account_id) = path.file_stem().and_then(|s| s.to_str()) {
+                    tracing::debug!("Loading account from file: {} (account_id: {})", path.display(), account_id);
                     match self.load_account(account_id) {
                         Ok(Some(account)) => {
+                            tracing::debug!("Successfully loaded account: {}", account.account_id);
                             accounts.push(account);
                         }
                         Ok(None) => {
@@ -216,10 +236,25 @@ impl SecureStorage {
                             tracing::warn!("Failed to load account {}: {}. Account will be skipped.", account_id, e);
                         }
                     }
+                } else {
+                    tracing::debug!("Could not extract account_id from filename: {:?}", path);
                 }
+            } else {
+                tracing::debug!("Skipping non-JSON file: {:?}", path);
             }
         }
 
+        tracing::debug!("Finished loading accounts. Total loaded: {}", accounts.len());
+        for account in &accounts {
+            tracing::debug!(
+                "Loaded account: {} ({}) - access_token_len={}, has_refresh={}, expires_at={:?}",
+                account.display_name,
+                account.account_id,
+                account.access_token.len(),
+                account.refresh_token.is_some(),
+                account.token_expires_at
+            );
+        }
         Ok(accounts)
     }
 

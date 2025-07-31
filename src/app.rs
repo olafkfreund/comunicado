@@ -18,7 +18,6 @@ use crate::imap::ImapAccountManager;
 use crate::notifications::{NotificationConfig, UnifiedNotificationManager};
 use crate::oauth2::{AccountConfig, SecureStorage, TokenManager};
 use crate::smtp::{SmtpService, SmtpServiceBuilder};
-use crate::startup::StartupProgressManager;
 use crate::ui::{ComposeAction, DraftAction, UI};
 use crate::performance::background_processor::{BackgroundProcessor, BackgroundTask, TaskResult};
 use crate::email::sync_engine::SyncProgress;
@@ -45,8 +44,6 @@ pub struct App {
     deferred_initialization: bool,
     initialization_complete: bool,
     initialization_in_progress: bool,
-    // Startup progress tracking
-    startup_progress_manager: StartupProgressManager,
     // Background processing
     background_processor: Option<Arc<BackgroundProcessor>>,
     sync_progress_rx: Option<mpsc::UnboundedReceiver<SyncProgress>>,
@@ -77,8 +74,6 @@ impl App {
             deferred_initialization: false,
             initialization_complete: false,
             initialization_in_progress: false,
-            // Startup progress tracking
-            startup_progress_manager: StartupProgressManager::new(),
             // Background processing
             background_processor: None,
             sync_progress_rx: None,
@@ -86,88 +81,70 @@ impl App {
         })
     }
 
-    /// Get reference to the startup progress manager
-    pub fn startup_progress_manager(&self) -> &StartupProgressManager {
-        &self.startup_progress_manager
-    }
 
-    /// Get mutable reference to the startup progress manager
-    pub fn startup_progress_manager_mut(&mut self) -> &mut StartupProgressManager {
-        &mut self.startup_progress_manager
-    }
 
     /// Initialize the database connection
     pub async fn initialize_database(&mut self) -> Result<()> {
-        // Start database initialization phase
-        self.startup_progress_manager.start_phase("Database").map_err(|e| anyhow::anyhow!("Progress manager error: {}", e))?;
+        tracing::info!("🗄️ Initializing database connection...");
         
-        // Perform database initialization with error handling
-        let result: Result<()> = async {
-            // Create database path in user's data directory
-            let data_dir = dirs::data_dir()
-                .unwrap_or_else(|| std::path::PathBuf::from("."))
-                .join("comunicado");
+        // Create database path in user's config directory (same as CLI)
+        let config_dir = dirs::config_dir()
+            .ok_or_else(|| anyhow::anyhow!("Cannot find config directory"))?
+            .join("comunicado")
+            .join("databases");
 
-            // Create directory if it doesn't exist
-            std::fs::create_dir_all(&data_dir)?;
+        // Create directory if it doesn't exist
+        std::fs::create_dir_all(&config_dir)?;
 
-            let db_path = data_dir.join("messages.db");
-            let db_path_str = db_path
-                .to_str()
-                .ok_or_else(|| anyhow::anyhow!("Invalid database path"))?;
+        let db_path = config_dir.join("email.db");
+        let db_path_str = db_path
+            .to_str()
+            .ok_or_else(|| anyhow::anyhow!("Invalid database path"))?;
 
-            // Create database connection
-            let database = EmailDatabase::new(db_path_str)
-                .await
-                .map_err(|e| anyhow::anyhow!("Failed to initialize database: {}", e))?;
+        tracing::info!("📊 TUI connecting to database: {}", db_path_str);
 
-            let database_arc = Arc::new(database);
+        // Create database connection with quick mode for startup
+        let database = EmailDatabase::new_with_mode(db_path_str, true)
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to initialize database: {}", e))?;
+            
+        tracing::info!("✅ TUI database connection established successfully");
 
-            // Create notification manager
-            let notification_manager = Arc::new(EmailNotificationManager::new(database_arc.clone()));
+        let database_arc = Arc::new(database);
 
-            // Start the notification processing
-            notification_manager.start().await;
+        // Create notification manager
+        let notification_manager = Arc::new(EmailNotificationManager::new(database_arc.clone()));
 
-            // Initialize unified notification manager with desktop notifications
-            let notification_config = NotificationConfig::default();
-            let unified_notification_manager = Arc::new(
-                UnifiedNotificationManager::new().with_desktop_notifications(notification_config),
-            );
+        // Start the notification processing
+        notification_manager.start().await;
 
-            // Connect email notifications to the unified manager
-            let email_receiver = notification_manager.subscribe();
-            unified_notification_manager.connect_email_notifications(email_receiver);
+        // Initialize unified notification manager with desktop notifications
+        let notification_config = NotificationConfig::default();
+        let unified_notification_manager = Arc::new(
+            UnifiedNotificationManager::new().with_desktop_notifications(notification_config),
+        );
 
-            // TODO: Connect calendar notifications when calendar system is implemented
-            // let calendar_receiver = calendar_manager.subscribe();
-            // unified_notification_manager.connect_calendar_notifications(calendar_receiver);
+        // Connect email notifications to the unified manager
+        let email_receiver = notification_manager.subscribe();
+        unified_notification_manager.connect_email_notifications(email_receiver);
 
-            tracing::info!("Unified notification system initialized successfully");
+        // TODO: Connect calendar notifications when calendar system is implemented
+        // let calendar_receiver = calendar_manager.subscribe();
+        // unified_notification_manager.connect_calendar_notifications(calendar_receiver);
 
-            // Set database and notification manager in UI
-            self.ui.set_database(database_arc.clone());
-            self.ui
-                .set_notification_manager(notification_manager.clone());
+        tracing::info!("Unified notification system initialized successfully");
 
-            self.database = Some(database_arc);
-            self.notification_manager = Some(notification_manager);
-            self.unified_notification_manager = Some(unified_notification_manager);
+        // Set database and notification manager in UI
+        self.ui.set_database(database_arc.clone());
+        self.ui
+            .set_notification_manager(notification_manager.clone());
 
-            Ok(())
-        }.await;
+        self.database = Some(database_arc);
+        self.notification_manager = Some(notification_manager);
+        self.unified_notification_manager = Some(unified_notification_manager);
 
-        // Report success or failure to progress manager
-        match result {
-            Ok(()) => {
-                self.startup_progress_manager.complete_phase("Database").map_err(|e| anyhow::anyhow!("Progress manager error: {}", e))?;
-                Ok(())
-            }
-            Err(e) => {
-                self.startup_progress_manager.fail_phase("Database", e.to_string()).map_err(|pe| anyhow::anyhow!("Progress manager error: {}", pe))?;
-                Err(e)
-            }
-        }
+        tracing::info!("✅ Database initialization completed successfully");
+        Ok(())
     }
 
     /// Get database reference for maintenance operations
@@ -209,6 +186,98 @@ impl App {
         self.initialization_complete
     }
 
+    /// Retry initialization in background (for when startup was skipped)
+    pub async fn retry_initialization_background(&mut self) -> Result<()> {
+        if self.initialization_complete {
+            return Ok(()); // Already complete
+        }
+
+        tracing::info!("🔄 Retrying initialization in background...");
+        
+        // Try database initialization first
+        if self.database.is_none() {
+            tracing::info!("📊 Initializing database in background...");
+            match tokio::time::timeout(
+                std::time::Duration::from_secs(15),
+                self.initialize_database()
+            ).await {
+                Ok(Ok(())) => {
+                    tracing::info!("✅ Database initialized successfully in background");
+                    self.ui.show_toast_success("Database connection established");
+                },
+                Ok(Err(e)) => {
+                    tracing::warn!("⚠️ Background database initialization failed: {}", e);
+                    self.ui.show_toast_warning("Database initialization failed - limited functionality");
+                },
+                Err(_) => {
+                    tracing::warn!("⏱️ Background database initialization timed out");
+                    self.ui.show_toast_warning("Database connection timed out - retrying later");
+                }
+            }
+        }
+
+        // Try IMAP manager initialization
+        if self.imap_manager.is_none() {
+            tracing::info!("📬 Initializing IMAP manager in background...");
+            match tokio::time::timeout(
+                std::time::Duration::from_secs(20),
+                self.initialize_imap_manager()
+            ).await {
+                Ok(Ok(())) => {
+                    tracing::info!("✅ IMAP manager initialized successfully in background");
+                    self.ui.show_toast_success("Email accounts connected");
+                    
+                    // Load accounts and folders
+                    if let Err(e) = self.load_existing_accounts().await {
+                        tracing::warn!("Failed to load accounts after IMAP init: {}", e);
+                        self.ui.show_toast_warning("Failed to load email accounts");
+                    } else {
+                        // Now actually load folders for the current account
+                        if let Some(current_account_id) = self.ui.get_current_account_id() {
+                            let account_id = current_account_id.clone(); // Clone to avoid borrowing issues
+                            tracing::info!("Loading folders for current account: {}", account_id);
+                            match self.ui.load_folders(&account_id).await {
+                                Ok(()) => {
+                                    tracing::info!("✅ Successfully loaded folders for account: {}", account_id);
+                                    self.ui.show_toast_success("Email folders loaded successfully");
+                                }
+                                Err(e) => {
+                                    tracing::warn!("Failed to load folders for account {}: {}", account_id, e);
+                                    self.ui.show_toast_warning("Failed to load email folders");
+                                }
+                            }
+                        } else {
+                            tracing::warn!("No current account set after loading accounts");
+                            self.ui.show_toast_warning("No email account selected");
+                        }
+                    }
+                },
+                Ok(Err(e)) => {
+                    tracing::warn!("⚠️ Background IMAP initialization failed: {}", e);
+                    self.ui.show_toast_warning("Email connection failed - check account settings");
+                },
+                Err(_) => {
+                    tracing::warn!("⏱️ Background IMAP initialization timed out");
+                    self.ui.show_toast_warning("Email connection timed out - retrying later");
+                }
+            }
+        }
+
+        // Try background processor
+        if self.background_processor.is_none() {
+            tracing::info!("⚙️ Initializing background processor...");
+            if let Err(e) = self.initialize_background_processor().await {
+                tracing::warn!("Background processor initialization failed: {}", e);
+                self.ui.show_toast_warning("Background sync disabled");
+            } else {
+                tracing::info!("✅ Background processor initialized");
+                self.ui.show_toast_success("Background sync enabled");
+            }
+        }
+
+        Ok(())
+    }
+
     /// Perform deferred initialization in the background
     pub async fn perform_deferred_initialization(&mut self) -> Result<()> {
         if self.initialization_in_progress || self.initialization_complete {
@@ -218,38 +287,109 @@ impl App {
         self.initialization_in_progress = true;
         tracing::info!("Starting deferred initialization...");
 
-        // Phase 1: Database
-        if let Err(e) = self.initialize_database().await {
-            tracing::error!("Database initialization failed: {}", e);
-            return Err(e);
+        // Phase 1: Database (skip for now - initialize later)
+        tracing::info!("⚡ Skipping database initialization for fast startup");
+        // Database initialization skipped
+
+        // Phase 2: IMAP Manager (with robust timeout handling)
+        // Initializing IMAP manager
+        
+        // Initialize IMAP manager with timeout to prevent hanging
+        match tokio::time::timeout(
+            std::time::Duration::from_secs(15), // 15 second timeout
+            self.initialize_imap_manager()
+        ).await {
+            Ok(Ok(())) => {
+                tracing::info!("✅ IMAP manager initialized successfully");
+                // IMAP manager ready
+            },
+            Ok(Err(e)) => {
+                tracing::warn!("⚠️ IMAP manager initialization failed: {}", e);
+                // IMAP failed - continuing
+                // Continue startup - app can work without IMAP for now
+            },
+            Err(_) => {
+                tracing::warn!("⏱️ IMAP manager initialization timed out after 15 seconds");
+                // IMAP timed out - continuing
+                // Continue startup - app can work without IMAP for now
+            }
         }
+        // IMAP Manager phase complete
 
-        // Phase 2: IMAP Manager (skipped at startup for speed - will initialize in background)
-        let _ = self.startup_progress_manager.start_phase("IMAP Manager");
-        let _ = self.startup_progress_manager.update_phase_progress("IMAP Manager", 50.0, Some("⚡ Skipping IMAP for fast startup...".to_string()));
+        // Phase 3: Account Setup (with robust timeout handling)
+        print!("📋 Loading accounts...");
+        std::io::Write::flush(&mut std::io::stdout()).unwrap();
         
-        tracing::info!("Skipping IMAP initialization for fast startup - will initialize in background");
-        // Mark as complete so startup continues immediately
-        let _ = self.startup_progress_manager.update_phase_progress("IMAP Manager", 100.0, Some("⚡ IMAP deferred to background".to_string()));
-        let _ = self.startup_progress_manager.complete_phase("IMAP Manager");
+        // Load existing accounts with timeout (should be fast now - just loading cached data)
+        match tokio::time::timeout(
+            std::time::Duration::from_secs(15), // 15 second timeout for account/cache loading
+            self.load_existing_accounts()
+        ).await {
+            Ok(Ok(())) => {
+                tracing::info!("✅ Account setup completed successfully");
+                println!(" ✅");
+            },
+            Ok(Err(e)) => {
+                tracing::warn!("⚠️ Account setup failed: {}", e);
+                println!(" ⚠️");
+                // Continue startup - show empty state in UI
+            },
+            Err(_) => {
+                tracing::warn!("⏱️ Account setup timed out after 10 seconds");
+                println!(" ⏱️");
+                // Continue startup - show empty state in UI
+            }
+        }
+        // Account setup complete
 
-        // Phase 3: Account Setup (skipped at startup for speed)
-        let _ = self.startup_progress_manager.start_phase("Account Setup");
-        let _ = self.startup_progress_manager.update_phase_progress("Account Setup", 50.0, Some("⚡ Skipping account setup for fast startup...".to_string()));
+        // Phase 4: Background Processor (essential for IMAP sync)
+        print!("🔄 Initializing background processor...");
+        std::io::Write::flush(&mut std::io::stdout()).unwrap();
         
-        tracing::info!("Skipping account setup for fast startup - will setup in background");
-        // Mark as complete so startup continues immediately
-        let _ = self.startup_progress_manager.update_phase_progress("Account Setup", 100.0, Some("⚡ Account setup deferred to background".to_string()));
-        let _ = self.startup_progress_manager.complete_phase("Account Setup");
-
-        // Phase 4: Services (skipped at startup for speed)
-        let _ = self.startup_progress_manager.start_phase("Services");
-        let _ = self.startup_progress_manager.update_phase_progress("Services", 50.0, Some("⚡ Skipping services for fast startup...".to_string()));
+        // Initialize background processor (optional - don't fail startup if it fails)
+        match self.initialize_background_processor().await {
+            Ok(()) => {
+                println!(" ✅");
+                tracing::info!("✅ Background processor initialized successfully");
+            },
+            Err(e) => {
+                println!(" ⚠️");
+                tracing::warn!("⚠️ Background processor initialization failed: {}", e);
+                // Continue without background processor
+            }
+        }
         
-        tracing::info!("Skipping services initialization for fast startup - will initialize in background");
-        // Mark as complete so startup continues immediately
-        let _ = self.startup_progress_manager.update_phase_progress("Services", 100.0, Some("⚡ Services deferred to background".to_string()));
-        let _ = self.startup_progress_manager.complete_phase("Services");
+        // Perform immediate IMAP sync with timeout to populate emails (replaces broken background sync)
+        if let Some(current_account_id) = self.ui.get_current_account_id().cloned() {
+            print!("📬 Fetching initial emails...");
+            std::io::Write::flush(&mut std::io::stdout()).unwrap();
+            tracing::info!("📬 Starting immediate IMAP sync for account: {}", current_account_id);
+            
+            // Run IMAP sync with 15-second timeout to prevent hanging
+            let sync_result = tokio::time::timeout(
+                std::time::Duration::from_secs(15),
+                self.sync_account_from_imap(&current_account_id)
+            ).await;
+            
+            match sync_result {
+                Ok(Ok(())) => {
+                    tracing::info!("✅ Initial IMAP sync completed successfully");
+                    println!(" ✅");
+                },
+                Ok(Err(e)) => {
+                    tracing::warn!("⚠️ Initial IMAP sync failed: {}", e);
+                    println!(" ⚠️");
+                },
+                Err(_) => {
+                    tracing::warn!("⚠️ Initial IMAP sync timed out after 15 seconds");
+                    println!(" ⚠️");
+                }
+            }
+        } else {
+            println!("⚠️ No account found");
+        }
+        
+        println!("✅ Background services ready");
 
         self.initialization_complete = true;
         self.initialization_in_progress = false;
@@ -270,8 +410,7 @@ impl App {
 
     /// Initialize IMAP account manager with OAuth2 support
     pub async fn initialize_imap_manager(&mut self) -> Result<()> {
-        // Start IMAP manager initialization phase
-        self.startup_progress_manager.start_phase("IMAP Manager").map_err(|e| anyhow::anyhow!("Progress manager error: {}", e))?;
+        tracing::info!("📬 Initializing IMAP manager...");
         
         // Perform IMAP manager initialization with error handling
         let result: Result<()> = async {
@@ -295,7 +434,7 @@ impl App {
 
         // Use robust initialization that handles problematic tokens
         tracing::info!("Performing robust token initialization to prevent startup hangs");
-        let has_valid_tokens = match tokio::time::timeout(
+        let _has_valid_tokens = match tokio::time::timeout(
             std::time::Duration::from_secs(15), // 15 second timeout for entire initialization
             token_manager.initialize_for_startup(),
         )
@@ -330,36 +469,10 @@ impl App {
             }
         };
 
-        // Only create and start automatic token refresh scheduler if we have valid tokens
-        if has_valid_tokens {
-            tracing::debug!("Creating token refresh scheduler");
-            let token_manager_arc = Arc::new(token_manager.clone());
-            let scheduler = crate::oauth2::token::TokenRefreshScheduler::new(token_manager_arc);
-
-            tracing::debug!("Starting token refresh scheduler");
-            let scheduler_result =
-                tokio::time::timeout(std::time::Duration::from_secs(5), scheduler.start()).await;
-
-            match scheduler_result {
-                Ok(Ok(())) => {
-                    tracing::info!("Started automatic OAuth2 token refresh scheduler");
-                    self.token_refresh_scheduler = Some(scheduler);
-                }
-                Ok(Err(e)) => {
-                    tracing::warn!("Failed to start automatic token refresh scheduler: {}", e);
-                    // Continue without scheduler - tokens will need manual refresh
-                    self.token_refresh_scheduler = None;
-                }
-                Err(_) => {
-                    tracing::warn!("Token refresh scheduler startup timed out after 5 seconds");
-                    // Continue without scheduler - tokens will need manual refresh
-                    self.token_refresh_scheduler = None;
-                }
-            }
-        } else {
-            tracing::info!("No valid OAuth2 tokens found, skipping token refresh scheduler");
-            self.token_refresh_scheduler = None;
-        }
+        // Skip token refresh scheduler during startup to prevent blocking
+        // Token refresh will be handled on-demand when needed
+        tracing::info!("Skipping token refresh scheduler during startup for faster initialization");
+        self.token_refresh_scheduler = None;
         tracing::debug!("Token refresh scheduler setup complete");
 
         // Set IMAP manager in UI for attachment downloading functionality
@@ -375,16 +488,7 @@ impl App {
         }.await;
 
         // Report success or failure to progress manager
-        match result {
-            Ok(()) => {
-                self.startup_progress_manager.complete_phase("IMAP Manager").map_err(|e| anyhow::anyhow!("Progress manager error: {}", e))?;
-                Ok(())
-            }
-            Err(e) => {
-                self.startup_progress_manager.fail_phase("IMAP Manager", e.to_string()).map_err(|pe| anyhow::anyhow!("Progress manager error: {}", pe))?;
-                Err(e)
-            }
-        }
+        result
     }
 
     /// Initialize background processor for async task handling
@@ -539,8 +643,7 @@ impl App {
 
     /// Check for existing accounts and run setup wizard if needed
     pub async fn check_accounts_and_setup(&mut self) -> Result<()> {
-        // Start account setup phase
-        self.startup_progress_manager.start_phase("Account Setup").map_err(|e| anyhow::anyhow!("Progress manager error: {}", e))?;
+        tracing::info!("📋 Setting up accounts...");
         
         // Perform account setup with error handling
         let result: Result<()> = async {
@@ -579,22 +682,14 @@ impl App {
         }.await;
 
         // Report success or failure to progress manager
-        match result {
-            Ok(()) => {
-                self.startup_progress_manager.complete_phase("Account Setup").map_err(|e| anyhow::anyhow!("Progress manager error: {}", e))?;
-                Ok(())
-            }
-            Err(e) => {
-                self.startup_progress_manager.fail_phase("Account Setup", e.to_string()).map_err(|pe| anyhow::anyhow!("Progress manager error: {}", pe))?;
-                Err(e)
-            }
-        }
+        result
     }
 
 
 
     /// Load existing accounts from storage
     async fn load_existing_accounts(&mut self) -> Result<()> {
+        tracing::debug!("Attempting to load accounts from storage...");
         let accounts = self
             .storage
             .load_all_accounts()
@@ -603,71 +698,23 @@ impl App {
         tracing::debug!("Loaded {} accounts from storage", accounts.len());
         for (i, account) in accounts.iter().enumerate() {
             tracing::debug!(
-                "Account {}: {} ({})",
+                "Account {}: {} ({}) - tokens expired: {}",
                 i,
                 account.display_name,
-                account.account_id
+                account.account_id,
+                account.is_token_expired()
             );
         }
 
         if accounts.is_empty() {
+            tracing::warn!("No accounts found in storage, loading sample data instead");
             return self.load_sample_data().await;
         }
 
-        // Load OAuth2 tokens into TokenManager for existing accounts
-        tracing::debug!(
-            "About to load OAuth2 tokens for {} accounts",
-            accounts.len()
-        );
-        if let Some(ref token_manager) = self.token_manager {
-            for account in &accounts {
-                tracing::debug!(
-                    "Processing account: {} (has access token: {})",
-                    account.account_id,
-                    !account.access_token.is_empty()
-                );
-                if !account.access_token.is_empty() {
-                    // Create TokenResponse from AccountConfig for TokenManager storage
-                    let token_response = crate::oauth2::TokenResponse {
-                        access_token: account.access_token.clone(),
-                        refresh_token: account.refresh_token.clone(),
-                        token_type: "Bearer".to_string(),
-                        expires_in: account.token_expires_at.map(|expires_at| {
-                            let now = chrono::Utc::now();
-                            let duration = expires_at.signed_duration_since(now);
-                            duration.num_seconds().max(0) as u64
-                        }),
-                        scope: Some(account.scopes.join(" ")),
-                    };
-
-                    tracing::debug!("About to store tokens for account: {}", account.account_id);
-                    if let Err(e) = token_manager
-                        .store_tokens(
-                            account.account_id.clone(),
-                            account.provider.clone(),
-                            &token_response,
-                        )
-                        .await
-                    {
-                        tracing::warn!(
-                            "Failed to load tokens for account {}: {}",
-                            account.account_id,
-                            e
-                        );
-                    } else {
-                        tracing::info!(
-                            "Loaded OAuth2 tokens for existing account: {}",
-                            account.account_id
-                        );
-                    }
-                }
-            }
-        } else {
-            tracing::warn!(
-                "TokenManager not initialized, OAuth2 tokens not loaded for existing accounts"
-            );
-        }
-        tracing::debug!("Finished loading OAuth2 tokens");
+        // Skip OAuth2 token loading during startup to prevent hanging
+        tracing::info!("Skipping OAuth2 token loading for {} accounts - will load on-demand", accounts.len());
+        // Token loading disabled during startup to prevent hanging
+        tracing::debug!("Account enumeration complete - token loading deferred");
 
         // Convert AccountConfig to AccountItem for the UI
         let account_items: Vec<crate::ui::AccountItem> = accounts
@@ -676,71 +723,45 @@ impl App {
             .collect();
 
         // Set accounts in the UI
-        self.ui.set_accounts(account_items);
+        self.ui.set_accounts(account_items.clone());
 
-        // Create all accounts in the database
-        for account in &accounts {
-            self.create_account_from_config(account).await?;
-        }
-
-        // Load messages for the first account (or current account)
-        tracing::debug!("App.load_existing_accounts() - Loading messages for accounts");
-        tracing::debug!("Checking for current account...");
-        if let Some(current_account_id) = self.ui.get_current_account_id().cloned() {
-            tracing::debug!("Found current account: {}", current_account_id);
-            // Try to sync folders and messages from IMAP
-            if let Some(ref _imap_manager) = self.imap_manager {
-                tracing::debug!("Starting IMAP sync for account: {}", current_account_id);
-                match self.sync_account_from_imap(&current_account_id).await {
-                    Ok(_) => {
-                        tracing::debug!(
-                            "IMAP sync completed successfully, loading folders and messages"
-                        );
-                        // Successfully synced from IMAP, load folders first
-                        match self.ui.load_folders(&current_account_id).await {
-                            Ok(_) => tracing::debug!("Successfully loaded folders from database"),
-                            Err(e) => {
-                                tracing::debug!("Failed to load folders from database: {}", e)
-                            }
-                        }
-
-                        // Then load messages for INBOX
-                        match self
-                            .ui
-                            .load_messages(current_account_id.clone(), "INBOX".to_string())
-                            .await
-                        {
-                            Ok(_) => tracing::debug!("Successfully loaded messages for INBOX"),
-                            Err(e) => tracing::debug!("Failed to load messages for INBOX: {}", e),
-                        }
-                    }
-                    Err(e) => {
-                        tracing::error!(
-                            "IMAP sync failed for account {}: {}",
-                            current_account_id,
-                            e
-                        );
-
-                        // If it's an authentication timeout, log helpful information
-                        if e.to_string().contains("timed out")
-                            || e.to_string().contains("authentication")
-                        {
-                            tracing::warn!(
-                                "Authentication issue detected - tokens may have expired"
-                            );
-                            tracing::info!("Consider re-running setup if this persists: rm ~/.config/comunicado/{}.json", current_account_id);
-                        }
-
-                        // Continue with sample data instead of crashing
-                        tracing::info!("Falling back to sample data due to IMAP sync failure");
-                        let _ = self.load_sample_data().await;
+        // Ensure current account is set and verify it persists
+        tracing::info!("🔍 Checking current account status after setting accounts...");
+        if let Some(account_id) = self.ui.get_current_account_id() {
+            tracing::debug!("Current account ID is now: {}", account_id);
+            
+            // Clone the account_id to avoid borrowing issues
+            let account_id_clone = account_id.clone();
+            
+            // Ensure account is properly activated with full folder and message loading
+            tracing::info!("🚀 Activating current account: {}", account_id_clone);
+            if let Err(e) = self.ui.switch_to_account(&account_id_clone).await {
+                tracing::warn!("❌ Failed to activate account {}: {}", account_id_clone, e);
+            } else {
+                tracing::info!("✅ Successfully activated account: {}", account_id_clone);
+            }
+        } else {
+            tracing::warn!("No current account ID set after setting accounts!");
+            // Try to set the first account as current explicitly
+            if !account_items.is_empty() {
+                    let first_account_id = &account_items[0].account_id;
+                    tracing::info!("Explicitly setting first account as current: {}", first_account_id);
+                    if let Err(e) = self.ui.switch_to_account(first_account_id).await {
+                        tracing::warn!("Failed to set first account as current: {}", e);
+                    } else {
+                        tracing::info!("✅ Successfully set first account as current: {}", first_account_id);
                     }
                 }
-            } else {
-                // Fall back to sample data if IMAP manager not initialized
-                let _ = self.load_sample_data().await;
-            }
         }
+
+        // Skip database account creation during startup to prevent blocking
+        // Accounts will be created on-demand when they are first used
+        tracing::info!("Skipping database account creation during startup for faster initialization");
+        tracing::debug!("Found {} accounts, database entries will be created on-demand", accounts.len());
+
+        // Skip UI data loading during startup to prevent hangs - will be loaded after UI starts
+        tracing::debug!("Skipping UI data loading during startup for fast initialization");
+        tracing::info!("📅 UI data loading and IMAP sync scheduled for background processing to keep startup fast");
 
         Ok(())
     }
@@ -786,9 +807,28 @@ impl App {
 
     /// Load sample data for demonstration (fallback)
     pub async fn load_sample_data(&mut self) -> Result<()> {
+        tracing::info!("Loading sample data as fallback (no real accounts found)");
+        
         if let Some(ref database) = self.database {
             // Create sample account and folder if they don't exist
             self.create_sample_account_and_folder(database).await?;
+
+            // Create a sample account for the UI
+            let sample_account = crate::ui::AccountItem {
+                account_id: "sample-account".to_string(),
+                display_name: "Demo Account".to_string(),
+                email_address: "demo@example.com".to_string(),
+                provider: "sample".to_string(),
+                is_online: false,
+                unread_count: 0,
+                sync_status: crate::ui::AccountSyncStatus::Offline,
+            };
+
+            // Set the sample account in the UI
+            self.ui.set_accounts(vec![sample_account]);
+
+            // Load folders for the sample account
+            let _ = self.ui.load_folders("sample-account").await;
 
             // Try to load messages from database
             let _ = self
@@ -1130,12 +1170,17 @@ impl App {
     }
 
     pub async fn run(&mut self) -> Result<()> {
+        println!("🚀 Starting Comunicado...");
+        
         // Check if we're running in a proper terminal
         if !std::io::stdout().is_tty() {
             return Err(anyhow::anyhow!(
                 "Comunicado requires a proper terminal (TTY) to run. Please run this application in a terminal emulator."
             ));
         }
+
+        println!("🔄 Setting up terminal...");
+        std::io::Write::flush(&mut std::io::stdout()).unwrap();
 
         // Setup terminal
         enable_raw_mode().map_err(|e| {
@@ -1179,12 +1224,14 @@ impl App {
         let mut previous_selection: Option<usize> = None;
 
         loop {
-            // Perform deferred initialization if not done yet
+            // Perform background initialization if not done yet
             if !self.initialization_complete {
-                if let Err(e) = self.perform_deferred_initialization().await {
-                    tracing::error!("Deferred initialization failed: {}", e);
+                if let Err(e) = self.retry_initialization_background().await {
+                    tracing::error!("Background initialization failed: {}", e);
                     // Don't fail the app, just log the error and continue
                 }
+                // Mark as complete to prevent continuous retries
+                self.initialization_complete = true;
             }
 
             // Process background task updates to prevent UI blocking
@@ -1219,18 +1266,9 @@ impl App {
                 }
             }
 
-            // Draw UI - show startup progress during startup, then normal UI
+            // Draw UI
             terminal.draw(|f| {
-                if self.startup_progress_manager.is_visible() {
-                    // Show startup progress screen during startup
-                    use crate::startup::StartupProgressScreen;
-                    let progress_screen = StartupProgressScreen::new();
-                    let theme = crate::theme::Theme::default();
-                    progress_screen.render(f, f.size(), &self.startup_progress_manager, &theme);
-                } else {
-                    // After startup, use regular UI
-                    self.ui.render(f)
-                }
+                self.ui.render(f)
             })?;
 
             // Handle events
@@ -1267,6 +1305,7 @@ impl App {
                             self.handle_sync_account(&account_id).await?;
                         }
                         EventResult::FolderSelect(folder_path) => {
+                            eprintln!("🔍 DEBUG: Processing FolderSelect event for: '{}'", folder_path);
                             self.handle_folder_select(&folder_path).await?;
                         }
                         EventResult::FolderForceRefresh(folder_path) => {
@@ -1308,6 +1347,11 @@ impl App {
                         EventResult::ContactQuickActions(email) => {
                             self.handle_contact_quick_actions(&email).await?;
                         }
+                        EventResult::RetryInitialization => {
+                            // Reset initialization flag and retry
+                            self.initialization_complete = false;
+                            self.ui.show_toast_info("Retrying initialization in background...");
+                        }
                     }
 
                     // Check for quit command
@@ -1343,8 +1387,7 @@ impl App {
 
     /// Initialize SMTP service and contacts manager
     pub async fn initialize_services(&mut self) -> Result<()> {
-        // Start services initialization phase
-        self.startup_progress_manager.start_phase("Services").map_err(|e| anyhow::anyhow!("Progress manager error: {}", e))?;
+        tracing::info!("🔄 Initializing background services...");
         
         // Perform services initialization with error handling
         let result: Result<()> = async {
@@ -1465,16 +1508,7 @@ impl App {
         }.await;
 
         // Report success or failure to progress manager
-        match result {
-            Ok(()) => {
-                self.startup_progress_manager.complete_phase("Services").map_err(|e| anyhow::anyhow!("Progress manager error: {}", e))?;
-                Ok(())
-            }
-            Err(e) => {
-                self.startup_progress_manager.fail_phase("Services", e.to_string()).map_err(|pe| anyhow::anyhow!("Progress manager error: {}", pe))?;
-                Err(e)
-            }
-        }
+        result
     }
 
     /// Handle compose actions (send, save draft, cancel)
@@ -2913,20 +2947,29 @@ impl App {
     /// Handle folder selection event - load cached messages immediately, then refresh in background
     /// This method provides instant feedback by loading cached messages first, then updates in background
     async fn handle_folder_select(&mut self, folder_path: &str) -> Result<()> {
+        eprintln!("🔍 DEBUG: handle_folder_select called with folder_path: '{}'", folder_path);
+        
         // Get the current account ID and clone it to avoid borrowing issues
         let current_account_id = match self.ui.get_current_account_id() {
-            Some(id) => id.clone(),
+            Some(id) => {
+                eprintln!("🔍 DEBUG: Current account ID: '{}'", id);
+                id.clone()
+            },
             None => {
+                eprintln!("❌ DEBUG: No current account selected for folder selection");
                 tracing::warn!("No current account selected for folder selection");
                 return Ok(());
             }
         };
 
         tracing::info!(
-            "Loading folder: {} for account: {} (instant load from cache)",
+            "Loading folder: '{}' for account: '{}' (instant load from cache)",
             folder_path,
             current_account_id
         );
+        
+        // Debug: Log the exact values being passed to database query
+        tracing::info!("DEBUG: Calling ui.load_messages with account_id='{}', folder_name='{}'", current_account_id, folder_path);
 
         // STEP 1: Load messages from database immediately (non-blocking UI)
         // This provides instant feedback to the user

@@ -1692,8 +1692,8 @@ This is a sample email showcasing the modern email display format."
     ) -> Result<(), Box<dyn std::error::Error>> {
         self.current_message_id = Some(message.id);
 
-        // Convert StoredMessage to EmailContent
-        let email_content = self.convert_stored_message_to_email_content(message);
+        // Convert StoredMessage to EmailContent with on-demand body fetching
+        let email_content = self.convert_stored_message_to_email_content(message).await;
 
         // Check if we have HTML content and load images
         if email_content.content_type == ContentType::Html && !email_content.body.is_empty() {
@@ -1772,8 +1772,8 @@ This is a sample email showcasing the modern email display format."
         }
     }
 
-    /// Convert a StoredMessage to EmailContent for display
-    fn convert_stored_message_to_email_content(&self, message: &StoredMessage) -> EmailContent {
+    /// Convert a StoredMessage to EmailContent for display with on-demand IMAP body fetching
+    async fn convert_stored_message_to_email_content(&self, message: &StoredMessage) -> EmailContent {
         let headers = EmailHeader {
             from: format!(
                 "{} <{}>",
@@ -1813,8 +1813,22 @@ This is a sample email showcasing the modern email display format."
                     (text_body.clone(), ContentType::PlainText)
                 }
             } else {
-                tracing::debug!("Content Preview: Only empty HTML body available");
-                ("No content available".to_string(), ContentType::PlainText)
+                tracing::debug!("Content Preview: Only empty HTML body available, attempting IMAP fetch");
+                // Try to fetch body from IMAP if available
+                match self.fetch_message_body_from_imap(message).await {
+                    Ok(Some((fetched_body, content_type))) => {
+                        tracing::info!("Content Preview: Successfully fetched body from IMAP (length: {}, type: {:?})", fetched_body.len(), content_type);
+                        (fetched_body, content_type)
+                    }
+                    Ok(None) => {
+                        tracing::warn!("Content Preview: IMAP fetch returned no content");
+                        ("No content available".to_string(), ContentType::PlainText)
+                    }
+                    Err(e) => {
+                        tracing::error!("Content Preview: Failed to fetch from IMAP: {}", e);
+                        ("No content available (IMAP fetch failed)".to_string(), ContentType::PlainText)
+                    }
+                }
             }
         } else if let Some(ref text_body) = message.body_text {
             // Use pre-cleaned text body and check if it contains HTML content
@@ -1832,8 +1846,22 @@ This is a sample email showcasing the modern email display format."
                 (text_body.clone(), ContentType::PlainText)
             }
         } else {
-            tracing::debug!("Content Preview: No content available");
-            ("No content available".to_string(), ContentType::PlainText)
+            tracing::debug!("Content Preview: No body content available, attempting IMAP fetch");
+            // Try to fetch body from IMAP if available
+            match self.fetch_message_body_from_imap(message).await {
+                Ok(Some((fetched_body, content_type))) => {
+                    tracing::info!("Content Preview: Successfully fetched body from IMAP (length: {}, type: {:?})", fetched_body.len(), content_type);
+                    (fetched_body, content_type)
+                }
+                Ok(None) => {
+                    tracing::warn!("Content Preview: IMAP fetch returned no content");
+                    ("No content available".to_string(), ContentType::PlainText)
+                }
+                Err(e) => {
+                    tracing::error!("Content Preview: Failed to fetch from IMAP: {}", e);
+                    ("No content available (IMAP fetch failed)".to_string(), ContentType::PlainText)
+                }
+            }
         };
 
         // Parse URLs from the body
@@ -2915,6 +2943,217 @@ This is a sample email showcasing the modern email display format."
         }
         
         filtered_lines
+    }
+
+    /// Fetch message body from IMAP when content is missing from database
+    async fn fetch_message_body_from_imap(
+        &self,
+        message: &StoredMessage,
+    ) -> Result<Option<(String, ContentType)>, Box<dyn std::error::Error + Send + Sync>> {
+        // Check if we have IMAP manager available
+        let imap_manager = match &self.imap_manager {
+            Some(manager) => manager,
+            None => {
+                tracing::warn!("IMAP manager not available for on-demand body fetching");
+                return Ok(None);
+            }
+        };
+
+        // Check if we have required message information
+        if message.imap_uid == 0 {
+            tracing::warn!("Cannot fetch body: message has no valid IMAP UID");
+            return Ok(None);
+        }
+
+        tracing::info!(
+            "Fetching message body from IMAP: account={}, folder={}, uid={}",
+            message.account_id,
+            message.folder_name,
+            message.imap_uid
+        );
+
+        // Get IMAP client for the account
+        let imap_client_arc = match imap_manager.get_client(&message.account_id).await {
+            Ok(client) => client,
+            Err(e) => {
+                tracing::error!("Failed to get IMAP client for account {}: {}", message.account_id, e);
+                return Err(format!("IMAP client unavailable: {}", e).into());
+            }
+        };
+
+        // Lock the client and perform IMAP operations
+        let fetched_messages = {
+            let mut imap_client = imap_client_arc.lock().await;
+
+            // Select the folder
+            if let Err(e) = imap_client.select_folder(&message.folder_name).await {
+                tracing::error!("Failed to select folder {}: {}", message.folder_name, e);
+                return Err(format!("Failed to select folder: {}", e).into());
+            }
+
+            // Fetch the message body using UID
+            let uid_set = message.imap_uid.to_string();
+            let fetch_items = &["BODY[]"]; // Fetch the entire message body
+
+            match imap_client.uid_fetch_messages(&uid_set, fetch_items).await {
+                Ok(messages) => messages,
+                Err(e) => {
+                    tracing::error!("Failed to fetch message body: {}", e);
+                    return Err(format!("IMAP fetch failed: {}", e).into());
+                }
+            }
+        };
+
+        // Extract body from the first (and should be only) message
+        if let Some(imap_message) = fetched_messages.first() {
+            if let Some(ref body) = imap_message.body {
+                tracing::info!("Successfully fetched message body from IMAP (length: {})", body.len());
+                
+                // Parse the raw email body to extract HTML/text content
+                let (clean_body, content_type) = self.parse_email_body(body)?;
+                
+                // Update the database with the fetched content
+                self.update_message_body_in_database(message, &clean_body, &content_type).await?;
+                
+                return Ok(Some((clean_body, content_type)));
+            }
+        }
+
+        tracing::warn!("No body content found in IMAP response");
+        Ok(None)
+    }
+
+    /// Parse raw email body to extract clean HTML/text content
+    fn parse_email_body(&self, raw_body: &str) -> Result<(String, ContentType), Box<dyn std::error::Error + Send + Sync>> {
+        // Use the existing email parsing logic to extract HTML/text from raw email
+        // This is a simplified implementation - in a real system you'd use a proper MIME parser
+        
+        // Look for HTML content first
+        if let Some(html_start) = raw_body.find("Content-Type: text/html") {
+            if let Some(html_content) = self.extract_html_from_raw_body(&raw_body[html_start..]) {
+                return Ok((html_content, ContentType::Html));
+            }
+        }
+        
+        // Look for plain text content
+        if let Some(text_start) = raw_body.find("Content-Type: text/plain") {
+            if let Some(text_content) = self.extract_text_from_raw_body(&raw_body[text_start..]) {
+                return Ok((text_content, ContentType::PlainText));
+            }
+        }
+        
+        // Fallback: try to extract any readable content from the body
+        let clean_content = self.extract_fallback_content(raw_body);
+        Ok((clean_content, ContentType::PlainText))
+    }
+
+    /// Extract HTML content from raw email body
+    fn extract_html_from_raw_body(&self, raw_section: &str) -> Option<String> {
+        // Look for the start of the HTML content (after headers)
+        let lines: Vec<&str> = raw_section.lines().collect();
+        let mut content_start = None;
+        
+        for (i, line) in lines.iter().enumerate() {
+            if line.trim().is_empty() {
+                // Empty line indicates end of headers, content starts next
+                content_start = Some(i + 1);
+                break;
+            }
+        }
+        
+        if let Some(start) = content_start {
+            let html_content: String = lines[start..].join("\n");
+            if !html_content.trim().is_empty() {
+                return Some(html_content);
+            }
+        }
+        
+        None
+    }
+
+    /// Extract plain text content from raw email body
+    fn extract_text_from_raw_body(&self, raw_section: &str) -> Option<String> {
+        // Similar to HTML extraction but for plain text
+        let lines: Vec<&str> = raw_section.lines().collect();
+        let mut content_start = None;
+        
+        for (i, line) in lines.iter().enumerate() {
+            if line.trim().is_empty() {
+                content_start = Some(i + 1);
+                break;
+            }
+        }
+        
+        if let Some(start) = content_start {
+            let text_content: String = lines[start..].join("\n");
+            if !text_content.trim().is_empty() {
+                return Some(text_content);
+            }
+        }
+        
+        None
+    }
+
+    /// Extract fallback content when MIME parsing fails
+    fn extract_fallback_content(&self, raw_body: &str) -> String {
+        // Remove obvious email headers and technical content
+        let lines: Vec<&str> = raw_body.lines().collect();
+        let mut content_lines = Vec::new();
+        let mut in_headers = true;
+        
+        for line in lines {
+            if in_headers {
+                // Skip headers until we find an empty line
+                if line.trim().is_empty() {
+                    in_headers = false;
+                }
+                continue;
+            }
+            
+            // Skip technical MIME boundaries and encoding lines
+            if line.starts_with("--") || 
+               line.starts_with("Content-") ||
+               line.contains("boundary=") ||
+               line.contains("charset=") {
+                continue;
+            }
+            
+            content_lines.push(line);
+        }
+        
+        content_lines.join("\n").trim().to_string()
+    }
+
+    /// Update message body in database after fetching from IMAP
+    async fn update_message_body_in_database(
+        &self,
+        message: &StoredMessage,
+        body_content: &str,
+        content_type: &ContentType,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        if let Some(database) = &self.database {
+            tracing::info!("Updating message body in database for message ID: {}", message.id);
+            
+            // Update the database with the fetched content
+            match content_type {
+                ContentType::Html => {
+                    database.update_message_body(message.id, None, Some(body_content.to_string())).await?;
+                }
+                ContentType::PlainText => {
+                    database.update_message_body(message.id, Some(body_content.to_string()), None).await?;
+                }
+                _ => {
+                    // For other types, store as plain text
+                    database.update_message_body(message.id, Some(body_content.to_string()), None).await?;
+                }
+            }
+            
+            tracing::info!("Successfully updated message body in database");
+        } else {
+            tracing::warn!("Database not available for updating message body");
+        }
+        
+        Ok(())
     }
 }
 

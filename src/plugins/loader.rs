@@ -134,12 +134,9 @@ impl CompiledPluginStrategy {
     }
 
     /// Get built-in plugin creators (for demonstration)
-    fn get_builtin_plugin_creator(&self, name: &str) -> Option<CreatePluginFn> {
-        match name {
-            "example_email_plugin" => Some(|| Box::new(crate::plugins::examples::ExampleEmailPlugin::new())),
-            "example_ui_plugin" => Some(|| Box::new(crate::plugins::examples::ExampleUIPlugin::new())),
-            _ => None,
-        }
+    fn get_builtin_plugin_creator(&self, _name: &str) -> Option<CreatePluginFn> {
+        // Note: Example plugins were removed during code cleanup
+        None
     }
 }
 
