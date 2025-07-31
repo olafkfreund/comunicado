@@ -1,3 +1,4 @@
+use chrono::Local;
 use comunicado::theme::Theme;
 use comunicado::ui::status_bar::{
     CalendarStatusSegment, EmailStatusSegment, NavigationHintsSegment, SeparatorStyle, StatusBar,
@@ -57,6 +58,8 @@ fn test_calendar_status_segment() {
     let segment = CalendarStatusSegment {
         next_event: Some("Team Meeting".to_string()),
         events_today: 3,
+        next_event_time: Some(chrono::Local::now()),
+        urgent_events: 0,
     };
 
     assert_eq!(segment.content(), "Cal: Next Team Meeting (3 today)");
@@ -69,6 +72,8 @@ fn test_calendar_status_segment_no_next_event() {
     let segment = CalendarStatusSegment {
         next_event: None,
         events_today: 2,
+        next_event_time: None,
+        urgent_events: 0,
     };
 
     assert_eq!(segment.content(), "Cal: 2 events today");
@@ -79,6 +84,8 @@ fn test_calendar_status_segment_no_events() {
     let segment = CalendarStatusSegment {
         next_event: None,
         events_today: 0,
+        next_event_time: None,
+        urgent_events: 0,
     };
 
     assert_eq!(segment.content(), "Cal: No events");

@@ -818,7 +818,7 @@ mod tests {
     fn create_test_storage() -> (SecureStorage, TempDir) {
         let temp_dir = TempDir::new().unwrap();
 
-        let mut storage = SecureStorage {
+        let storage = SecureStorage {
             app_name: "comunicado-test".to_string(),
             config_dir: temp_dir.path().to_path_buf(),
         };

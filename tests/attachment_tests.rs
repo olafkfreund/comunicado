@@ -9,8 +9,6 @@
 
 use comunicado::email::{AttachmentInfo, AttachmentType, AttachmentViewer, StoredAttachment};
 use comunicado::mime::decode_mime_header;
-use std::collections::HashMap;
-use tokio_test;
 
 /// Test data representing attachments from various email providers
 struct TestAttachment {

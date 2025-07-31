@@ -12,7 +12,7 @@
 //!    cargo run --example token_refresh_test
 
 use anyhow::Result;
-use comunicado::oauth2::{SecureStorage, TokenDiagnosis, TokenManager};
+use comunicado::oauth2::{SecureStorage, TokenManager};
 use std::sync::Arc;
 
 #[tokio::main]

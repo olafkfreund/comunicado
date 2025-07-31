@@ -410,7 +410,7 @@ mod tests {
 
     #[test]
     fn test_render_with_invisible_manager() {
-        let mut backend = TestBackend::new(80, 24);
+        let backend = TestBackend::new(80, 24);
         let mut terminal = Terminal::new(backend).unwrap();
         let screen = StartupProgressScreen::new();
         let mut manager = StartupProgressManager::new();
@@ -431,7 +431,7 @@ mod tests {
 
     #[test]
     fn test_render_with_visible_manager() {
-        let mut backend = TestBackend::new(100, 30);
+        let backend = TestBackend::new(100, 30);
         let mut terminal = Terminal::new(backend).unwrap();
         let screen = StartupProgressScreen::new();
         let mut manager = StartupProgressManager::new();
@@ -459,7 +459,7 @@ mod tests {
 
     #[test]
     fn test_render_with_errors() {
-        let mut backend = TestBackend::new(100, 30);
+        let backend = TestBackend::new(100, 30);
         let mut terminal = Terminal::new(backend).unwrap();
         let screen = StartupProgressScreen::new();
         let mut manager = StartupProgressManager::new();
@@ -484,7 +484,7 @@ mod tests {
 
     #[test]
     fn test_render_with_completion() {
-        let mut backend = TestBackend::new(100, 30);
+        let backend = TestBackend::new(100, 30);
         let mut terminal = Terminal::new(backend).unwrap();
         let screen = StartupProgressScreen::new();
         let mut manager = StartupProgressManager::new();
@@ -517,7 +517,7 @@ mod tests {
     
     #[test]
     fn test_render_with_near_completion() {
-        let mut backend = TestBackend::new(100, 30);
+        let backend = TestBackend::new(100, 30);
         let mut terminal = Terminal::new(backend).unwrap();
         let screen = StartupProgressScreen::new();
         let mut manager = StartupProgressManager::new();

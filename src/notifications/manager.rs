@@ -418,7 +418,7 @@ impl Default for UnifiedNotificationManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::calendar::CalendarNotification;
+    
     use crate::email::EmailNotification;
     use chrono::Utc;
     use uuid::Uuid;

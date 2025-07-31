@@ -542,7 +542,7 @@ impl Clone for CalendarSyncEngine {
 mod tests {
     use super::*;
     use crate::calendar::{database::CalendarDatabase, manager::CalendarManager};
-    use crate::oauth2::token::{TokenManager, TokenStats};
+    use crate::oauth2::token::TokenManager;
 
     #[tokio::test]
     async fn test_sync_engine_creation() {

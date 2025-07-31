@@ -6,10 +6,10 @@ use crate::email::{
 use crate::theme::Theme;
 use chrono::{DateTime, Utc};
 use ratatui::{
-    layout::Rect,
+    layout::{Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, List, ListItem, ListState},
+    widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
     Frame,
 };
 use std::sync::Arc;
@@ -174,62 +174,109 @@ impl MessageList {
     fn initialize_sample_messages(&mut self) {
         self.messages = vec![
             MessageItem::new(
-                "Welcome to Comunicado!".to_string(),
-                "Comunicado Team".to_string(),
-                "Today 10:30".to_string(),
-            )
-            .unread()
-            .important(),
-            MessageItem::new(
-                "Project Update: Q1 Planning".to_string(),
-                "Alice Johnson".to_string(),
-                "Today 09:15".to_string(),
-            )
-            .with_attachments(),
-            MessageItem::new(
-                "Re: Meeting Notes from Yesterday".to_string(),
-                "Bob Smith".to_string(),
-                "Yesterday 16:45".to_string(),
-            ),
-            MessageItem::new(
-                "Monthly Newsletter - Tech Updates".to_string(),
-                "TechNews Daily".to_string(),
-                "Yesterday 14:20".to_string(),
+                "Security alert".to_string(),
+                "Google".to_string(),
+                "11:08".to_string(),
             )
             .unread(),
             MessageItem::new(
-                "Invitation: Team Lunch Tomorrow".to_string(),
-                "Carol Davis".to_string(),
-                "Mon 11:30".to_string(),
-            )
-            .important(),
-            MessageItem::new(
-                "Security Alert: Password Change Required".to_string(),
-                "IT Security".to_string(),
-                "Mon 09:00".to_string(),
-            )
-            .unread()
-            .important(),
-            MessageItem::new(
-                "Vacation Photos from Hawaii".to_string(),
-                "family@example.com".to_string(),
-                "Sun 18:22".to_string(),
-            )
-            .with_attachments(),
-            MessageItem::new(
-                "Re: Budget Proposal Review".to_string(),
-                "David Wilson".to_string(),
-                "Fri 15:30".to_string(),
+                "On-demand webinar: Introduction to...".to_string(),
+                "Red Hat Partner Program".to_string(),
+                "11:03".to_string(),
             ),
             MessageItem::new(
-                "Weekend Plans - Anyone up for hiking?".to_string(),
-                "Adventure Club".to_string(),
-                "Thu 20:15".to_string(),
+                "Security alert".to_string(),
+                "Google".to_string(),
+                "10:03".to_string(),
+            )
+            .unread(),
+            MessageItem::new(
+                "There was an error with a recent...".to_string(),
+                "Steam Support".to_string(), 
+                "06:59".to_string(),
             ),
             MessageItem::new(
-                "Reminder: Dentist Appointment Tomorrow".to_string(),
-                "Dr. Smith's Office".to_string(),
-                "Wed 12:00".to_string(),
+                "BrodieOnGames just went live on...".to_string(),
+                "Twitch".to_string(),
+                "01:31".to_string(),
+            ),
+            MessageItem::new(
+                "Updates from David, Joachim, an...".to_string(),
+                "Goodreads".to_string(),
+                "01:06".to_string(),
+            ),
+            MessageItem::new(
+                "Re: [olafkfreund/comunicado] M...".to_string(),
+                "claude[bot]".to_string(),
+                "30/07/2025, 11:26".to_string(),
+            )
+            .unread(),
+            MessageItem::new(
+                "Tune Into the Battlefield 6 Multip...".to_string(),
+                "BATTLEFIELD".to_string(),
+                "30/07/2025, 20:38".to_string(),
+            ),
+            MessageItem::new(  
+                "Exclusive referral code: just for...".to_string(),
+                "Pixel Superfans".to_string(),
+                "30/07/2025, 17:16".to_string(),
+            ),
+            MessageItem::new(
+                "Did you know you can 3D prin...".to_string(),
+                "XDA".to_string(),
+                "30/07/2025, 14:30".to_string(),
+            )
+            .unread(),
+            MessageItem::new(
+                "[Ending Tomorrow] Take the 10 M...".to_string(),
+                "GeeksforGeeks".to_string(),
+                "30/07/2025, 12:06".to_string(),
+            ),
+            MessageItem::new(
+                "Re: [olafkfreund/comunicado] Ad...".to_string(),
+                "claude[bot]".to_string(),
+                "30/07/2025, 11:23".to_string(),
+            )
+            .unread(),
+            MessageItem::new(
+                "Re: [olafkfreund/comunicado] ...".to_string(),
+                "Copilot".to_string(),
+                "30/07/2025, 11:23".to_string(),
+            ),
+            MessageItem::new(
+                "Re: [olafkfreund/comunicado] ...".to_string(),
+                "claude[bot]".to_string(),
+                "30/07/2025, 11:24".to_string(),
+            ),
+            MessageItem::new(
+                "Thank you for your Steam purch...".to_string(),
+                "Steam Support".to_string(),
+                "30/07/2025, 11:16".to_string(),
+            ),
+            MessageItem::new(
+                "Award-winning things to do in Eu...".to_string(),
+                "Tripadvisor".to_string(),
+                "30/07/2025, 10:23".to_string(),
+            ),
+            MessageItem::new(
+                "Your ModelStudioDeployment Cl...".to_string(),
+                "Alibaba Cloud".to_string(),
+                "30/07/2025, 09:24".to_string(),
+            ),
+            MessageItem::new(
+                "Your ModelStudioInference Clou...".to_string(),
+                "Alibaba Cloud".to_string(),
+                "30/07/2025, 09:24".to_string(),
+            ),
+            MessageItem::new(
+                "Welcome to Alibaba Cloud Servic...".to_string(),
+                "Alibaba Cloud".to_string(),
+                "30/07/2025, 09:12".to_string(),
+            ),
+            MessageItem::new(
+                "[GitHub] A third-party OAuth app...".to_string(),
+                "GitHub".to_string(),
+                "30/07/2025, 09:11".to_string(),
             )
             .unread(),
         ];
@@ -240,9 +287,23 @@ impl MessageList {
         frame: &mut Frame,
         area: Rect,
         block: Block,
-        _is_focused: bool,
+        is_focused: bool,
         theme: &Theme,
     ) {
+        // Split area into header and message list
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(3), // Header row
+                Constraint::Min(0),    // Message list
+            ])
+            .split(area);
+        
+        let header_area = chunks[0];
+        let list_area = chunks[1];
+
+        // Render table header
+        self.render_table_header(frame, header_area, theme);
         tracing::debug!("MessageList::render called with {} messages, current_account: {:?}, current_folder: {:?}", 
                        self.messages.len(), self.current_account, self.current_folder);
 
@@ -253,111 +314,27 @@ impl MessageList {
             &self.messages
         };
 
+        // Calculate column widths based on available area
+        let available_width = list_area.width.saturating_sub(4) as usize; // Account for borders
+        let (subject_width, correspondents_width, date_width, between_width) = 
+            self.calculate_column_widths(available_width);
+
         let items: Vec<ListItem> = messages_to_display
             .iter()
             .enumerate()
             .map(|(i, message)| {
                 let is_selected = self.state.selected() == Some(i);
-
-                // Style based on message state
-                let subject_style = if is_selected {
-                    theme
-                        .styles
-                        .get_selected_style("message_list", &theme.colors)
-                } else if !message.is_read {
-                    Style::default()
-                        .fg(theme.colors.message_list.subject_unread)
-                        .add_modifier(Modifier::BOLD)
-                } else {
-                    Style::default().fg(theme.colors.message_list.subject_read)
-                };
-
-                let sender_style = if is_selected {
-                    theme
-                        .styles
-                        .get_selected_style("message_list", &theme.colors)
-                } else {
-                    Style::default().fg(theme.colors.message_list.sender)
-                };
-
-                let date_style = if is_selected {
-                    theme
-                        .styles
-                        .get_selected_style("message_list", &theme.colors)
-                } else {
-                    Style::default().fg(theme.colors.message_list.date)
-                };
-
-                // Create threading visualization
-                let threading_prefix = self.get_threading_prefix(message);
-
-                // Create indicators (professional, text-based)
-                let mut indicators = String::new();
-                if message.is_important {
-                    indicators.push('!');
-                }
-                if message.has_attachments {
-                    indicators.push('@');
-                }
-                if !message.is_read {
-                    indicators.push('•');
-                }
-
-                // Add thread count for root messages
-                if message.is_thread_root && message.message_count > 1 {
-                    indicators.push_str(&format!("({})", message.message_count));
-                }
-
-                if !indicators.is_empty() {
-                    indicators.push(' ');
-                }
-
-                // Format the message line with threading
-                let available_width = match self.view_mode {
-                    ViewMode::Threaded => 35_usize.saturating_sub(message.thread_depth * 2),
-                    ViewMode::List => 35,
-                };
-
-                let subject_truncated = if message.subject.len() > available_width {
-                    format!(
-                        "{}...",
-                        &message.subject[..available_width.saturating_sub(3)]
-                    )
-                } else {
-                    message.subject.clone()
-                };
-
-                // Format sender with contact recognition
-                let (sender_display, sender_indicators) = self.format_sender_with_contact_info(message);
-                let sender_truncated = if sender_display.len() > 18 {
-                    format!("{}...", &sender_display[..15])
-                } else {
-                    sender_display
-                };
-
-                let line = match self.view_mode {
-                    ViewMode::List => Line::from(vec![
-                        Span::raw(indicators),
-                        Span::styled(subject_truncated, subject_style),
-                        Span::raw("\n  "),
-                        Span::raw(sender_indicators),
-                        Span::styled(format!("From: {}", sender_truncated), sender_style),
-                        Span::raw(" • "),
-                        Span::styled(message.date.clone(), date_style),
-                    ]),
-                    ViewMode::Threaded => Line::from(vec![
-                        Span::raw(threading_prefix),
-                        Span::raw(indicators),
-                        Span::styled(subject_truncated, subject_style),
-                        Span::raw("\n  "),
-                        Span::raw(sender_indicators),
-                        Span::styled(format!("From: {}", sender_truncated), sender_style),
-                        Span::raw(" • "),
-                        Span::styled(message.date.clone(), date_style),
-                    ]),
-                };
-
-                ListItem::new(line)
+                
+                self.render_message_row(
+                    message, 
+                    is_selected, 
+                    is_focused, 
+                    theme, 
+                    subject_width, 
+                    correspondents_width, 
+                    date_width, 
+                    between_width
+                )
             })
             .collect();
 
@@ -365,7 +342,252 @@ impl MessageList {
             .block(block)
             .highlight_style(Style::default().add_modifier(Modifier::BOLD));
 
-        frame.render_stateful_widget(list, area, &mut self.state.clone());
+        frame.render_stateful_widget(list, list_area, &mut self.state.clone());
+    }
+    
+    /// Render the table header row
+    fn render_table_header(&self, frame: &mut Frame, area: Rect, theme: &Theme) {
+        let available_width = area.width.saturating_sub(4) as usize;
+        let (subject_width, correspondents_width, date_width, _between_width) = 
+            self.calculate_column_widths(available_width);
+        
+        // Create header text with proper spacing
+        let mut header_spans = vec![
+            Span::raw(" "), // Small left padding
+            Span::styled(
+                "Subject".to_string(),
+                Style::default()
+                    .fg(theme.colors.palette.text_secondary)
+                    .add_modifier(Modifier::BOLD)
+            ),
+        ];
+        
+        // Add padding to correspondents column
+        let subject_len = "Subject".len();
+        if subject_len < subject_width {
+            header_spans.push(Span::raw(" ".repeat(subject_width - subject_len)));
+        }
+        
+        // Correspondents column
+        header_spans.push(Span::raw(" "));
+        header_spans.push(Span::styled(
+            "Correspondents".to_string(),
+            Style::default()
+                .fg(theme.colors.palette.text_secondary)
+                .add_modifier(Modifier::BOLD)
+        ));
+        
+        // Add padding to date column
+        let correspondents_len = "Correspondents".len();
+        if correspondents_len < correspondents_width {
+            header_spans.push(Span::raw(" ".repeat(correspondents_width - correspondents_len)));
+        }
+        
+        // Date column
+        header_spans.push(Span::raw(" "));
+        header_spans.push(Span::styled(
+            "Date".to_string(),
+            Style::default()
+                .fg(theme.colors.palette.text_secondary)
+                .add_modifier(Modifier::BOLD)
+        ));
+        
+        // Add padding to between column
+        let date_len = "Date".len();
+        if date_len < date_width {
+            header_spans.push(Span::raw(" ".repeat(date_width - date_len)));
+        }
+        
+        // Between column
+        header_spans.push(Span::raw(" "));
+        header_spans.push(Span::styled(
+            "Between".to_string(),
+            Style::default()
+                .fg(theme.colors.palette.text_secondary)
+                .add_modifier(Modifier::BOLD)
+        ));
+        
+        let header_paragraph = Paragraph::new(Line::from(header_spans))
+            .block(
+                Block::default()
+                    .borders(Borders::BOTTOM)
+                    .border_style(Style::default().fg(theme.colors.palette.border))
+            )
+            .style(Style::default().bg(theme.colors.palette.surface));
+        
+        frame.render_widget(header_paragraph, area);
+    }
+    
+    /// Calculate optimal column widths based on available space
+    fn calculate_column_widths(&self, available_width: usize) -> (usize, usize, usize, usize) {
+        // Based on your screenshot proportions:
+        // Subject: ~40%, Correspondents: ~30%, Date: ~15%, Between: ~15%
+        let subject_width = (available_width * 40) / 100;
+        let correspondents_width = (available_width * 30) / 100;
+        let date_width = (available_width * 15) / 100;
+        let between_width = available_width.saturating_sub(subject_width + correspondents_width + date_width);
+        
+        (subject_width.max(20), correspondents_width.max(15), date_width.max(8), between_width.max(10))
+    }
+    
+    /// Render a single message row in table format
+    fn render_message_row(
+        &self,
+        message: &MessageItem,
+        is_selected: bool,
+        is_focused: bool,
+        theme: &Theme,
+        subject_width: usize,
+        correspondents_width: usize,
+        date_width: usize,
+        between_width: usize,
+    ) -> ListItem {
+        // Threading visualization
+        let threading_prefix = self.get_threading_prefix(message);
+        
+        // Status indicators (unread dot, importance, attachments)
+        let mut status_icons = String::new();
+        if !message.is_read {
+            status_icons.push('●'); // Unread indicator
+        } else {
+            status_icons.push(' '); // Placeholder for alignment
+        }
+        if message.is_important {
+            status_icons.push('🔴'); // Important flag
+        }
+        if message.has_attachments {
+            status_icons.push('📎'); // Attachment icon
+        }
+        
+        // Format subject with threading and truncation
+        let subject_available = subject_width.saturating_sub(threading_prefix.len() + status_icons.len() + 2);
+        let subject_text = if message.subject.len() > subject_available {
+            format!("{}...", &message.subject[..subject_available.saturating_sub(3)])
+        } else {
+            message.subject.clone()
+        };
+        
+        // Format correspondents (sender with contact info)
+        let (sender_display, sender_indicators) = self.format_sender_with_contact_info(message);
+        let correspondents_text = if sender_display.len() > correspondents_width.saturating_sub(2) {
+            format!("{}...", &sender_display[..correspondents_width.saturating_sub(5)])
+        } else {
+            sender_display
+        };
+        
+        // Format date to fit column
+        let date_text = if message.date.len() > date_width {
+            if message.date.len() > 8 {
+                message.date[..8].to_string()
+            } else {
+                message.date.clone()
+            }
+        } else {
+            message.date.clone()
+        };
+        
+        // Create "Between" column (showing sender and current user)
+        let current_user = self.current_account.as_ref()
+            .and_then(|account| account.split('@').next())
+            .unwrap_or("Me");
+        let between_text = format!("{} and {}", 
+            if correspondents_text.len() > 10 {
+                &correspondents_text[..10]
+            } else {
+                &correspondents_text
+            }, 
+            current_user
+        );
+        let between_truncated = if between_text.len() > between_width {
+            format!("{}...", &between_text[..between_width.saturating_sub(3)])
+        } else {
+            between_text
+        };
+        
+        // Determine styles based on message state and selection
+        let base_style = if is_selected && is_focused {
+            Style::default()
+                .fg(theme.colors.palette.selection_text)
+                .bg(theme.colors.palette.selection)
+        } else if is_selected {
+            Style::default()
+                .fg(theme.colors.palette.accent)
+                .bg(theme.colors.palette.surface)
+        } else {
+            Style::default()
+        };
+        
+        let subject_style = if !message.is_read && !is_selected {
+            base_style
+                .fg(theme.colors.message_list.subject_unread)
+                .add_modifier(Modifier::BOLD)
+        } else if is_selected {
+            base_style
+        } else {
+            base_style.fg(theme.colors.message_list.subject_read)
+        };
+        
+        let correspondents_style = if is_selected {
+            base_style
+        } else {
+            base_style.fg(theme.colors.message_list.sender)
+        };
+        
+        let date_style = if is_selected {
+            base_style
+        } else {
+            base_style.fg(theme.colors.message_list.date)
+        };
+        
+        let between_style = if is_selected {
+            base_style
+        } else {
+            base_style.fg(theme.colors.palette.text_muted)
+        };
+        
+        // Build the line with proper spacing and alignment
+        let mut spans = vec![
+            // Status indicators and threading
+            Span::raw(threading_prefix.clone()),
+            Span::styled(status_icons.clone(), subject_style),
+            Span::raw(" "),
+            
+            // Subject column
+            Span::styled(subject_text, subject_style),
+        ];
+        
+        // Add padding to reach correspondents column
+        let current_len = threading_prefix.len() + status_icons.len() + 1 + message.subject.len().min(subject_available);
+        if current_len < subject_width {
+            spans.push(Span::raw(" ".repeat(subject_width - current_len)));
+        }
+        
+        // Correspondents column
+        spans.push(Span::raw(" "));
+        spans.push(Span::raw(sender_indicators.clone()));
+        spans.push(Span::styled(correspondents_text.clone(), correspondents_style));
+        
+        // Add padding to reach date column
+        let correspondents_len = sender_indicators.len() + correspondents_text.len();
+        if correspondents_len < correspondents_width {
+            spans.push(Span::raw(" ".repeat(correspondents_width - correspondents_len)));
+        }
+        
+        // Date column
+        spans.push(Span::raw(" "));
+        spans.push(Span::styled(date_text, date_style));
+        
+        // Add padding to reach between column
+        let date_len = message.date.len().min(date_width);
+        if date_len < date_width {
+            spans.push(Span::raw(" ".repeat(date_width - date_len)));
+        }
+        
+        // Between column
+        spans.push(Span::raw(" "));
+        spans.push(Span::styled(between_truncated, between_style));
+        
+        ListItem::new(Line::from(spans))
     }
 
     /// Handle up arrow key press - move selection up with wraparound

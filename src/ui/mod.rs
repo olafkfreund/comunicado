@@ -13,6 +13,7 @@ pub mod email_viewer;
 pub mod enhanced_message_list;
 pub mod folder_tree;
 pub mod graphics;
+pub mod help;
 pub mod integrated_layout;
 pub mod invitation_viewer;
 pub mod keyboard_shortcuts;
@@ -23,6 +24,8 @@ pub mod startup_progress;
 pub mod status_bar;
 pub mod sync_progress;
 pub mod time_picker;
+pub mod toast;
+pub mod typography;
 pub mod unified_sidebar;
 
 
@@ -48,6 +51,7 @@ use self::{
     context_shortcuts::ContextShortcutsPopup,
     draft_list::DraftListUI,
     folder_tree::FolderTree,
+    help::HelpOverlay,
     keyboard_shortcuts::KeyboardShortcutsUI,
     layout::AppLayout,
     message_list::MessageList,
@@ -56,6 +60,8 @@ use self::{
         SystemInfoSegment,
     },
     sync_progress::SyncProgressOverlay,
+    toast::ToastManager,
+    typography::{TypographySystem, InformationDensity},
 };
 
 // Re-export compose and draft types for external use
@@ -90,6 +96,9 @@ pub use graphics::{GraphicsProtocol, ImageRenderer, RenderConfig};
 pub use context_calendar::{CalendarAction as ContextCalendarAction, ContextAwareCalendar, CalendarDisplayMode, EmailCalendarContext};
 pub use integrated_layout::{IntegratedLayout, IntegratedLayoutManager, IntegratedViewMode, ContentType};
 pub use unified_sidebar::{UnifiedSidebar, SidebarAction, NavigationItem, QuickActionType};
+
+// Re-export help system types
+pub use help::{HelpContent, HelpSection, KeyBinding, KeyBindingCategory};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FocusedPane {
@@ -145,7 +154,13 @@ pub struct UI {
     context_calendar: ContextAwareCalendar,
     integrated_layout: IntegratedLayoutManager,
     unified_sidebar: UnifiedSidebar,
-    // Notification system
+    // Modern toast notification system
+    toast_manager: ToastManager,
+    // Typography and visual hierarchy system
+    typography: TypographySystem,
+    // Contextual help overlay system
+    help_overlay: HelpOverlay,
+    // Legacy notification system (to be phased out)
     notification_message: Option<String>,
     notification_expires_at: Option<tokio::time::Instant>,
     // Contacts popup
@@ -181,7 +196,13 @@ impl UI {
             context_calendar: ContextAwareCalendar::new(),
             integrated_layout: IntegratedLayoutManager::new(),
             unified_sidebar: UnifiedSidebar::new(),
-            // Initialize notification system
+            // Initialize modern toast notification system
+            toast_manager: ToastManager::new(),
+            // Initialize typography and visual hierarchy system
+            typography: TypographySystem::new(),
+            // Initialize contextual help overlay system
+            help_overlay: HelpOverlay::new(),
+            // Initialize legacy notification system (to be phased out)
             notification_message: None,
             notification_expires_at: None,
             // Initialize contacts popup
@@ -374,9 +395,19 @@ impl UI {
             }
         }
 
-        // Render context shortcuts popup on top of everything if visible
+        // Render toast notifications on top of everything
         let theme = self.theme_manager.current_theme();
+        if self.toast_manager.has_toasts() {
+            crate::ui::toast::ToastRenderer::render(frame, size, self.toast_manager.toasts(), theme);
+        }
+
+        // Render context shortcuts popup on top of everything if visible
         self.context_shortcuts_popup.render(frame, size, theme, &self.mode);
+
+        // Render help overlay on top of everything if visible
+        if self.help_overlay.is_visible() {
+            self.help_overlay.render(frame, size, theme, &self.typography);
+        }
     }
 
     /// Render context-aware email-calendar integrated layout
@@ -577,8 +608,8 @@ impl UI {
 
             frame.render_widget(notification_widget, area);
         } else {
-            // Normal status bar rendering
-            self.status_bar.render(frame, area, theme);
+            // Enhanced status bar rendering with typography
+            self.status_bar.render_with_typography(frame, area, theme, &self.typography);
         }
     }
 
@@ -2310,6 +2341,146 @@ impl UI {
                 self.show_notification(message, Duration::from_secs(3));
             }
         }
+    }
+
+    // ===== MODERN TOAST NOTIFICATION SYSTEM =====
+
+    /// Show an info toast notification
+    pub fn show_toast_info<S: Into<String>>(&mut self, message: S) {
+        self.toast_manager.info(message);
+    }
+
+    /// Show a success toast notification
+    pub fn show_toast_success<S: Into<String>>(&mut self, message: S) {
+        self.toast_manager.success(message);
+    }
+
+    /// Show a warning toast notification
+    pub fn show_toast_warning<S: Into<String>>(&mut self, message: S) {
+        self.toast_manager.warning(message);
+    }
+
+    /// Show an error toast notification
+    pub fn show_toast_error<S: Into<String>>(&mut self, message: S) {
+        self.toast_manager.error(message);
+    }
+
+    /// Show a custom toast notification with specific level and duration
+    pub fn show_custom_toast<S: Into<String>>(
+        &mut self, 
+        message: S, 
+        level: crate::tea::message::ToastLevel, 
+        duration: Duration
+    ) {
+        self.toast_manager.show_with_duration(message.into(), level, duration);
+    }
+
+    /// Show a persistent toast (longer duration)
+    pub fn show_persistent_toast<S: Into<String>>(
+        &mut self, 
+        message: S, 
+        level: crate::tea::message::ToastLevel
+    ) {
+        self.toast_manager.persistent(message, level);
+    }
+
+    /// Show a quick toast (shorter duration)
+    pub fn show_quick_toast<S: Into<String>>(
+        &mut self, 
+        message: S, 
+        level: crate::tea::message::ToastLevel
+    ) {
+        self.toast_manager.quick(message, level);
+    }
+
+    /// Update toast system (should be called every frame)
+    pub fn update_toasts(&mut self) {
+        self.toast_manager.update();
+    }
+
+    /// Remove a specific toast by ID
+    pub fn remove_toast(&mut self, toast_id: &str) {
+        self.toast_manager.remove_toast(toast_id);
+    }
+
+    /// Clear all active toasts
+    pub fn clear_toasts(&mut self) {
+        self.toast_manager.clear();
+    }
+
+    /// Check if there are any active toasts
+    pub fn has_active_toasts(&self) -> bool {
+        self.toast_manager.has_toasts()
+    }
+
+    /// Get access to the toast manager for advanced operations
+    pub fn toast_manager(&mut self) -> &mut ToastManager {
+        &mut self.toast_manager
+    }
+
+    // ===== TYPOGRAPHY AND VISUAL HIERARCHY SYSTEM =====
+
+    /// Get access to the typography system
+    pub fn typography(&self) -> &TypographySystem {
+        &self.typography
+    }
+
+    /// Get mutable access to the typography system
+    pub fn typography_mut(&mut self) -> &mut TypographySystem {
+        &mut self.typography
+    }
+
+    /// Set information density for the interface
+    pub fn set_information_density(&mut self, density: InformationDensity) {
+        self.typography = self.typography.clone().with_density(density);
+    }
+
+    /// Get current information density
+    pub fn information_density(&self) -> InformationDensity {
+        self.typography.density()
+    }
+
+    /// Cycle to next information density mode
+    pub fn cycle_information_density(&mut self) {
+        let next_density = match self.typography.density() {
+            InformationDensity::Compact => InformationDensity::Comfortable,
+            InformationDensity::Comfortable => InformationDensity::Relaxed,
+            InformationDensity::Relaxed => InformationDensity::Compact,
+        };
+        self.set_information_density(next_density);
+        
+        // Show toast to inform user of the change
+        let density_name = match next_density {
+            InformationDensity::Compact => "Compact",
+            InformationDensity::Comfortable => "Comfortable",
+            InformationDensity::Relaxed => "Relaxed",
+        };
+        self.show_toast_info(format!("Information density: {}", density_name));
+    }
+
+    /// Show contextual help overlay for current view mode
+    pub fn show_help(&mut self, view_mode: crate::tea::message::ViewMode) {
+        self.help_overlay.show(view_mode);
+        self.show_toast_info("Help overlay displayed. Press Ctrl+H or ? to close".to_string());
+    }
+
+    /// Hide contextual help overlay
+    pub fn hide_help(&mut self) {
+        self.help_overlay.hide();
+    }
+
+    /// Toggle contextual help overlay for current view mode
+    pub fn toggle_help(&mut self, view_mode: crate::tea::message::ViewMode) {
+        self.help_overlay.toggle(view_mode);
+        
+        if self.help_overlay.is_visible() {
+            self.show_toast_info("Help overlay displayed. Press Ctrl+H, ? or Esc to close".to_string());
+        }
+    }
+
+    /// Check if help overlay is currently visible
+    pub fn is_help_visible(&self) -> bool {
+        self.help_overlay.is_visible()
     }
 }
 

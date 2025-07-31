@@ -969,7 +969,7 @@ impl CalendarManager {
 mod tests {
     use super::*;
     use crate::calendar::database::CalendarDatabase;
-    use crate::oauth2::token::{TokenManager, TokenStats};
+    use crate::oauth2::token::TokenManager;
 
     #[tokio::test]
     async fn test_calendar_manager_creation() {

@@ -1,8 +1,7 @@
-use comunicado::imap::idle::{IdleNotification, IdleNotificationService, IdleResponseParser};
+use comunicado::imap::idle::{IdleNotification, IdleResponseParser};
 use comunicado::imap::{
     ImapAccountManager, ImapAuthMethod, ImapCapability, ImapClient, ImapConfig,
 };
-use std::sync::{Arc, Mutex};
 
 /// Test basic IDLE notification parsing
 #[tokio::test]
@@ -56,7 +55,7 @@ async fn test_idle_client_integration() {
         "password".to_string(),
     );
 
-    let mut client = ImapClient::new(config);
+    let client = ImapClient::new(config);
 
     // Test IDLE service initialization (methods need to be implemented)
     // For now, just test that client exists
@@ -73,7 +72,7 @@ async fn test_idle_callbacks() {
         "password".to_string(),
     );
 
-    let mut client = ImapClient::new(config);
+    let client = ImapClient::new(config);
 
     // For now, test basic client setup
     assert!(!client.capabilities().contains(&ImapCapability::Idle));
@@ -104,7 +103,7 @@ async fn test_idle_timeout_handling() {
 /// Integration test with account manager
 #[tokio::test]
 async fn test_idle_with_account_manager() {
-    use comunicado::oauth2::TokenManager;
+    
 
     let account_manager = ImapAccountManager::new().unwrap();
 
@@ -220,7 +219,7 @@ async fn example_idle_usage() {
         "password".to_string(),
     );
 
-    let mut client = ImapClient::new(config);
+    let client = ImapClient::new(config);
 
     // 1. Test client creation (IDLE service would be initialized in real usage)
     println!("IDLE client created");

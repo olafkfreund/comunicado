@@ -1,5 +1,4 @@
 use comunicado::ui::email_viewer::EmailViewer;
-use comunicado::ui::content_preview::{EmailContent, EmailHeader, ContentType};
 
 /// Comprehensive email rendering test suite
 /// Tests various email formats including HTML emails with images, tables, and complex layouts

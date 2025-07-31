@@ -1,4 +1,5 @@
 use crate::keyboard::{KeyboardAction, KeyboardManager};
+use crate::tea::message::ViewMode;
 use crate::ui::{ComposeAction, DraftAction, FocusedPane, UIMode, UI};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use chrono::Datelike;
@@ -65,6 +66,11 @@ impl EventHandler {
         key: KeyEvent,
         ui: &mut UI,
     ) -> EventResult {
+        // Handle global help overlay first (works in all modes)
+        if self.handle_help_keys(key, ui) {
+            return EventResult::Continue;
+        }
+
         // Handle compose mode separately (these use different input handling)
         if ui.mode() == &UIMode::Compose {
             if let Some(action) = ui.handle_compose_key(key.code).await {
@@ -141,6 +147,31 @@ impl EventHandler {
                 }
                 _ => {}
             }
+        }
+
+        false
+    }
+
+    /// Handle help overlay keyboard shortcuts (Ctrl+H and ? key)
+    fn handle_help_keys(&mut self, key: KeyEvent, ui: &mut UI) -> bool {
+        // Check for help toggle keys: Ctrl+H or ? (question mark)
+        let is_help_key = match key.code {
+            KeyCode::Char('h') if key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL) => true,
+            KeyCode::Char('?') => true,
+            KeyCode::Esc if ui.is_help_visible() => true, // Allow Esc to close help
+            _ => false,
+        };
+
+        if is_help_key {
+            // Determine current view mode based on UI mode
+            let current_view = match ui.mode() {
+                UIMode::Calendar => ViewMode::Calendar,
+                UIMode::ContactsPopup => ViewMode::Contacts,
+                _ => ViewMode::Email, // Default to Email for normal/compose/draft modes
+            };
+
+            ui.toggle_help(current_view);
+            return true;
         }
 
         false

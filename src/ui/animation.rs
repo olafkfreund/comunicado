@@ -635,7 +635,7 @@ impl AnimationManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::TempDir;
+    
 
     #[test]
     fn test_animation_format_detection() {

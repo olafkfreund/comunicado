@@ -243,11 +243,29 @@ impl FolderTree {
 
     fn initialize_sample_folders(&mut self) {
         self.folders = vec![
-            // Standard IMAP folders
+            // Account header - Gmail account
+            {
+                let mut gmail_account = FolderItem::new_with_type(
+                    "olaf@gmail.com".to_string(),
+                    "account:olaf@gmail.com".to_string(),
+                    0,
+                    FolderType::Custom("Account".to_string()),
+                )
+                .with_children(vec![
+                    "olaf@gmail.com/INBOX".to_string(),
+                    "olaf@gmail.com/Sent".to_string(),
+                    "olaf@gmail.com/Drafts".to_string(),
+                ])
+                .with_sync_status(SyncStatus::Synced);
+                gmail_account.is_expanded = true; // Start expanded
+                gmail_account
+            },
+            
+            // Gmail folders under account
             FolderItem::new_with_type(
                 "Inbox".to_string(),
-                "INBOX".to_string(),
-                0,
+                "olaf@gmail.com/INBOX".to_string(),
+                1,
                 FolderType::Inbox,
             )
             .with_unread_count(5)
@@ -255,16 +273,16 @@ impl FolderTree {
             .with_sync_status(SyncStatus::Synced),
             FolderItem::new_with_type(
                 "Sent".to_string(),
-                "INBOX/Sent".to_string(),
-                0,
+                "olaf@gmail.com/Sent".to_string(),
+                1,
                 FolderType::Sent,
             )
             .with_total_count(89)
             .with_sync_status(SyncStatus::Synced),
             FolderItem::new_with_type(
                 "Drafts".to_string(),
-                "INBOX/Drafts".to_string(),
-                0,
+                "olaf@gmail.com/Drafts".to_string(),
+                1,
                 FolderType::Drafts,
             )
             .with_unread_count(2)
@@ -272,73 +290,94 @@ impl FolderTree {
             .with_sync_status(SyncStatus::Syncing),
             FolderItem::new_with_type(
                 "Archive".to_string(),
-                "INBOX/Archive".to_string(),
-                0,
+                "olaf@gmail.com/Archive".to_string(),
+                1,
                 FolderType::Archive,
             )
             .with_total_count(1234)
             .with_sync_status(SyncStatus::Synced),
             FolderItem::new_with_type(
                 "Trash".to_string(),
-                "INBOX/Trash".to_string(),
-                0,
+                "olaf@gmail.com/Trash".to_string(),
+                1,
                 FolderType::Trash,
             )
             .with_total_count(23)
             .with_sync_status(SyncStatus::Synced),
             FolderItem::new_with_type(
                 "Spam".to_string(),
-                "INBOX/Spam".to_string(),
-                0,
+                "olaf@gmail.com/Spam".to_string(),
+                1,
                 FolderType::Spam,
             )
             .with_total_count(7)
             .with_sync_status(SyncStatus::Error),
-            // Custom folders with hierarchy
-            FolderItem::new("Work".to_string(), "INBOX/Work".to_string(), 0)
+            // Custom folders with hierarchy under Gmail account
+            FolderItem::new("Work".to_string(), "olaf@gmail.com/Work".to_string(), 1)
                 .with_children(vec![
-                    "INBOX/Work/Projects".to_string(),
-                    "INBOX/Work/Team".to_string(),
+                    "olaf@gmail.com/Work/Projects".to_string(),
+                    "olaf@gmail.com/Work/Team".to_string(),
                 ])
                 .with_unread_count(3)
                 .with_total_count(45)
                 .with_sync_status(SyncStatus::Synced),
-            FolderItem::new("Projects".to_string(), "INBOX/Work/Projects".to_string(), 1)
+            FolderItem::new("Projects".to_string(), "olaf@gmail.com/Work/Projects".to_string(), 2)
                 .with_unread_count(1)
                 .with_total_count(12)
                 .with_sync_status(SyncStatus::Synced),
-            FolderItem::new("Team".to_string(), "INBOX/Work/Team".to_string(), 1)
+            FolderItem::new("Team".to_string(), "olaf@gmail.com/Work/Team".to_string(), 2)
                 .with_total_count(33)
                 .with_sync_status(SyncStatus::Synced),
-            FolderItem::new("Personal".to_string(), "INBOX/Personal".to_string(), 0)
+            // Second account header - Outlook account
+            {
+                let mut outlook_account = FolderItem::new_with_type(
+                    "olaf@outlook.com".to_string(),
+                    "account:olaf@outlook.com".to_string(),
+                    0,
+                    FolderType::Custom("Account".to_string()),
+                )
                 .with_children(vec![
-                    "INBOX/Personal/Family".to_string(),
-                    "INBOX/Personal/Finance".to_string(),
+                    "olaf@outlook.com/INBOX".to_string(),
+                    "olaf@outlook.com/Sent".to_string(),
+                    "olaf@outlook.com/Drafts".to_string(),
                 ])
-                .with_unread_count(2)
-                .with_total_count(78)
-                .with_sync_status(SyncStatus::Synced),
-            FolderItem::new("Family".to_string(), "INBOX/Personal/Family".to_string(), 1)
-                .with_unread_count(1)
-                .with_total_count(34)
-                .with_sync_status(SyncStatus::Synced),
-            FolderItem::new(
-                "Finance".to_string(),
-                "INBOX/Personal/Finance".to_string(),
+                .with_sync_status(SyncStatus::Synced);
+                outlook_account.is_expanded = true; // Start expanded
+                outlook_account
+            },
+            
+            // Outlook folders under account
+            FolderItem::new_with_type(
+                "Inbox".to_string(),
+                "olaf@outlook.com/INBOX".to_string(),
                 1,
+                FolderType::Inbox,
+            )
+            .with_unread_count(2)
+            .with_total_count(78)
+            .with_sync_status(SyncStatus::Synced),
+            FolderItem::new_with_type(
+                "Sent".to_string(),
+                "olaf@outlook.com/Sent".to_string(),
+                1,
+                FolderType::Sent,
+            )
+            .with_total_count(34)
+            .with_sync_status(SyncStatus::Synced),
+            FolderItem::new_with_type(
+                "Drafts".to_string(),
+                "olaf@outlook.com/Drafts".to_string(),
+                1,
+                FolderType::Drafts,
             )
             .with_unread_count(1)
-            .with_total_count(44)
+            .with_total_count(8)
             .with_sync_status(SyncStatus::Synced),
-            FolderItem::new("Important".to_string(), "INBOX/Important".to_string(), 0)
-                .with_unread_count(1)
-                .with_total_count(8)
-                .with_sync_status(SyncStatus::Synced),
             // Unsubscribed folder (normally hidden)
             FolderItem::new(
                 "Old Archives".to_string(),
-                "INBOX/OldArchives".to_string(),
-                0,
+                "olaf@outlook.com/OldArchives".to_string(),
+                1,
             )
             .with_total_count(567)
             .with_sync_status(SyncStatus::Offline)
@@ -367,11 +406,40 @@ impl FolderTree {
             };
 
             let is_visible = folder.is_subscribed || self.show_unsubscribed;
+            
+            // For account headers (depth 0), always show if subscribed
+            let show_folder = if folder.depth == 0 {
+                matches_search && is_visible
+            } else {
+                // For child folders, only show if parent account is expanded
+                let parent_expanded = self.is_parent_account_expanded(folder);
+                matches_search && is_visible && parent_expanded
+            };
 
-            if matches_search && is_visible {
+            if show_folder {
                 self.filtered_folders.push(index);
             }
         }
+    }
+    
+    /// Check if the parent account for this folder is expanded
+    fn is_parent_account_expanded(&self, folder: &FolderItem) -> bool {
+        if folder.depth == 0 {
+            return true; // Account headers are always visible
+        }
+        
+        // Find the account this folder belongs to
+        let account_email = if let Some(slash_pos) = folder.path.find('/') {
+            &folder.path[..slash_pos]
+        } else {
+            return true; // No parent, show it
+        };
+        
+        // Find the account folder and check if it's expanded
+        self.folders.iter()
+            .find(|f| f.depth == 0 && f.name == account_email)
+            .map(|account| account.is_expanded)
+            .unwrap_or(true) // Default to expanded if not found
     }
 
     pub fn render(
@@ -382,102 +450,27 @@ impl FolderTree {
         is_focused: bool,
         theme: &Theme,
     ) {
+        let available_width = area.width.saturating_sub(4) as usize; // Account for borders and padding
+        
         let items: Vec<ListItem> = self
             .filtered_folders
             .iter()
             .enumerate()
             .map(|(display_i, &folder_i)| {
                 let folder = &self.folders[folder_i];
-                let indent = "  ".repeat(folder.depth);
-
-                // Expansion indicator
-                let expand_icon = if folder.has_children {
-                    if folder.is_expanded {
-                        "▼ "
-                    } else {
-                        "▶ "
-                    }
-                } else {
-                    "  "
-                };
-
-                // Type indicator (professional monochrome icons)
-                let type_indicator = folder.get_type_indicator();
-
-                // Sync status indicator
-                let sync_indicator = folder.get_sync_indicator();
-
-                // Count display: show unread if > 0, otherwise total
-                let count_display = if folder.unread_count > 0 {
-                    format!(" ({}/{})", folder.unread_count, folder.total_count)
-                } else if folder.total_count > 0 {
-                    format!(" ({})", folder.total_count)
-                } else {
-                    String::new()
-                };
-
                 let is_selected = self.state.selected() == Some(display_i);
 
-                // Determine folder style based on state and type
-                let folder_style = if is_selected && is_focused {
-                    theme
-                        .styles
-                        .get_selected_style("folder_tree", &theme.colors)
-                } else if is_selected {
-                    theme
-                        .styles
-                        .get_selected_style("folder_tree", &theme.colors)
-                } else if folder.unread_count > 0 {
-                    Style::default()
-                        .fg(theme.colors.folder_tree.folder_unread)
-                        .add_modifier(Modifier::BOLD)
-                } else if matches!(folder.sync_status, SyncStatus::Error) {
-                    Style::default().fg(theme.colors.palette.error)
-                } else if matches!(folder.sync_status, SyncStatus::Syncing) {
-                    Style::default().fg(theme.colors.palette.warning)
-                } else if !folder.is_subscribed {
-                    Style::default()
-                        .fg(theme.colors.palette.text_muted)
-                        .add_modifier(Modifier::DIM)
+                // Check if this is a top-level account folder (depth 0 and account path)
+                let is_account_header = folder.depth == 0 && folder.path.starts_with("account:");
+                
+                if is_account_header {
+                    self.render_account_header(folder, is_selected, is_focused, theme, available_width)
                 } else {
-                    Style::default().fg(theme.colors.folder_tree.folder_normal)
-                };
-
-                let line = Line::from(vec![
-                    Span::styled(
-                        indent,
-                        Style::default().fg(theme.colors.folder_tree.expand_icon),
-                    ),
-                    Span::styled(
-                        expand_icon,
-                        Style::default().fg(theme.colors.folder_tree.expand_icon),
-                    ),
-                    Span::styled(
-                        type_indicator,
-                        Style::default().fg(theme.colors.folder_tree.folder_normal),
-                    ),
-                    Span::raw(" "),
-                    Span::styled(folder.name.clone(), folder_style),
-                    Span::styled(
-                        count_display,
-                        Style::default().fg(theme.colors.folder_tree.count_badge),
-                    ),
-                    Span::raw(" "),
-                    Span::styled(
-                        sync_indicator,
-                        Style::default().fg(match folder.sync_status {
-                            SyncStatus::Synced => theme.colors.palette.success,
-                            SyncStatus::Syncing => theme.colors.palette.warning,
-                            SyncStatus::Error => theme.colors.palette.error,
-                            SyncStatus::Offline => theme.colors.palette.text_muted,
-                            SyncStatus::NeverSynced => theme.colors.palette.text_muted,
-                        }),
-                    ),
-                ]);
-
-                ListItem::new(line)
+                    self.render_folder_item(folder, is_selected, is_focused, theme, available_width)
+                }
             })
             .collect();
+
 
         let list = List::new(items)
             .block(block)
@@ -494,6 +487,232 @@ impl FolderTree {
         if self.context_menu_visible {
             self.render_context_menu(frame, area, theme);
         }
+    }
+
+    /// Render an account header (top-level account)
+    fn render_account_header(
+        &self,
+        folder: &FolderItem,
+        is_selected: bool,
+        is_focused: bool,
+        theme: &Theme,
+        _available_width: usize,
+    ) -> ListItem {
+        // Expansion indicator for account
+        let expand_icon = if folder.is_expanded {
+            "▼ "
+        } else {
+            "▶ "
+        };
+
+        // Extract account name from folder name (assuming format like "user@domain.com")
+        let account_name = folder.name.clone();
+        
+        // Calculate total unread across account (in a real implementation, this would aggregate child folders)
+        let total_unread = self.folders.iter()
+            .filter(|f| f.path.starts_with(&account_name) && f.depth > 0)
+            .map(|f| f.unread_count)
+            .sum::<usize>();
+        
+        // Use calculated total unread count
+        let _total_unread = total_unread;
+        
+        // Account header style
+        let header_style = if is_selected && is_focused {
+            Style::default()
+                .fg(theme.colors.palette.accent)
+                .add_modifier(Modifier::BOLD)
+        } else if is_selected {
+            Style::default()
+                .fg(theme.colors.palette.accent)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default()
+                .fg(theme.colors.palette.text_primary)
+                .add_modifier(Modifier::BOLD)
+        };
+
+        let mut spans = vec![
+            Span::styled(
+                expand_icon,
+                Style::default().fg(theme.colors.folder_tree.expand_icon),
+            ),
+            Span::styled("📧 ", Style::default().fg(theme.colors.palette.info)),
+            Span::styled(account_name, header_style),
+        ];
+        
+        // Add account-level unread badge if there are unread messages
+        if total_unread > 0 {
+            spans.push(Span::raw(" "));
+            let badge_text = if total_unread > 99 {
+                "99+".to_string()
+            } else {
+                total_unread.to_string()
+            };
+            spans.push(Span::styled(
+                format!("({})", badge_text),
+                Style::default()
+                    .fg(theme.colors.palette.background)
+                    .bg(theme.colors.palette.warning)
+                    .add_modifier(Modifier::BOLD),
+            ));
+        }
+        
+        let line = Line::from(spans);
+
+        ListItem::new(line)
+    }
+
+    /// Render a regular folder item with enhanced styling
+    fn render_folder_item(
+        &self,
+        folder: &FolderItem,
+        is_selected: bool,
+        is_focused: bool,
+        theme: &Theme,
+        available_width: usize,
+    ) -> ListItem {
+        let indent = "  ".repeat(folder.depth);
+
+        // Expansion indicator for folders with children
+        let expand_icon = if folder.has_children {
+            if folder.is_expanded {
+                "▼ "
+            } else {
+                "▶ "
+            }
+        } else {
+            "  "
+        };
+
+        // Type indicator with better icons that match your screenshot
+        let type_indicator = match folder.folder_type {
+            FolderType::Inbox => "📥 ",
+            FolderType::Sent => "📤 ", 
+            FolderType::Drafts => "📝 ",
+            FolderType::Trash => "🗑️ ",
+            FolderType::Archive => "📦 ",
+            FolderType::Spam => "🚫 ",
+            FolderType::Custom(_) => "📁 ",
+        };
+
+        // Create unread badge (circular blue badge like in your screenshot)
+        let unread_badge = if folder.unread_count > 0 {
+            format!(" {}", folder.unread_count)
+        } else {
+            String::new()
+        };
+
+        // Right-aligned counts and size (like in your screenshot)
+        let size_display = if folder.total_count > 0 {
+            self.format_size_display(folder.total_count, folder.unread_count)
+        } else {
+            String::new()
+        };
+
+        // Calculate available space for folder name
+        let right_content_width = size_display.len() + unread_badge.len() + 5; // padding
+        let name_max_width = available_width.saturating_sub(
+            indent.len() + expand_icon.len() + 3 + right_content_width
+        );
+        
+        let folder_name = if folder.name.len() > name_max_width {
+            format!("{}...", &folder.name[..name_max_width.saturating_sub(3)])
+        } else {
+            folder.name.clone()
+        };
+
+        // Determine folder style
+        let folder_style = if is_selected && is_focused {
+            Style::default()
+                .fg(theme.colors.palette.selection_text)
+                .bg(theme.colors.palette.selection)
+                .add_modifier(Modifier::BOLD)
+        } else if is_selected {
+            Style::default()
+                .fg(theme.colors.palette.accent)
+                .add_modifier(Modifier::BOLD)
+        } else if folder.unread_count > 0 {
+            Style::default()
+                .fg(theme.colors.folder_tree.folder_unread)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(theme.colors.folder_tree.folder_normal)
+        };
+
+        // Build the line with proper spacing
+        let mut spans = vec![
+            Span::raw(indent),
+            Span::styled(
+                expand_icon,
+                Style::default().fg(theme.colors.folder_tree.expand_icon),
+            ),
+            Span::raw(type_indicator),
+            Span::raw(" "),
+            Span::styled(folder_name, folder_style),
+        ];
+
+        // Add unread badge if there are unread messages (circular like in your screenshot)
+        if folder.unread_count > 0 {
+            spans.push(Span::raw(" "));
+            // Format the number to look like a circular badge
+            let badge_text = if folder.unread_count > 99 {
+                "99+".to_string()
+            } else {
+                folder.unread_count.to_string()
+            };
+            spans.push(Span::styled(
+                format!("({})", badge_text),
+                Style::default()
+                    .fg(theme.colors.palette.background)
+                    .bg(theme.colors.palette.info)
+                    .add_modifier(Modifier::BOLD),
+            ));
+        }
+
+        // Add size display aligned to the right
+        if !size_display.is_empty() {
+            // Calculate current content length
+            let current_content_len: usize = spans.iter().map(|s| {
+                // Handle the different content types in Span
+                match s.content {
+                    std::borrow::Cow::Borrowed(s) => s.len(),
+                    std::borrow::Cow::Owned(ref s) => s.len(),
+                }
+            }).sum();
+            
+            let padding_len = available_width.saturating_sub(current_content_len + size_display.len() + 2);
+            if padding_len > 0 {
+                spans.push(Span::raw(" ".repeat(padding_len)));
+                spans.push(Span::styled(
+                    size_display,
+                    Style::default().fg(theme.colors.palette.text_muted),
+                ));
+            }
+        }
+
+        ListItem::new(Line::from(spans))
+    }
+
+    /// Format size display similar to your screenshot (messages count and estimated size)
+    fn format_size_display(&self, total_count: usize, _unread_count: usize) -> String {
+        if total_count == 0 {
+            return String::new();
+        }
+        
+        // Estimate size based on message count (rough estimate: 15KB per message average)
+        let estimated_bytes = total_count * 15 * 1024; // 15KB per message
+        let size_str = if estimated_bytes > 1024 * 1024 * 1024 {
+            format!("{:.1} GB", estimated_bytes as f64 / (1024.0 * 1024.0 * 1024.0))
+        } else if estimated_bytes > 1024 * 1024 {
+            format!("{} MB", estimated_bytes / (1024 * 1024))
+        } else if estimated_bytes > 1024 {
+            format!("{} KB", estimated_bytes / 1024)
+        } else {
+            format!("{} B", estimated_bytes)
+        };
+        
+        format!("{} • {}", total_count, size_str)
     }
 
     /// Render the context menu overlay

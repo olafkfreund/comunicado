@@ -385,7 +385,7 @@ impl Drop for ImapService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio::time::timeout;
+    
     
     #[tokio::test]
     async fn test_idle_service_creation() {

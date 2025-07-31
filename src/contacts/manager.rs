@@ -436,7 +436,7 @@ mod tests {
         let token_manager = TokenManager::new();
         let manager = ContactsManager::new(database, token_manager).await.unwrap();
 
-        let mut contact1 = Contact::new(
+        let contact1 = Contact::new(
             "test-id".to_string(),
             ContactSource::Google {
                 account_id: "test@gmail.com".to_string(),

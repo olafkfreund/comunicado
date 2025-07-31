@@ -1,4 +1,5 @@
 use crate::theme::Theme;
+use crate::ui::typography::{TypographySystem, TypographyLevel, VisualHierarchy};
 use ratatui::{
     layout::{Alignment, Rect},
     style::{Modifier, Style},
@@ -423,6 +424,163 @@ impl StatusBar {
 
             if remaining_width == 0 {
                 break;
+            }
+        }
+
+        Line::from(spans)
+    }
+
+    /// Enhanced render method using typography system for better visual hierarchy
+    pub fn render_with_typography(
+        &self, 
+        frame: &mut Frame, 
+        area: Rect, 
+        theme: &Theme, 
+        typography: &TypographySystem
+    ) {
+        if area.height == 0 {
+            return;
+        }
+
+        // Filter visible segments and sort by order
+        let visible_segments: Vec<_> = self
+            .segment_order
+            .iter()
+            .filter_map(|name| {
+                self.segments.get(name).and_then(|segment| {
+                    if segment.is_visible() {
+                        Some((name, segment))
+                    } else {
+                        None
+                    }
+                })
+            })
+            .collect();
+
+        if visible_segments.is_empty() {
+            return;
+        }
+
+        // Create enhanced segments with typography
+        let segments_content = self.create_enhanced_segments_content(
+            &visible_segments, 
+            area.width.saturating_sub(2), 
+            theme, 
+            typography
+        );
+
+        // Create the status bar block with better spacing
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .border_style(theme.get_component_style("status_bar", false));
+
+        // Use typography-aware paragraph rendering
+        let paragraph = Paragraph::new(segments_content)
+            .block(block)
+            .alignment(Alignment::Left)
+            .style(typography.get_typography_style(TypographyLevel::Caption, theme));
+
+        frame.render_widget(paragraph, area);
+    }
+
+    /// Create enhanced segments content with typography and visual hierarchy
+    fn create_enhanced_segments_content(
+        &self,
+        visible_segments: &[(&String, &Box<dyn StatusSegment>)],
+        available_width: u16,
+        theme: &Theme,
+        typography: &TypographySystem,
+    ) -> Line {
+        let mut spans = Vec::new();
+        let spacing = typography.spacing();
+        let separator_width = spacing.sm;
+        let total_separator_width = separator_width * (visible_segments.len().saturating_sub(1) as u16);
+        let content_width = available_width.saturating_sub(total_separator_width);
+        let mut remaining_width = content_width;
+
+        for (i, (name, segment)) in visible_segments.iter().enumerate() {
+            if remaining_width == 0 {
+                break;
+            }
+
+            // Add separator between segments with proper spacing
+            if i > 0 {
+                spans.push(typography.create_span(
+                    " ".repeat(spacing.xs as usize),
+                    TypographyLevel::Metadata,
+                    theme,
+                ));
+
+                // Add visual separator based on style
+                let separator = match self.separator_style {
+                    SeparatorStyle::Powerline => "⮰",
+                    SeparatorStyle::Simple => "|",
+                    SeparatorStyle::Minimal => "·",
+                };
+
+                spans.push(typography.create_span(
+                    separator.to_string(),
+                    TypographyLevel::Metadata,
+                    theme,
+                ));
+
+                spans.push(typography.create_span(
+                    " ".repeat(spacing.xs as usize),
+                    TypographyLevel::Metadata,
+                    theme,
+                ));
+            }
+
+            // Determine typography level based on segment type and priority
+            let typography_level = match name.as_str() {
+                "email" => TypographyLevel::Body,
+                "calendar" => TypographyLevel::Body,
+                "system" => TypographyLevel::Caption,
+                "search" => TypographyLevel::Body,
+                "navigation" => TypographyLevel::Metadata,
+                _ => TypographyLevel::Caption,
+            };
+
+            // Get segment content and apply enhanced styling
+            let content = segment.content();
+            let segment_width = content.len() as u16;
+
+            if segment_width <= remaining_width {
+                // Check for special content formatting
+                if name.as_str() == "email" && content.contains("unread") {
+                    // Highlight unread count
+                    let parts: Vec<&str> = content.split_whitespace().collect();
+                    for (j, part) in parts.iter().enumerate() {
+                        if j > 0 {
+                            spans.push(typography.create_span(" ".to_string(), typography_level, theme));
+                        }
+                        
+                        if part.chars().all(|c| c.is_ascii_digit()) {
+                            // This is likely the unread count - emphasize it
+                            spans.push(typography.create_emphasis(part, theme));
+                        } else {
+                            spans.push(typography.create_span(part.to_string(), typography_level, theme));
+                        }
+                    }
+                } else if name.as_str() == "calendar" && content.contains("event") {
+                    // Add status indicator for upcoming events
+                    spans.push(VisualHierarchy::status_indicator("📅", theme.colors.palette.info));
+                    spans.push(typography.create_span(
+                        format!(" {}", content),
+                        typography_level,
+                        theme,
+                    ));
+                } else {
+                    // Regular content with appropriate typography
+                    spans.push(typography.create_span(content, typography_level, theme));
+                }
+
+                remaining_width = remaining_width.saturating_sub(segment_width);
+            } else if remaining_width > 3 {
+                // Truncate with ellipsis
+                let truncated = format!("{}…", &content[..(remaining_width.saturating_sub(1) as usize).min(content.len())]);
+                spans.push(typography.create_span(truncated, typography_level, theme));
+                remaining_width = 0;
             }
         }
 

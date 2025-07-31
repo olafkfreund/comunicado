@@ -466,7 +466,7 @@ impl Default for LazyInitManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio::time::{sleep, Duration};
+    use tokio::time::Duration;
 
     #[derive(Clone, Debug, PartialEq)]
     struct TestResource {

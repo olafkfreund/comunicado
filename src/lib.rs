@@ -24,6 +24,7 @@ pub mod smtp;
 pub mod spell;
 pub mod startup;
 pub mod system;
+pub mod tea;
 pub mod theme;
 pub mod ui;
 

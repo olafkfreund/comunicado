@@ -254,6 +254,9 @@ impl App {
         self.initialization_complete = true;
         self.initialization_in_progress = false;
         
+        // Show welcome toast notification
+        self.ui.show_toast_success("🚀 Comunicado ready! Modern TUI email & calendar client");
+        
         tracing::info!("Deferred initialization completed");
 
         // Log ready state
@@ -1198,6 +1201,9 @@ impl App {
 
             // Update UI notifications (clear expired ones)
             self.ui.update_notifications();
+            
+            // Update toast notifications (handle expiration and animations)
+            self.ui.update_toasts();
 
             // Check if message selection changed and handle it
             let current_selection = self.ui.message_list().get_selection_state();
