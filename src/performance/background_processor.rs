@@ -4,7 +4,9 @@
 //! email synchronization, folder refresh, and other long-running operations
 //! without blocking the UI thread.
 
-use crate::email::sync_engine::{SyncProgress, SyncStrategy, SyncPhase};
+use crate::email::sync_engine::{SyncProgress, SyncStrategy, SyncPhase, SyncEngine};
+use crate::email::database::EmailDatabase;
+use crate::imap::ImapAccountManager;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -134,6 +136,8 @@ pub struct TaskResult {
     pub completed_at: Option<Instant>,
     pub error: Option<String>,
     pub result_data: Option<TaskResultData>,
+    pub account_id: String,
+    pub task_type: BackgroundTaskType,
 }
 
 /// Task result data for different task types
@@ -199,6 +203,12 @@ pub struct BackgroundProcessor {
     settings: ProcessorSettings,
     /// Shutdown signal
     shutdown_tx: Arc<Mutex<Option<mpsc::Sender<()>>>>,
+    /// Sync engine for email operations
+    sync_engine: Arc<SyncEngine>,
+    /// IMAP account manager
+    account_manager: Arc<ImapAccountManager>,
+    /// Email database
+    database: Arc<EmailDatabase>,
 }
 
 /// Background processor settings
@@ -234,6 +244,9 @@ impl BackgroundProcessor {
     /// # Arguments
     /// * `progress_sender` - Channel for sending sync progress updates to UI
     /// * `completion_sender` - Channel for sending task completion notifications
+    /// * `sync_engine` - Sync engine for email operations
+    /// * `account_manager` - IMAP account manager
+    /// * `database` - Email database
     /// 
     /// # Returns
     /// A new `BackgroundProcessor` instance with default configuration:
@@ -245,6 +258,9 @@ impl BackgroundProcessor {
     pub fn new(
         progress_sender: mpsc::UnboundedSender<SyncProgress>,
         completion_sender: mpsc::UnboundedSender<TaskResult>,
+        sync_engine: Arc<SyncEngine>,
+        account_manager: Arc<ImapAccountManager>,
+        database: Arc<EmailDatabase>,
     ) -> Self {
         Self {
             task_queue: Arc::new(RwLock::new(HashMap::new())),
@@ -254,6 +270,51 @@ impl BackgroundProcessor {
             completion_sender: Arc::new(completion_sender),
             settings: ProcessorSettings::default(),
             shutdown_tx: Arc::new(Mutex::new(None)),
+            sync_engine,
+            account_manager,
+            database,
+        }
+    }
+
+    /// Creates a new background processor without sync services (for testing/standalone use)
+    /// 
+    /// This constructor creates placeholder services that will cause sync operations to fail.
+    /// Use this only for testing or when sync functionality is not needed.
+    /// 
+    /// # Arguments
+    /// * `progress_sender` - Channel for sending sync progress updates to UI
+    /// * `completion_sender` - Channel for sending task completion notifications
+    pub fn new_standalone(
+        progress_sender: mpsc::UnboundedSender<SyncProgress>,
+        completion_sender: mpsc::UnboundedSender<TaskResult>,
+    ) -> Self {
+        // Create placeholder services that will cause sync operations to fail
+        // This is only for compatibility with existing code that doesn't need sync
+        let (dummy_progress_tx, _) = mpsc::unbounded_channel::<SyncProgress>();
+        let dummy_database = Arc::new(
+            // This will fail if actually used, but allows compilation
+            tokio::runtime::Handle::current().block_on(async {
+                crate::email::database::EmailDatabase::new(":memory:").await
+                    .expect("Failed to create dummy database")
+            })
+        );
+        let dummy_sync_engine = Arc::new(SyncEngine::new(dummy_database.clone(), dummy_progress_tx));
+        let dummy_account_manager = Arc::new(
+            ImapAccountManager::new()
+                .expect("Failed to create dummy IMAP account manager")
+        );
+
+        Self {
+            task_queue: Arc::new(RwLock::new(HashMap::new())),
+            running_tasks: Arc::new(RwLock::new(HashMap::new())),
+            task_results: Arc::new(RwLock::new(HashMap::new())),
+            progress_sender: Arc::new(progress_sender),
+            completion_sender: Arc::new(completion_sender),
+            settings: ProcessorSettings::default(),
+            shutdown_tx: Arc::new(Mutex::new(None)),
+            sync_engine: dummy_sync_engine,
+            account_manager: dummy_account_manager,
+            database: dummy_database,
         }
     }
 
@@ -281,6 +342,9 @@ impl BackgroundProcessor {
     pub fn with_settings(
         progress_sender: mpsc::UnboundedSender<SyncProgress>,
         completion_sender: mpsc::UnboundedSender<TaskResult>,
+        sync_engine: Arc<SyncEngine>,
+        account_manager: Arc<ImapAccountManager>,
+        database: Arc<EmailDatabase>,
         settings: ProcessorSettings,
     ) -> Self {
         Self {
@@ -291,6 +355,9 @@ impl BackgroundProcessor {
             completion_sender: Arc::new(completion_sender),
             settings,
             shutdown_tx: Arc::new(Mutex::new(None)),
+            sync_engine,
+            account_manager,
+            database,
         }
     }
 
@@ -322,6 +389,9 @@ impl BackgroundProcessor {
         let progress_sender = self.progress_sender.clone();
         let completion_sender = self.completion_sender.clone();
         let settings = self.settings.clone();
+        let sync_engine = self.sync_engine.clone();
+        let account_manager = self.account_manager.clone();
+        let database = self.database.clone();
 
         tokio::spawn(async move {
             let mut processing_interval = tokio::time::interval(settings.processing_interval);
@@ -336,6 +406,9 @@ impl BackgroundProcessor {
                             &progress_sender,
                             &completion_sender,
                             &settings,
+                            &sync_engine,
+                            &account_manager,
+                            &database,
                         ).await;
                     }
                     _ = shutdown_rx.recv() => {
@@ -478,6 +551,8 @@ impl BackgroundProcessor {
                     completed_at: Some(Instant::now()),
                     error: None,
                     result_data: None,
+                    account_id: "unknown".to_string(), // Task was cancelled before execution
+                    task_type: BackgroundTaskType::AccountSync { strategy: crate::email::sync_engine::SyncStrategy::Full },
                 };
                 
                 let _ = self.completion_sender.send(result);
@@ -656,6 +731,9 @@ impl BackgroundProcessor {
         progress_sender: &Arc<mpsc::UnboundedSender<SyncProgress>>,
         completion_sender: &Arc<mpsc::UnboundedSender<TaskResult>>,
         settings: &ProcessorSettings,
+        sync_engine: &Arc<SyncEngine>,
+        account_manager: &Arc<ImapAccountManager>,
+        database: &Arc<EmailDatabase>,
     ) {
         // Clean up completed tasks
         {
@@ -705,15 +783,28 @@ impl BackgroundProcessor {
             let task_id = task.id;
             let progress_sender_clone = progress_sender.clone();
             let completion_sender_clone = completion_sender.clone();
+            let sync_engine_clone = sync_engine.clone();
+            let account_manager_clone = account_manager.clone();
+            let database_clone = database.clone();
             let task_timeout = settings.task_timeout;
             
             let handle = tokio::spawn(async move {
                 let started_at = Instant::now();
                 
                 // Execute task with timeout
+                // Clone task info before moving task to execute_task
+                let task_account_id = task.account_id.clone();
+                let task_type = task.task_type.clone();
+                
                 let result = tokio::time::timeout(
                     task_timeout,
-                    Self::execute_task(task, progress_sender_clone)
+                    Self::execute_task(
+                        task, 
+                        progress_sender_clone,
+                        sync_engine_clone,
+                        account_manager_clone,
+                        database_clone
+                    )
                 ).await;
 
                 let task_result = match result {
@@ -724,6 +815,8 @@ impl BackgroundProcessor {
                         completed_at: Some(Instant::now()),
                         error: None,
                         result_data: Some(result_data),
+                        account_id: task_account_id.clone(),
+                        task_type: task_type.clone(),
                     },
                     Ok(Err(error)) => TaskResult {
                         task_id,
@@ -732,6 +825,8 @@ impl BackgroundProcessor {
                         completed_at: Some(Instant::now()),
                         error: Some(error),
                         result_data: None,
+                        account_id: task_account_id.clone(),
+                        task_type: task_type.clone(),
                     },
                     Err(_) => TaskResult {
                         task_id,
@@ -740,6 +835,8 @@ impl BackgroundProcessor {
                         completed_at: Some(Instant::now()),
                         error: Some("Task execution timed out".to_string()),
                         result_data: None,
+                        account_id: task_account_id,
+                        task_type: task_type,
                     },
                 };
 
@@ -781,76 +878,43 @@ impl BackgroundProcessor {
     async fn execute_task(
         task: BackgroundTask,
         progress_sender: Arc<mpsc::UnboundedSender<SyncProgress>>,
+        sync_engine: Arc<SyncEngine>,
+        account_manager: Arc<ImapAccountManager>,
+        _database: Arc<EmailDatabase>,
     ) -> Result<TaskResultData, String> {
         match task.task_type {
             BackgroundTaskType::FolderRefresh { folder_name } => {
-                // Send progress update
-                let progress = SyncProgress {
-                    account_id: task.account_id.clone(),
-                    folder_name: folder_name.clone(),
-                    phase: SyncPhase::FetchingBodies,
-                    messages_processed: 0,
-                    total_messages: 0,
-                    bytes_downloaded: 0,
-                    started_at: Utc::now(),
-                    estimated_completion: None,
-                };
-                let _ = progress_sender.send(progress);
-
-                // NOTE: This would normally integrate with the actual IMAP client
-                // For now, we simulate a quick folder refresh
-                tokio::time::sleep(Duration::from_millis(500)).await;
-                Ok(TaskResultData::MessageCount(42))
+                use crate::email::async_sync_service::AsyncSyncService;
+                
+                AsyncSyncService::execute_folder_refresh(
+                    account_manager,
+                    (*progress_sender).clone(),
+                    task.account_id,
+                    folder_name,
+                ).await.map_err(|e| e.to_string())
             }
-            BackgroundTaskType::FolderSync { folder_name, strategy: _ } => {
-                // Send progress updates during sync
-                let progress = SyncProgress {
-                    account_id: task.account_id.clone(),
-                    folder_name: folder_name.clone(),
-                    phase: SyncPhase::Initializing,
-                    messages_processed: 0,
-                    total_messages: 100,
-                    bytes_downloaded: 0,
-                    started_at: Utc::now(),
-                    estimated_completion: Some(Utc::now() + chrono::Duration::seconds(30)),
-                };
-                let _ = progress_sender.send(progress);
-
-                // Simulate progressive sync with status updates
-                for i in 0..10 {
-                    tokio::time::sleep(Duration::from_millis(300)).await;
-                    let progress = SyncProgress {
-                        account_id: task.account_id.clone(),
-                        folder_name: folder_name.clone(),
-                        phase: SyncPhase::FetchingBodies,
-                        messages_processed: i * 10,
-                        total_messages: 100,
-                        bytes_downloaded: (i * 1024) as u64,
-                        started_at: Utc::now(),
-                        estimated_completion: Some(Utc::now() + chrono::Duration::seconds((30 - i * 3) as i64)),
-                    };
-                    let _ = progress_sender.send(progress);
-                }
-
-                Ok(TaskResultData::MessageCount(100))
+            BackgroundTaskType::FolderSync { folder_name, strategy } => {
+                use crate::email::async_sync_service::AsyncSyncService;
+                
+                AsyncSyncService::execute_folder_sync(
+                    sync_engine,
+                    account_manager,
+                    (*progress_sender).clone(),
+                    task.account_id,
+                    folder_name,
+                    strategy,
+                ).await.map_err(|e| e.to_string())
             }
-            BackgroundTaskType::AccountSync { strategy: _ } => {
-                // Send progress for full account sync
-                let progress = SyncProgress {
-                    account_id: task.account_id.clone(),
-                    folder_name: "All Folders".to_string(),
-                    phase: SyncPhase::Initializing,
-                    messages_processed: 0,
-                    total_messages: 500,
-                    bytes_downloaded: 0,
-                    started_at: Utc::now(),
-                    estimated_completion: Some(Utc::now() + chrono::Duration::minutes(2)),
-                };
-                let _ = progress_sender.send(progress);
-
-                // Simulate account-wide sync
-                tokio::time::sleep(Duration::from_secs(5)).await;
-                Ok(TaskResultData::MessageCount(500))
+            BackgroundTaskType::AccountSync { strategy } => {
+                use crate::email::async_sync_service::AsyncSyncService;
+                
+                AsyncSyncService::execute_account_sync(
+                    sync_engine,
+                    account_manager,
+                    (*progress_sender).clone(),
+                    task.account_id,
+                    strategy,
+                ).await.map_err(|e| e.to_string())
             }
             BackgroundTaskType::Search { query: _, folders: _ } => {
                 // Send search progress

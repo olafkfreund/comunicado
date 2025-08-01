@@ -398,23 +398,15 @@ impl CalendarManager {
         start_time: Option<DateTime<Utc>>,
         end_time: Option<DateTime<Utc>>,
     ) -> CalendarResult<Vec<Event>> {
-        let calendars = self.calendars.read().await;
-        let mut all_events = Vec::new();
+        // Use the database method that gets all events across all calendars
+        // This avoids the issue where calendars might not be loaded in memory
+        let events = self
+            .database
+            .get_all_events_in_range(start_time, end_time)
+            .await
+            .map_err(|e| CalendarError::DatabaseError(e.to_string()))?;
 
-        for calendar_id in calendars.keys() {
-            let events = self
-                .database
-                .get_events(calendar_id, start_time, end_time)
-                .await
-                .map_err(|e| CalendarError::DatabaseError(e.to_string()))?;
-
-            all_events.extend(events);
-        }
-
-        // Sort by start time
-        all_events.sort_by(|a, b| a.start_time.cmp(&b.start_time));
-
-        Ok(all_events)
+        Ok(events)
     }
 
     /// Get upcoming events (starting within the next N hours)

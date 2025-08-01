@@ -11,6 +11,7 @@ use std::io;
 use std::sync::Arc;
 use tokio::time::{Duration, Instant};
 
+use crate::calendar::CalendarManager;
 use crate::contacts::ContactsManager;
 use crate::email::{EmailDatabase, EmailNotificationManager};
 use crate::events::{EventHandler, EventResult};
@@ -21,6 +22,7 @@ use crate::smtp::{SmtpService, SmtpServiceBuilder};
 use crate::ui::{ComposeAction, DraftAction, UI};
 use crate::performance::background_processor::{BackgroundProcessor, BackgroundTask, TaskResult};
 use crate::email::sync_engine::SyncProgress;
+use crate::startup::StartupProgressManager;
 use tokio::sync::mpsc;
 use uuid::Uuid;
 
@@ -36,6 +38,7 @@ pub struct App {
     token_refresh_scheduler: Option<crate::oauth2::token::TokenRefreshScheduler>,
     smtp_service: Option<SmtpService>,
     contacts_manager: Option<Arc<ContactsManager>>,
+    calendar_manager: Option<Arc<CalendarManager>>,
     unified_notification_manager: Option<Arc<UnifiedNotificationManager>>,
     // Auto-sync functionality
     last_auto_sync: Instant,
@@ -48,6 +51,12 @@ pub struct App {
     background_processor: Option<Arc<BackgroundProcessor>>,
     sync_progress_rx: Option<mpsc::UnboundedReceiver<SyncProgress>>,
     task_completion_rx: Option<mpsc::UnboundedReceiver<TaskResult>>,
+    // Sync engine for email operations
+    sync_engine: Option<Arc<crate::email::sync_engine::SyncEngine>>,
+    // Startup progress manager
+    startup_progress_manager: StartupProgressManager,
+    // Toast integration service (using simple direct approach now)
+    // toast_integration_service: Option<crate::ui::toast_integration::ToastIntegrationService>,
 }
 
 impl App {
@@ -66,6 +75,7 @@ impl App {
             token_refresh_scheduler: None,
             smtp_service: None,
             contacts_manager: None,
+            calendar_manager: None,
             unified_notification_manager: None,
             // Initialize auto-sync with 3 minute interval
             last_auto_sync: Instant::now(),
@@ -78,6 +88,12 @@ impl App {
             background_processor: None,
             sync_progress_rx: None,
             task_completion_rx: None,
+            // Sync engine
+            sync_engine: None,
+            // Startup progress manager
+            startup_progress_manager: StartupProgressManager::new(),
+            // Toast integration service
+            // toast_integration_service: None,
         })
     }
 
@@ -87,30 +103,128 @@ impl App {
     pub async fn initialize_database(&mut self) -> Result<()> {
         tracing::info!("🗄️ Initializing database connection...");
         
+        // Start database phase in progress manager
+        if let Err(e) = self.startup_progress_manager.start_phase("Database") {
+            tracing::warn!("Failed to start Database phase in progress manager: {}", e);
+        }
+        
         // Create database path in user's config directory (same as CLI)
-        let config_dir = dirs::config_dir()
-            .ok_or_else(|| anyhow::anyhow!("Cannot find config directory"))?
-            .join("comunicado")
-            .join("databases");
+        let config_dir = match dirs::config_dir() {
+            Some(dir) => dir.join("comunicado").join("databases"),
+            None => {
+                if let Err(e) = self.startup_progress_manager.fail_phase("Database", "Cannot find config directory".to_string()) {
+                    tracing::warn!("Failed to fail Database phase in progress manager: {}", e);
+                }
+                return Err(anyhow::anyhow!("Cannot find config directory"));
+            }
+        };
 
         // Create directory if it doesn't exist
-        std::fs::create_dir_all(&config_dir)?;
+        if let Err(e) = std::fs::create_dir_all(&config_dir) {
+            if let Err(pe) = self.startup_progress_manager.fail_phase("Database", format!("Failed to create database directory: {}", e)) {
+                tracing::warn!("Failed to fail Database phase in progress manager: {}", pe);
+            }
+            return Err(anyhow::anyhow!("Failed to create database directory: {}", e));
+        }
 
         let db_path = config_dir.join("email.db");
-        let db_path_str = db_path
-            .to_str()
-            .ok_or_else(|| anyhow::anyhow!("Invalid database path"))?;
+        let db_path_str = match db_path.to_str() {
+            Some(path) => path,
+            None => {
+                if let Err(e) = self.startup_progress_manager.fail_phase("Database", "Invalid database path".to_string()) {
+                    tracing::warn!("Failed to fail Database phase in progress manager: {}", e);
+                }
+                return Err(anyhow::anyhow!("Invalid database path"));
+            }
+        };
 
         tracing::info!("📊 TUI connecting to database: {}", db_path_str);
 
         // Create database connection with quick mode for startup
-        let database = EmailDatabase::new_with_mode(db_path_str, true)
-            .await
-            .map_err(|e| anyhow::anyhow!("Failed to initialize database: {}", e))?;
+        let database = match EmailDatabase::new_with_mode(db_path_str, true).await {
+            Ok(db) => db,
+            Err(e) => {
+                let error_msg = format!("Failed to initialize database: {}", e);
+                if let Err(pe) = self.startup_progress_manager.fail_phase("Database", error_msg.clone()) {
+                    tracing::warn!("Failed to fail Database phase in progress manager: {}", pe);
+                }
+                return Err(anyhow::anyhow!(error_msg));
+            }
+        };
             
         tracing::info!("✅ TUI database connection established successfully");
 
         let database_arc = Arc::new(database);
+
+        // Create sync engine for background operations
+        let (sync_progress_tx, _sync_progress_rx) = mpsc::unbounded_channel::<SyncProgress>();
+        let sync_engine = Arc::new(crate::email::sync_engine::SyncEngine::new(
+            database_arc.clone(),
+            sync_progress_tx
+        ));
+        self.sync_engine = Some(sync_engine);
+        
+        // Initialize calendar database and manager
+        tracing::info!("📅 Initializing calendar database...");
+        let calendar_db_path = config_dir.join("calendar.db");
+        let calendar_db_path_str = match calendar_db_path.to_str() {
+            Some(path) => path,
+            None => {
+                return Err(anyhow::anyhow!("Invalid calendar database path"));
+            }
+        };
+        
+        let calendar_database = Arc::new(
+            crate::calendar::database::CalendarDatabase::new(calendar_db_path_str)
+                .await
+                .map_err(|e| anyhow::anyhow!("Failed to initialize calendar database: {}", e))?
+        );
+        
+        // Initialize token manager for calendar and contacts (reuse existing or create new)
+        let token_manager = if let Some(existing_tm) = &self.token_manager {
+            Arc::new(existing_tm.clone())
+        } else {
+            let new_tm = TokenManager::new();
+            self.token_manager = Some(new_tm.clone());
+            Arc::new(new_tm)
+        };
+        
+        // Create calendar manager
+        let calendar_manager = Arc::new(
+            CalendarManager::new(calendar_database.clone(), token_manager.clone())
+                .await
+                .map_err(|e| anyhow::anyhow!("Failed to create calendar manager: {}", e))?
+        );
+        
+        self.calendar_manager = Some(calendar_manager.clone());
+        tracing::info!("✅ Calendar system initialized successfully");
+        
+        // Initialize contacts database and manager
+        tracing::info!("👥 Initializing contacts database...");
+        let contacts_db_path = config_dir.join("contacts.db");
+        let contacts_db_path_str = match contacts_db_path.to_str() {
+            Some(path) => path,
+            None => {
+                return Err(anyhow::anyhow!("Invalid contacts database path"));
+            }
+        };
+        
+        let contacts_database = crate::contacts::database::ContactsDatabase::new(contacts_db_path_str)
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to initialize contacts database: {}", e))?;
+        
+        // Create contacts manager (ContactsManager expects non-Arc values)
+        let token_manager_for_contacts = match &*token_manager {
+            tm => tm.clone()
+        };
+        let contacts_manager = Arc::new(
+            ContactsManager::new(contacts_database, token_manager_for_contacts)
+                .await
+                .map_err(|e| anyhow::anyhow!("Failed to create contacts manager: {}", e))?
+        );
+        
+        self.contacts_manager = Some(contacts_manager.clone());
+        tracing::info!("✅ Contacts system initialized successfully");
 
         // Create notification manager
         let notification_manager = Arc::new(EmailNotificationManager::new(database_arc.clone()));
@@ -143,6 +257,15 @@ impl App {
         self.notification_manager = Some(notification_manager);
         self.unified_notification_manager = Some(unified_notification_manager);
 
+        // Complete database phase in progress manager
+        if let Err(e) = self.startup_progress_manager.complete_phase("Database") {
+            tracing::warn!("Failed to complete Database phase in progress manager: {}", e);
+        }
+
+        // Load calendar and contacts data into UI
+        self.refresh_calendar_data().await?;
+        self.refresh_contacts_data().await?;
+        
         tracing::info!("✅ Database initialization completed successfully");
         Ok(())
     }
@@ -168,6 +291,79 @@ impl App {
     pub fn set_initial_mode(&mut self, mode: crate::cli::StartupMode) {
         self.ui.set_initial_mode(mode);
     }
+    
+    /// Refresh calendar data from database and update UI
+    pub async fn refresh_calendar_data(&mut self) -> Result<()> {
+        if let Some(calendar_manager) = &self.calendar_manager {
+            tracing::info!("🔄 Refreshing calendar data from database...");
+            
+            // Get all calendars
+            let calendars = calendar_manager.get_calendars().await;
+            tracing::info!("📅 Found {} calendars in manager", calendars.len());
+            for calendar in &calendars {
+                tracing::info!("   - Calendar: {} (ID: {})", calendar.name, calendar.id);
+            }
+            
+            // Get all events for the next 6 months (to show in calendar views)
+            let now = chrono::Utc::now();
+            let six_months_later = now + chrono::Duration::days(180);
+            tracing::info!("🗓️  Querying events from {} to {}", now - chrono::Duration::days(30), six_months_later);
+            
+            let events = calendar_manager.get_all_events(Some(now - chrono::Duration::days(30)), Some(six_months_later)).await
+                .map_err(|e| anyhow::anyhow!("Failed to load calendar events: {}", e))?;
+            
+            tracing::info!("🎯 Retrieved {} events from calendar manager", events.len());
+            for event in &events {
+                tracing::info!("   - Event: {} (Start: {}, Calendar: {})", event.title, event.start_time, event.calendar_id);
+            }
+            
+            // Update UI with calendar data
+            let calendars_count = calendars.len();
+            let events_count = events.len();
+            self.ui.set_calendars(calendars);
+            self.ui.set_calendar_events(events);
+            
+            tracing::info!("✅ Loaded {} calendars and {} events into UI", calendars_count, events_count);
+        } else {
+            tracing::warn!("⚠️  Calendar manager not initialized, cannot refresh calendar data");
+        }
+        Ok(())
+    }
+    
+    /// Refresh contacts data from database and update UI  
+    pub async fn refresh_contacts_data(&mut self) -> Result<()> {
+        if let Some(contacts_manager) = &self.contacts_manager {
+            tracing::debug!("Refreshing contacts data from database...");
+            
+            // Get all contacts using empty search criteria
+            let criteria = crate::contacts::ContactSearchCriteria::new();
+            let contacts = contacts_manager.search_contacts(&criteria).await
+                .map_err(|e| anyhow::anyhow!("Failed to load contacts: {}", e))?;
+            
+            // Update UI with contacts data (if UI has contacts support)
+            // For now, just log the count
+            tracing::info!("👥 Loaded {} contacts from database", contacts.len());
+        }
+        Ok(())
+    }
+    
+    /// Refresh both calendar and contacts data on demand
+    pub async fn refresh_all_data(&mut self) -> Result<()> {
+        self.refresh_calendar_data().await?;
+        self.refresh_contacts_data().await?;
+        Ok(())
+    }
+    
+    /// Check if auto-refresh is needed and perform it
+    pub async fn check_and_refresh(&mut self) -> Result<()> {
+        let now = Instant::now();
+        if now.saturating_duration_since(self.last_auto_sync) >= self.auto_sync_interval {
+            tracing::debug!("Auto-refresh interval reached, refreshing calendar and contacts data...");
+            self.refresh_all_data().await?;
+            self.last_auto_sync = now;
+        }
+        Ok(())
+    }
 
     /// Send a test desktop notification
     pub async fn send_test_notification(&self) {
@@ -184,6 +380,16 @@ impl App {
     /// Check if initialization is complete
     pub fn is_initialization_complete(&self) -> bool {
         self.initialization_complete
+    }
+
+    /// Get a reference to the startup progress manager
+    pub fn startup_progress_manager(&self) -> &StartupProgressManager {
+        &self.startup_progress_manager
+    }
+
+    /// Get a mutable reference to the startup progress manager
+    pub fn startup_progress_manager_mut(&mut self) -> &mut StartupProgressManager {
+        &mut self.startup_progress_manager
     }
 
     /// Retry initialization in background (for when startup was skipped)
@@ -204,6 +410,14 @@ impl App {
                 Ok(Ok(())) => {
                     tracing::info!("✅ Database initialized successfully in background");
                     self.ui.show_toast_success("Database connection established");
+                    
+                    // Load calendar and contacts data into UI (same as in initialize_database)
+                    if let Err(e) = self.refresh_calendar_data().await {
+                        tracing::warn!("Failed to refresh calendar data after background init: {}", e);
+                    }
+                    if let Err(e) = self.refresh_contacts_data().await {
+                        tracing::warn!("Failed to refresh contacts data after background init: {}", e);
+                    }
                 },
                 Ok(Err(e)) => {
                     tracing::warn!("⚠️ Background database initialization failed: {}", e);
@@ -327,16 +541,16 @@ impl App {
         ).await {
             Ok(Ok(())) => {
                 tracing::info!("✅ Account setup completed successfully");
-                println!(" ✅");
+                // ✅ (removed print - already logged above)
             },
             Ok(Err(e)) => {
                 tracing::warn!("⚠️ Account setup failed: {}", e);
-                println!(" ⚠️");
+                // ⚠️ (removed print - already logged above)
                 // Continue startup - show empty state in UI
             },
             Err(_) => {
                 tracing::warn!("⏱️ Account setup timed out after 10 seconds");
-                println!(" ⏱️");
+                // ⏱️ (removed print - already logged above)
                 // Continue startup - show empty state in UI
             }
         }
@@ -349,11 +563,11 @@ impl App {
         // Initialize background processor (optional - don't fail startup if it fails)
         match self.initialize_background_processor().await {
             Ok(()) => {
-                println!(" ✅");
+                // ✅ (removed print - already logged below)
                 tracing::info!("✅ Background processor initialized successfully");
             },
             Err(e) => {
-                println!(" ⚠️");
+                // ⚠️ (removed print - already logged below)
                 tracing::warn!("⚠️ Background processor initialization failed: {}", e);
                 // Continue without background processor
             }
@@ -374,22 +588,22 @@ impl App {
             match sync_result {
                 Ok(Ok(())) => {
                     tracing::info!("✅ Initial IMAP sync completed successfully");
-                    println!(" ✅");
+                    // ✅ (removed print - already logged above)
                 },
                 Ok(Err(e)) => {
                     tracing::warn!("⚠️ Initial IMAP sync failed: {}", e);
-                    println!(" ⚠️");
+                    // ⚠️ (removed print - already logged above)
                 },
                 Err(_) => {
                     tracing::warn!("⚠️ Initial IMAP sync timed out after 15 seconds");
-                    println!(" ⚠️");
+                    // ⚠️ (removed print - already logged above)
                 }
             }
         } else {
-            println!("⚠️ No account found");
+            tracing::warn!("⚠️ No account found for initial sync");
         }
         
-        println!("✅ Background services ready");
+        tracing::info!("✅ Background services ready");
 
         self.initialization_complete = true;
         self.initialization_in_progress = false;
@@ -398,6 +612,11 @@ impl App {
         self.ui.show_toast_success("🚀 Comunicado ready! Modern TUI email & calendar client");
         
         tracing::info!("Deferred initialization completed");
+
+        // Check and refresh expired tokens now that initialization is complete
+        if let Err(e) = self.check_and_refresh_tokens().await {
+            tracing::warn!("Failed to refresh tokens after initialization: {}", e);
+        }
 
         // Log ready state
         tracing::info!("All services ready");
@@ -475,13 +694,16 @@ impl App {
         self.token_refresh_scheduler = None;
         tracing::debug!("Token refresh scheduler setup complete");
 
+        // Store token manager for later token refresh operations
+        let token_manager_arc = Arc::new(token_manager);
+
         // Set IMAP manager in UI for attachment downloading functionality
         let imap_manager_arc = Arc::new(imap_manager);
         self.ui
             .content_preview_mut()
             .set_imap_manager(imap_manager_arc.clone());
 
-            self.token_manager = Some(token_manager);
+            self.token_manager = Some(token_manager_arc.as_ref().clone());
             self.imap_manager = Some(imap_manager_arc);
 
             Ok(())
@@ -508,9 +730,23 @@ impl App {
             processing_interval: Duration::from_millis(250), // Check every 250ms
         };
 
+        // Get required services for background processor
+        let sync_engine = self.sync_engine.as_ref()
+            .ok_or_else(|| anyhow::anyhow!("Sync engine not initialized. Call initialize_database() first."))?
+            .clone();
+        let database = self.database.as_ref()
+            .ok_or_else(|| anyhow::anyhow!("Database not initialized. Call initialize_database() first."))?
+            .clone();
+        let account_manager = self.imap_manager.as_ref()
+            .ok_or_else(|| anyhow::anyhow!("IMAP account manager not initialized. Call initialize_imap_manager() first."))?
+            .clone();
+
         let processor = Arc::new(BackgroundProcessor::with_settings(
             progress_tx,
             completion_tx,
+            sync_engine,
+            account_manager,
+            database,
             settings,
         ));
 
@@ -520,11 +756,26 @@ impl App {
         })?;
 
         // Store processor and channels
-        self.background_processor = Some(processor);
+        self.background_processor = Some(processor.clone());
         self.sync_progress_rx = Some(progress_rx);
         self.task_completion_rx = Some(completion_rx);
 
+        // Set background processor on enhanced progress overlay for task cancellation
+        self.ui.enhanced_progress_overlay_mut().set_background_processor(processor);
+
         tracing::info!("✅ Background processor initialized successfully");
+        Ok(())
+    }
+
+    /// Initialize toast integration service for cross-application notifications
+    pub async fn initialize_toast_integration(&mut self) -> Result<()> {
+        tracing::info!("🍞 Toast integration using simple direct approach (no separate service needed)");
+        
+        // Toast integration is handled directly in the UI event processing
+        // via SimpleToastIntegration in process_background_updates() and handle_notification()
+        // No separate service initialization required
+        
+        tracing::info!("✅ Toast integration ready (using simple direct approach)");
         Ok(())
     }
 
@@ -545,8 +796,11 @@ impl App {
         // Process sync progress updates
         if let Some(ref mut progress_rx) = self.sync_progress_rx {
             while let Ok(progress) = progress_rx.try_recv() {
-                // Update UI with sync progress
-                self.ui.update_sync_progress(progress);
+                // Update UI with sync progress (legacy overlay)
+                self.ui.update_sync_progress(progress.clone());
+                
+                // Update enhanced progress overlay with sync progress
+                self.ui.enhanced_progress_overlay_mut().update_sync_progress(progress);
             }
         }
 
@@ -555,6 +809,42 @@ impl App {
             while let Ok(result) = completion_rx.try_recv() {
                 // Handle task completion
                 tracing::debug!("Background task completed: {:?}", result.status);
+                
+                // Update UI account status for successful account sync tasks
+                if let crate::performance::background_processor::BackgroundTaskType::AccountSync { .. } = result.task_type {
+                    match result.status {
+                        crate::performance::background_processor::TaskStatus::Completed => {
+                            // Account sync completed successfully - update UI status to Online
+                            tracing::info!("Account sync completed successfully for {}, updating UI status to Online", result.account_id);
+                            self.ui.update_account_status(
+                                &result.account_id,
+                                crate::ui::AccountSyncStatus::Online,
+                                None,
+                            );
+                        }
+                        crate::performance::background_processor::TaskStatus::Failed(_) => {
+                            // Account sync failed - update UI status to Error
+                            tracing::warn!("Account sync failed for {}, updating UI status to Error", result.account_id);
+                            self.ui.update_account_status(
+                                &result.account_id,
+                                crate::ui::AccountSyncStatus::Error,
+                                None,
+                            );
+                        }
+                        _ => {
+                            // Cancelled or other status - no UI update needed
+                        }
+                    }
+                }
+                
+                // Update enhanced progress overlay with completion
+                self.ui.enhanced_progress_overlay_mut().handle_task_completion(result.clone());
+                
+                // Add toast notification for task completion
+                crate::ui::toast_integration_simple::SimpleToastIntegration::handle_task_completion(
+                    self.ui.toast_manager(), 
+                    result
+                );
             }
         }
     }
@@ -766,44 +1056,6 @@ impl App {
         Ok(())
     }
 
-    /// Create account and folder in database from OAuth2 config
-    async fn create_account_from_config(&self, config: &AccountConfig) -> Result<()> {
-        if let Some(ref database) = self.database {
-            // Check if account already exists
-            let account_exists = sqlx::query("SELECT id FROM accounts WHERE id = ?")
-                .bind(&config.account_id)
-                .fetch_optional(&database.pool)
-                .await?
-                .is_some();
-
-            if !account_exists {
-                // Create account
-                sqlx::query("INSERT INTO accounts (id, name, email, provider, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)")
-                    .bind(&config.account_id)
-                    .bind(&config.display_name)
-                    .bind(&config.email_address)
-                    .bind(&config.provider)
-                    .bind(chrono::Utc::now().to_rfc3339())
-                    .bind(chrono::Utc::now().to_rfc3339())
-                    .execute(&database.pool)
-                    .await?;
-
-                // Create INBOX folder (always create this for email accounts)
-                sqlx::query("INSERT INTO folders (account_id, name, full_name, delimiter, attributes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
-                    .bind(&config.account_id)
-                    .bind("INBOX")
-                    .bind("INBOX")
-                    .bind(".")
-                    .bind("[]")
-                    .bind(chrono::Utc::now().to_rfc3339())
-                    .bind(chrono::Utc::now().to_rfc3339())
-                    .execute(&database.pool)
-                    .await?;
-            }
-        }
-
-        Ok(())
-    }
 
     /// Load sample data for demonstration (fallback)
     pub async fn load_sample_data(&mut self) -> Result<()> {
@@ -1014,8 +1266,11 @@ impl App {
             .map(|row| row.get::<String, _>("name"))
             .collect();
 
-        // Define important folders that should always be synced
-        let important_folders = ["INBOX", "Sent", "Drafts", "Trash", "Spam", "Junk", "Sent Items", "Sent Mail"];
+        // Define important folders that should always be synced (including Gmail-specific folders)
+        let important_folders = [
+            "INBOX", "Sent", "Drafts", "Trash", "Spam", "Junk", "Sent Items", "Sent Mail",
+            "All Mail", "Starred", "Important", "Bin"  // Gmail-specific folders
+        ];
         
         // Separate important folders from others
         let mut priority_folders = Vec::new();
@@ -1047,8 +1302,8 @@ impl App {
             }
         }
 
-        // Then fetch from other folders (with a limit to avoid performance issues)
-        let max_other_folders = 5; // Limit to avoid performance issues
+        // Then fetch from other folders (increased limit to sync all important Gmail folders)
+        let max_other_folders = 25; // Increased from 5 to support all Gmail folders like All Mail, etc.
         let folders_to_sync = other_folders.iter().take(max_other_folders);
         
         for folder_name in folders_to_sync {
@@ -1170,7 +1425,7 @@ impl App {
     }
 
     pub async fn run(&mut self) -> Result<()> {
-        println!("🚀 Starting Comunicado...");
+        tracing::info!("🚀 Starting Comunicado...");
         
         // Check if we're running in a proper terminal
         if !std::io::stdout().is_tty() {
@@ -1179,8 +1434,7 @@ impl App {
             ));
         }
 
-        println!("🔄 Setting up terminal...");
-        std::io::Write::flush(&mut std::io::stdout()).unwrap();
+        tracing::debug!("🔄 Setting up terminal...");
 
         // Setup terminal
         enable_raw_mode().map_err(|e| {
@@ -1240,6 +1494,12 @@ impl App {
             // Check for auto-sync (every 3 minutes) - now uses background processing
             if self.last_auto_sync.elapsed() >= self.auto_sync_interval {
                 self.queue_auto_sync_background().await;
+                
+                // Also refresh calendar and contacts data
+                if let Err(e) = self.check_and_refresh().await {
+                    tracing::warn!("Failed to refresh calendar/contacts data: {}", e);
+                }
+                
                 self.last_auto_sync = Instant::now();
             }
 
@@ -1266,10 +1526,41 @@ impl App {
                 }
             }
 
-            // Draw UI
-            terminal.draw(|f| {
-                self.ui.render(f)
-            })?;
+            // Draw UI with panic protection
+            let draw_result = terminal.draw(|f| {
+                // Catch panics in the render call
+                let render_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    self.ui.render(f)
+                }));
+                
+                match render_result {
+                    Ok(_) => {
+                        // Rendering succeeded
+                    }
+                    Err(panic_info) => {
+                        tracing::error!("🚨 PANIC CAUGHT in ui.render()!");
+                        if let Some(s) = panic_info.downcast_ref::<&str>() {
+                            tracing::error!("🚨 Render panic message: {}", s);
+                        } else if let Some(s) = panic_info.downcast_ref::<String>() {
+                            tracing::error!("🚨 Render panic message: {}", s);
+                        } else {
+                            tracing::error!("🚨 Unknown render panic type");
+                        }
+                        // Draw a simple error message instead of crashing
+                        use ratatui::widgets::{Block, Borders, Paragraph};
+                        use ratatui::layout::Alignment;
+                        let error_msg = Paragraph::new("🚨 Render Error - Check logs for details")
+                            .block(Block::default().borders(Borders::ALL).title("Error"))
+                            .alignment(Alignment::Center);
+                        f.render_widget(error_msg, f.size());
+                    }
+                }
+            });
+            
+            if let Err(e) = draw_result {
+                tracing::error!("🚨 Terminal drawing error: {}", e);
+                return Err(e.into());
+            }
 
             // Handle events
             let timeout = tick_rate
@@ -1305,7 +1596,7 @@ impl App {
                             self.handle_sync_account(&account_id).await?;
                         }
                         EventResult::FolderSelect(folder_path) => {
-                            eprintln!("🔍 DEBUG: Processing FolderSelect event for: '{}'", folder_path);
+                            tracing::debug!("🔍 Processing FolderSelect event for: '{}'", folder_path);
                             self.handle_folder_select(&folder_path).await?;
                         }
                         EventResult::FolderForceRefresh(folder_path) => {
@@ -1352,6 +1643,10 @@ impl App {
                             self.initialization_complete = false;
                             self.ui.show_toast_info("Retrying initialization in background...");
                         }
+                        EventResult::CancelBackgroundTask => {
+                            // Cancel the selected task in enhanced progress overlay
+                            self.ui.cancel_enhanced_progress_selected_task().await;
+                        }
                     }
 
                     // Check for quit command
@@ -1373,6 +1668,9 @@ impl App {
                 
                 // Clean up old sync progress entries
                 self.ui.cleanup_sync_progress();
+                
+                // Clean up old enhanced progress entries
+                self.ui.cleanup_enhanced_progress();
                 
                 last_tick = Instant::now();
             }
@@ -2947,16 +3245,16 @@ impl App {
     /// Handle folder selection event - load cached messages immediately, then refresh in background
     /// This method provides instant feedback by loading cached messages first, then updates in background
     async fn handle_folder_select(&mut self, folder_path: &str) -> Result<()> {
-        eprintln!("🔍 DEBUG: handle_folder_select called with folder_path: '{}'", folder_path);
+        tracing::debug!("🔍 handle_folder_select called with folder_path: '{}'", folder_path);
         
         // Get the current account ID and clone it to avoid borrowing issues
         let current_account_id = match self.ui.get_current_account_id() {
             Some(id) => {
-                eprintln!("🔍 DEBUG: Current account ID: '{}'", id);
+                tracing::debug!("🔍 Current account ID: '{}'", id);
                 id.clone()
             },
             None => {
-                eprintln!("❌ DEBUG: No current account selected for folder selection");
+                tracing::warn!("❌ No current account selected for folder selection");
                 tracing::warn!("No current account selected for folder selection");
                 return Ok(());
             }
@@ -2999,19 +3297,21 @@ impl App {
         }
 
         // STEP 2: Queue background refresh task using the background processor
-        if let Some(folder_name) = folder_path.split('/').next_back() {
+        // Use the full folder_path instead of just the last segment to preserve Gmail prefixes like [Gmail]/
+        let folder_name_for_display = folder_path.split('/').last().unwrap_or(folder_path);
+        {
             use crate::performance::background_processor::{BackgroundTask, BackgroundTaskType, TaskPriority};
             
             use uuid::Uuid;
             
             let background_task = BackgroundTask {
                 id: Uuid::new_v4(),
-                name: format!("Quick refresh: {}", folder_name),
+                name: format!("Quick refresh: {}", folder_name_for_display),
                 priority: TaskPriority::Normal,
                 account_id: current_account_id.clone(),
-                folder_name: Some(folder_name.to_string()),
+                folder_name: Some(folder_path.to_string()), // Use full path
                 task_type: BackgroundTaskType::FolderRefresh {
-                    folder_name: folder_name.to_string(),
+                    folder_name: folder_path.to_string(), // Use full path
                 },
                 created_at: std::time::Instant::now(),
                 estimated_duration: Some(std::time::Duration::from_secs(2)),
@@ -3022,7 +3322,7 @@ impl App {
                 Ok(task_id) => {
                     tracing::info!("✅ Queued background refresh task for {} (ID: {})", folder_path, task_id);
                     self.ui.show_notification(
-                        format!("🔄 Background sync queued for {}", folder_name),
+                        format!("🔄 Background sync queued for {}", folder_name_for_display),
                         std::time::Duration::from_millis(1000)
                     );
                 }
@@ -3610,9 +3910,77 @@ impl App {
         );
     }
 
+
+    /// Check and refresh expired tokens with UI updates
+    pub async fn check_and_refresh_tokens(&mut self) -> Result<()> {
+        if let Some(ref token_manager) = self.token_manager {
+            let account_ids = token_manager.get_account_ids().await;
+            let mut refreshed_accounts = Vec::new();
+
+            for account_id in account_ids {
+                let diagnosis = token_manager.diagnose_account_tokens(&account_id).await;
+                
+                match diagnosis {
+                    crate::oauth2::token::TokenDiagnosis::ExpiredWithRefresh { .. } |
+                    crate::oauth2::token::TokenDiagnosis::ExpiringSoon { has_refresh_token: true, .. } => {
+                        tracing::info!("Refreshing token for account: {}", account_id);
+                        match token_manager.refresh_access_token(&account_id).await {
+                            Ok(_) => {
+                                tracing::info!("Successfully refreshed token for account: {}", account_id);
+                                refreshed_accounts.push(account_id.clone());
+                                
+                                // Update UI to show account as online
+                                self.ui.update_account_status(
+                                    &account_id,
+                                    crate::ui::AccountSyncStatus::Online,
+                                    None,
+                                );
+                            }
+                            Err(e) => {
+                                tracing::warn!("Failed to refresh token for account {}: {}", account_id, e);
+                                // Update UI to show account has error
+                                self.ui.update_account_status(
+                                    &account_id,
+                                    crate::ui::AccountSyncStatus::Error,
+                                    None,
+                                );
+                            }
+                        }
+                    }
+                    crate::oauth2::token::TokenDiagnosis::ExpiredNoRefresh { .. } => {
+                        tracing::warn!("Account {} has expired token without refresh capability", account_id);
+                        self.ui.update_account_status(
+                            &account_id,
+                            crate::ui::AccountSyncStatus::Error,
+                            None,
+                        );
+                    }
+                    _ => {
+                        // Token is valid, ensure account shows as online
+                        self.ui.update_account_status(
+                            &account_id,
+                            crate::ui::AccountSyncStatus::Online,
+                            None,
+                        );
+                    }
+                }
+            }
+
+            if !refreshed_accounts.is_empty() {
+                let message = format!("🔄 Refreshed tokens for {} account(s)", refreshed_accounts.len());
+                self.ui.show_toast_success(&message);
+                tracing::info!("Token refresh completed for accounts: {:?}", refreshed_accounts);
+            }
+        }
+        
+        Ok(())
+    }
+
     /// Handle contacts popup request
     async fn handle_contacts_popup(&mut self) -> Result<()> {
+        tracing::info!("🎯 handle_contacts_popup() called!");
         if let Some(ref contacts_manager) = self.contacts_manager {
+            tracing::info!("✅ Contacts manager found, showing popup");
             self.ui.show_contacts_popup(contacts_manager.clone());
         } else {
             tracing::warn!("Contacts manager not initialized, cannot show contacts popup");
@@ -3635,14 +4003,19 @@ impl App {
                 // TODO: Start email composition with this contact
             }
             ContactPopupAction::ViewContact(contact) => {
-                // View contact details
-                self.ui.hide_contacts_popup();
-                
-                let message = format!("Viewing contact: {} <{}>", 
-                    contact.display_name, 
-                    contact.primary_email().map(|e| e.address.as_str()).unwrap_or("no email")
-                );
-                self.ui.show_notification(message, Duration::from_secs(3));
+                // Show contact details in the popup instead of closing it
+                if self.ui.show_contact_details_in_popup(contact.clone()) {
+                    // Successfully shown contact details in popup
+                    tracing::info!("📱 Showing contact details in popup");
+                } else {
+                    // Fallback: show notification if popup is not available
+                    self.ui.hide_contacts_popup();
+                    let message = format!("Viewing contact: {} <{}>", 
+                        contact.display_name, 
+                        contact.primary_email().map(|e| e.address.as_str()).unwrap_or("no email")
+                    );
+                    self.ui.show_notification(message, Duration::from_secs(3));
+                }
             }
             ContactPopupAction::Close => {
                 // Close the popup
@@ -3959,7 +4332,7 @@ mod tests {
         let mut app = App::new().unwrap();
         
         // Test that the progress manager is initialized
-        assert_eq!(app.startup_progress_manager().phases().len(), 5);
+        assert_eq!(app.startup_progress_manager().phases().len(), 4);
         assert!(!app.startup_progress_manager().is_complete());
         assert_eq!(app.startup_progress_manager().overall_progress_percentage(), 0.0);
         

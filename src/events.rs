@@ -1,7 +1,7 @@
 use crate::keyboard::{KeyboardAction, KeyboardManager};
 use crate::tea::message::ViewMode;
 use crate::ui::{ComposeAction, DraftAction, FocusedPane, UIMode, UI};
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{KeyCode, KeyEvent};
 use chrono::Datelike;
 
 pub struct EventHandler {
@@ -35,6 +35,7 @@ pub enum EventResult {
     ReplyAllToMessage(uuid::Uuid), // Message ID to reply all to
     ForwardMessage(uuid::Uuid), // Message ID to forward
     RetryInitialization, // Retry failed initialization
+    CancelBackgroundTask, // Cancel selected background task
 }
 
 impl EventHandler {
@@ -67,6 +68,7 @@ impl EventHandler {
         key: KeyEvent,
         ui: &mut UI,
     ) -> EventResult {
+        
         // Handle global help overlay first (works in all modes)
         if self.handle_help_keys(key, ui) {
             return EventResult::Continue;
@@ -100,18 +102,66 @@ impl EventHandler {
             return EventResult::Continue;
         }
 
-        // Get the action from keyboard manager
-        if let Some(action) = self.keyboard_manager.get_action(key.code, key.modifiers) {
-            return self.execute_keyboard_action(action.clone(), ui).await;
+        // Handle enhanced progress overlay keys with high priority (before keyboard manager)
+        if ui.enhanced_progress_overlay().is_visible() {
+            match key.code {
+                KeyCode::Esc => {
+                    // If cancel dialog is already showing, actually cancel the task
+                    if ui.enhanced_progress_overlay().is_cancel_dialog_showing() {
+                        return EventResult::CancelBackgroundTask;
+                    }
+                    // If there's a cancellable task selected, show cancel dialog
+                    else if ui.enhanced_progress_overlay().has_cancellable_task() {
+                        ui.show_enhanced_progress_cancel_dialog();
+                        return EventResult::Continue;
+                    }
+                    // Otherwise just hide the overlay
+                    else {
+                        ui.hide_enhanced_progress_overlay();
+                        return EventResult::Continue;
+                    }
+                }
+                KeyCode::Enter => {
+                    return self.handle_select(ui);
+                }
+                KeyCode::Up | KeyCode::Char('k') => {
+                    self.handle_move_up(ui);
+                    return EventResult::Continue;
+                }
+                KeyCode::Down | KeyCode::Char('j') => {
+                    self.handle_move_down(ui);
+                    return EventResult::Continue;
+                }
+                KeyCode::Char('q') | KeyCode::Char('Q') => {
+                    ui.hide_enhanced_progress_overlay();
+                    return EventResult::Continue;
+                }
+                _ => {} // Fall through to keyboard manager for other keys
+            }
         }
 
-        // Handle mode-specific keys that don't have actions
-        match ui.mode() {
+        // Handle mode-specific keys BEFORE keyboard manager to avoid conflicts
+        let mode_result = match ui.mode() {
             UIMode::EmailViewer => self.handle_email_viewer_keys(key, ui).await,
             UIMode::KeyboardShortcuts => self.handle_keyboard_shortcuts_keys(key, ui).await,
             UIMode::ContactsPopup => self.handle_contacts_popup_keys(key, ui).await,
             _ => EventResult::Continue,
+        };
+        
+        // If mode-specific handler processed the key, return its result
+        if !matches!(mode_result, EventResult::Continue) {
+            return mode_result;
         }
+
+        // Get the action from keyboard manager (only if mode-specific handler didn't handle it)
+        if let Some(action) = self.keyboard_manager.get_action(key.code, key.modifiers) {
+            tracing::debug!("Found keyboard action for {:?}: {:?}", key.code, action);
+            return self.execute_keyboard_action(action.clone(), ui).await;
+        } else {
+            tracing::debug!("No keyboard action found for key: {:?} with modifiers: {:?}", key.code, key.modifiers);
+        }
+
+        EventResult::Continue
     }
 
     /// Handle text input modes (search, folder search, etc.)
@@ -222,7 +272,26 @@ impl EventHandler {
             KeyboardAction::VimMoveRight => {
                 match ui.focused_pane() {
                     FocusedPane::FolderTree => {
-                        ui.folder_tree_mut().handle_right();
+                        tracing::info!("🔍 About to call handle_right() on folder tree");
+                        
+                        // Add comprehensive error handling around the entire call
+                        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                            ui.folder_tree_mut().handle_right();
+                        })) {
+                            Ok(_) => {
+                                tracing::info!("✅ handle_right() completed successfully");
+                            }
+                            Err(panic_info) => {
+                                tracing::error!("🚨 PANIC CAUGHT in handle_right()!");
+                                if let Some(s) = panic_info.downcast_ref::<&str>() {
+                                    tracing::error!("🚨 Panic message: {}", s);
+                                } else if let Some(s) = panic_info.downcast_ref::<String>() {
+                                    tracing::error!("🚨 Panic message: {}", s);
+                                } else {
+                                    tracing::error!("🚨 Unknown panic type");
+                                }
+                            }
+                        }
                     }
                     _ => {
                         ui.next_pane();
@@ -459,8 +528,10 @@ impl EventHandler {
                 EventResult::Continue
             }
             KeyboardAction::OpenEmailViewer => {
+                tracing::debug!("🔍 OpenEmailViewer action triggered! Current pane: {:?}", ui.focused_pane());
                 // Open email popup viewer for reply/forward/edit actions
-                if ui.focused_pane() == FocusedPane::ContentPreview {
+                if matches!(ui.focused_pane(), FocusedPane::MessageList | FocusedPane::ContentPreview) {
+                    tracing::debug!("✅ Pane check passed for OpenEmailViewer");
                     if let Some(selected_message_item) = ui.message_list().selected_message() {
                         // We need the email content to start the viewer
                         if let Some(email_content) = ui.content_preview().get_email_content() {
@@ -569,7 +640,7 @@ impl EventHandler {
                 EventResult::Continue
             }
             KeyboardAction::ViewAttachment => {
-                if let FocusedPane::ContentPreview = ui.focused_pane() {
+                if matches!(ui.focused_pane(), FocusedPane::MessageList | FocusedPane::ContentPreview) {
                     if ui.content_preview().has_attachments() {
                         if let Some(_attachment) = ui.content_preview().get_selected_attachment() {
                             if let Err(e) =
@@ -583,7 +654,7 @@ impl EventHandler {
                 EventResult::Continue
             }
             KeyboardAction::OpenAttachmentWithSystem => {
-                if let FocusedPane::ContentPreview = ui.focused_pane() {
+                if matches!(ui.focused_pane(), FocusedPane::MessageList | FocusedPane::ContentPreview) {
                     if ui.content_preview().has_attachments() {
                         if let Some(_attachment) = ui.content_preview().get_selected_attachment() {
                             if let Err(e) =
@@ -704,6 +775,7 @@ impl EventHandler {
 
             // Contacts actions
             KeyboardAction::ContactsPopup => {
+                tracing::info!("🔥 ContactsPopup action triggered!");
                 EventResult::ContactsPopup
             }
             KeyboardAction::ViewSenderContact => {
@@ -948,6 +1020,12 @@ impl EventHandler {
 
     /// Handle move down action for different panes
     fn handle_move_down(&mut self, ui: &mut UI) {
+        // First check if enhanced progress overlay is visible and handle navigation there
+        if ui.enhanced_progress_overlay().is_visible() {
+            ui.enhanced_progress_next();
+            return;
+        }
+
         match ui.focused_pane() {
             FocusedPane::AccountSwitcher => {
                 ui.account_switcher_mut().next_account();
@@ -967,6 +1045,12 @@ impl EventHandler {
 
     /// Handle move up action for different panes
     fn handle_move_up(&mut self, ui: &mut UI) {
+        // First check if enhanced progress overlay is visible and handle navigation there
+        if ui.enhanced_progress_overlay().is_visible() {
+            ui.enhanced_progress_previous();
+            return;
+        }
+
         match ui.focused_pane() {
             FocusedPane::AccountSwitcher => {
                 ui.account_switcher_mut().previous_account();
@@ -986,6 +1070,18 @@ impl EventHandler {
 
     /// Handle select action for different panes
     fn handle_select(&mut self, ui: &mut UI) -> EventResult {
+        // First check if enhanced progress overlay is visible
+        if ui.enhanced_progress_overlay().is_visible() {
+            if ui.enhanced_progress_overlay().is_cancel_dialog_showing() {
+                // Confirm cancellation - return event that can be handled async by main app
+                return EventResult::CancelBackgroundTask;
+            } else {
+                // Show cancel dialog for selected task
+                ui.show_enhanced_progress_cancel_dialog();
+                return EventResult::Continue;
+            }
+        }
+
         match ui.focused_pane() {
             FocusedPane::AccountSwitcher => {
                 if let Some(account_id) = ui.account_switcher_mut().select_current() {
@@ -1001,6 +1097,7 @@ impl EventHandler {
                     EventResult::Continue
                 } else {
                     if let Some(folder_path) = ui.folder_tree_mut().handle_enter() {
+                        tracing::debug!("Folder selection: returning FolderSelect({})", folder_path);
                         EventResult::FolderSelect(folder_path)
                     } else {
                         EventResult::Continue
@@ -1017,6 +1114,18 @@ impl EventHandler {
 
     /// Handle escape action for different panes and modes
     fn handle_escape(&mut self, ui: &mut UI) {
+        // First handle enhanced progress overlay
+        if ui.enhanced_progress_overlay().is_visible() {
+            // If cancel dialog is shown, hide it
+            if ui.enhanced_progress_overlay().is_cancel_dialog_showing() {
+                ui.hide_enhanced_progress_cancel_dialog();
+                return;
+            }
+            // Otherwise hide the entire overlay
+            ui.hide_enhanced_progress_overlay();
+            return;
+        }
+
         // First check UI mode for mode-specific escape handling
         match ui.mode() {
             UIMode::Calendar => {
@@ -1050,655 +1159,6 @@ impl EventHandler {
         }
     }
 
-    pub async fn handle_key_event(&mut self, key: KeyEvent, ui: &mut UI) -> EventResult {
-        // Handle compose mode separately
-        if ui.mode() == &UIMode::Compose {
-            if let Some(action) = ui.handle_compose_key(key.code).await {
-                return EventResult::ComposeAction(action);
-            }
-            return EventResult::Continue;
-        }
-
-        // Handle draft list mode
-        if ui.mode() == &UIMode::DraftList {
-            if let Some(action) = ui.handle_draft_list_key(key.code).await {
-                return EventResult::DraftAction(action);
-            }
-            return EventResult::Continue;
-        }
-
-
-        // Handle email viewer mode
-        if ui.mode() == &UIMode::EmailViewer {
-            return self.handle_email_viewer_keys(key, ui).await;
-        }
-
-        // Handle attachment viewer mode when it's active in content preview
-        if ui.focused_pane() == FocusedPane::ContentPreview
-            && ui.content_preview().is_viewing_attachment()
-        {
-            // Route key handling to attachment viewer
-            match key.code {
-                KeyCode::Esc => {
-                    ui.content_preview_mut().close_attachment_viewer();
-                    return EventResult::Continue;
-                }
-                KeyCode::Up => {
-                    ui.content_preview_mut().handle_up();
-                    return EventResult::Continue;
-                }
-                KeyCode::Down => {
-                    ui.content_preview_mut().handle_down();
-                    return EventResult::Continue;
-                }
-                KeyCode::Char('k') => {
-                    ui.content_preview_mut().handle_up();
-                    return EventResult::Continue;
-                }
-                KeyCode::Char('j') => {
-                    ui.content_preview_mut().handle_down();
-                    return EventResult::Continue;
-                }
-                KeyCode::Home => {
-                    ui.content_preview_mut().scroll_to_top();
-                    return EventResult::Continue;
-                }
-                KeyCode::End => {
-                    ui.content_preview_mut().scroll_to_bottom(20); // Default height
-                    return EventResult::Continue;
-                }
-                KeyCode::Char(c) => {
-                    if let Err(e) = ui
-                        .content_preview_mut()
-                        .handle_attachment_viewer_key(c)
-                        .await
-                    {
-                        tracing::error!("Error handling attachment viewer key: {}", e);
-                    }
-                    return EventResult::Continue;
-                }
-                _ => {
-                    // Other keys are ignored in attachment viewer mode
-                    return EventResult::Continue;
-                }
-            }
-        }
-
-        match key.code {
-            // Global quit commands
-            KeyCode::Char('q') => {
-                self.should_quit = true;
-            }
-            KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                self.should_quit = true;
-            }
-
-            // Handle search input mode for folder tree
-            KeyCode::Char(c)
-                if ui.focused_pane() == FocusedPane::FolderTree
-                    && ui.folder_tree().is_in_search_mode() =>
-            {
-                ui.folder_tree_mut().handle_search_input(c);
-                return EventResult::Continue;
-            }
-            KeyCode::Backspace
-                if ui.focused_pane() == FocusedPane::FolderTree
-                    && ui.folder_tree().is_in_search_mode() =>
-            {
-                ui.folder_tree_mut().handle_search_backspace();
-                return EventResult::Continue;
-            }
-
-            // Handle search input mode for message list
-            KeyCode::Char(c)
-                if ui.focused_pane() == FocusedPane::MessageList
-                    && ui.message_list().is_search_active() =>
-            {
-                let mut current_query = ui.message_list().search_query().to_string();
-                current_query.push(c);
-                ui.message_list_mut().update_search(current_query);
-                return EventResult::Continue;
-            }
-            KeyCode::Backspace
-                if ui.focused_pane() == FocusedPane::MessageList
-                    && ui.message_list().is_search_active() =>
-            {
-                let mut current_query = ui.message_list().search_query().to_string();
-                current_query.pop();
-                ui.message_list_mut().update_search(current_query);
-                return EventResult::Continue;
-            }
-
-
-            // Navigation between panes
-            KeyCode::Tab => {
-                ui.next_pane();
-            }
-            KeyCode::BackTab => {
-                ui.previous_pane();
-            }
-
-            // Vim-style navigation
-            KeyCode::Char('h') => {
-                match ui.focused_pane() {
-                    FocusedPane::FolderTree => {
-                        // Handle left movement in folder tree (collapse)
-                        ui.folder_tree_mut().handle_left();
-                    }
-                    _ => {
-                        // Move to previous pane
-                        ui.previous_pane();
-                    }
-                }
-            }
-            KeyCode::Char('l') => {
-                match ui.focused_pane() {
-                    FocusedPane::FolderTree => {
-                        // Handle right movement in folder tree (expand)
-                        ui.folder_tree_mut().handle_right();
-                    }
-                    _ => {
-                        // Move to next pane
-                        ui.next_pane();
-                    }
-                }
-            }
-            KeyCode::Char('j') | KeyCode::Down => {
-                // Move down in current pane
-                match ui.focused_pane() {
-                    FocusedPane::AccountSwitcher => {
-                        ui.account_switcher_mut().next_account();
-                    }
-                    FocusedPane::FolderTree => {
-                        ui.folder_tree_mut().handle_down();
-                    }
-                    FocusedPane::MessageList => {
-                        ui.message_list_mut().handle_down();
-                    }
-                    FocusedPane::ContentPreview => {
-                        // Check if there are attachments and if any are selected
-                        if ui.content_preview().has_attachments()
-                            && ui.content_preview().get_selected_attachment().is_some()
-                            && key.modifiers.contains(KeyModifiers::CONTROL)
-                        {
-                            // Ctrl+J: Navigate to next attachment
-                            ui.content_preview_mut().next_attachment();
-                        } else {
-                            // Regular scroll down
-                            ui.content_preview_mut().handle_down();
-                        }
-                    }
-                    FocusedPane::Compose => {
-                        // Handled separately in compose mode
-                    }
-                    FocusedPane::DraftList => {
-                        // Draft list navigation handled in draft list mode
-                    }
-                    FocusedPane::Calendar => {
-                        // Calendar navigation handled in calendar mode
-                    }
-                }
-            }
-            KeyCode::Char('k') | KeyCode::Up => {
-                // Move up in current pane
-                match ui.focused_pane() {
-                    FocusedPane::AccountSwitcher => {
-                        ui.account_switcher_mut().previous_account();
-                    }
-                    FocusedPane::FolderTree => {
-                        ui.folder_tree_mut().handle_up();
-                    }
-                    FocusedPane::MessageList => {
-                        ui.message_list_mut().handle_up();
-                    }
-                    FocusedPane::ContentPreview => {
-                        // Check if there are attachments and if any are selected
-                        if ui.content_preview().has_attachments()
-                            && ui.content_preview().get_selected_attachment().is_some()
-                            && key.modifiers.contains(KeyModifiers::CONTROL)
-                        {
-                            // Ctrl+K: Navigate to previous attachment
-                            ui.content_preview_mut().previous_attachment();
-                        } else {
-                            // Regular scroll up
-                            ui.content_preview_mut().handle_up();
-                        }
-                    }
-                    FocusedPane::Compose => {
-                        // Handled separately in compose mode
-                    }
-                    FocusedPane::DraftList => {
-                        // Draft list navigation handled in draft list mode
-                    }
-                    FocusedPane::Calendar => {
-                        // Calendar navigation handled in calendar mode
-                    }
-                }
-            }
-
-            // Escape key handling
-            KeyCode::Esc => {
-                // Check if sync progress overlay is visible and close it first
-                if ui.is_sync_progress_visible() {
-                    ui.toggle_sync_progress_overlay();
-                    ui.show_toast_info("Sync progress overlay closed");
-                    return EventResult::Continue;
-                }
-
-                match ui.focused_pane() {
-                    FocusedPane::FolderTree => {
-                        // Check if in search mode first
-                        if ui.folder_tree().is_in_search_mode() {
-                            ui.folder_tree_mut().exit_search_mode(false); // Cancel search
-                        } else {
-                            ui.folder_tree_mut().handle_escape();
-                        }
-                    }
-                    FocusedPane::MessageList => {
-                        // Check if in search mode first
-                        if ui.message_list().is_search_active() {
-                            ui.message_list_mut().end_search(); // Cancel search
-                        }
-                    }
-                    FocusedPane::ContentPreview => {
-                        // Close attachment viewer if open
-                        if ui.content_preview().is_viewing_attachment() {
-                            ui.content_preview_mut().close_attachment_viewer();
-                        }
-                    }
-                    _ => {}
-                }
-            }
-
-            // Function keys for folder operations
-            KeyCode::Char('r') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                // Ctrl+R - Refresh
-                match ui.focused_pane() {
-                    FocusedPane::FolderTree => {
-                        if let Some(operation) = ui.folder_tree_mut().handle_function_key(KeyCode::F(5))
-                        {
-                            return EventResult::FolderOperation(operation);
-                        }
-                    }
-                    _ => {
-                        // Global Ctrl+R refresh
-                        // TODO: Add global refresh functionality
-                    }
-                }
-            }
-            KeyCode::Char('g') => {
-                // g - Calendar (global access) - more terminal friendly than F3
-                ui.show_calendar();
-            }
-            
-            // Navigation shortcuts between email/calendar/contacts
-            KeyCode::Char('e') => {
-                // e - Email interface (from any mode)
-                ui.show_email_interface();
-            }
-            KeyCode::Char('K') => {
-                // K - Contacts popup (K for Kontacts to avoid conflicts with C)
-                // TODO: Need to pass contacts_manager from app level
-                tracing::info!("Contacts shortcut pressed - contacts popup not implemented yet");
-            }
-            KeyCode::Char('R') => {
-                // R - Rename (uppercase R)
-                match ui.focused_pane() {
-                    FocusedPane::FolderTree => {
-                        if let Some(operation) = ui.folder_tree_mut().handle_function_key(KeyCode::F(2))
-                        {
-                            return EventResult::FolderOperation(operation);
-                        }
-                    }
-                    _ => {}
-                }
-            }
-            KeyCode::Delete => {
-                // Delete key
-                match ui.focused_pane() {
-                    FocusedPane::FolderTree => {
-                        if let Some(operation) = ui.folder_tree_mut().handle_function_key(key.code)
-                        {
-                            return EventResult::FolderOperation(operation);
-                        }
-                    }
-                    _ => {}
-                }
-            }
-
-            // Enter key for selection
-            KeyCode::Enter => {
-                eprintln!("🔍 DEBUG: Enter key pressed, focused pane: {:?}", ui.focused_pane());
-                match ui.focused_pane() {
-                    FocusedPane::AccountSwitcher => {
-                        if let Some(account_id) = ui.account_switcher_mut().select_current() {
-                            // Return account switch event to be handled by main loop
-                            tracing::info!("Account selected: {}", account_id);
-                            return EventResult::AccountSwitch(account_id);
-                        }
-                    }
-                    FocusedPane::FolderTree => {
-                        // Check if in search mode first
-                        if ui.folder_tree().is_in_search_mode() {
-                            ui.folder_tree_mut().exit_search_mode(true); // Apply search
-                        } else {
-                            if let Some(folder_path) = ui.folder_tree_mut().handle_enter() {
-                                eprintln!("🔍 DEBUG: Folder selected: '{}'", folder_path);
-                                return EventResult::FolderSelect(folder_path);
-                            }
-                        }
-                    }
-                    FocusedPane::MessageList => {
-                        ui.message_list_mut().handle_enter();
-                    }
-                    FocusedPane::ContentPreview => {
-                        // Maybe handle links or attachments in the future
-                    }
-                    FocusedPane::Compose => {
-                        // Handled separately in compose mode
-                    }
-                    FocusedPane::DraftList => {
-                        // Draft list navigation handled in draft list mode
-                    }
-                    FocusedPane::Calendar => {
-                        // Calendar navigation handled in calendar mode
-                    }
-                }
-            }
-
-            // Threading and view mode controls
-            KeyCode::Char('t') => {
-                // Toggle threaded view
-                if let FocusedPane::MessageList = ui.focused_pane() {
-                    ui.message_list_mut().toggle_view_mode();
-                }
-            }
-            KeyCode::Char(' ') => {
-                // Toggle expansion/collapse (Space key)
-                match ui.focused_pane() {
-                    FocusedPane::AccountSwitcher => {
-                        ui.account_switcher_mut().toggle_expanded();
-                    }
-                    FocusedPane::MessageList => {
-                        ui.message_list_mut().toggle_selected_thread();
-                    }
-                    _ => {}
-                }
-            }
-            KeyCode::Char('o') => {
-                // Open/expand thread
-                if let FocusedPane::MessageList = ui.focused_pane() {
-                    ui.message_list_mut().expand_selected_thread();
-                }
-            }
-            KeyCode::Char('C') => {
-                // Close/collapse thread (capital C)
-                if let FocusedPane::MessageList = ui.focused_pane() {
-                    ui.message_list_mut().collapse_selected_thread();
-                }
-            }
-
-            // Sorting controls / Attachment save
-            KeyCode::Char('s') => {
-                match ui.focused_pane() {
-                    FocusedPane::MessageList => {
-                        // Cycle through sort modes (date, sender, subject)
-                        use crate::email::{SortCriteria, SortOrder};
-                        ui.message_list_mut()
-                            .set_sort_criteria(SortCriteria::Date(SortOrder::Descending));
-                    }
-                    FocusedPane::ContentPreview => {
-                        // Save selected attachment
-                        if ui.content_preview().has_attachments() {
-                            if let Some(_attachment) =
-                                ui.content_preview().get_selected_attachment()
-                            {
-                                // In a full implementation, this would trigger an async save operation
-                                // For now, we'll just indicate that save was attempted
-                                tracing::info!("Attachment save requested");
-                                // TODO: Implement async save operation
-                                // This would require adding a save operation to EventResult
-                            }
-                        }
-                    }
-                    _ => {}
-                }
-            }
-            KeyCode::Char('v') => {
-                // View selected attachment
-                if let FocusedPane::ContentPreview = ui.focused_pane() {
-                    if ui.content_preview().has_attachments() {
-                        if let Some(_attachment) = ui.content_preview().get_selected_attachment() {
-                            // Open attachment viewer
-                            if let Err(e) =
-                                ui.content_preview_mut().view_selected_attachment().await
-                            {
-                                tracing::error!("Failed to view attachment: {}", e);
-                            }
-                        }
-                    }
-                }
-            }
-            KeyCode::Char('O') => {
-                // Open selected attachment with system default application (xdg-open)
-                if let FocusedPane::ContentPreview = ui.focused_pane() {
-                    if ui.content_preview().has_attachments() {
-                        if let Some(_attachment) = ui.content_preview().get_selected_attachment() {
-                            // Open attachment with xdg-open
-                            if let Err(e) =
-                                ui.content_preview_mut().open_attachment_with_system().await
-                            {
-                                tracing::error!(
-                                    "Failed to open attachment with system application: {}",
-                                    e
-                                );
-                            }
-                        }
-                    }
-                }
-            }
-            KeyCode::Char('r') if !key.modifiers.contains(KeyModifiers::CONTROL) => {
-                // Handle 'r' key based on focused pane
-                match ui.focused_pane() {
-                    FocusedPane::FolderTree => {
-                        // 'r' in folder tree = refresh
-                        if let Some(operation) = ui.folder_tree_mut().handle_char_key('r') {
-                            return EventResult::FolderOperation(operation);
-                        }
-                    }
-                    FocusedPane::MessageList => {
-                        // 'r' in message list = sort by sender
-                        use crate::email::{SortCriteria, SortOrder};
-                        ui.message_list_mut()
-                            .set_sort_criteria(SortCriteria::Sender(SortOrder::Ascending));
-                    }
-                    _ => {}
-                }
-            }
-            KeyCode::Char('u') => {
-                // Sort by subject
-                if let FocusedPane::MessageList = ui.focused_pane() {
-                    use crate::email::{SortCriteria, SortOrder};
-                    ui.message_list_mut()
-                        .set_sort_criteria(SortCriteria::Subject(SortOrder::Ascending));
-                }
-            }
-
-            // Search functionality
-            KeyCode::Char('/') => {
-                // Enter message search mode
-                if let FocusedPane::MessageList = ui.focused_pane() {
-                    if !ui.message_list().is_search_active() {
-                        ui.message_list_mut().start_search();
-                    }
-                }
-            }
-
-            // Search interface F-keys (when search is active)
-            // TODO: These are documented but not yet implemented - the current search
-            // is a simple text filter, not the advanced SearchUI with different modes
-            KeyCode::F(1 | 4) => {
-                if ui.focused_pane() == FocusedPane::MessageList
-                    && ui.message_list().is_search_active()
-                {
-                    // F1, F4: Search mode switching (not yet implemented)
-                    // Note: F2 is handled above for folder rename operations
-                    // Note: F3 is handled above for calendar access
-                    tracing::info!("Search mode switching F-keys not yet implemented");
-                }
-            }
-
-            // Folder management shortcuts (when folder tree is focused)
-            KeyCode::Char('f') => {
-                // Enter folder search mode
-                if let FocusedPane::FolderTree = ui.focused_pane() {
-                    if !ui.folder_tree().is_in_search_mode() {
-                        ui.folder_tree_mut().enter_search_mode();
-                    }
-                }
-            }
-            KeyCode::Char('n') => {
-                // Create new folder (when folder tree focused)
-                if let FocusedPane::FolderTree = ui.focused_pane() {
-                    // In production, this would open a dialog for folder name input
-                    // For demo, create a sample folder
-                    let parent_path = ui.folder_tree().selected_folder().map(|f| f.path.clone());
-                    if let Some(parent_path) = parent_path {
-                        let _ = ui
-                            .folder_tree_mut()
-                            .create_folder(Some(&parent_path), "New Folder".to_string());
-                    }
-                }
-            }
-            KeyCode::Char('d') if !key.modifiers.contains(KeyModifiers::CONTROL) => {
-                // Delete folder (when folder tree focused, non-Ctrl)
-                // Note: Ctrl+D is handled separately below for draft list
-                if matches!(ui.focused_pane(), FocusedPane::FolderTree) {
-                    let folder_path = ui.folder_tree().selected_folder().map(|f| f.path.clone());
-                    if let Some(path) = folder_path {
-                        let _ = ui.folder_tree_mut().delete_folder(&path);
-                    }
-                }
-            }
-            KeyCode::Char('F') => {
-                // Force refresh folder (capital F) - full IMAP sync
-                if let FocusedPane::FolderTree = ui.focused_pane() {
-                    let folder_path = ui.folder_tree().selected_folder().map(|f| f.path.clone());
-                    if let Some(path) = folder_path {
-                        return EventResult::FolderForceRefresh(path);
-                    }
-                }
-            }
-
-            // Content preview controls (when content preview is focused)
-            KeyCode::Char('m') => {
-                // Toggle view mode (Raw, Formatted, Headers)
-                if let FocusedPane::ContentPreview = ui.focused_pane() {
-                    ui.content_preview_mut().toggle_view_mode();
-                }
-            }
-            KeyCode::Char('a') if !key.modifiers.contains(KeyModifiers::CONTROL) => {
-                // Select first attachment (when content preview is focused and has attachments)
-                if let FocusedPane::ContentPreview = ui.focused_pane() {
-                    if ui.content_preview().has_attachments() {
-                        ui.content_preview_mut().select_first_attachment();
-                        tracing::info!("First attachment selected");
-                    }
-                }
-            }
-            KeyCode::Char('H') => {
-                // Toggle expanded headers (capital H)
-                if let FocusedPane::ContentPreview = ui.focused_pane() {
-                    ui.content_preview_mut().toggle_headers();
-                }
-            }
-            KeyCode::Home => {
-                // Jump to top of content
-                if let FocusedPane::ContentPreview = ui.focused_pane() {
-                    ui.content_preview_mut().scroll_to_top();
-                }
-            }
-            KeyCode::End => {
-                // Jump to bottom of content
-                if let FocusedPane::ContentPreview = ui.focused_pane() {
-                    ui.content_preview_mut().scroll_to_bottom(20); // Default height
-                }
-            }
-
-            // Compose email shortcut
-            KeyCode::Char('c') if !key.modifiers.contains(KeyModifiers::CONTROL) => {
-                // Start compose mode only if we're not already in compose mode
-                if !ui.is_composing() {
-                    // Return a special compose action to signal the app to start compose mode
-                    return EventResult::ComposeAction(ComposeAction::StartCompose);
-                }
-            }
-
-            // Show draft list shortcut
-            KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                // Ctrl+D to show draft list
-                if !ui.is_draft_list_visible() && !ui.is_composing() {
-                    return EventResult::DraftAction(DraftAction::RefreshDrafts);
-                }
-            }
-
-            // Add account shortcut
-            KeyCode::Char('a') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                // Ctrl+A to add a new account
-                return EventResult::AddAccount;
-            }
-
-            // Remove account shortcut (when account switcher is focused)
-            KeyCode::Char('x') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                // Ctrl+X to remove the currently selected account (only when account switcher is focused)
-                if matches!(ui.focused_pane(), FocusedPane::AccountSwitcher) {
-                    if let Some(account_id) = ui.account_switcher().get_current_account_id() {
-                        return EventResult::RemoveAccount(account_id.clone());
-                    }
-                }
-            }
-
-            // Refresh account connection shortcut
-            KeyCode::Char('r') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                // Ctrl+R to refresh account connection and sync folders/emails
-                if matches!(ui.focused_pane(), FocusedPane::AccountSwitcher) {
-                    if let Some(account_id) = ui.account_switcher().get_current_account_id() {
-                        tracing::info!("Refreshing account connection: {}", account_id);
-                        return EventResult::RefreshAccount(account_id.clone());
-                    }
-                }
-            }
-
-            // Retry initialization shortcut
-            KeyCode::Char('i') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                // Ctrl+I to retry initialization (for when startup was skipped)
-                ui.show_toast_info("Retrying initialization...");
-                return EventResult::RetryInitialization;
-            }
-
-            // Copy functionality
-            KeyCode::Char('y') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                // Ctrl+Y to copy email content to clipboard
-                if matches!(ui.focused_pane(), FocusedPane::ContentPreview) {
-                    if let Err(e) = ui.content_preview_mut().copy_email_content() {
-                        tracing::error!("Failed to copy email content: {}", e);
-                    }
-                }
-            }
-            KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::ALT) => {
-                // Alt+C to copy attachment info to clipboard
-                if matches!(ui.focused_pane(), FocusedPane::ContentPreview) {
-                    if let Err(e) = ui.content_preview_mut().copy_attachment_info() {
-                        tracing::error!("Failed to copy attachment info: {}", e);
-                    }
-                }
-            }
-
-            _ => {}
-        }
-
-        EventResult::Continue
-    }
 
 
     /// Handle email viewer mode key events

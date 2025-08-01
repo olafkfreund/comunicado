@@ -49,7 +49,7 @@ impl PerformanceSystem {
         
         Self {
             cache_manager: Arc::new(CacheManager::new()),
-            background_processor: Arc::new(BackgroundProcessor::new(progress_tx, completion_tx)),
+            background_processor: Arc::new(BackgroundProcessor::new_standalone(progress_tx, completion_tx)),
             progress_tracker: Arc::new(ProgressTracker::new()),
             startup_optimizer: Arc::new(StartupOptimizer::new()),
         }

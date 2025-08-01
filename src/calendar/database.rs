@@ -543,6 +543,58 @@ impl CalendarDatabase {
         }
     }
 
+    /// Get all events in date range (across all calendars)
+    pub async fn get_all_events_in_range(
+        &self,
+        start_time: Option<DateTime<Utc>>,
+        end_time: Option<DateTime<Utc>>,
+    ) -> CalendarDatabaseResult<Vec<Event>> {
+        let mut query = String::from(
+            r#"
+            SELECT id, uid, calendar_id, title, description, location,
+                   start_time, end_time, all_day, status, priority,
+                   organizer_email, organizer_name, attendees, recurrence_rule,
+                   reminders, categories, url, created_at, updated_at,
+                   sequence, etag
+            FROM calendar_events
+            WHERE 1=1
+        "#,
+        );
+
+        let mut bind_count = 0;
+
+        if start_time.is_some() {
+            bind_count += 1;
+            query.push_str(&format!(" AND end_time >= ?{}", bind_count));
+        }
+
+        if end_time.is_some() {
+            bind_count += 1;
+            query.push_str(&format!(" AND start_time <= ?{}", bind_count));
+        }
+
+        query.push_str(" ORDER BY start_time ASC");
+
+        let mut query_builder = sqlx::query(&query);
+
+        if let Some(start) = start_time {
+            query_builder = query_builder.bind(start.to_rfc3339());
+        }
+
+        if let Some(end) = end_time {
+            query_builder = query_builder.bind(end.to_rfc3339());
+        }
+
+        let rows = query_builder.fetch_all(&self.pool).await?;
+
+        let mut events = Vec::new();
+        for row in rows {
+            events.push(self.row_to_event(row)?);
+        }
+
+        Ok(events)
+    }
+
     /// Search events with full-text search
     pub async fn search_events(
         &self,

@@ -1,6 +1,7 @@
 use crate::contacts::{ContactAutocomplete, ContactsManager};
 use crate::spell::{SpellCheckResult, SpellChecker};
 use crate::theme::Theme;
+use crate::ui::external_editor::{ExternalEditor, EditorConfig};
 use crossterm::event::KeyModifiers;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -17,6 +18,7 @@ pub struct ComposeUI {
     contacts_manager: Arc<ContactsManager>,
     spell_checker: SpellChecker,
     contact_autocomplete: ContactAutocomplete,
+    external_editor: ExternalEditor,
 
     // Form fields
     to_field: String,
@@ -27,6 +29,10 @@ pub struct ComposeUI {
 
     // UI state
     current_field: ComposeField,
+
+    // External editor state
+    is_editor_config_visible: bool,
+    editor_config: EditorConfig,
 
     // Spell check state
     is_spell_check_visible: bool,
@@ -77,17 +83,22 @@ impl ComposeUI {
         let spell_checker = SpellChecker::new().unwrap_or_default();
         let available_languages = spell_checker.available_languages();
         let contact_autocomplete = ContactAutocomplete::new(contacts_manager.clone());
+        let external_editor = ExternalEditor::new().unwrap_or_default();
+        let editor_config = external_editor.get_editor_config();
 
         Self {
             contacts_manager,
             spell_checker,
             contact_autocomplete,
+            external_editor,
             to_field: String::new(),
             cc_field: String::new(),
             bcc_field: String::new(),
             subject_field: String::new(),
             body_text: String::new(),
             current_field: ComposeField::To,
+            is_editor_config_visible: false,
+            editor_config,
             is_spell_check_visible: false,
             spell_check_result: None,
             current_spell_error: 0,
@@ -239,6 +250,11 @@ impl ComposeUI {
             self.render_spell_config_popup(f, area, theme);
         }
 
+        // Render external editor configuration if visible
+        if self.is_editor_config_visible {
+            self.render_editor_config_popup(f, area, theme);
+        }
+
         // Status line at bottom
         self.render_status_line(f, area, theme);
     }
@@ -375,13 +391,15 @@ impl ComposeUI {
         };
 
         let status_text = if self.contact_autocomplete.is_visible() {
-            "↑↓ Navigate suggestions | Tab Complete | Esc Cancel | Enter Select"
+            "↑↓ Navigate suggestions | Tab Complete | Esc Cancel | Enter Select".to_string()
+        } else if self.is_editor_config_visible {
+            "Editor config | Esc Close".to_string()
         } else if self.is_spell_config_visible {
-            "↑↓ Select language | Enter Apply | Esc/F10 Close"
+            "↑↓ Select language | Enter Apply | Esc/F10 Close".to_string()
         } else if self.spell_check_enabled && self.is_spell_check_visible {
-            "F7 Toggle | F8/F9 Next/Prev error | F10 Config | ↑↓ Navigate suggestions | Tab Apply | Esc Cancel"
+            "F7 Toggle | F8/F9 Next/Prev error | F10 Config | ↑↓ Navigate suggestions | Tab Apply | Esc Cancel".to_string()
         } else {
-            "Tab Next field | F1 Send | F2 Save | F7 Spell check | F8/F9 Errors | F10 Config | Esc Cancel | @ Contact"
+            format!("Tab Next field | F1 Send | F2 Save | F7 Spell check | F8/F9 Errors | F10 Config | Ctrl+E Editor ({}) | Esc Cancel | @ Contact", self.editor_config.name)
         };
 
         let modified_indicator = if self.is_modified { " [Modified]" } else { "" };
@@ -554,6 +572,67 @@ impl ComposeUI {
         f.render_widget(popup, popup_area);
     }
 
+    /// Render external editor configuration popup
+    fn render_editor_config_popup(&self, f: &mut Frame, compose_area: Rect, theme: &Theme) {
+        // Calculate position for configuration popup
+        let popup_width = 60;
+        let popup_height = 15;
+
+        let popup_area = Rect {
+            x: compose_area.x + (compose_area.width.saturating_sub(popup_width)) / 2,
+            y: compose_area.y + (compose_area.height.saturating_sub(popup_height)) / 2,
+            width: popup_width,
+            height: popup_height,
+        };
+
+        // Clear the background
+        f.render_widget(Clear, popup_area);
+
+        // Create configuration content
+        let mut lines = vec![
+            Line::from("External Editor Configuration"),
+            Line::from(""),
+            Line::from(format!("Current Editor: {}", self.editor_config.name)),
+            Line::from(""),
+            Line::from("Features:"),
+        ];
+
+        for feature in &self.editor_config.features {
+            lines.push(Line::from(format!("  • {}", feature)));
+        }
+
+        lines.push(Line::from(""));
+        lines.push(Line::from(format!(
+            "Syntax Highlighting: {}",
+            if self.editor_config.supports_syntax { "Yes" } else { "No" }
+        )));
+        lines.push(Line::from(format!(
+            "Spell Checking: {}",
+            if self.editor_config.supports_spell { "Yes" } else { "No" }
+        )));
+        
+        if self.editor_config.line_wrap > 0 {
+            lines.push(Line::from(format!("Line Wrap: {} chars", self.editor_config.line_wrap)));
+        }
+
+        lines.push(Line::from(""));
+        lines.push(Line::from("Press Ctrl+E to launch editor for body text"));
+        lines.push(Line::from("Press Esc to close this dialog"));
+
+        let content = Text::from(lines);
+
+        let popup = Paragraph::new(content)
+            .block(
+                Block::default()
+                    .title("External Editor Info")
+                    .borders(Borders::ALL)
+                    .border_style(theme.get_component_style("popup", true)),
+            )
+            .wrap(Wrap { trim: true });
+
+        f.render_widget(popup, popup_area);
+    }
+
     /// Create highlighted line with misspelled words marked
     fn create_highlighted_line(&self, line: &str, _line_idx: usize) -> Line<'static> {
         if let Some(ref result) = self.spell_check_result {
@@ -654,6 +733,10 @@ impl ComposeUI {
             return self.handle_spell_config_key(key).await;
         }
 
+        if self.is_editor_config_visible {
+            return self.handle_editor_config_key(key);
+        }
+
         match key.code {
             KeyCode::Esc => ComposeAction::Cancel,
             KeyCode::Char('s') if key.modifiers.contains(KeyModifiers::CONTROL) => ComposeAction::Send,
@@ -680,6 +763,16 @@ impl ComposeUI {
             KeyCode::Char(',') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 // Open spell check configuration
                 self.toggle_spell_config();
+                ComposeAction::Continue
+            }
+            KeyCode::Char('e') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                // Launch external editor for body text
+                if self.current_field == ComposeField::Body {
+                    return self.launch_external_editor().await;
+                } else {
+                    // Show editor configuration
+                    self.toggle_editor_config();
+                }
                 ComposeAction::Continue
             }
             KeyCode::Tab => {
@@ -765,6 +858,75 @@ impl ComposeUI {
                     self.move_cursor_down();
                 }
                 ComposeAction::Continue
+            }
+            _ => ComposeAction::Continue,
+        }
+    }
+
+    /// Launch external editor for body text editing
+    async fn launch_external_editor(&mut self) -> ComposeAction {
+        // Get current body text
+        let current_body = self.body_lines.join("\n");
+        
+        // Launch editor and get edited content
+        match self.external_editor.edit_email_body(&current_body).await {
+            Ok(edited_body) => {
+                // Update body with edited content
+                self.body_text = edited_body.clone();
+                self.body_lines = if edited_body.is_empty() {
+                    vec![String::new()]
+                } else {
+                    edited_body.lines().map(|s| s.to_string()).collect()
+                };
+                
+                // Reset cursor to end of content
+                if !self.body_lines.is_empty() {
+                    self.body_line_index = self.body_lines.len() - 1;
+                    self.body_cursor = self.body_lines.last().map(|line| line.len()).unwrap_or(0);
+                } else {
+                    self.body_line_index = 0;
+                    self.body_cursor = 0;
+                }
+                
+                // Mark as modified if content changed
+                if current_body != edited_body {
+                    self.mark_content_modified();
+                }
+                
+                ComposeAction::Continue
+            }
+            Err(e) => {
+                tracing::error!("Failed to launch external editor: {}", e);
+                // Could return an error action here, but for now just continue
+                ComposeAction::Continue
+            }
+        }
+    }
+
+    /// Toggle external editor configuration popup
+    fn toggle_editor_config(&mut self) {
+        self.is_editor_config_visible = !self.is_editor_config_visible;
+    }
+
+    /// Handle editor configuration popup key input
+    fn handle_editor_config_key(&mut self, key: crossterm::event::KeyEvent) -> ComposeAction {
+        use crossterm::event::KeyCode;
+
+        match key.code {
+            KeyCode::Esc => {
+                self.is_editor_config_visible = false;
+                ComposeAction::Continue
+            }
+            KeyCode::Char('e') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                // Launch editor from config popup
+                self.is_editor_config_visible = false;
+                if self.current_field == ComposeField::Body {
+                    ComposeAction::Continue // Will be handled by the main key handler
+                } else {
+                    // Switch to body field first
+                    self.current_field = ComposeField::Body;
+                    ComposeAction::Continue
+                }
             }
             _ => ComposeAction::Continue,
         }

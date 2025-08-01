@@ -76,6 +76,7 @@ impl ProviderConfig {
                 OAuth2Scope::Profile,        // Required to get user name
                 OAuth2Scope::GmailFull,      // Full Gmail access required for IMAP
                 OAuth2Scope::GoogleContacts, // Access to Google Contacts
+                OAuth2Scope::GoogleCalendar, // Access to Google Calendar
             ],
             additional_params: {
                 let mut params = HashMap::new();

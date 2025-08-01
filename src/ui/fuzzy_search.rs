@@ -484,9 +484,9 @@ impl FuzzySearchEngine {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_levenshtein_distance() {
-        let engine = FuzzySearchEngine::new(Arc::new(EmailDatabase::new(":memory:").unwrap()));
+    #[tokio::test]
+    async fn test_levenshtein_distance() {
+        let engine = FuzzySearchEngine::new(Arc::new(EmailDatabase::new_in_memory().await.unwrap()));
         
         assert_eq!(engine.levenshtein_distance("kitten", "sitting"), 3);
         assert_eq!(engine.levenshtein_distance("hello", "hello"), 0);
@@ -494,26 +494,26 @@ mod tests {
         assert_eq!(engine.levenshtein_distance("hello", ""), 5);
     }
 
-    #[test]
-    fn test_jaro_similarity() {
-        let engine = FuzzySearchEngine::new(Arc::new(EmailDatabase::new(":memory:").unwrap()));
+    #[tokio::test]
+    async fn test_jaro_similarity() {
+        let engine = FuzzySearchEngine::new(Arc::new(EmailDatabase::new_in_memory().await.unwrap()));
         
         assert!((engine.jaro_similarity("martha", "marhta") - 0.944).abs() < 0.01);
         assert_eq!(engine.jaro_similarity("hello", "hello"), 1.0);
         assert_eq!(engine.jaro_similarity("", "hello"), 0.0);
     }
 
-    #[test]
-    fn test_jaro_winkler_similarity() {
-        let engine = FuzzySearchEngine::new(Arc::new(EmailDatabase::new(":memory:").unwrap()));
+    #[tokio::test]
+    async fn test_jaro_winkler_similarity() {
+        let engine = FuzzySearchEngine::new(Arc::new(EmailDatabase::new_in_memory().await.unwrap()));
         
         assert!((engine.jaro_winkler_similarity("martha", "marhta") - 0.961).abs() < 0.01);
         assert_eq!(engine.jaro_winkler_similarity("hello", "hello"), 1.0);
     }
 
-    #[test]
-    fn test_trigram_similarity() {
-        let engine = FuzzySearchEngine::new(Arc::new(EmailDatabase::new(":memory:").unwrap()));
+    #[tokio::test]
+    async fn test_trigram_similarity() {
+        let engine = FuzzySearchEngine::new(Arc::new(EmailDatabase::new_in_memory().await.unwrap()));
         
         let similarity = engine.trigram_similarity("hello world", "hello");
         assert!(similarity > 0.0);
@@ -522,9 +522,9 @@ mod tests {
         assert!(exact_similarity > similarity);
     }
 
-    #[test]
-    fn test_word_boundary_match() {
-        let engine = FuzzySearchEngine::new(Arc::new(EmailDatabase::new(":memory:").unwrap()));
+    #[tokio::test]
+    async fn test_word_boundary_match() {
+        let engine = FuzzySearchEngine::new(Arc::new(EmailDatabase::new_in_memory().await.unwrap()));
         
         assert!(engine.word_boundary_match("hello world", "hel"));
         assert!(engine.word_boundary_match("hello world", "wor"));

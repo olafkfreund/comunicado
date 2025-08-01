@@ -22,6 +22,7 @@ pub mod notifications;
 pub mod sorting;
 pub mod sync_engine;
 pub mod imap_service;
+pub mod async_sync_service;
 pub mod thread;
 pub mod threading_engine;
 pub mod timestamp_utils;
@@ -87,6 +88,7 @@ pub use sync_engine::{
     ConflictResolution, SyncEngine, SyncError, SyncPhase, SyncProgress, SyncResult, SyncStrategy,
 };
 pub use imap_service::{ImapService, IdleUpdate};
+pub use async_sync_service::AsyncSyncService;
 pub use thread::{EmailThread, ThreadStatistics};
 pub use threading_engine::{ThreadingAlgorithm, ThreadingEngine};
 pub use timestamp_utils::{TimestampError, TimestampPreserver, TimestampResult, TimestampUtils};

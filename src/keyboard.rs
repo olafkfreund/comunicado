@@ -515,7 +515,7 @@ impl KeyboardConfig {
             KeyboardAction::RemoveAccount,
         );
         self.shortcuts.insert(
-            KeyboardShortcut::ctrl(KeyCode::Char('r')),
+            KeyboardShortcut::new(KeyCode::Char('r'), KeyModifiers::CONTROL | KeyModifiers::SHIFT),
             KeyboardAction::RefreshAccount,
         );
 
@@ -551,7 +551,7 @@ impl KeyboardConfig {
             KeyboardAction::ToggleHeaders,
         );
         self.shortcuts.insert(
-            KeyboardShortcut::simple(KeyCode::Char('P')),
+            KeyboardShortcut::simple(KeyCode::Char('V')),
             KeyboardAction::OpenEmailViewer,
         );
 
@@ -583,7 +583,7 @@ impl KeyboardConfig {
             KeyboardAction::SelectFirstAttachment,
         );
         self.shortcuts.insert(
-            KeyboardShortcut::simple(KeyCode::Char('v')),
+            KeyboardShortcut::simple(KeyCode::Char('A')),
             KeyboardAction::ViewAttachment,
         );
         self.shortcuts.insert(
@@ -629,11 +629,8 @@ impl KeyboardConfig {
             KeyboardAction::FolderDelete,
         );
 
-        // Email viewer shortcuts
-        self.shortcuts.insert(
-            KeyboardShortcut::simple(KeyCode::Char('q')),
-            KeyboardAction::EmailViewerClose,
-        );
+        // Email viewer shortcuts - Use Esc instead of 'q' to avoid conflict with Quit
+        // EmailViewerClose is handled by Escape action in email viewer mode
 
         // Attachment navigation
         self.shortcuts.insert(
@@ -666,10 +663,8 @@ impl KeyboardConfig {
             KeyboardShortcut::simple(KeyCode::Delete),
             KeyboardAction::DeleteEvent,
         );
-        self.shortcuts.insert(
-            KeyboardShortcut::simple(KeyCode::Enter),
-            KeyboardAction::ViewEventDetails,
-        );
+        // ViewEventDetails should use a different key (Enter conflicts with Select)
+        // Use Space or another key for viewing event details in calendar context
         self.shortcuts.insert(
             KeyboardShortcut::simple(KeyCode::Char('T')),
             KeyboardAction::CreateTodo,
@@ -679,7 +674,7 @@ impl KeyboardConfig {
             KeyboardAction::ToggleTodoComplete,
         );
         self.shortcuts.insert(
-            KeyboardShortcut::simple(KeyCode::Char('t')),
+            KeyboardShortcut::ctrl(KeyCode::Char('t')),
             KeyboardAction::ViewTodos,
         );
         self.shortcuts.insert(
@@ -711,9 +706,9 @@ impl KeyboardConfig {
             KeyboardAction::CalendarAgendaView,
         );
 
-        // Contacts actions
+        // Contacts actions - temporarily changed from Ctrl+Shift+C to Ctrl+K for testing
         self.shortcuts.insert(
-            KeyboardShortcut::new(KeyCode::Char('c'), KeyModifiers::CONTROL | KeyModifiers::SHIFT),
+            KeyboardShortcut::new(KeyCode::Char('k'), KeyModifiers::CONTROL),
             KeyboardAction::ContactsPopup,
         );
         
@@ -1308,6 +1303,7 @@ impl KeyboardManager {
         modifiers: KeyModifiers,
     ) -> Option<&KeyboardAction> {
         let shortcut = KeyboardShortcut::new(key_code, modifiers);
+        
         self.config.get_action(&shortcut)
     }
 

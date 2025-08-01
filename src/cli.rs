@@ -144,6 +144,12 @@ pub enum Commands {
     /// Sync accounts with IMAP servers
     Sync(SyncArgs),
 
+    /// Sync calendars and tasks
+    CalendarSync(CalendarSyncArgs),
+
+    /// Sync contacts and address books
+    ContactsSync(ContactsSyncArgs),
+
     /// IMAP folder operations and diagnostics
     Folders(FoldersArgs),
 
@@ -695,6 +701,109 @@ pub enum SyncCommands {
 }
 
 #[derive(Args)]
+pub struct CalendarSyncArgs {
+    #[command(subcommand)]
+    pub command: CalendarSyncCommands,
+}
+
+#[derive(Subcommand)]
+pub enum CalendarSyncCommands {
+    /// Sync all calendars from all accounts
+    All {
+        /// Show detailed sync progress
+        #[arg(short, long)]
+        verbose: bool,
+        
+        /// Force full sync (ignore last sync time)
+        #[arg(long)]
+        force: bool,
+    },
+    
+    /// Sync calendars for a specific account
+    Account {
+        /// Account name or email address
+        account: String,
+        
+        /// Show detailed sync progress
+        #[arg(short, long)]
+        verbose: bool,
+        
+        /// Force full sync (ignore last sync time)
+        #[arg(long)]
+        force: bool,
+    },
+    
+    /// Sync a specific calendar
+    Calendar {
+        /// Account name or email address
+        account: String,
+        
+        /// Calendar name or ID
+        calendar: String,
+        
+        /// Show detailed sync progress
+        #[arg(short, long)]
+        verbose: bool,
+        
+        /// Force full sync (ignore last sync time)
+        #[arg(long)]
+        force: bool,
+    },
+    
+    /// List available calendars for sync
+    List,
+    
+    /// Show calendar sync status and statistics
+    Status {
+        /// Account name or email address (optional, shows all if not specified)
+        account: Option<String>,
+    },
+}
+
+#[derive(Args)]
+pub struct ContactsSyncArgs {
+    #[command(subcommand)]
+    pub command: ContactsSyncCommands,
+}
+
+#[derive(Subcommand)]
+pub enum ContactsSyncCommands {
+    /// Sync all contacts from all accounts
+    All {
+        /// Show detailed sync progress
+        #[arg(short, long)]
+        verbose: bool,
+        
+        /// Force full sync (ignore last sync time)
+        #[arg(long)]
+        force: bool,
+    },
+    
+    /// Sync contacts for a specific account
+    Account {
+        /// Account name or email address
+        account: String,
+        
+        /// Show detailed sync progress
+        #[arg(short, long)]
+        verbose: bool,
+        
+        /// Force full sync (ignore last sync time)
+        #[arg(long)]
+        force: bool,
+    },
+    
+    /// List available contacts sources for sync
+    List,
+    
+    /// Show contacts sync status and statistics
+    Status {
+        /// Account name or email address (optional, shows all if not specified)
+        account: Option<String>,
+    },
+}
+
+#[derive(Args)]
 pub struct FoldersArgs {
     #[command(subcommand)]
     pub command: FoldersCommands,
@@ -845,6 +954,8 @@ impl CliHandler {
             Commands::Maildir(args) => self.handle_maildir(args, dry_run).await,
             Commands::Offline(args) => self.handle_offline(args, dry_run).await,
             Commands::Sync(args) => self.handle_sync(args, dry_run).await,
+            Commands::CalendarSync(args) => self.handle_calendar_sync(args, dry_run).await,
+            Commands::ContactsSync(args) => self.handle_contacts_sync(args, dry_run).await,
             Commands::Folders(args) => self.handle_folders(args, dry_run).await,
             Commands::OAuth2(args) => self.handle_oauth2(args, dry_run).await,
         }
@@ -1236,9 +1347,11 @@ impl CliHandler {
                 client_secret: client_secret.to_string(),
                 redirect_uri: "http://localhost:8080/oauth/callback".to_string(),
                 scopes: vec![
-                    "https://www.googleapis.com/auth/gmail.readonly".to_string(),
-                    "https://www.googleapis.com/auth/gmail.send".to_string(),
+                    "https://mail.google.com/".to_string(),
+                    "https://www.googleapis.com/auth/userinfo.email".to_string(),
+                    "https://www.googleapis.com/auth/userinfo.profile".to_string(),
                     "https://www.googleapis.com/auth/calendar".to_string(),
+                    "https://www.googleapis.com/auth/contacts.readonly".to_string(),
                 ],
             };
 
@@ -2621,7 +2734,7 @@ impl CliHandler {
                 let auth_params = [
                     ("client_id", client_id),
                     ("redirect_uri", REDIRECT_URI),
-                    ("scope", "https://mail.google.com/ https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile"),
+                    ("scope", "https://mail.google.com/ https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/contacts.readonly"),
                     ("response_type", "code"),
                     ("access_type", "offline"),
                     ("prompt", "consent"),
@@ -2858,7 +2971,9 @@ impl CliHandler {
                 "gmail" => vec![
                     "https://mail.google.com/",
                     "https://www.googleapis.com/auth/userinfo.email",
-                    "https://www.googleapis.com/auth/userinfo.profile"
+                    "https://www.googleapis.com/auth/userinfo.profile",
+                    "https://www.googleapis.com/auth/calendar",
+                    "https://www.googleapis.com/auth/contacts.readonly"
                 ],
                 _ => vec![],
             }
@@ -4230,6 +4345,708 @@ impl CliHandler {
         println!("   3. Select 'Re-authenticate' for the account");
         
         Ok(())
+    }
+
+    /// Handle calendar sync commands
+    async fn handle_calendar_sync(&self, args: CalendarSyncArgs, dry_run: bool) -> Result<()> {
+        match args.command {
+            CalendarSyncCommands::All { verbose, force } => {
+                self.handle_calendar_sync_all(verbose, force, dry_run).await
+            }
+            CalendarSyncCommands::Account { account, verbose, force } => {
+                self.handle_calendar_sync_account(account, verbose, force, dry_run).await
+            }
+            CalendarSyncCommands::Calendar { account, calendar, verbose, force } => {
+                self.handle_calendar_sync_calendar(account, calendar, verbose, force, dry_run).await
+            }
+            CalendarSyncCommands::List => {
+                self.handle_calendar_sync_list(dry_run).await
+            }
+            CalendarSyncCommands::Status { account } => {
+                self.handle_calendar_sync_status(account, dry_run).await
+            }
+        }
+    }
+
+    /// Sync all calendars from all accounts
+    async fn handle_calendar_sync_all(&self, verbose: bool, force: bool, dry_run: bool) -> Result<()> {
+        println!("📅 Syncing all calendars...");
+        
+        if dry_run {
+            println!("💨 Dry run mode - no changes will be made");
+        }
+
+        // Get all accounts
+        let account_ids = self.storage.list_account_ids()
+            .map_err(|e| anyhow!("Failed to list accounts: {}", e))?;
+
+        if account_ids.is_empty() {
+            println!("⚠️  No accounts found. Use 'comunicado setup-gmail' to add an account.");
+            return Ok(());
+        }
+
+        println!("📧 Found {} account(s) to sync calendars for", account_ids.len());
+        
+        if verbose {
+            println!("📋 Calendar sync plan:");
+            println!("   🔄 Force full sync: {}", if force { "✅ Yes" } else { "❌ No" });
+        }
+
+        if dry_run {
+            for account_id in &account_ids {
+                if let Ok(Some(config)) = self.storage.load_account(account_id) {
+                    let display_name = if config.display_name.is_empty() { "Unknown".to_string() } else { config.display_name.clone() };
+                    println!("💨 Would sync calendars for: {} ({}) - {}", display_name, config.email_address, config.provider);
+                }
+            }
+        } else {
+            println!("🚀 Starting calendar sync...");
+            
+            // Initialize calendar manager
+            match self.create_calendar_manager().await {
+                Ok(calendar_manager) => {
+                    if verbose {
+                        println!("✅ Calendar manager initialized");
+                    }
+                    
+                    // Perform the actual sync
+                    match calendar_manager.sync_calendars().await {
+                        Ok(_) => {
+                            println!("✅ Calendar sync completed successfully");
+                            
+                            // Show statistics if verbose
+                            if verbose {
+                                match calendar_manager.get_stats().await {
+                                    Ok(stats) => {
+                                        println!("📊 Sync statistics:");
+                                        println!("   📅 Total calendars: {}", stats.total_calendars);
+                                        println!("   📍 Total events: {}", stats.total_events);
+                                        println!("   📈 Upcoming events: {}", stats.upcoming_events);
+                                        if let Some(last_sync) = stats.last_sync {
+                                            println!("   🕒 Last sync: {}", last_sync.format("%Y-%m-%d %H:%M:%S UTC"));
+                                        }
+                                    }
+                                    Err(e) => {
+                                        println!("⚠️  Could not get sync statistics: {}", e);
+                                    }
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            println!("❌ Calendar sync failed: {}", e);
+                            return Err(anyhow!("Calendar sync failed: {}", e));
+                        }
+                    }
+                }
+                Err(e) => {
+                    println!("❌ Failed to initialize calendar manager: {}", e);
+                    return Err(anyhow!("Calendar manager initialization failed: {}", e));
+                }
+            }
+        }
+        
+        Ok(())
+    }
+
+    /// Sync calendars for a specific account
+    async fn handle_calendar_sync_account(&self, account: String, verbose: bool, force: bool, dry_run: bool) -> Result<()> {
+        println!("📅 Syncing calendars for account: {}", account);
+        
+        if dry_run {
+            println!("💨 Dry run mode - no changes will be made");
+        }
+
+        // Find account by name or email
+        let account_id = self.find_account_id(&account)?;
+        
+        if let Ok(Some(config)) = self.storage.load_account(&account_id) {
+            let display_name = if config.display_name.is_empty() { "Unknown".to_string() } else { config.display_name.clone() };
+            
+            println!("📋 Calendar sync plan for: {} ({}) - {}", display_name, config.email_address, config.provider);
+            
+            if verbose {
+                println!("   🔄 Force full sync: {}", if force { "✅ Yes" } else { "❌ No" });
+            }
+
+            if dry_run {
+                println!("💨 Would sync calendars for account: {}", account);
+            } else {
+                println!("🚀 Starting calendar sync for account: {}", account);
+                
+                // Initialize calendar manager
+                match self.create_calendar_manager().await {
+                    Ok(calendar_manager) => {
+                        if verbose {
+                            println!("✅ Calendar manager initialized");
+                        }
+                        
+                        // For Google accounts, try to add/sync Google calendars
+                        if config.provider.to_lowercase().contains("google") || config.provider.to_lowercase().contains("gmail") {
+                            match calendar_manager.add_google_calendars(account_id.clone()).await {
+                                Ok(calendars) => {
+                                    println!("✅ Added/updated {} Google calendars", calendars.len());
+                                    if verbose {
+                                        for calendar in &calendars {
+                                            println!("   📅 {}", calendar.name);
+                                        }
+                                    }
+                                }
+                                Err(e) => {
+                                    println!("⚠️  Failed to add Google calendars: {}", e);
+                                }
+                            }
+                        }
+                        
+                        // Perform general calendar sync
+                        match calendar_manager.sync_calendars().await {
+                            Ok(_) => {
+                                println!("✅ Calendar sync completed for account: {}", account);
+                            }
+                            Err(e) => {
+                                println!("❌ Calendar sync failed for account {}: {}", account, e);
+                                return Err(anyhow!("Calendar sync failed: {}", e));
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        println!("❌ Failed to initialize calendar manager: {}", e);
+                        return Err(anyhow!("Calendar manager initialization failed: {}", e));
+                    }
+                }
+            }
+        } else {
+            return Err(anyhow!("Account '{}' not found", account));
+        }
+        
+        Ok(())
+    }
+
+    /// Sync a specific calendar
+    async fn handle_calendar_sync_calendar(&self, account: String, calendar: String, verbose: bool, force: bool, dry_run: bool) -> Result<()> {
+        println!("📅 Syncing calendar '{}' for account: {}", calendar, account);
+        
+        if dry_run {
+            println!("💨 Dry run mode - no changes will be made");
+        }
+
+        // Find account by name or email
+        let account_id = self.find_account_id(&account)?;
+        
+        if let Ok(Some(config)) = self.storage.load_account(&account_id) {
+            let display_name = if config.display_name.is_empty() { "Unknown".to_string() } else { config.display_name.clone() };
+            
+            println!("📋 Calendar sync plan:");
+            println!("   📧 Account: {} ({}) - {}", display_name, config.email_address, config.provider);
+            println!("   📅 Calendar: {}", calendar);
+            
+            if verbose {
+                println!("   🔄 Force full sync: {}", if force { "✅ Yes" } else { "❌ No" });
+            }
+
+            if dry_run {
+                println!("💨 Would sync calendar '{}' for account '{}'", calendar, account);
+            } else {
+                println!("🚀 Starting sync for calendar: {}", calendar);
+                
+                // Initialize calendar manager
+                match self.create_calendar_manager().await {
+                    Ok(calendar_manager) => {
+                        if verbose {
+                            println!("✅ Calendar manager initialized");
+                        }
+                        
+                        // Get all calendars and find the requested one
+                        let calendars = calendar_manager.get_calendars().await;
+                        let target_calendar = calendars.iter().find(|c| 
+                            c.name.eq_ignore_ascii_case(&calendar) || c.id == calendar
+                        );
+                        
+                        match target_calendar {
+                            Some(cal) => {
+                                println!("✅ Found calendar: {} ({})", cal.name, cal.id);
+                                
+                                // Perform sync for this specific calendar
+                                // Note: The sync_calendars method syncs all calendars
+                                // In a full implementation, we'd have a sync_specific_calendar method
+                                match calendar_manager.sync_calendars().await {
+                                    Ok(_) => {
+                                        println!("✅ Calendar sync completed for: {}", calendar);
+                                    }
+                                    Err(e) => {
+                                        println!("❌ Calendar sync failed for '{}': {}", calendar, e);
+                                        return Err(anyhow!("Calendar sync failed: {}", e));
+                                    }
+                                }
+                            }
+                            None => {
+                                println!("❌ Calendar '{}' not found for account '{}'", calendar, account);
+                                println!("💡 Use 'comunicado calendar-sync list' to see available calendars");
+                                return Err(anyhow!("Calendar '{}' not found", calendar));
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        println!("❌ Failed to initialize calendar manager: {}", e);
+                        return Err(anyhow!("Calendar manager initialization failed: {}", e));
+                    }
+                }
+            }
+        } else {
+            return Err(anyhow!("Account '{}' not found", account));
+        }
+        
+        Ok(())
+    }
+
+    /// List available calendars for sync
+    async fn handle_calendar_sync_list(&self, _dry_run: bool) -> Result<()> {
+        println!("📅 Available calendars for sync:");
+        
+        // Initialize calendar manager
+        match self.create_calendar_manager().await {
+            Ok(calendar_manager) => {
+                let calendars = calendar_manager.get_calendars().await;
+                
+                if calendars.is_empty() {
+                    println!("⚠️  No calendars found.");
+                    println!("💡 Add calendars by running:");
+                    println!("   • comunicado calendar-sync account <account> (for Google calendars)");
+                    println!("   • Use the TUI interface to add CalDAV calendars");
+                    return Ok(());
+                }
+                
+                println!("Found {} calendar(s):", calendars.len());
+                
+                for calendar in &calendars {
+                    println!("\n📅 {} (ID: {})", calendar.name, calendar.id);
+                    println!("   Source: {:?}", calendar.source);
+                    if let Some(description) = &calendar.description {
+                        println!("   Description: {}", description);
+                    }
+                    if calendar.read_only {
+                        println!("   Access: 📖 Read-only");
+                    } else {
+                        println!("   Access: ✏️  Read-write");
+                    }
+                    if let Some(last_synced) = calendar.last_synced {
+                        println!("   Last synced: {}", last_synced.format("%Y-%m-%d %H:%M:%S UTC"));
+                    } else {
+                        println!("   Last synced: Never");
+                    }
+                }
+                
+                println!("\n💡 Usage:");
+                println!("  comunicado calendar-sync all                     # Sync all calendars");
+                println!("  comunicado calendar-sync account <account>       # Sync calendars for specific account");
+                println!("  comunicado calendar-sync calendar <account> <calendar> # Sync specific calendar");
+            }
+            Err(e) => {
+                println!("❌ Failed to initialize calendar manager: {}", e);
+                return Err(anyhow!("Calendar manager initialization failed: {}", e));
+            }
+        }
+        
+        Ok(())
+    }
+
+    /// Show calendar sync status and statistics
+    async fn handle_calendar_sync_status(&self, account: Option<String>, _dry_run: bool) -> Result<()> {
+        if let Some(account_name) = account {
+            println!("📊 Calendar sync status for account: {}", account_name);
+            // For now, we show general calendar info since we don't have per-account calendar stats
+        } else {
+            println!("📊 Calendar sync status for all calendars:");
+        }
+        
+        // Initialize calendar manager
+        match self.create_calendar_manager().await {
+            Ok(calendar_manager) => {
+                match calendar_manager.get_stats().await {
+                    Ok(stats) => {
+                        println!("\n📊 Calendar Statistics:");
+                        println!("   📅 Total calendars: {}", stats.total_calendars);
+                        println!("   🌐 Google calendars: {}", stats.google_calendars);
+                        println!("   📍 CalDAV calendars: {}", stats.caldav_calendars);
+                        println!("   🏠 Local calendars: {}", stats.local_calendars);
+                        println!("   📍 Total events: {}", stats.total_events);
+                        println!("   📈 Upcoming events: {}", stats.upcoming_events);
+                        if stats.overdue_events > 0 {
+                            println!("   ⏰ Overdue events: {}", stats.overdue_events);
+                        }
+                        
+                        if let Some(last_sync) = stats.last_sync {
+                            let now = chrono::Utc::now();
+                            let time_since_sync = now.signed_duration_since(last_sync);
+                            println!("   🕒 Last sync: {} ({})", 
+                                last_sync.format("%Y-%m-%d %H:%M:%S UTC"),
+                                format_duration(time_since_sync)
+                            );
+                        } else {
+                            println!("   🕒 Last sync: Never");
+                        }
+                    }
+                    Err(e) => {
+                        println!("❌ Failed to get calendar statistics: {}", e);
+                        return Err(anyhow!("Failed to get calendar statistics: {}", e));
+                    }
+                }
+            }
+            Err(e) => {
+                println!("❌ Failed to initialize calendar manager: {}", e);
+                return Err(anyhow!("Calendar manager initialization failed: {}", e));
+            }
+        }
+        
+        Ok(())
+    }
+
+    /// Helper: Create a calendar manager instance
+    async fn create_calendar_manager(&self) -> Result<Arc<crate::calendar::manager::CalendarManager>> {
+        // Get or create calendar database path using the same pattern as email database
+        let calendar_db_path = dirs::config_dir()
+            .ok_or_else(|| anyhow!("Cannot find config directory"))?
+            .join("comunicado")
+            .join("databases")
+            .join("calendar.db");
+        
+        // Ensure parent directory exists
+        if let Some(parent) = calendar_db_path.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| anyhow!("Failed to create calendar database directory: {}", e))?;
+        }
+        
+        // Initialize database
+        let database = Arc::new(crate::calendar::database::CalendarDatabase::new(
+            calendar_db_path.to_str().ok_or_else(|| anyhow!("Invalid calendar database path"))?
+        ).await
+            .map_err(|e| anyhow!("Failed to initialize calendar database: {}", e))?);
+        
+        // Use existing token manager or create a new one
+        let token_manager = if let Some(ref tm) = self.token_manager {
+            Arc::new(tm.clone())
+        } else {
+            Arc::new(TokenManager::new_with_storage(Arc::new(self.storage.clone())))
+        };
+        
+        // Create calendar manager
+        let calendar_manager = Arc::new(crate::calendar::manager::CalendarManager::new(database, token_manager).await
+            .map_err(|e| anyhow!("Failed to create calendar manager: {}", e))?);
+        
+        Ok(calendar_manager)
+    }
+
+    /// Handle contacts sync commands
+    async fn handle_contacts_sync(&self, args: ContactsSyncArgs, dry_run: bool) -> Result<()> {
+        match args.command {
+            ContactsSyncCommands::All { verbose, force } => {
+                self.handle_contacts_sync_all(verbose, force, dry_run).await
+            }
+            ContactsSyncCommands::Account { account, verbose, force } => {
+                self.handle_contacts_sync_account(account, verbose, force, dry_run).await
+            }
+            ContactsSyncCommands::List => {
+                self.handle_contacts_sync_list(dry_run).await
+            }
+            ContactsSyncCommands::Status { account } => {
+                self.handle_contacts_sync_status(account, dry_run).await
+            }
+        }
+    }
+
+    /// Sync all contacts from all accounts
+    async fn handle_contacts_sync_all(&self, verbose: bool, force: bool, dry_run: bool) -> Result<()> {
+        println!("📞 Syncing all contacts...");
+        
+        if dry_run {
+            println!("💨 Dry run mode - no changes will be made");
+        }
+
+        // Get all accounts
+        let account_ids = self.storage.list_account_ids()
+            .map_err(|e| anyhow!("Failed to list accounts: {}", e))?;
+
+        if account_ids.is_empty() {
+            println!("⚠️  No accounts found. Use 'comunicado setup-gmail' to add an account.");
+            return Ok(());
+        }
+
+        println!("📧 Found {} account(s) to sync contacts for", account_ids.len());
+        
+        if verbose {
+            println!("📋 Contacts sync plan:");
+            println!("   🔄 Force full sync: {}", if force { "✅ Yes" } else { "❌ No" });
+        }
+
+        if dry_run {
+            for account_id in &account_ids {
+                if let Ok(Some(config)) = self.storage.load_account(account_id) {
+                    let display_name = if config.display_name.is_empty() { "Unknown".to_string() } else { config.display_name.clone() };
+                    println!("💨 Would sync contacts for: {} ({}) - {}", display_name, config.email_address, config.provider);
+                }
+            }
+        } else {
+            println!("🚀 Starting contacts sync...");
+            
+            // Initialize contacts manager
+            match self.create_contacts_manager().await {
+                Ok(contacts_manager) => {
+                    if verbose {
+                        println!("✅ Contacts manager initialized");
+                    }
+                    
+                    // Perform the actual sync
+                    match contacts_manager.sync_all_contacts().await {
+                        Ok(summary) => {
+                            println!("✅ Contacts sync completed successfully");
+                            
+                            // Show statistics if verbose
+                            if verbose {
+                                println!("📊 Sync statistics:");
+                                println!("   📞 Contacts fetched: {}", summary.fetched_count);
+                                println!("   ➕ Contacts created: {}", summary.created_count);
+                                println!("   🔄 Contacts updated: {}", summary.updated_count);
+                                println!("   ⏭️  Contacts skipped: {}", summary.skipped_count);
+                                if !summary.errors.is_empty() {
+                                    println!("   ❌ Errors: {}", summary.errors.len());
+                                    for error in &summary.errors {
+                                        println!("      {}", error);
+                                    }
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            println!("❌ Contacts sync failed: {}", e);
+                            return Err(anyhow!("Contacts sync failed: {}", e));
+                        }
+                    }
+                }
+                Err(e) => {
+                    println!("❌ Failed to initialize contacts manager: {}", e);
+                    return Err(anyhow!("Contacts manager initialization failed: {}", e));
+                }
+            }
+        }
+        
+        Ok(())
+    }
+
+    /// Sync contacts for a specific account
+    async fn handle_contacts_sync_account(&self, account: String, verbose: bool, force: bool, dry_run: bool) -> Result<()> {
+        println!("📞 Syncing contacts for account: {}", account);
+        
+        if dry_run {
+            println!("💨 Dry run mode - no changes will be made");
+        }
+
+        // Find account by name or email
+        let account_id = self.find_account_id(&account)?;
+        
+        if let Ok(Some(config)) = self.storage.load_account(&account_id) {
+            let display_name = if config.display_name.is_empty() { "Unknown".to_string() } else { config.display_name.clone() };
+            
+            println!("📋 Contacts sync plan for: {} ({}) - {}", display_name, config.email_address, config.provider);
+            
+            if verbose {
+                println!("   🔄 Force full sync: {}", if force { "✅ Yes" } else { "❌ No" });
+            }
+
+            if dry_run {
+                println!("💨 Would sync contacts for account: {}", account);
+            } else {
+                println!("🚀 Starting contacts sync for account: {}", account);
+                
+                // Initialize contacts manager
+                match self.create_contacts_manager().await {
+                    Ok(contacts_manager) => {
+                        if verbose {
+                            println!("✅ Contacts manager initialized");
+                        }
+                        
+                        // Determine provider type
+                        let provider_type = if config.provider.to_lowercase().contains("google") || config.provider.to_lowercase().contains("gmail") {
+                            "google"
+                        } else if config.provider.to_lowercase().contains("outlook") || config.provider.to_lowercase().contains("microsoft") {
+                            "outlook"
+                        } else {
+                            return Err(anyhow!("Unsupported provider for contacts sync: {}", config.provider));
+                        };
+                        
+                        // Perform account-specific sync
+                        match contacts_manager.sync_account_contacts(&account_id, provider_type).await {
+                            Ok(summary) => {
+                                println!("✅ Contacts sync completed for account: {}", account);
+                                
+                                if verbose {
+                                    println!("📊 Sync statistics:");
+                                    println!("   📞 Contacts fetched: {}", summary.fetched_count);
+                                    println!("   ➕ Contacts created: {}", summary.created_count);
+                                    println!("   🔄 Contacts updated: {}", summary.updated_count);
+                                    println!("   ⏭️  Contacts skipped: {}", summary.skipped_count);
+                                    if !summary.errors.is_empty() {
+                                        println!("   ❌ Errors: {}", summary.errors.len());
+                                        for error in &summary.errors {
+                                            println!("      {}", error);
+                                        }
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                println!("❌ Contacts sync failed for account {}: {}", account, e);
+                                return Err(anyhow!("Contacts sync failed: {}", e));
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        println!("❌ Failed to initialize contacts manager: {}", e);
+                        return Err(anyhow!("Contacts manager initialization failed: {}", e));
+                    }
+                }
+            }
+        } else {
+            return Err(anyhow!("Account '{}' not found", account));
+        }
+        
+        Ok(())
+    }
+
+    /// List available contacts sources for sync
+    async fn handle_contacts_sync_list(&self, _dry_run: bool) -> Result<()> {
+        println!("📞 Available contacts sources for sync:");
+        
+        // Initialize contacts manager
+        match self.create_contacts_manager().await {
+            Ok(contacts_manager) => {
+                match contacts_manager.get_stats().await {
+                    Ok(stats) => {
+                        if stats.total_contacts == 0 {
+                            println!("⚠️  No contacts found.");
+                            println!("💡 Sync contacts by running:");
+                            println!("   • comunicado contacts-sync account <account> (for Google/Outlook contacts)");
+                            return Ok(());
+                        }
+                        
+                        println!("Found {} contact(s):", stats.total_contacts);
+                        
+                        // Get accounts to show contact sources
+                        let account_ids = self.storage.list_account_ids()
+                            .map_err(|e| anyhow!("Failed to list accounts: {}", e))?;
+                            
+                        for account_id in &account_ids {
+                            if let Ok(Some(config)) = self.storage.load_account(account_id) {
+                                let display_name = if config.display_name.is_empty() { "Unknown".to_string() } else { config.display_name.clone() };
+                                
+                                // Check if this account has contacts scope
+                                let has_contacts_scope = config.scopes.iter().any(|scope| 
+                                    scope.contains("contacts") || scope.contains("Contacts")
+                                );
+                                
+                                println!("\n📧 {} ({}) - {}", display_name, config.email_address, config.provider);
+                                if has_contacts_scope {
+                                    println!("   Status: ✅ Contacts sync available");
+                                } else {
+                                    println!("   Status: ❌ Contacts scope not available");
+                                    println!("   💡 Re-run setup to add contacts permissions");
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        println!("❌ Failed to get contacts statistics: {}", e);
+                        return Err(anyhow!("Failed to get contacts statistics: {}", e));
+                    }
+                }
+            }
+            Err(e) => {
+                println!("❌ Failed to initialize contacts manager: {}", e);
+                return Err(anyhow!("Contacts manager initialization failed: {}", e));
+            }
+        }
+        
+        println!("\n💡 Usage:");
+        println!("  comunicado contacts-sync all                     # Sync all contacts");
+        println!("  comunicado contacts-sync account <account>       # Sync contacts for specific account");
+        
+        Ok(())
+    }
+
+    /// Show contacts sync status and statistics
+    async fn handle_contacts_sync_status(&self, account: Option<String>, _dry_run: bool) -> Result<()> {
+        if let Some(account_name) = account {
+            println!("📊 Contacts sync status for account: {}", account_name);
+        } else {
+            println!("📊 Contacts sync status for all accounts:");
+        }
+        
+        // Initialize contacts manager
+        match self.create_contacts_manager().await {
+            Ok(contacts_manager) => {
+                match contacts_manager.get_stats().await {
+                    Ok(stats) => {
+                        println!("\n📊 Contacts Statistics:");
+                        println!("   📞 Total contacts: {}", stats.total_contacts);
+                        println!("   📧 Contacts with email: {}", stats.contacts_with_email);
+                        println!("   📱 Contacts with phone: {}", stats.contacts_with_phone);
+                        println!("   🏢 Groups: {}", stats.groups_count);
+                        
+                        if let Some(last_sync) = stats.last_sync {
+                            let now = chrono::Utc::now();
+                            let time_since_sync = now.signed_duration_since(last_sync);
+                            println!("   🕒 Last sync: {} ({})", 
+                                last_sync.format("%Y-%m-%d %H:%M:%S UTC"),
+                                format_duration(time_since_sync)
+                            );
+                        } else {
+                            println!("   🕒 Last sync: Never");
+                        }
+                    }
+                    Err(e) => {
+                        println!("❌ Failed to get contacts statistics: {}", e);
+                        return Err(anyhow!("Failed to get contacts statistics: {}", e));
+                    }
+                }
+            }
+            Err(e) => {
+                println!("❌ Failed to initialize contacts manager: {}", e);
+                return Err(anyhow!("Contacts manager initialization failed: {}", e));
+            }
+        }
+        
+        Ok(())
+    }
+
+    /// Helper: Create a contacts manager instance
+    async fn create_contacts_manager(&self) -> Result<Arc<crate::contacts::ContactsManager>> {
+        // Get or create contacts database path
+        let contacts_db_path = dirs::config_dir()
+            .ok_or_else(|| anyhow!("Cannot find config directory"))?
+            .join("comunicado")
+            .join("databases")
+            .join("contacts.db");
+        
+        // Ensure parent directory exists
+        if let Some(parent) = contacts_db_path.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| anyhow!("Failed to create contacts database directory: {}", e))?;
+        }
+        
+        // Initialize database
+        let database = crate::contacts::ContactsDatabase::new(
+            contacts_db_path.to_str().ok_or_else(|| anyhow!("Invalid contacts database path"))?
+        ).await
+            .map_err(|e| anyhow!("Failed to initialize contacts database: {}", e))?;
+        
+        // Use existing token manager or create a new one
+        let token_manager = if let Some(ref tm) = self.token_manager {
+            tm.clone()
+        } else {
+            TokenManager::new_with_storage(Arc::new(self.storage.clone()))
+        };
+        
+        // Create contacts manager
+        let contacts_manager = Arc::new(crate::contacts::ContactsManager::new(database, token_manager).await
+            .map_err(|e| anyhow!("Failed to create contacts manager: {}", e))?);
+        
+        Ok(contacts_manager)
     }
 }
 

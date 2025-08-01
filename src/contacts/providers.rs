@@ -57,17 +57,36 @@ impl GoogleContactsProvider {
     }
 
     async fn get_access_token(&self, account_id: &str) -> ContactsResult<String> {
+        // TEMPORARY: Load token directly from file to bypass TokenManager cache issue
+        let config_dir = dirs::config_dir()
+            .ok_or_else(|| ContactsError::AuthError("Cannot find config directory".to_string()))?
+            .join("comunicado");
+        let token_file = config_dir.join(format!("{}.access.token", account_id));
+        
+        if token_file.exists() {
+            let encoded_token = std::fs::read_to_string(&token_file)
+                .map_err(|e| ContactsError::AuthError(format!("Failed to read token file: {}", e)))?;
+            let encoded_token = encoded_token.trim();
+            
+            use base64::{Engine as _, engine::general_purpose};
+            let decoded_token = general_purpose::STANDARD.decode(encoded_token)
+                .map_err(|e| ContactsError::AuthError(format!("Failed to decode token: {}", e)))?;
+            let token_str = String::from_utf8(decoded_token)
+                .map_err(|e| ContactsError::AuthError(format!("Invalid token encoding: {}", e)))?;
+                
+            println!("🔍 DEBUG: Using file token for contacts (first 50 chars): {}", &token_str[..50.min(token_str.len())]);
+            return Ok(token_str);
+        }
+        
+        // Fallback to TokenManager (original code)
         let token = self
             .token_manager
-            .get_access_token(account_id)
+            .get_valid_access_token(account_id)
             .await
             .map_err(|e| ContactsError::AuthError(e.to_string()))?
             .ok_or_else(|| ContactsError::AuthError("No access token found".to_string()))?;
 
-        if token.is_expired() {
-            return Err(ContactsError::AuthError("Access token expired".to_string()));
-        }
-
+        println!("🔍 DEBUG: Using TokenManager token for contacts (first 50 chars): {}", &token.token[..50.min(token.token.len())]);
         Ok(token.token)
     }
 }
@@ -460,14 +479,11 @@ impl OutlookContactsProvider {
     async fn get_access_token(&self, account_id: &str) -> ContactsResult<String> {
         let token = self
             .token_manager
-            .get_access_token(account_id)
+            .get_valid_access_token(account_id)
             .await
             .map_err(|e| ContactsError::AuthError(e.to_string()))?
             .ok_or_else(|| ContactsError::AuthError("No access token found".to_string()))?;
 
-        if token.is_expired() {
-            return Err(ContactsError::AuthError("Access token expired".to_string()));
-        }
 
         Ok(token.token)
     }

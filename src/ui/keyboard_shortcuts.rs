@@ -154,47 +154,92 @@ impl KeyboardShortcutsUI {
             ("Global Actions", Vec::new()),
             ("Navigation", Vec::new()),
             ("Selection & Interaction", Vec::new()),
-            ("Pane Management", Vec::new()),
             ("Email Actions", Vec::new()),
+            ("View & Attachments", Vec::new()),
+            ("Sorting & Search", Vec::new()),
             ("Account Management", Vec::new()),
-            ("Calendar", Vec::new()),
             ("Folder Management", Vec::new()),
+            ("Calendar & Todos", Vec::new()),
             ("Vim-style Movement", Vec::new()),
         ];
 
         // Get all shortcuts and organize them
         for (shortcut, action) in keyboard_manager.get_all_shortcuts() {
             let category_index = match action {
+                // Global Actions (0)
                 KeyboardAction::Quit
                 | KeyboardAction::ForceQuit
                 | KeyboardAction::ShowKeyboardShortcuts => 0,
+                
+                // Navigation (1)
                 KeyboardAction::NextPane
                 | KeyboardAction::PreviousPane
                 | KeyboardAction::MoveUp
                 | KeyboardAction::MoveDown
                 | KeyboardAction::MoveLeft
-                | KeyboardAction::MoveRight => 1,
+                | KeyboardAction::MoveRight
+                | KeyboardAction::NextMessage
+                | KeyboardAction::PreviousMessage => 1,
+                
+                // Selection & Interaction (2)
                 KeyboardAction::Select
                 | KeyboardAction::Escape
                 | KeyboardAction::ToggleExpanded => 2,
-                KeyboardAction::VimMoveLeft
-                | KeyboardAction::VimMoveRight
-                | KeyboardAction::VimMoveUp
-                | KeyboardAction::VimMoveDown => 8,
+                
+                // Email Actions (3)
                 KeyboardAction::ComposeEmail
                 | KeyboardAction::ReplyEmail
                 | KeyboardAction::ReplyAllEmail
                 | KeyboardAction::ForwardEmail
                 | KeyboardAction::DeleteEmail
                 | KeyboardAction::MarkAsRead
-                | KeyboardAction::MarkAsUnread => 4,
+                | KeyboardAction::MarkAsUnread
+                | KeyboardAction::ArchiveEmail
+                | KeyboardAction::ShowDraftList => 3,
+                
+                // View & Attachments (4)
+                KeyboardAction::OpenEmailViewer
+                | KeyboardAction::ViewAttachment
+                | KeyboardAction::SelectFirstAttachment
+                | KeyboardAction::OpenAttachmentWithSystem
+                | KeyboardAction::ToggleViewMode
+                | KeyboardAction::ToggleHeaders
+                | KeyboardAction::ScrollToTop
+                | KeyboardAction::ScrollToBottom
+                | KeyboardAction::ToggleThreadedView
+                | KeyboardAction::ExpandThread
+                | KeyboardAction::CollapseThread => 4,
+                
+                // Sorting & Search (5)
+                KeyboardAction::SortByDate
+                | KeyboardAction::SortBySender
+                | KeyboardAction::SortBySubject
+                | KeyboardAction::StartSearch
+                | KeyboardAction::StartFolderSearch
+                | KeyboardAction::EndSearch => 5,
+                
+                // Account Management (6)
                 KeyboardAction::AddAccount
                 | KeyboardAction::RemoveAccount
                 | KeyboardAction::RefreshAccount
-                | KeyboardAction::SwitchAccount => 5,
-                KeyboardAction::StartSearch
-                | KeyboardAction::StartFolderSearch
-                | KeyboardAction::EndSearch => 7,
+                | KeyboardAction::SwitchAccount => 6,
+                
+                // Folder Management (7)
+                KeyboardAction::RefreshFolder
+                | KeyboardAction::CreateFolder
+                | KeyboardAction::DeleteFolder => 7,
+                
+                // Calendar & Todos (8)
+                KeyboardAction::ViewTodos
+                | KeyboardAction::CreateTodo
+                | KeyboardAction::ToggleTodoComplete => 8,
+                
+                // Vim-style Movement (9)
+                KeyboardAction::VimMoveLeft
+                | KeyboardAction::VimMoveRight
+                | KeyboardAction::VimMoveUp
+                | KeyboardAction::VimMoveDown => 9,
+                
                 _ => 0, // Default to global actions
             };
 
@@ -247,6 +292,25 @@ impl KeyboardShortcutsUI {
             KeyboardAction::ToggleThreadedView => "Toggle threaded view",
             KeyboardAction::ExpandThread => "Expand thread",
             KeyboardAction::CollapseThread => "Collapse thread",
+            KeyboardAction::OpenEmailViewer => "Open email in full-screen viewer",
+            KeyboardAction::ViewAttachment => "View selected attachment",
+            KeyboardAction::SelectFirstAttachment => "Select first attachment",
+            KeyboardAction::OpenAttachmentWithSystem => "Open attachment with system app",
+            KeyboardAction::ToggleViewMode => "Toggle view mode",
+            KeyboardAction::ToggleHeaders => "Toggle extended headers",
+            KeyboardAction::ScrollToTop => "Scroll to top",
+            KeyboardAction::ScrollToBottom => "Scroll to bottom",
+            KeyboardAction::SortByDate => "Sort by date",
+            KeyboardAction::SortBySender => "Sort by sender",
+            KeyboardAction::SortBySubject => "Sort by subject",
+            KeyboardAction::NextMessage => "Next message",
+            KeyboardAction::PreviousMessage => "Previous message",
+            KeyboardAction::RefreshFolder => "Refresh current folder",
+            KeyboardAction::CreateFolder => "Create new folder",
+            KeyboardAction::DeleteFolder => "Delete folder",
+            KeyboardAction::ViewTodos => "View todos (Ctrl+T)",
+            KeyboardAction::CreateTodo => "Create new todo",
+            KeyboardAction::ToggleTodoComplete => "Toggle todo complete",
             _ => "Unknown action",
         }
     }

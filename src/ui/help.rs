@@ -674,8 +674,8 @@ impl HelpOverlay {
                 category: KeyBindingCategory::View,
             },
             KeyBinding {
-                keys: "F3".to_string(),
-                description: "Switch to Contacts view".to_string(),
+                keys: "Ctrl+K".to_string(),
+                description: "Open Contacts popup".to_string(),
                 category: KeyBindingCategory::View,
             },
             KeyBinding {
@@ -702,6 +702,33 @@ impl HelpOverlay {
                 keys: "Esc".to_string(),
                 description: "Cancel current action/close dialogs".to_string(),
                 category: KeyBindingCategory::System,
+            },
+            
+            // Contacts popup shortcuts (when Ctrl+K popup is open)
+            KeyBinding {
+                keys: "f".to_string(),
+                description: "Show All contacts (in contacts popup)".to_string(),
+                category: KeyBindingCategory::Actions,
+            },
+            KeyBinding {
+                keys: "s".to_string(),
+                description: "Sync contacts (in contacts popup)".to_string(),
+                category: KeyBindingCategory::Actions,
+            },
+            KeyBinding {
+                keys: "r".to_string(),
+                description: "Switch to Recent contacts (in contacts popup)".to_string(),
+                category: KeyBindingCategory::Actions,
+            },
+            KeyBinding {
+                keys: "/".to_string(),
+                description: "Start search (in contacts popup)".to_string(),
+                category: KeyBindingCategory::Actions,
+            },
+            KeyBinding {
+                keys: "Tab".to_string(),
+                description: "Toggle contact details (in contacts popup)".to_string(),
+                category: KeyBindingCategory::View,
             },
         ]
     }

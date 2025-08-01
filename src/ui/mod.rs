@@ -5,6 +5,7 @@ pub mod animation;
 pub mod calendar;
 pub mod compose;
 pub mod content_preview;
+pub mod external_editor;
 pub mod context_calendar;
 pub mod context_menu;
 pub mod context_shortcuts;
@@ -26,8 +27,10 @@ pub mod search;
 pub mod startup_progress;
 pub mod status_bar;
 pub mod sync_progress;
+pub mod enhanced_progress_overlay;
 pub mod time_picker;
 pub mod toast;
+pub mod toast_integration_simple;
 pub mod typography;
 pub mod unified_sidebar;
 
@@ -66,6 +69,7 @@ use self::{
     },
     sync_progress::SyncProgressOverlay,
     toast::ToastManager,
+    toast_integration_simple::SimpleToastIntegration,
     typography::{TypographySystem, InformationDensity},
 };
 
@@ -156,6 +160,7 @@ pub struct UI {
     status_bar: StatusBar,
     email_updater: Option<UIEmailUpdater>,
     sync_progress_overlay: SyncProgressOverlay,
+    enhanced_progress_overlay: enhanced_progress_overlay::EnhancedProgressOverlay,
     mode: UIMode,
     compose_ui: Option<ComposeUI>,
     draft_list: DraftListUI,
@@ -205,6 +210,7 @@ impl UI {
             status_bar: StatusBar::default(),
             email_updater: None,
             sync_progress_overlay: SyncProgressOverlay::new(),
+            enhanced_progress_overlay: enhanced_progress_overlay::EnhancedProgressOverlay::new(),
             mode: UIMode::Normal,
             compose_ui: None,
             draft_list: DraftListUI::new(),
@@ -320,9 +326,11 @@ impl UI {
                     self.render_status_bar(frame, chunks[4]);
                 }
 
-                // Render sync progress overlay (on top of everything)
-                if self.sync_progress_overlay.is_visible() {
-                    let theme = self.theme_manager.current_theme();
+                // Render progress overlays (enhanced takes priority over sync)
+                let theme = self.theme_manager.current_theme();
+                if self.enhanced_progress_overlay.is_visible() {
+                    self.enhanced_progress_overlay.render(frame, size, theme);
+                } else if self.sync_progress_overlay.is_visible() {
                     self.sync_progress_overlay.render(frame, size, theme);
                 }
             }
@@ -1236,6 +1244,9 @@ impl UI {
 
     /// Handle a specific email notification
     async fn handle_notification(&mut self, notification: EmailNotification) {
+        // Add toast notification for all email notifications
+        SimpleToastIntegration::handle_email_notification(&mut self.toast_manager, notification.clone());
+        
         match notification {
             EmailNotification::NewMessage {
                 account_id,
@@ -1509,6 +1520,64 @@ impl UI {
     /// Check if sync progress overlay is currently visible
     pub fn is_sync_progress_visible(&self) -> bool {
         self.sync_progress_overlay.is_visible()
+    }
+
+    /// Enhanced progress overlay methods
+    
+    /// Get mutable access to enhanced progress overlay
+    pub fn enhanced_progress_overlay_mut(&mut self) -> &mut enhanced_progress_overlay::EnhancedProgressOverlay {
+        &mut self.enhanced_progress_overlay
+    }
+
+    /// Get read-only access to enhanced progress overlay
+    pub fn enhanced_progress_overlay(&self) -> &enhanced_progress_overlay::EnhancedProgressOverlay {
+        &self.enhanced_progress_overlay
+    }
+
+    /// Toggle enhanced progress overlay visibility
+    pub fn toggle_enhanced_progress_overlay(&mut self) {
+        self.enhanced_progress_overlay.toggle_visibility();
+    }
+
+    /// Show enhanced progress overlay
+    pub fn show_enhanced_progress_overlay(&mut self) {
+        self.enhanced_progress_overlay.show();
+    }
+
+    /// Hide enhanced progress overlay
+    pub fn hide_enhanced_progress_overlay(&mut self) {
+        self.enhanced_progress_overlay.hide();
+    }
+
+    /// Navigate enhanced progress overlay selection
+    pub fn enhanced_progress_next(&mut self) {
+        self.enhanced_progress_overlay.select_next();
+    }
+
+    pub fn enhanced_progress_previous(&mut self) {
+        self.enhanced_progress_overlay.select_previous();
+    }
+
+    /// Show cancellation dialog for enhanced progress overlay
+    pub fn show_enhanced_progress_cancel_dialog(&mut self) {
+        self.enhanced_progress_overlay.show_cancel_dialog();
+    }
+
+    /// Hide cancellation dialog for enhanced progress overlay
+    pub fn hide_enhanced_progress_cancel_dialog(&mut self) {
+        self.enhanced_progress_overlay.hide_cancel_dialog();
+    }
+
+    /// Cancel selected task in enhanced progress overlay
+    pub async fn cancel_enhanced_progress_selected_task(&mut self) {
+        self.enhanced_progress_overlay.cancel_selected_task().await;
+    }
+
+    /// Clean up completed enhanced progress entries
+    pub fn cleanup_enhanced_progress(&mut self) {
+        // Remove completed tasks after 5 seconds
+        let threshold = tokio::time::Duration::from_secs(5);
+        self.enhanced_progress_overlay.cleanup_completed(threshold);
     }
 
     // Compose mode methods
@@ -2513,6 +2582,16 @@ impl UI {
         self.contacts_popup = Some(contacts_popup);
         self.mode = UIMode::ContactsPopup;
         self.update_navigation_hints();
+    }
+
+    /// Show contact details in existing popup
+    pub fn show_contact_details_in_popup(&mut self, contact: crate::contacts::Contact) -> bool {
+        if let Some(ref mut popup) = self.contacts_popup {
+            popup.show_contact_details(contact);
+            true
+        } else {
+            false
+        }
     }
 
     /// Show contact edit dialog

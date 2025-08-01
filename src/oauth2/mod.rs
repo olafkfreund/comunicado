@@ -88,6 +88,9 @@ pub enum OAuth2Scope {
 
     // Google Contacts scope
     GoogleContacts,
+    
+    // Google Calendar scope
+    GoogleCalendar,
 
     // Outlook scopes
     OutlookMailRead,
@@ -116,6 +119,7 @@ impl OAuth2Scope {
             OAuth2Scope::Profile => "profile",
             OAuth2Scope::Email => "email",
             OAuth2Scope::GoogleContacts => "https://www.googleapis.com/auth/contacts.readonly",
+            OAuth2Scope::GoogleCalendar => "https://www.googleapis.com/auth/calendar",
             OAuth2Scope::OutlookMailRead => "https://graph.microsoft.com/Mail.Read",
             OAuth2Scope::OutlookMailReadWrite => "https://graph.microsoft.com/Mail.ReadWrite",
             OAuth2Scope::OutlookMailSend => "https://graph.microsoft.com/Mail.Send",

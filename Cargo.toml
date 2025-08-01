@@ -88,6 +88,7 @@ uuid = { version = "1.6", features = ["v4", "v5", "serde"] }
 # System directories
 dirs = "5.0"
 glob = "0.3"
+tempfile = "3.8"
 webbrowser = "0.8"
 urlencoding = "2.1"
 
@@ -108,11 +109,22 @@ filetime = "0.2"
 [dev-dependencies]
 # Testing
 tokio-test = "0.4"
-tempfile = "3.8"
 
 [[bin]]
 name = "comunicado"
 path = "src/main.rs"
+
+[[bin]]
+name = "check-account-tokens"
+path = "check_account_tokens.rs"
+
+[[bin]]
+name = "debug-storage-vs-direct"
+path = "debug_storage_vs_direct.rs"
+
+[[bin]]
+name = "simple-v-test"
+path = "simple_v_test.rs"
 
 [profile.release]
 strip = true

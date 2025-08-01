@@ -1193,6 +1193,10 @@ impl CalendarUI {
 
     /// Set available calendars
     pub fn set_calendars(&mut self, calendars: Vec<crate::calendar::Calendar>) {
+        // Enable all calendars by default when they're loaded
+        for calendar in &calendars {
+            self.enabled_calendars.insert(calendar.id.clone());
+        }
         self.calendars = calendars;
     }
 

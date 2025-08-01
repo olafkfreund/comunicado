@@ -41,17 +41,23 @@ async fn main() -> Result<()> {
             println!("   Provider: {}", account.provider);
             println!("   Account ID: {}", account_id);
 
+            // Show stored scopes
+            println!("   📋 Stored Scopes:");
+            for scope in &account.scopes {
+                println!("      • {}", scope);
+            }
+            
             // Load tokens into token manager
             let token_response = comunicado::oauth2::TokenResponse {
                 access_token: account.access_token.clone(),
                 refresh_token: account.refresh_token.clone(),
                 token_type: "Bearer".to_string(),
+                scope: Some(account.scopes.join(" ")),
                 expires_in: account.token_expires_at.map(|expires_at| {
                     let now = chrono::Utc::now();
                     let duration = expires_at.signed_duration_since(now);
                     duration.num_seconds().max(0) as u64
                 }),
-                scope: Some(account.scopes.join(" ")),
             };
 
             if let Err(e) = token_manager
