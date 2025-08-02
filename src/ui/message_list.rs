@@ -686,6 +686,16 @@ impl MessageList {
         }
     }
 
+    /// Get the current account ID
+    pub fn current_account(&self) -> Option<&String> {
+        self.current_account.as_ref()
+    }
+
+    /// Get the current folder name
+    pub fn current_folder(&self) -> Option<&String> {
+        self.current_folder.as_ref()
+    }
+
     // Threading and view mode methods
 
     /// Toggle between list and threaded view modes

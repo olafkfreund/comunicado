@@ -421,7 +421,7 @@ mod tests {
 
     #[test]
     fn test_ical_reply_creation() {
-        let db = CalendarDatabase::new_in_memory();
+        let _db = CalendarDatabase::new_in_memory();
         // This would need to be implemented as an async test
         // with proper invitation data to test the RSVP functionality
     }

@@ -836,7 +836,7 @@ impl BackgroundProcessor {
                         error: Some("Task execution timed out".to_string()),
                         result_data: None,
                         account_id: task_account_id,
-                        task_type: task_type,
+                        task_type,
                     },
                 };
 

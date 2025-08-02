@@ -509,7 +509,7 @@ mod tests {
         }).unwrap();
         
         let buffer = terminal.backend().buffer();
-        let content: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
+        let _content: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
         
         // Should not render anything when complete (invisible)
         assert!(buffer.content.iter().all(|cell| cell.symbol() == " " || cell.symbol() == ""));

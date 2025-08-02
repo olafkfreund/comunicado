@@ -458,6 +458,15 @@ impl CalendarManager {
             .await
     }
 
+    /// Get events in a specific date range across all calendars
+    pub async fn get_events_in_range(
+        &self,
+        start_time: DateTime<Utc>,
+        end_time: DateTime<Utc>,
+    ) -> CalendarResult<Vec<Event>> {
+        self.get_all_events(Some(start_time), Some(end_time)).await
+    }
+
     /// RSVP to an event (update attendee status)
     pub async fn rsvp_to_event(
         &self,

@@ -430,8 +430,8 @@ mod tests {
             "test".to_string(),
         );
 
-        let engine = FilterEngine::new();
-        let message = create_test_message();
+        let _engine = FilterEngine::new();
+        let _message = create_test_message();
 
         // This would require a full test setup - simplified for now
         assert_eq!(condition.field, FilterField::Subject);

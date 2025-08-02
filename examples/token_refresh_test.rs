@@ -23,7 +23,7 @@ async fn main() -> Result<()> {
     // Check for required environment variables
     let client_id = std::env::var("GMAIL_CLIENT_ID")
         .map_err(|_| anyhow::anyhow!("GMAIL_CLIENT_ID environment variable not set"))?;
-    let client_secret = std::env::var("GMAIL_CLIENT_SECRET")
+    let _client_secret = std::env::var("GMAIL_CLIENT_SECRET")
         .map_err(|_| anyhow::anyhow!("GMAIL_CLIENT_SECRET environment variable not set"))?;
 
     println!("✅ Found OAuth2 credentials in environment");

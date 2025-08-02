@@ -45,6 +45,7 @@ pub struct ThemeColors {
     pub message_list: MessageListColors,
     pub content_preview: ContentPreviewColors,
     pub status_bar: StatusBarColors,
+    pub ai_assistant: AIAssistantColors,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -82,6 +83,19 @@ pub struct StatusBarColors {
     pub text: Color,
     pub section_separator: Color,
     pub active_indicator: Color,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AIAssistantColors {
+    pub border: Color,
+    pub title: Color,
+    pub text: Color,
+    pub selected: Color,
+    pub section: Color,
+    pub context: Color,
+    pub help: Color,
+    pub loading: Color,
+    pub error: Color,
 }
 
 impl ThemeColors {
@@ -143,6 +157,17 @@ impl ThemeColors {
                 text: palette.text_primary,
                 section_separator: palette.border,
                 active_indicator: palette.accent,
+            },
+            ai_assistant: AIAssistantColors {
+                border: palette.accent,
+                title: palette.accent,
+                text: palette.text_primary,
+                selected: palette.selection,
+                section: palette.highlight,
+                context: palette.text_secondary,
+                help: palette.text_muted,
+                loading: palette.info,
+                error: palette.error,
             },
         }
     }
@@ -206,6 +231,17 @@ impl ThemeColors {
                 section_separator: palette.border,
                 active_indicator: palette.accent,
             },
+            ai_assistant: AIAssistantColors {
+                border: palette.accent,
+                title: palette.accent,
+                text: palette.text_primary,
+                selected: palette.selection,
+                section: palette.highlight,
+                context: palette.text_secondary,
+                help: palette.text_muted,
+                loading: palette.info,
+                error: palette.error,
+            },
         }
     }
 
@@ -267,6 +303,17 @@ impl ThemeColors {
                 text: palette.text_primary,
                 section_separator: palette.border,
                 active_indicator: palette.accent,
+            },
+            ai_assistant: AIAssistantColors {
+                border: palette.accent,
+                title: palette.accent,
+                text: palette.text_primary,
+                selected: palette.selection,
+                section: palette.highlight,
+                context: palette.text_secondary,
+                help: palette.text_muted,
+                loading: palette.info,
+                error: palette.error,
             },
         }
     }
@@ -335,6 +382,17 @@ impl ThemeColors {
                 section_separator: palette.border,
                 active_indicator: Color::Rgb(250, 189, 47), // #fabd2f - bright_yellow
             },
+            ai_assistant: AIAssistantColors {
+                border: Color::Rgb(250, 189, 47), // #fabd2f - bright_yellow
+                title: Color::Rgb(250, 189, 47),  // #fabd2f - bright_yellow
+                text: palette.text_primary,
+                selected: Color::Rgb(131, 165, 152), // #83a598 - bright_blue
+                section: Color::Rgb(184, 187, 38),   // #b8bb26 - bright_green
+                context: palette.text_secondary,
+                help: palette.text_muted,
+                loading: Color::Rgb(131, 165, 152),  // #83a598 - bright_blue
+                error: Color::Rgb(251, 73, 52),      // #fb4934 - bright_red
+            },
         }
     }
 
@@ -401,6 +459,17 @@ impl ThemeColors {
                 text: palette.text_primary,
                 section_separator: palette.border,
                 active_indicator: Color::Rgb(181, 118, 20), // #b57614 - dark_yellow
+            },
+            ai_assistant: AIAssistantColors {
+                border: Color::Rgb(181, 118, 20), // #b57614 - dark_yellow
+                title: Color::Rgb(181, 118, 20),  // #b57614 - dark_yellow
+                text: palette.text_primary,
+                selected: Color::Rgb(7, 102, 120),   // #076678 - dark_blue
+                section: Color::Rgb(121, 116, 14),   // #79740e - dark_green
+                context: palette.text_secondary,
+                help: palette.text_muted,
+                loading: Color::Rgb(7, 102, 120),    // #076678 - dark_blue
+                error: Color::Rgb(157, 0, 6),        // #9d0006 - dark_red
             },
         }
     }

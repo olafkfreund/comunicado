@@ -1,3 +1,4 @@
+pub mod ai_assistant;
 pub mod caldav;
 pub mod database;
 pub mod event;
@@ -10,6 +11,10 @@ pub mod notifications;
 pub mod sync;
 pub mod ui;
 
+pub use ai_assistant::{
+    AICalendarAssistant, AvailabilityConflict, CalendarInsights, EventModificationSuggestions,
+    MeetingScheduleAnalysis, NaturalLanguageEventRequest, ParsedEventInfo,
+};
 pub use caldav::{CalDAVClient, CalDAVConfig, CalDAVError, CalDAVResult};
 pub use database::{
     CalendarDatabase, CalendarEvent, CalendarEventAttendee, CalendarEventRecurrence,

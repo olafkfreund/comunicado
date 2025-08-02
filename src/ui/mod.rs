@@ -1,5 +1,9 @@
 pub mod account_inspector;
 pub mod account_switcher;
+pub mod ai_assistant_ui;
+pub mod ai_calendar_ui;
+pub mod ai_config_ui;
+pub mod ai_privacy_dialog;
 pub mod animated_content;
 pub mod animation;
 pub mod calendar;
@@ -194,6 +198,12 @@ pub struct UI {
     notification_expires_at: Option<tokio::time::Instant>,
     // Contacts popup
     contacts_popup: Option<crate::contacts::ContactPopup>,
+    
+    // AI Assistant components
+    ai_assistant: crate::ui::ai_assistant_ui::AIAssistantUI,
+    ai_assistant_state: crate::ui::ai_assistant_ui::AIAssistantUIState,
+    ai_config_ui: crate::ui::ai_config_ui::AIConfigUI,
+    ai_config_state: crate::ui::ai_config_ui::AIConfigUIState,
 }
 
 impl UI {
@@ -244,6 +254,32 @@ impl UI {
             notification_expires_at: None,
             // Initialize contacts popup
             contacts_popup: None,
+            
+            // Initialize AI components - will be properly initialized when AI service is set
+            ai_assistant: {
+                // Create minimal AI service dependencies for UI initialization
+                let config = std::sync::Arc::new(tokio::sync::RwLock::new(crate::ai::config::AIConfig::default()));
+                let provider_manager = std::sync::Arc::new(tokio::sync::RwLock::new(
+                    crate::ai::provider::AIProviderManager::new(config.clone())
+                ));
+                let cache = std::sync::Arc::new(crate::ai::cache::AIResponseCache::new(
+                    100, 
+                    std::time::Duration::from_secs(300)
+                ));
+                let ai_service = std::sync::Arc::new(crate::ai::service::AIService::new(
+                    provider_manager,
+                    cache,
+                    config.clone()
+                ));
+                let email_assistant = std::sync::Arc::new(crate::email::AIEmailAssistant::new(
+                    ai_service,
+                    config
+                ));
+                crate::ui::ai_assistant_ui::AIAssistantUI::new(email_assistant)
+            },
+            ai_assistant_state: crate::ui::ai_assistant_ui::AIAssistantUIState::new(),
+            ai_config_ui: crate::ui::ai_config_ui::AIConfigUI::new(),
+            ai_config_state: crate::ui::ai_config_ui::AIConfigUIState::new(),
         };
 
         // Initialize status bar with default segments
@@ -745,6 +781,23 @@ impl UI {
 
     pub fn current_theme(&self) -> &Theme {
         self.theme_manager.current_theme()
+    }
+
+    // AI Assistant component accessors
+    pub fn ai_assistant(&self) -> &crate::ui::ai_assistant_ui::AIAssistantUI {
+        &self.ai_assistant
+    }
+
+    pub fn ai_assistant_mut(&mut self) -> &mut crate::ui::ai_assistant_ui::AIAssistantUI {
+        &mut self.ai_assistant
+    }
+
+    pub fn ai_config_ui(&self) -> &crate::ui::ai_config_ui::AIConfigUI {
+        &self.ai_config_ui
+    }
+
+    pub fn ai_config_ui_mut(&mut self) -> &mut crate::ui::ai_config_ui::AIConfigUI {
+        &mut self.ai_config_ui
     }
 
     // Status bar management methods
@@ -1523,7 +1576,7 @@ impl UI {
     }
 
     /// Enhanced progress overlay methods
-    
+    ///
     /// Get mutable access to enhanced progress overlay
     pub fn enhanced_progress_overlay_mut(&mut self) -> &mut enhanced_progress_overlay::EnhancedProgressOverlay {
         &mut self.enhanced_progress_overlay
@@ -3153,6 +3206,117 @@ impl UI {
     /// Get top shortcuts for compact display
     pub fn get_top_shortcuts(&self, limit: usize) -> Vec<KeyboardShortcut> {
         self.dynamic_shortcuts_manager.get_top_shortcuts(limit)
+    }
+
+    // AI Assistant methods
+    
+    /// Toggle AI assistant panel visibility
+    pub fn toggle_ai_assistant(&mut self) {
+        use crate::ui::ai_assistant_ui::AIAssistantMode;
+        
+        if self.ai_assistant_state.mode == AIAssistantMode::Hidden {
+            self.ai_assistant_state.mode = AIAssistantMode::Compose;
+        } else {
+            self.ai_assistant_state.mode = AIAssistantMode::Hidden;
+        }
+    }
+
+    /// Show AI email suggestions for a message
+    pub fn show_ai_email_suggestions(&mut self, subject: &str, sender: &str) {
+        use crate::ui::ai_assistant_ui::AIAssistantMode;
+        
+        self.ai_assistant_state.mode = AIAssistantMode::Reply;
+        self.ai_assistant_state.loading = true;
+        
+        // Show toast notification for now
+        self.show_toast_info(format!("AI analyzing email from {} about '{}'", sender, subject));
+    }
+
+    /// Show AI compose suggestions
+    pub fn show_ai_compose_suggestions(&mut self) {
+        use crate::ui::ai_assistant_ui::AIAssistantMode;
+        
+        self.ai_assistant_state.mode = AIAssistantMode::Compose;
+        self.ai_assistant_state.loading = true;
+        
+        // Show toast notification for now
+        self.show_toast_info("AI compose assistance activated");
+    }
+
+    /// Show AI summarization for email content
+    pub fn show_ai_summarization(&mut self, content: &str) {
+        use crate::ui::ai_assistant_ui::AIAssistantMode;
+        
+        self.ai_assistant_state.mode = AIAssistantMode::Summarize;
+        self.ai_assistant_state.loading = true;
+        
+        // Show toast notification for now
+        let preview = if content.len() > 50 {
+            format!("{}...", &content[..50])
+        } else {
+            content.to_string()
+        };
+        
+        self.show_toast_info(format!("AI summarizing: {}", preview));
+    }
+
+    /// Show AI calendar assistance
+    pub fn show_ai_calendar_assistance(&mut self) {
+        // Show toast notification for now
+        self.show_toast_info("AI calendar assistance activated");
+    }
+
+    /// Show AI configuration settings
+    pub fn show_ai_configuration(&mut self) {
+        self.ai_config_state.show(crate::ai::config::AIConfig::default());
+        
+        // Show toast notification for now
+        self.show_toast_info("AI configuration opened (Ctrl+Alt+G)");
+    }
+
+    /// Show AI quick reply suggestions
+    pub fn show_ai_quick_reply(&mut self, sender: &str, _content: &str) {
+        use crate::ui::ai_assistant_ui::AIAssistantMode;
+        
+        self.ai_assistant_state.mode = AIAssistantMode::Reply;
+        self.ai_assistant_state.loading = true;
+        
+        // Show toast notification for now
+        self.show_toast_info(format!("AI generating quick reply to {}", sender));
+    }
+
+    /// Show AI email analysis
+    pub fn show_ai_email_analysis(&mut self, _content: &str, subject: &str) {
+        use crate::ui::ai_assistant_ui::AIAssistantMode;
+        
+        self.ai_assistant_state.mode = AIAssistantMode::BulkAnalysis;
+        self.ai_assistant_state.loading = true;
+        
+        // Show toast notification for now
+        self.show_toast_info(format!("AI analyzing email: {}", subject));
+    }
+
+    /// Show AI schedule parsing
+    pub fn show_ai_schedule_parsing(&mut self, content: &str) {
+        // Show toast notification for now
+        let preview = if content.len() > 50 {
+            format!("{}...", &content[..50])
+        } else {
+            content.to_string()
+        };
+        
+        self.show_toast_info(format!("AI parsing schedule from: {}", preview));
+    }
+
+    /// Show AI content generation
+    pub fn show_ai_content_generation(&mut self) {
+        use crate::ui::ai_assistant_ui::AIAssistantMode;
+        
+        self.ai_assistant_state.mode = AIAssistantMode::Compose;
+        self.ai_assistant_state.loading = true;
+        
+        // Show toast notification for now
+        self.show_toast_info("AI content generation activated");
     }
 }
 

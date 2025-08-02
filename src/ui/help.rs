@@ -298,8 +298,39 @@ impl HelpOverlay {
     fn create_email_help() -> HelpContent {
         HelpContent {
             title: "Email Client".to_string(),
-            description: "Navigate and manage your emails efficiently with these keyboard shortcuts.".to_string(),
+            description: "Navigate and manage your emails efficiently with these keyboard shortcuts. Note: Most shortcuts are context-sensitive and require focus on the correct UI pane (shown in brackets).".to_string(),
             sections: vec![
+                HelpSection {
+                    title: "AI Assistant".to_string(),
+                    description: Some("AI-powered email and calendar assistance".to_string()),
+                    shortcuts: vec![
+                        KeyBinding {
+                            keys: "Ctrl+Alt+I".to_string(),
+                            description: "Toggle AI assistant panel".to_string(),
+                            category: KeyBindingCategory::Actions,
+                        },
+                        KeyBinding {
+                            keys: "Ctrl+Alt+S".to_string(),
+                            description: "Get AI suggestions for current email".to_string(),
+                            category: KeyBindingCategory::Actions,
+                        },
+                        KeyBinding {
+                            keys: "Ctrl+Alt+U".to_string(),
+                            description: "Generate AI summary of current email".to_string(),
+                            category: KeyBindingCategory::Actions,
+                        },
+                        KeyBinding {
+                            keys: "Ctrl+Alt+C".to_string(),
+                            description: "AI assistance for email composition".to_string(),
+                            category: KeyBindingCategory::Actions,
+                        },
+                        KeyBinding {
+                            keys: "Ctrl+Alt+G".to_string(),
+                            description: "Open AI configuration and settings".to_string(),
+                            category: KeyBindingCategory::Actions,
+                        },
+                    ],
+                },
                 HelpSection {
                     title: "Email Navigation".to_string(),
                     description: Some("Move between folders and messages".to_string()),
@@ -324,6 +355,11 @@ impl HelpOverlay {
                             description: "Collapse/expand folder tree".to_string(),
                             category: KeyBindingCategory::View,
                         },
+                        KeyBinding {
+                            keys: "n/p".to_string(),
+                            description: "Next/Previous message".to_string(),
+                            category: KeyBindingCategory::Navigation,
+                        },
                     ],
                 },
                 HelpSection {
@@ -336,28 +372,38 @@ impl HelpOverlay {
                             category: KeyBindingCategory::Actions,
                         },
                         KeyBinding {
-                            keys: "r".to_string(),
-                            description: "Reply to selected message".to_string(),
+                            keys: "Ctrl+R".to_string(),
+                            description: "Reply to selected message [Focus: MessageList/ContentPreview]".to_string(),
                             category: KeyBindingCategory::Actions,
                         },
                         KeyBinding {
-                            keys: "R".to_string(),
-                            description: "Reply all to selected message".to_string(),
+                            keys: "Shift+R".to_string(),
+                            description: "Reply all to selected message [Focus: MessageList/ContentPreview]".to_string(),
                             category: KeyBindingCategory::Actions,
                         },
                         KeyBinding {
-                            keys: "f".to_string(),
-                            description: "Forward selected message".to_string(),
+                            keys: "Ctrl+F".to_string(),
+                            description: "Forward selected message [Focus: MessageList/ContentPreview]".to_string(),
                             category: KeyBindingCategory::Actions,
                         },
                         KeyBinding {
-                            keys: "d, Delete".to_string(),
-                            description: "Delete selected message".to_string(),
+                            keys: "Shift+Delete".to_string(),
+                            description: "Delete selected message [Focus: MessageList/ContentPreview]".to_string(),
                             category: KeyBindingCategory::Actions,
                         },
                         KeyBinding {
-                            keys: "m".to_string(),
-                            description: "Mark as read/unread".to_string(),
+                            keys: "Shift+M".to_string(),
+                            description: "Mark as read [Focus: MessageList/ContentPreview]".to_string(),
+                            category: KeyBindingCategory::Actions,
+                        },
+                        KeyBinding {
+                            keys: "Shift+U".to_string(),
+                            description: "Mark as unread [Focus: MessageList/ContentPreview]".to_string(),
+                            category: KeyBindingCategory::Actions,
+                        },
+                        KeyBinding {
+                            keys: "Shift+A".to_string(),
+                            description: "Archive message [Focus: MessageList/ContentPreview]".to_string(),
                             category: KeyBindingCategory::Actions,
                         },
                     ],
@@ -368,23 +414,95 @@ impl HelpOverlay {
                     shortcuts: vec![
                         KeyBinding {
                             keys: "/".to_string(),
-                            description: "Start search".to_string(),
+                            description: "Start search [Focus: MessageList]".to_string(),
                             category: KeyBindingCategory::Actions,
                         },
                         KeyBinding {
-                            keys: "n".to_string(),
-                            description: "Next search result".to_string(),
-                            category: KeyBindingCategory::Navigation,
-                        },
-                        KeyBinding {
-                            keys: "N".to_string(),
-                            description: "Previous search result".to_string(),
-                            category: KeyBindingCategory::Navigation,
+                            keys: "f".to_string(),
+                            description: "Search folders [Focus: FolderTree]".to_string(),
+                            category: KeyBindingCategory::Actions,
                         },
                         KeyBinding {
                             keys: "Esc".to_string(),
-                            description: "Clear search".to_string(),
+                            description: "Clear search [Context: Any]".to_string(),
                             category: KeyBindingCategory::Actions,
+                        },
+                    ],
+                },
+                HelpSection {
+                    title: "Email Viewer Actions".to_string(),
+                    description: Some("Actions available in full-screen email viewer".to_string()),
+                    shortcuts: vec![
+                        KeyBinding {
+                            keys: "r".to_string(),
+                            description: "Reply to email [Focus: EmailViewer]".to_string(),
+                            category: KeyBindingCategory::Actions,
+                        },
+                        KeyBinding {
+                            keys: "Shift+R".to_string(),
+                            description: "Reply all to email [Focus: EmailViewer]".to_string(),
+                            category: KeyBindingCategory::Actions,
+                        },
+                        KeyBinding {
+                            keys: "f".to_string(),
+                            description: "Forward email [Focus: EmailViewer]".to_string(),
+                            category: KeyBindingCategory::Actions,
+                        },
+                        KeyBinding {
+                            keys: "e".to_string(),
+                            description: "Edit draft [Focus: EmailViewer]".to_string(),
+                            category: KeyBindingCategory::Actions,
+                        },
+                        KeyBinding {
+                            keys: "Delete".to_string(),
+                            description: "Delete email [Focus: EmailViewer]".to_string(),
+                            category: KeyBindingCategory::Actions,
+                        },
+                        KeyBinding {
+                            keys: "a".to_string(),
+                            description: "Archive email [Focus: EmailViewer]".to_string(),
+                            category: KeyBindingCategory::Actions,
+                        },
+                        KeyBinding {
+                            keys: "m".to_string(),
+                            description: "Mark as read [Focus: EmailViewer]".to_string(),
+                            category: KeyBindingCategory::Actions,
+                        },
+                        KeyBinding {
+                            keys: "u".to_string(),
+                            description: "Mark as unread [Focus: EmailViewer]".to_string(),
+                            category: KeyBindingCategory::Actions,
+                        },
+                        KeyBinding {
+                            keys: "q, Esc".to_string(),
+                            description: "Close email viewer [Focus: EmailViewer]".to_string(),
+                            category: KeyBindingCategory::Navigation,
+                        },
+                    ],
+                },
+                HelpSection {
+                    title: "View Controls".to_string(),
+                    description: Some("Control email display and view modes".to_string()),
+                    shortcuts: vec![
+                        KeyBinding {
+                            keys: "m".to_string(),
+                            description: "Toggle view mode [Focus: ContentPreview]".to_string(),
+                            category: KeyBindingCategory::View,
+                        },
+                        KeyBinding {
+                            keys: "H".to_string(),
+                            description: "Toggle extended headers [Focus: ContentPreview]".to_string(),
+                            category: KeyBindingCategory::View,
+                        },
+                        KeyBinding {
+                            keys: "t".to_string(),
+                            description: "Toggle threaded view [Focus: MessageList]".to_string(),
+                            category: KeyBindingCategory::View,
+                        },
+                        KeyBinding {
+                            keys: "V".to_string(),
+                            description: "Open email in full-screen viewer [Context: Any]".to_string(),
+                            category: KeyBindingCategory::View,
                         },
                     ],
                 },
@@ -397,7 +515,7 @@ impl HelpOverlay {
     fn create_calendar_help() -> HelpContent {
         HelpContent {
             title: "Calendar".to_string(),
-            description: "Manage your calendar events and appointments with these shortcuts.".to_string(),
+            description: "Manage your calendar events and appointments with these shortcuts. Calendar actions require focus on the calendar view.".to_string(),
             sections: vec![
                 HelpSection {
                     title: "Calendar Navigation".to_string(),
@@ -436,27 +554,27 @@ impl HelpOverlay {
                     shortcuts: vec![
                         KeyBinding {
                             keys: "n".to_string(),
-                            description: "Create new event".to_string(),
+                            description: "Create new event [Focus: Calendar]".to_string(),
                             category: KeyBindingCategory::Actions,
                         },
                         KeyBinding {
                             keys: "Enter".to_string(),
-                            description: "View/edit selected event".to_string(),
+                            description: "View/edit selected event [Focus: Calendar]".to_string(),
                             category: KeyBindingCategory::Actions,
                         },
                         KeyBinding {
                             keys: "d, Delete".to_string(),
-                            description: "Delete selected event".to_string(),
+                            description: "Delete selected event [Focus: Calendar]".to_string(),
                             category: KeyBindingCategory::Actions,
                         },
                         KeyBinding {
                             keys: "c".to_string(),
-                            description: "Copy event".to_string(),
+                            description: "Copy event [Focus: Calendar]".to_string(),
                             category: KeyBindingCategory::Actions,
                         },
                         KeyBinding {
                             keys: "e".to_string(),
-                            description: "Edit event".to_string(),
+                            description: "Edit event [Focus: Calendar]".to_string(),
                             category: KeyBindingCategory::Actions,
                         },
                     ],
@@ -467,22 +585,22 @@ impl HelpOverlay {
                     shortcuts: vec![
                         KeyBinding {
                             keys: "1".to_string(),
-                            description: "Day view".to_string(),
+                            description: "Day view [Focus: Calendar]".to_string(),
                             category: KeyBindingCategory::View,
                         },
                         KeyBinding {
                             keys: "2".to_string(),
-                            description: "Week view".to_string(),
+                            description: "Week view [Focus: Calendar]".to_string(),
                             category: KeyBindingCategory::View,
                         },
                         KeyBinding {
                             keys: "3".to_string(),
-                            description: "Month view".to_string(),
+                            description: "Month view [Focus: Calendar]".to_string(),
                             category: KeyBindingCategory::View,
                         },
                         KeyBinding {
                             keys: "4".to_string(),
-                            description: "Agenda view".to_string(),
+                            description: "Agenda view [Focus: Calendar]".to_string(),
                             category: KeyBindingCategory::View,
                         },
                     ],
@@ -525,17 +643,17 @@ impl HelpOverlay {
                     shortcuts: vec![
                         KeyBinding {
                             keys: "n".to_string(),
-                            description: "Add new contact".to_string(),
+                            description: "Add new contact [Focus: Contacts]".to_string(),
                             category: KeyBindingCategory::Actions,
                         },
                         KeyBinding {
                             keys: "e".to_string(),
-                            description: "Edit selected contact".to_string(),
+                            description: "Edit selected contact [Focus: Contacts]".to_string(),
                             category: KeyBindingCategory::Actions,
                         },
                         KeyBinding {
                             keys: "d, Delete".to_string(),
-                            description: "Delete selected contact".to_string(),
+                            description: "Delete selected contact [Focus: Contacts]".to_string(),
                             category: KeyBindingCategory::Actions,
                         },
                         KeyBinding {
@@ -575,7 +693,7 @@ impl HelpOverlay {
     fn create_settings_help() -> HelpContent {
         HelpContent {
             title: "Settings".to_string(),
-            description: "Configure Comunicado preferences and account settings.".to_string(),
+            description: "Configure Comunicado preferences and account settings. Use Tab to navigate between settings categories.".to_string(),
             sections: vec![
                 HelpSection {
                     title: "Settings Navigation".to_string(),
@@ -659,17 +777,22 @@ impl HelpOverlay {
                 category: KeyBindingCategory::System,
             },
             KeyBinding {
-                keys: "Ctrl+Q, q".to_string(),
+                keys: "q".to_string(),
                 description: "Quit application".to_string(),
                 category: KeyBindingCategory::System,
             },
             KeyBinding {
-                keys: "F1".to_string(),
+                keys: "Ctrl+C".to_string(),
+                description: "Force quit application".to_string(),
+                category: KeyBindingCategory::System,
+            },
+            KeyBinding {
+                keys: "Ctrl+M".to_string(),
                 description: "Switch to Email view".to_string(),
                 category: KeyBindingCategory::View,
             },
             KeyBinding {
-                keys: "F2".to_string(),
+                keys: "Ctrl+L".to_string(),
                 description: "Switch to Calendar view".to_string(),
                 category: KeyBindingCategory::View,
             },
@@ -679,24 +802,14 @@ impl HelpOverlay {
                 category: KeyBindingCategory::View,
             },
             KeyBinding {
-                keys: "F4".to_string(),
-                description: "Switch to Settings view".to_string(),
-                category: KeyBindingCategory::View,
-            },
-            KeyBinding {
-                keys: "Ctrl+S".to_string(),
-                description: "Sync all accounts".to_string(),
+                keys: "Ctrl+A".to_string(),
+                description: "Add new account".to_string(),
                 category: KeyBindingCategory::Actions,
             },
             KeyBinding {
-                keys: "Ctrl+R".to_string(),
-                description: "Refresh current view".to_string(),
-                category: KeyBindingCategory::Actions,
-            },
-            KeyBinding {
-                keys: "Ctrl+D".to_string(),
-                description: "Cycle information density".to_string(),
-                category: KeyBindingCategory::View,
+                keys: "Tab".to_string(),
+                description: "Switch between panes".to_string(),
+                category: KeyBindingCategory::Navigation,
             },
             KeyBinding {
                 keys: "Esc".to_string(),
@@ -707,27 +820,27 @@ impl HelpOverlay {
             // Contacts popup shortcuts (when Ctrl+K popup is open)
             KeyBinding {
                 keys: "f".to_string(),
-                description: "Show All contacts (in contacts popup)".to_string(),
+                description: "Show All contacts [Context: Contacts Popup]".to_string(),
                 category: KeyBindingCategory::Actions,
             },
             KeyBinding {
                 keys: "s".to_string(),
-                description: "Sync contacts (in contacts popup)".to_string(),
+                description: "Sync contacts [Context: Contacts Popup]".to_string(),
                 category: KeyBindingCategory::Actions,
             },
             KeyBinding {
                 keys: "r".to_string(),
-                description: "Switch to Recent contacts (in contacts popup)".to_string(),
+                description: "Switch to Recent contacts [Context: Contacts Popup]".to_string(),
                 category: KeyBindingCategory::Actions,
             },
             KeyBinding {
                 keys: "/".to_string(),
-                description: "Start search (in contacts popup)".to_string(),
+                description: "Start search [Context: Contacts Popup]".to_string(),
                 category: KeyBindingCategory::Actions,
             },
             KeyBinding {
                 keys: "Tab".to_string(),
-                description: "Toggle contact details (in contacts popup)".to_string(),
+                description: "Toggle contact details [Context: Contacts Popup]".to_string(),
                 category: KeyBindingCategory::View,
             },
         ]

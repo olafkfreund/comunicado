@@ -22,6 +22,51 @@ pub struct Theme {
 }
 
 impl Theme {
+    /// Get AI assistant border color
+    pub fn ai_assistant_border(&self) -> ratatui::style::Color {
+        self.colors.ai_assistant.border
+    }
+    
+    /// Get AI assistant title color
+    pub fn ai_assistant_title(&self) -> ratatui::style::Color {
+        self.colors.ai_assistant.title
+    }
+    
+    /// Get AI assistant text color
+    pub fn ai_assistant_text(&self) -> ratatui::style::Color {
+        self.colors.ai_assistant.text
+    }
+    
+    /// Get AI assistant selected color
+    pub fn ai_assistant_selected(&self) -> ratatui::style::Color {
+        self.colors.ai_assistant.selected
+    }
+    
+    /// Get AI assistant section color
+    pub fn ai_assistant_section(&self) -> ratatui::style::Color {
+        self.colors.ai_assistant.section
+    }
+    
+    /// Get AI assistant context color
+    pub fn ai_assistant_context(&self) -> ratatui::style::Color {
+        self.colors.ai_assistant.context
+    }
+    
+    /// Get AI assistant help color
+    pub fn ai_assistant_help(&self) -> ratatui::style::Color {
+        self.colors.ai_assistant.help
+    }
+    
+    /// Get AI assistant loading color
+    pub fn ai_assistant_loading(&self) -> ratatui::style::Color {
+        self.colors.ai_assistant.loading
+    }
+    
+    /// Get AI assistant error color
+    pub fn ai_assistant_error(&self) -> ratatui::style::Color {
+        self.colors.ai_assistant.error
+    }
+
     /// Create a new professional dark theme
     pub fn professional_dark() -> Self {
         Self {

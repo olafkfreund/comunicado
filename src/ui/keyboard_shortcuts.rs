@@ -152,14 +152,15 @@ impl KeyboardShortcutsUI {
     ) -> Vec<(&str, Vec<(KeyboardShortcut, KeyboardAction)>)> {
         let mut categories: Vec<(&str, Vec<(KeyboardShortcut, KeyboardAction)>)> = vec![
             ("Global Actions", Vec::new()),
+            ("AI Assistant", Vec::new()),
             ("Navigation", Vec::new()),
             ("Selection & Interaction", Vec::new()),
             ("Email Actions", Vec::new()),
+            ("Calendar & Events", Vec::new()),
             ("View & Attachments", Vec::new()),
             ("Sorting & Search", Vec::new()),
             ("Account Management", Vec::new()),
             ("Folder Management", Vec::new()),
-            ("Calendar & Todos", Vec::new()),
             ("Vim-style Movement", Vec::new()),
         ];
 
@@ -171,7 +172,19 @@ impl KeyboardShortcutsUI {
                 | KeyboardAction::ForceQuit
                 | KeyboardAction::ShowKeyboardShortcuts => 0,
                 
-                // Navigation (1)
+                // AI Assistant (1)
+                KeyboardAction::AIToggleAssistant
+                | KeyboardAction::AIEmailSuggestions
+                | KeyboardAction::AIComposeSuggestions
+                | KeyboardAction::AISummarizeEmail
+                | KeyboardAction::AICalendarAssist
+                | KeyboardAction::AIConfigureSettings
+                | KeyboardAction::AIQuickReply
+                | KeyboardAction::AIEmailAnalysis
+                | KeyboardAction::AIScheduleRequest
+                | KeyboardAction::AIContentGeneration => 1,
+                
+                // Navigation (2)
                 KeyboardAction::NextPane
                 | KeyboardAction::PreviousPane
                 | KeyboardAction::MoveUp
@@ -179,14 +192,14 @@ impl KeyboardShortcutsUI {
                 | KeyboardAction::MoveLeft
                 | KeyboardAction::MoveRight
                 | KeyboardAction::NextMessage
-                | KeyboardAction::PreviousMessage => 1,
+                | KeyboardAction::PreviousMessage => 2,
                 
-                // Selection & Interaction (2)
+                // Selection & Interaction (3)
                 KeyboardAction::Select
                 | KeyboardAction::Escape
-                | KeyboardAction::ToggleExpanded => 2,
+                | KeyboardAction::ToggleExpanded => 3,
                 
-                // Email Actions (3)
+                // Email Actions (4)
                 KeyboardAction::ComposeEmail
                 | KeyboardAction::ReplyEmail
                 | KeyboardAction::ReplyAllEmail
@@ -195,9 +208,27 @@ impl KeyboardShortcutsUI {
                 | KeyboardAction::MarkAsRead
                 | KeyboardAction::MarkAsUnread
                 | KeyboardAction::ArchiveEmail
-                | KeyboardAction::ShowDraftList => 3,
+                | KeyboardAction::ShowDraftList => 4,
                 
-                // View & Attachments (4)
+                // Calendar & Events (5)
+                KeyboardAction::ShowCalendar
+                | KeyboardAction::ShowEmail
+                | KeyboardAction::CreateEvent
+                | KeyboardAction::EditEvent
+                | KeyboardAction::DeleteEvent
+                | KeyboardAction::ViewEventDetails
+                | KeyboardAction::CreateTodo
+                | KeyboardAction::ToggleTodoComplete
+                | KeyboardAction::ViewTodos
+                | KeyboardAction::CalendarNextMonth
+                | KeyboardAction::CalendarPrevMonth
+                | KeyboardAction::CalendarToday
+                | KeyboardAction::CalendarWeekView
+                | KeyboardAction::CalendarMonthView
+                | KeyboardAction::CalendarDayView
+                | KeyboardAction::CalendarAgendaView => 5,
+                
+                // View & Attachments (6)
                 KeyboardAction::OpenEmailViewer
                 | KeyboardAction::ViewAttachment
                 | KeyboardAction::SelectFirstAttachment
@@ -208,37 +239,32 @@ impl KeyboardShortcutsUI {
                 | KeyboardAction::ScrollToBottom
                 | KeyboardAction::ToggleThreadedView
                 | KeyboardAction::ExpandThread
-                | KeyboardAction::CollapseThread => 4,
+                | KeyboardAction::CollapseThread => 6,
                 
-                // Sorting & Search (5)
+                // Sorting & Search (7)
                 KeyboardAction::SortByDate
                 | KeyboardAction::SortBySender
                 | KeyboardAction::SortBySubject
                 | KeyboardAction::StartSearch
                 | KeyboardAction::StartFolderSearch
-                | KeyboardAction::EndSearch => 5,
+                | KeyboardAction::EndSearch => 7,
                 
-                // Account Management (6)
+                // Account Management (8)
                 KeyboardAction::AddAccount
                 | KeyboardAction::RemoveAccount
                 | KeyboardAction::RefreshAccount
-                | KeyboardAction::SwitchAccount => 6,
+                | KeyboardAction::SwitchAccount => 8,
                 
-                // Folder Management (7)
+                // Folder Management (9)
                 KeyboardAction::RefreshFolder
                 | KeyboardAction::CreateFolder
-                | KeyboardAction::DeleteFolder => 7,
+                | KeyboardAction::DeleteFolder => 9,
                 
-                // Calendar & Todos (8)
-                KeyboardAction::ViewTodos
-                | KeyboardAction::CreateTodo
-                | KeyboardAction::ToggleTodoComplete => 8,
-                
-                // Vim-style Movement (9)
+                // Vim-style Movement (10)
                 KeyboardAction::VimMoveLeft
                 | KeyboardAction::VimMoveRight
                 | KeyboardAction::VimMoveUp
-                | KeyboardAction::VimMoveDown => 9,
+                | KeyboardAction::VimMoveDown => 10,
                 
                 _ => 0, // Default to global actions
             };
@@ -274,43 +300,71 @@ impl KeyboardShortcutsUI {
             KeyboardAction::Escape => "Cancel or go back",
             KeyboardAction::ToggleExpanded => "Toggle expanded/collapsed",
             KeyboardAction::ComposeEmail => "Compose new email",
-            KeyboardAction::ReplyEmail => "Reply to email",
-            KeyboardAction::ReplyAllEmail => "Reply all to email",
-            KeyboardAction::ForwardEmail => "Forward email",
-            KeyboardAction::DeleteEmail => "Delete email",
-            KeyboardAction::MarkAsRead => "Mark as read",
-            KeyboardAction::MarkAsUnread => "Mark as unread",
+            KeyboardAction::ReplyEmail => "Reply to email (message list/preview)",
+            KeyboardAction::ReplyAllEmail => "Reply all to email (message list/preview)",
+            KeyboardAction::ForwardEmail => "Forward email (message list/preview)",
+            KeyboardAction::DeleteEmail => "Delete email (message list/preview)",
+            KeyboardAction::MarkAsRead => "Mark as read (message list/preview)",
+            KeyboardAction::MarkAsUnread => "Mark as unread (message list/preview)",
             KeyboardAction::ShowDraftList => "Show draft list",
-            KeyboardAction::ArchiveEmail => "Archive email",
+            KeyboardAction::ArchiveEmail => "Archive email (message list/preview)",
             KeyboardAction::AddAccount => "Add new account",
-            KeyboardAction::RemoveAccount => "Remove account",
-            KeyboardAction::RefreshAccount => "Refresh account",
+            KeyboardAction::RemoveAccount => "Remove account (account switcher)",
+            KeyboardAction::RefreshAccount => "Refresh account (account switcher)",
             KeyboardAction::SwitchAccount => "Switch account",
-            KeyboardAction::StartSearch => "Start search",
-            KeyboardAction::StartFolderSearch => "Search folders",
+            KeyboardAction::StartSearch => "Start search (message list)",
+            KeyboardAction::StartFolderSearch => "Search folders (folder tree)",
             KeyboardAction::EndSearch => "End search",
-            KeyboardAction::ToggleThreadedView => "Toggle threaded view",
-            KeyboardAction::ExpandThread => "Expand thread",
-            KeyboardAction::CollapseThread => "Collapse thread",
+            KeyboardAction::ToggleThreadedView => "Toggle threaded view (message list)",
+            KeyboardAction::ExpandThread => "Expand thread (message list)",
+            KeyboardAction::CollapseThread => "Collapse thread (message list)",
             KeyboardAction::OpenEmailViewer => "Open email in full-screen viewer",
-            KeyboardAction::ViewAttachment => "View selected attachment",
-            KeyboardAction::SelectFirstAttachment => "Select first attachment",
-            KeyboardAction::OpenAttachmentWithSystem => "Open attachment with system app",
-            KeyboardAction::ToggleViewMode => "Toggle view mode",
-            KeyboardAction::ToggleHeaders => "Toggle extended headers",
-            KeyboardAction::ScrollToTop => "Scroll to top",
-            KeyboardAction::ScrollToBottom => "Scroll to bottom",
-            KeyboardAction::SortByDate => "Sort by date",
-            KeyboardAction::SortBySender => "Sort by sender",
-            KeyboardAction::SortBySubject => "Sort by subject",
-            KeyboardAction::NextMessage => "Next message",
-            KeyboardAction::PreviousMessage => "Previous message",
-            KeyboardAction::RefreshFolder => "Refresh current folder",
-            KeyboardAction::CreateFolder => "Create new folder",
-            KeyboardAction::DeleteFolder => "Delete folder",
-            KeyboardAction::ViewTodos => "View todos (Ctrl+T)",
-            KeyboardAction::CreateTodo => "Create new todo",
-            KeyboardAction::ToggleTodoComplete => "Toggle todo complete",
+            KeyboardAction::ViewAttachment => "View selected attachment (content preview)",
+            KeyboardAction::SelectFirstAttachment => "Select first attachment (content preview)",
+            KeyboardAction::OpenAttachmentWithSystem => "Open attachment with system app (content preview)",
+            KeyboardAction::ToggleViewMode => "Toggle view mode (content preview)",
+            KeyboardAction::ToggleHeaders => "Toggle extended headers (content preview)",
+            KeyboardAction::ScrollToTop => "Scroll to top (content preview)",
+            KeyboardAction::ScrollToBottom => "Scroll to bottom (content preview)",
+            KeyboardAction::SortByDate => "Sort by date (message list)",
+            KeyboardAction::SortBySender => "Sort by sender (message list)",
+            KeyboardAction::SortBySubject => "Sort by subject (message list)",
+            KeyboardAction::NextMessage => "Next message (message list/preview)",
+            KeyboardAction::PreviousMessage => "Previous message (message list/preview)",
+            KeyboardAction::RefreshFolder => "Refresh current folder (folder tree)",
+            KeyboardAction::CreateFolder => "Create new folder (folder tree)",
+            KeyboardAction::DeleteFolder => "Delete folder (folder tree)",
+            KeyboardAction::ViewTodos => "View todos (calendar mode)",
+            KeyboardAction::CreateTodo => "Create new todo (calendar mode)",
+            KeyboardAction::ToggleTodoComplete => "Toggle todo complete (calendar mode)",
+            
+            // AI Assistant actions
+            KeyboardAction::AIToggleAssistant => "Toggle AI assistant panel",
+            KeyboardAction::AIEmailSuggestions => "Get AI suggestions for current email (message list/preview)",
+            KeyboardAction::AIComposeSuggestions => "AI assistance for email composition (compose mode)",
+            KeyboardAction::AISummarizeEmail => "Generate AI summary of current email (message list/preview)",
+            KeyboardAction::AICalendarAssist => "AI calendar assistance (calendar mode)",
+            KeyboardAction::AIConfigureSettings => "Open AI configuration and settings",
+            KeyboardAction::AIQuickReply => "Generate quick reply suggestions (message list/preview)",
+            KeyboardAction::AIEmailAnalysis => "Analyze email content with AI (message list/preview)",
+            KeyboardAction::AIScheduleRequest => "Parse scheduling requests with AI (message list/preview)",
+            KeyboardAction::AIContentGeneration => "Generate email content with AI (compose mode)",
+            
+            // Calendar and Event actions
+            KeyboardAction::ShowCalendar => "Switch to calendar view",
+            KeyboardAction::ShowEmail => "Switch to email view",
+            KeyboardAction::CreateEvent => "Create new calendar event",
+            KeyboardAction::EditEvent => "Edit selected event",
+            KeyboardAction::DeleteEvent => "Delete selected event",
+            KeyboardAction::ViewEventDetails => "View event details",
+            KeyboardAction::CalendarNextMonth => "Next month in calendar",
+            KeyboardAction::CalendarPrevMonth => "Previous month in calendar",
+            KeyboardAction::CalendarToday => "Jump to today in calendar",
+            KeyboardAction::CalendarWeekView => "Switch to week view",
+            KeyboardAction::CalendarMonthView => "Switch to month view",
+            KeyboardAction::CalendarDayView => "Switch to day view",
+            KeyboardAction::CalendarAgendaView => "Switch to agenda view",
+            
             _ => "Unknown action",
         }
     }

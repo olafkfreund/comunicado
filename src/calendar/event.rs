@@ -253,6 +253,32 @@ impl Event {
 
         ical
     }
+
+    /// Builder method to set description
+    pub fn with_description(mut self, description: Option<String>) -> Self {
+        self.description = description;
+        self
+    }
+
+    /// Builder method to set location
+    pub fn with_location(mut self, location: Option<String>) -> Self {
+        self.location = location;
+        self
+    }
+
+    /// Builder method to set all-day flag
+    pub fn set_all_day(mut self, all_day: bool) -> Self {
+        self.all_day = all_day;
+        self
+    }
+
+    /// Builder method to add an attendee
+    pub fn with_attendee(mut self, email: String, name: Option<String>, rsvp: bool) -> Self {
+        let mut attendee = EventAttendee::new(email, name);
+        attendee.rsvp = rsvp;
+        self.attendees.push(attendee);
+        self
+    }
 }
 
 /// Event status

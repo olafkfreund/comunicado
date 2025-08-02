@@ -108,7 +108,7 @@ async fn test_idle_with_account_manager() {
     let account_manager = ImapAccountManager::new().unwrap();
 
     // Create a test account configuration
-    let config = ImapConfig {
+    let _config = ImapConfig {
         hostname: "imap.gmail.com".to_string(),
         port: 993,
         username: "test@gmail.com".to_string(),

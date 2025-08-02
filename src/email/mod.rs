@@ -1,5 +1,6 @@
 pub mod advanced_filters;
 pub mod advanced_filters_ui;
+pub mod ai_assistant;
 pub mod attachment_viewer;
 pub mod attachments;
 pub mod database;
@@ -19,6 +20,7 @@ pub mod maildir_mapper;
 pub mod maildir_ui;
 pub mod message;
 pub mod notifications;
+pub mod operations_service;
 pub mod sorting;
 pub mod sync_engine;
 pub mod imap_service;
@@ -34,6 +36,10 @@ pub use advanced_filters::{
     NotificationPriority, MessagePriority,
 };
 pub use advanced_filters_ui::{AdvancedFiltersUI, FilterUIAction, FilterTab};
+pub use ai_assistant::{
+    AIEmailAssistant, EmailCompositionAssistance, EmailReplyAssistance, EmailSummary,
+    BulkEmailAnalysis, BulkAnalysisStats,
+};
 pub use attachment_viewer::{AttachmentViewer, ViewResult, ViewerMode};
 pub use attachments::{AttachmentInfo, AttachmentManager, AttachmentType};
 pub use database::{
@@ -80,6 +86,7 @@ pub use maildir_mapper::{
 };
 pub use maildir_ui::{MaildirExportPreview, MaildirImportFolder, MaildirImportPreview, MaildirUI};
 pub use message::{EmailMessage, MessageId};
+pub use operations_service::{EmailOperationsService, EmailOperationError, EmailOperationResult};
 pub use notifications::{
     EmailNotification, EmailNotificationHandler, EmailNotificationManager, UIEmailUpdater,
 };

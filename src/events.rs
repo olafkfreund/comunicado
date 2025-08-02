@@ -34,6 +34,17 @@ pub enum EventResult {
     ReplyToMessage(uuid::Uuid), // Message ID to reply to
     ReplyAllToMessage(uuid::Uuid), // Message ID to reply all to
     ForwardMessage(uuid::Uuid), // Message ID to forward
+    DeleteEmail(String, uuid::Uuid, String), // Account ID, Message ID, Folder
+    ArchiveEmail(String, uuid::Uuid, String), // Account ID, Message ID, Folder
+    MarkEmailRead(String, uuid::Uuid, String), // Account ID, Message ID, Folder
+    MarkEmailUnread(String, uuid::Uuid, String), // Account ID, Message ID, Folder
+    ToggleEmailFlag(String, uuid::Uuid, String), // Account ID, Message ID, Folder
+    CreateEvent(String), // Calendar ID
+    EditEvent(String, String), // Calendar ID, Event ID
+    DeleteEvent(String, String), // Calendar ID, Event ID
+    ViewEventDetails(String, String), // Calendar ID, Event ID
+    CreateTodo(String), // Calendar ID
+    ToggleTodoComplete(String, String), // Calendar ID, Event ID
     RetryInitialization, // Retry failed initialization
     CancelBackgroundTask, // Cancel selected background task
 }
@@ -390,10 +401,18 @@ impl EventHandler {
             KeyboardAction::DeleteEmail => {
                 if matches!(ui.focused_pane(), FocusedPane::MessageList | FocusedPane::ContentPreview) {
                     if let Some(message) = ui.message_list().selected_message() {
-                        // Mark message for deletion - this would need to be handled by the main app loop
-                        tracing::info!("Delete email action triggered for message: {}", message.subject);
-                        // TODO: Implement actual email deletion
-                        EventResult::Continue
+                        if let (Some(message_id), Some(account_id), Some(folder)) = (
+                            &message.message_id,
+                            ui.message_list().current_account(),
+                            ui.message_list().current_folder(),
+                        ) {
+                            tracing::info!("Delete email action triggered for message: {}", message.subject);
+                            // Return event result for App to handle with email operations service
+                            EventResult::DeleteEmail(account_id.clone(), *message_id, folder.clone())
+                        } else {
+                            tracing::warn!("Missing required information for delete email operation");
+                            EventResult::Continue
+                        }
                     } else {
                         EventResult::Continue
                     }
@@ -404,9 +423,17 @@ impl EventHandler {
             KeyboardAction::ArchiveEmail => {
                 if matches!(ui.focused_pane(), FocusedPane::MessageList | FocusedPane::ContentPreview) {
                     if let Some(message) = ui.message_list().selected_message() {
-                        tracing::info!("Archive email action triggered for message: {}", message.subject);
-                        // TODO: Implement actual email archiving
-                        EventResult::Continue
+                        if let (Some(message_id), Some(account_id), Some(folder)) = (
+                            &message.message_id,
+                            ui.message_list().current_account(),
+                            ui.message_list().current_folder(),
+                        ) {
+                            tracing::info!("Archive email action triggered for message: {}", message.subject);
+                            EventResult::ArchiveEmail(account_id.clone(), *message_id, folder.clone())
+                        } else {
+                            tracing::warn!("Missing required information for archive email operation");
+                            EventResult::Continue
+                        }
                     } else {
                         EventResult::Continue
                     }
@@ -417,9 +444,17 @@ impl EventHandler {
             KeyboardAction::MarkAsRead => {
                 if matches!(ui.focused_pane(), FocusedPane::MessageList | FocusedPane::ContentPreview) {
                     if let Some(message) = ui.message_list().selected_message() {
-                        tracing::info!("Mark as read action triggered for message: {}", message.subject);
-                        // TODO: Implement mark as read
-                        EventResult::Continue
+                        if let (Some(message_id), Some(account_id), Some(folder)) = (
+                            &message.message_id,
+                            ui.message_list().current_account(),
+                            ui.message_list().current_folder(),
+                        ) {
+                            tracing::info!("Mark as read action triggered for message: {}", message.subject);
+                            EventResult::MarkEmailRead(account_id.clone(), *message_id, folder.clone())
+                        } else {
+                            tracing::warn!("Missing required information for mark as read operation");
+                            EventResult::Continue
+                        }
                     } else {
                         EventResult::Continue
                     }
@@ -430,9 +465,17 @@ impl EventHandler {
             KeyboardAction::MarkAsUnread => {
                 if matches!(ui.focused_pane(), FocusedPane::MessageList | FocusedPane::ContentPreview) {
                     if let Some(message) = ui.message_list().selected_message() {
-                        tracing::info!("Mark as unread action triggered for message: {}", message.subject);
-                        // TODO: Implement mark as unread
-                        EventResult::Continue
+                        if let (Some(message_id), Some(account_id), Some(folder)) = (
+                            &message.message_id,
+                            ui.message_list().current_account(),
+                            ui.message_list().current_folder(),
+                        ) {
+                            tracing::info!("Mark as unread action triggered for message: {}", message.subject);
+                            EventResult::MarkEmailUnread(account_id.clone(), *message_id, folder.clone())
+                        } else {
+                            tracing::warn!("Missing required information for mark as unread operation");
+                            EventResult::Continue
+                        }
                     } else {
                         EventResult::Continue
                     }
@@ -809,27 +852,42 @@ impl EventHandler {
             }
             KeyboardAction::CreateEvent => {
                 if ui.mode() == &UIMode::Calendar {
-                    // TODO: Implement event creation - for now just show a notification
-                    tracing::info!("Create event action triggered in calendar mode");
+                    // Use default calendar ID for creating events
+                    let calendar_id = "primary".to_string();
+                    EventResult::CreateEvent(calendar_id)
                 } else {
                     ui.show_calendar();
                     tracing::info!("Switched to calendar and triggered create event");
+                    EventResult::Continue
                 }
-                EventResult::Continue
             }
             KeyboardAction::EditEvent => {
                 if ui.mode() == &UIMode::Calendar {
-                    // TODO: Implement event editing
-                    tracing::info!("Edit event action triggered in calendar mode");
+                    // Get selected event ID - use default calendar
+                    if let Some(event_id) = ui.calendar_ui().get_selected_event_id() {
+                        let calendar_id = "primary".to_string();
+                        EventResult::EditEvent(calendar_id, event_id)
+                    } else {
+                        tracing::warn!("No event selected for editing");
+                        EventResult::Continue
+                    }
+                } else {
+                    EventResult::Continue
                 }
-                EventResult::Continue
             }
             KeyboardAction::DeleteEvent => {
                 if ui.mode() == &UIMode::Calendar {
-                    // TODO: Implement event deletion
-                    tracing::info!("Delete event action triggered in calendar mode");
+                    // Get selected event ID - use default calendar
+                    if let Some(event_id) = ui.calendar_ui().get_selected_event_id() {
+                        let calendar_id = "primary".to_string();
+                        EventResult::DeleteEvent(calendar_id, event_id)
+                    } else {
+                        tracing::warn!("No event selected for deletion");
+                        EventResult::Continue
+                    }
+                } else {
+                    EventResult::Continue
                 }
-                EventResult::Continue
             }
             KeyboardAction::ViewEventDetails => {
                 if ui.mode() == &UIMode::Calendar {
@@ -840,20 +898,28 @@ impl EventHandler {
             }
             KeyboardAction::CreateTodo => {
                 if ui.mode() == &UIMode::Calendar {
-                    // TODO: Implement todo creation
-                    tracing::info!("Create todo action triggered in calendar mode");
+                    // Use default calendar ID for creating todos
+                    let calendar_id = "primary".to_string();
+                    EventResult::CreateTodo(calendar_id)
                 } else {
                     ui.show_calendar();
                     tracing::info!("Switched to calendar and triggered create todo");
+                    EventResult::Continue
                 }
-                EventResult::Continue
             }
             KeyboardAction::ToggleTodoComplete => {
                 if ui.mode() == &UIMode::Calendar {
-                    // TODO: Implement todo toggle
-                    tracing::info!("Toggle todo complete action triggered in calendar mode");
+                    // Get selected event/todo ID - use default calendar
+                    if let Some(event_id) = ui.calendar_ui().get_selected_event_id() {
+                        let calendar_id = "primary".to_string();
+                        EventResult::ToggleTodoComplete(calendar_id, event_id)
+                    } else {
+                        tracing::warn!("No todo selected for toggle completion");
+                        EventResult::Continue
+                    }
+                } else {
+                    EventResult::Continue
                 }
-                EventResult::Continue
             }
             KeyboardAction::ViewTodos => {
                 if ui.mode() == &UIMode::Calendar {
@@ -924,11 +990,317 @@ impl EventHandler {
                 EventResult::Continue
             }
 
-            // Other actions that need specific handling
-            _ => {
-                tracing::debug!("Unhandled keyboard action: {:?}", action);
+            // AI Assistant actions
+            KeyboardAction::AIToggleAssistant => {
+                ui.toggle_ai_assistant();
                 EventResult::Continue
             }
+            KeyboardAction::AIEmailSuggestions => {
+                if matches!(ui.focused_pane(), FocusedPane::MessageList | FocusedPane::ContentPreview) {
+                    if let Some(message) = ui.message_list().selected_message() {
+                        let subject = message.subject.clone();
+                        let sender = message.sender.clone();
+                        ui.show_ai_email_suggestions(&subject, &sender);
+                    }
+                }
+                EventResult::Continue
+            }
+            KeyboardAction::AIComposeSuggestions => {
+                if ui.mode() == &UIMode::Compose || ui.is_composing() {
+                    ui.show_ai_compose_suggestions();
+                }
+                EventResult::Continue
+            }
+            KeyboardAction::AISummarizeEmail => {
+                if matches!(ui.focused_pane(), FocusedPane::MessageList | FocusedPane::ContentPreview) {
+                    if let Some(_message) = ui.message_list().selected_message() {
+                        if let Some(email_content) = ui.content_preview().get_email_content() {
+                            let body = email_content.body.clone();
+                            ui.show_ai_summarization(&body);
+                        }
+                    }
+                }
+                EventResult::Continue
+            }
+            KeyboardAction::AICalendarAssist => {
+                if ui.mode() == &UIMode::Calendar {
+                    ui.show_ai_calendar_assistance();
+                } else {
+                    // Switch to calendar first, then show AI assistance
+                    ui.show_calendar();
+                    ui.show_ai_calendar_assistance();
+                }
+                EventResult::Continue
+            }
+            KeyboardAction::AIConfigureSettings => {
+                ui.show_ai_configuration();
+                EventResult::Continue
+            }
+            KeyboardAction::AIQuickReply => {
+                if matches!(ui.focused_pane(), FocusedPane::MessageList | FocusedPane::ContentPreview) {
+                    if let Some(message) = ui.message_list().selected_message() {
+                        if let Some(email_content) = ui.content_preview().get_email_content() {
+                            let sender = message.sender.clone();
+                            let body = email_content.body.clone();
+                            ui.show_ai_quick_reply(&sender, &body);
+                        }
+                    }
+                }
+                EventResult::Continue
+            }
+            KeyboardAction::AIEmailAnalysis => {
+                if matches!(ui.focused_pane(), FocusedPane::MessageList | FocusedPane::ContentPreview) {
+                    if let Some(_message) = ui.message_list().selected_message() {
+                        if let Some(email_content) = ui.content_preview().get_email_content() {
+                            let body = email_content.body.clone();
+                            let subject = email_content.headers.subject.clone();
+                            ui.show_ai_email_analysis(&body, &subject);
+                        }
+                    }
+                }
+                EventResult::Continue
+            }
+            KeyboardAction::AIScheduleRequest => {
+                if matches!(ui.focused_pane(), FocusedPane::MessageList | FocusedPane::ContentPreview) {
+                    if let Some(_message) = ui.message_list().selected_message() {
+                        if let Some(email_content) = ui.content_preview().get_email_content() {
+                            let body = email_content.body.clone();
+                            ui.show_ai_schedule_parsing(&body);
+                        }
+                    }
+                }
+                EventResult::Continue
+            }
+            KeyboardAction::AIContentGeneration => {
+                if ui.mode() == &UIMode::Compose || ui.is_composing() {
+                    ui.show_ai_content_generation();
+                } else {
+                    // Start compose mode and then show AI content generation
+                    return EventResult::ComposeAction(ComposeAction::StartCompose);
+                }
+                EventResult::Continue
+            }
+
+            // Email Viewer actions - only work in email viewer mode
+            KeyboardAction::EmailViewerReply => {
+                if ui.mode() == &UIMode::EmailViewer {
+                    if let Some(message_id) = ui.email_viewer().get_message_id() {
+                        EventResult::ReplyToMessage(message_id)
+                    } else {
+                        EventResult::Continue
+                    }
+                } else {
+                    EventResult::Continue
+                }
+            }
+            KeyboardAction::EmailViewerReplyAll => {
+                if ui.mode() == &UIMode::EmailViewer {
+                    if let Some(message_id) = ui.email_viewer().get_message_id() {
+                        EventResult::ReplyAllToMessage(message_id)
+                    } else {
+                        EventResult::Continue
+                    }
+                } else {
+                    EventResult::Continue
+                }
+            }
+            KeyboardAction::EmailViewerForward => {
+                if ui.mode() == &UIMode::EmailViewer {
+                    if let Some(message_id) = ui.email_viewer().get_message_id() {
+                        EventResult::ForwardMessage(message_id)
+                    } else {
+                        EventResult::Continue
+                    }
+                } else {
+                    EventResult::Continue
+                }
+            }
+            KeyboardAction::EmailViewerEdit => {
+                if ui.mode() == &UIMode::EmailViewer {
+                    // Start compose mode to edit the current email
+                    EventResult::ComposeAction(ComposeAction::StartCompose)
+                } else {
+                    EventResult::Continue
+                }
+            }
+            KeyboardAction::EmailViewerDelete => {
+                if ui.mode() == &UIMode::EmailViewer {
+                    if let Some(message_id) = ui.email_viewer().get_message_id() {
+                        // Get account and folder info from email viewer
+                        if let (Some(account_id), Some(folder)) = (
+                            ui.email_viewer().get_account_id(),
+                            ui.email_viewer().get_folder_name(),
+                        ) {
+                            EventResult::DeleteEmail(account_id, message_id, folder)
+                        } else {
+                            tracing::warn!("Missing account/folder info in email viewer for delete");
+                            EventResult::Continue
+                        }
+                    } else {
+                        EventResult::Continue
+                    }
+                } else {
+                    EventResult::Continue
+                }
+            }
+            KeyboardAction::EmailViewerArchive => {
+                if ui.mode() == &UIMode::EmailViewer {
+                    if let Some(message_id) = ui.email_viewer().get_message_id() {
+                        if let (Some(account_id), Some(folder)) = (
+                            ui.email_viewer().get_account_id(),
+                            ui.email_viewer().get_folder_name(),
+                        ) {
+                            EventResult::ArchiveEmail(account_id, message_id, folder)
+                        } else {
+                            tracing::warn!("Missing account/folder info in email viewer for archive");
+                            EventResult::Continue
+                        }
+                    } else {
+                        EventResult::Continue
+                    }
+                } else {
+                    EventResult::Continue
+                }
+            }
+            KeyboardAction::EmailViewerMarkRead => {
+                if ui.mode() == &UIMode::EmailViewer {
+                    if let Some(message_id) = ui.email_viewer().get_message_id() {
+                        if let (Some(account_id), Some(folder)) = (
+                            ui.email_viewer().get_account_id(),
+                            ui.email_viewer().get_folder_name(),
+                        ) {
+                            EventResult::MarkEmailRead(account_id, message_id, folder)
+                        } else {
+                            tracing::warn!("Missing account/folder info in email viewer for mark read");
+                            EventResult::Continue
+                        }
+                    } else {
+                        EventResult::Continue
+                    }
+                } else {
+                    EventResult::Continue
+                }
+            }
+            KeyboardAction::EmailViewerMarkUnread => {
+                if ui.mode() == &UIMode::EmailViewer {
+                    if let Some(message_id) = ui.email_viewer().get_message_id() {
+                        if let (Some(account_id), Some(folder)) = (
+                            ui.email_viewer().get_account_id(),
+                            ui.email_viewer().get_folder_name(),
+                        ) {
+                            EventResult::MarkEmailUnread(account_id, message_id, folder)
+                        } else {
+                            tracing::warn!("Missing account/folder info in email viewer for mark unread");
+                            EventResult::Continue
+                        }
+                    } else {
+                        EventResult::Continue
+                    }
+                } else {
+                    EventResult::Continue
+                }
+            }
+            KeyboardAction::EmailViewerClose => {
+                if ui.mode() == &UIMode::EmailViewer {
+                    // Close email viewer by switching back to normal mode
+                    self.handle_escape(ui);
+                }
+                EventResult::Continue
+            }
+
+            // Arrow navigation actions
+            KeyboardAction::MoveLeft => {
+                match ui.focused_pane() {
+                    FocusedPane::AccountSwitcher => {
+                        ui.previous_pane();
+                    }
+                    FocusedPane::FolderTree => {
+                        ui.folder_tree_mut().handle_left();
+                    }
+                    FocusedPane::MessageList => {
+                        ui.previous_pane();
+                    }
+                    FocusedPane::ContentPreview => {
+                        ui.previous_pane();
+                    }
+                    FocusedPane::Compose | FocusedPane::DraftList | FocusedPane::Calendar => {
+                        // For these special modes, just go to previous pane
+                        ui.previous_pane();
+                    }
+                }
+                EventResult::Continue
+            }
+            KeyboardAction::MoveRight => {
+                match ui.focused_pane() {
+                    FocusedPane::AccountSwitcher => {
+                        ui.next_pane();
+                    }
+                    FocusedPane::FolderTree => {
+                        ui.folder_tree_mut().handle_right();
+                    }
+                    FocusedPane::MessageList => {
+                        ui.next_pane();
+                    }
+                    FocusedPane::ContentPreview => {
+                        // At rightmost pane, cycle back to beginning
+                        ui.previous_pane();
+                        ui.previous_pane();
+                        ui.previous_pane();
+                    }
+                    FocusedPane::Compose | FocusedPane::DraftList | FocusedPane::Calendar => {
+                        // For these special modes, just go to next pane
+                        ui.next_pane();
+                    }
+                }
+                EventResult::Continue
+            }
+
+            // Search actions
+            KeyboardAction::EndSearch => {
+                // End search based on current focused pane
+                match ui.focused_pane() {
+                    FocusedPane::MessageList => {
+                        if ui.message_list().is_search_active() {
+                            ui.message_list_mut().end_search();
+                        }
+                    }
+                    FocusedPane::FolderTree => {
+                        if ui.folder_tree().is_in_search_mode() {
+                            ui.folder_tree_mut().exit_search_mode(true);
+                        }
+                    }
+                    _ => {}
+                }
+                EventResult::Continue
+            }
+
+            // Attachment actions
+            KeyboardAction::SaveAttachment => {
+                if ui.focused_pane() == FocusedPane::ContentPreview {
+                    if ui.content_preview().is_viewing_attachment() {
+                        // TODO: Implement save attachment functionality
+                        tracing::info!("Save attachment action triggered");
+                        // For now, show a toast message
+                        ui.show_toast_info("Save attachment functionality coming soon");
+                    }
+                }
+                EventResult::Continue
+            }
+
+            // Account management actions
+            KeyboardAction::SwitchAccount => {
+                if ui.focused_pane() == FocusedPane::AccountSwitcher {
+                    ui.account_switcher_mut().next_account();
+                } else {
+                    // Cycle to account switcher pane
+                    while ui.focused_pane() != FocusedPane::AccountSwitcher {
+                        ui.next_pane();
+                    }
+                    ui.account_switcher_mut().next_account();
+                }
+                EventResult::Continue
+            }
+
         }
     }
 

@@ -351,6 +351,18 @@ pub enum KeyboardAction {
     AddSenderToContacts,
     RemoveSenderFromContacts,
     ContactQuickActions,
+    
+    // AI Assistant actions
+    AIToggleAssistant,      // Toggle AI assistant panel
+    AIEmailSuggestions,     // Show AI email suggestions
+    AIComposeSuggestions,   // Show AI compose suggestions
+    AISummarizeEmail,       // Summarize current email
+    AICalendarAssist,       // AI calendar assistance
+    AIConfigureSettings,    // Open AI configuration
+    AIQuickReply,          // Generate quick reply suggestions
+    AIEmailAnalysis,       // Analyze email content
+    AIScheduleRequest,     // Parse schedule request with AI
+    AIContentGeneration,   // Generate email content
 }
 
 /// Configuration for keyboard shortcuts
@@ -518,6 +530,10 @@ impl KeyboardConfig {
             KeyboardShortcut::new(KeyCode::Char('r'), KeyModifiers::CONTROL | KeyModifiers::SHIFT),
             KeyboardAction::RefreshAccount,
         );
+        self.shortcuts.insert(
+            KeyboardShortcut::ctrl(KeyCode::Char('s')),
+            KeyboardAction::SwitchAccount,
+        );
 
         // Search
         self.shortcuts.insert(
@@ -527,6 +543,10 @@ impl KeyboardConfig {
         self.shortcuts.insert(
             KeyboardShortcut::simple(KeyCode::Char('f')),
             KeyboardAction::StartFolderSearch,
+        );
+        self.shortcuts.insert(
+            KeyboardShortcut::simple(KeyCode::Esc),
+            KeyboardAction::EndSearch,
         );
 
         // View controls
@@ -587,6 +607,10 @@ impl KeyboardConfig {
             KeyboardAction::ViewAttachment,
         );
         self.shortcuts.insert(
+            KeyboardShortcut::simple(KeyCode::Char('S')),
+            KeyboardAction::SaveAttachment,
+        );
+        self.shortcuts.insert(
             KeyboardShortcut::simple(KeyCode::Char('O')),
             KeyboardAction::OpenAttachmentWithSystem,
         );
@@ -629,7 +653,39 @@ impl KeyboardConfig {
             KeyboardAction::FolderDelete,
         );
 
-        // Email viewer shortcuts - Use Esc instead of 'q' to avoid conflict with Quit
+        // Email viewer shortcuts - context-sensitive shortcuts for email viewer mode
+        self.shortcuts.insert(
+            KeyboardShortcut::simple(KeyCode::Char('r')),
+            KeyboardAction::EmailViewerReply,
+        );
+        self.shortcuts.insert(
+            KeyboardShortcut::shift(KeyCode::Char('R')),
+            KeyboardAction::EmailViewerReplyAll,
+        );
+        self.shortcuts.insert(
+            KeyboardShortcut::simple(KeyCode::Char('f')),
+            KeyboardAction::EmailViewerForward,
+        );
+        self.shortcuts.insert(
+            KeyboardShortcut::simple(KeyCode::Char('e')),
+            KeyboardAction::EmailViewerEdit,
+        );
+        self.shortcuts.insert(
+            KeyboardShortcut::simple(KeyCode::Char('d')),
+            KeyboardAction::EmailViewerDelete,
+        );
+        self.shortcuts.insert(
+            KeyboardShortcut::simple(KeyCode::Char('a')),
+            KeyboardAction::EmailViewerArchive,
+        );
+        self.shortcuts.insert(
+            KeyboardShortcut::simple(KeyCode::Char('m')),
+            KeyboardAction::EmailViewerMarkRead,
+        );
+        self.shortcuts.insert(
+            KeyboardShortcut::simple(KeyCode::Char('u')),
+            KeyboardAction::EmailViewerMarkUnread,
+        );
         // EmailViewerClose is handled by Escape action in email viewer mode
 
         // Attachment navigation
@@ -733,6 +789,48 @@ impl KeyboardConfig {
             KeyboardShortcut::shift(KeyCode::Char('C')),
             KeyboardAction::ContactQuickActions,
         );
+
+        // AI Assistant shortcuts
+        self.shortcuts.insert(
+            KeyboardShortcut::new(KeyCode::Char('i'), KeyModifiers::CONTROL | KeyModifiers::ALT),
+            KeyboardAction::AIToggleAssistant,
+        );
+        self.shortcuts.insert(
+            KeyboardShortcut::new(KeyCode::Char('s'), KeyModifiers::CONTROL | KeyModifiers::ALT),
+            KeyboardAction::AIEmailSuggestions,
+        );
+        self.shortcuts.insert(
+            KeyboardShortcut::new(KeyCode::Char('c'), KeyModifiers::CONTROL | KeyModifiers::ALT),
+            KeyboardAction::AIComposeSuggestions,
+        );
+        self.shortcuts.insert(
+            KeyboardShortcut::new(KeyCode::Char('u'), KeyModifiers::CONTROL | KeyModifiers::ALT),
+            KeyboardAction::AISummarizeEmail,
+        );
+        self.shortcuts.insert(
+            KeyboardShortcut::new(KeyCode::Char('l'), KeyModifiers::CONTROL | KeyModifiers::ALT),
+            KeyboardAction::AICalendarAssist,
+        );
+        self.shortcuts.insert(
+            KeyboardShortcut::new(KeyCode::Char('g'), KeyModifiers::CONTROL | KeyModifiers::ALT),
+            KeyboardAction::AIConfigureSettings,
+        );
+        self.shortcuts.insert(
+            KeyboardShortcut::new(KeyCode::Char('r'), KeyModifiers::CONTROL | KeyModifiers::ALT),
+            KeyboardAction::AIQuickReply,
+        );
+        self.shortcuts.insert(
+            KeyboardShortcut::new(KeyCode::Char('a'), KeyModifiers::CONTROL | KeyModifiers::ALT),
+            KeyboardAction::AIEmailAnalysis,
+        );
+        self.shortcuts.insert(
+            KeyboardShortcut::new(KeyCode::Char('t'), KeyModifiers::CONTROL | KeyModifiers::ALT),
+            KeyboardAction::AIScheduleRequest,
+        );
+        self.shortcuts.insert(
+            KeyboardShortcut::new(KeyCode::Char('e'), KeyModifiers::CONTROL | KeyModifiers::ALT),
+            KeyboardAction::AIContentGeneration,
+        );
     }
 
     /// Set up descriptions for each action
@@ -829,6 +927,10 @@ impl KeyboardConfig {
             KeyboardAction::RefreshAccount,
             "Refresh account connection".to_string(),
         );
+        self.action_descriptions.insert(
+            KeyboardAction::SwitchAccount,
+            "Switch to next account".to_string(),
+        );
 
         self.action_descriptions.insert(
             KeyboardAction::StartSearch,
@@ -837,6 +939,10 @@ impl KeyboardConfig {
         self.action_descriptions.insert(
             KeyboardAction::StartFolderSearch,
             "Start folder search".to_string(),
+        );
+        self.action_descriptions.insert(
+            KeyboardAction::EndSearch,
+            "End current search".to_string(),
         );
 
         self.action_descriptions.insert(
@@ -890,6 +996,10 @@ impl KeyboardConfig {
         self.action_descriptions.insert(
             KeyboardAction::ViewAttachment,
             "View selected attachment".to_string(),
+        );
+        self.action_descriptions.insert(
+            KeyboardAction::SaveAttachment,
+            "Save selected attachment".to_string(),
         );
         self.action_descriptions.insert(
             KeyboardAction::OpenAttachmentWithSystem,
@@ -1024,6 +1134,86 @@ impl KeyboardConfig {
         self.action_descriptions.insert(
             KeyboardAction::ContactQuickActions,
             "Show contact quick actions menu".to_string(),
+        );
+
+        // Email Viewer action descriptions
+        self.action_descriptions.insert(
+            KeyboardAction::EmailViewerReply,
+            "Reply to email in viewer".to_string(),
+        );
+        self.action_descriptions.insert(
+            KeyboardAction::EmailViewerReplyAll,
+            "Reply to all in email viewer".to_string(),
+        );
+        self.action_descriptions.insert(
+            KeyboardAction::EmailViewerForward,
+            "Forward email from viewer".to_string(),
+        );
+        self.action_descriptions.insert(
+            KeyboardAction::EmailViewerEdit,
+            "Edit email in viewer".to_string(),
+        );
+        self.action_descriptions.insert(
+            KeyboardAction::EmailViewerDelete,
+            "Delete email from viewer".to_string(),
+        );
+        self.action_descriptions.insert(
+            KeyboardAction::EmailViewerArchive,
+            "Archive email from viewer".to_string(),
+        );
+        self.action_descriptions.insert(
+            KeyboardAction::EmailViewerMarkRead,
+            "Mark email as read in viewer".to_string(),
+        );
+        self.action_descriptions.insert(
+            KeyboardAction::EmailViewerMarkUnread,
+            "Mark email as unread in viewer".to_string(),
+        );
+        self.action_descriptions.insert(
+            KeyboardAction::EmailViewerClose,
+            "Close email viewer".to_string(),
+        );
+
+        // AI Assistant action descriptions
+        self.action_descriptions.insert(
+            KeyboardAction::AIToggleAssistant,
+            "Toggle AI assistant panel".to_string(),
+        );
+        self.action_descriptions.insert(
+            KeyboardAction::AIEmailSuggestions,
+            "Show AI email suggestions".to_string(),
+        );
+        self.action_descriptions.insert(
+            KeyboardAction::AIComposeSuggestions,
+            "Show AI compose suggestions".to_string(),
+        );
+        self.action_descriptions.insert(
+            KeyboardAction::AISummarizeEmail,
+            "Summarize current email with AI".to_string(),
+        );
+        self.action_descriptions.insert(
+            KeyboardAction::AICalendarAssist,
+            "AI calendar assistance".to_string(),
+        );
+        self.action_descriptions.insert(
+            KeyboardAction::AIConfigureSettings,
+            "Open AI configuration settings".to_string(),
+        );
+        self.action_descriptions.insert(
+            KeyboardAction::AIQuickReply,
+            "Generate quick reply suggestions".to_string(),
+        );
+        self.action_descriptions.insert(
+            KeyboardAction::AIEmailAnalysis,
+            "Analyze email content with AI".to_string(),
+        );
+        self.action_descriptions.insert(
+            KeyboardAction::AIScheduleRequest,
+            "Parse schedule request with AI".to_string(),
+        );
+        self.action_descriptions.insert(
+            KeyboardAction::AIContentGeneration,
+            "Generate email content with AI".to_string(),
         );
     }
 
@@ -1174,6 +1364,17 @@ impl KeyboardConfig {
             | KeyboardAction::AddSenderToContacts
             | KeyboardAction::RemoveSenderFromContacts
             | KeyboardAction::ContactQuickActions => "Contacts".to_string(),
+            
+            KeyboardAction::AIToggleAssistant
+            | KeyboardAction::AIEmailSuggestions
+            | KeyboardAction::AIComposeSuggestions
+            | KeyboardAction::AISummarizeEmail
+            | KeyboardAction::AICalendarAssist
+            | KeyboardAction::AIConfigureSettings
+            | KeyboardAction::AIQuickReply
+            | KeyboardAction::AIEmailAnalysis
+            | KeyboardAction::AIScheduleRequest
+            | KeyboardAction::AIContentGeneration => "AI Assistant".to_string(),
         }
     }
 

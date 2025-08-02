@@ -396,7 +396,7 @@ mod tests {
     #[tokio::test] 
     async fn test_idle_notification_processing() {
         // Test IDLE notification processing logic
-        let update = IdleUpdate {
+        let _update = IdleUpdate {
             account_id: "test_account".to_string(),
             folder_name: "INBOX".to_string(),
             notification: IdleNotification::Exists { count: 5 },

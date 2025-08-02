@@ -53,6 +53,8 @@ pub struct App {
     task_completion_rx: Option<mpsc::UnboundedReceiver<TaskResult>>,
     // Sync engine for email operations
     sync_engine: Option<Arc<crate::email::sync_engine::SyncEngine>>,
+    // Email operations service
+    email_operations_service: Option<Arc<crate::email::EmailOperationsService>>,
     // Startup progress manager
     startup_progress_manager: StartupProgressManager,
     // Toast integration service (using simple direct approach now)
@@ -90,6 +92,8 @@ impl App {
             task_completion_rx: None,
             // Sync engine
             sync_engine: None,
+            // Email operations service
+            email_operations_service: None,
             // Startup progress manager
             startup_progress_manager: StartupProgressManager::new(),
             // Toast integration service
@@ -1638,6 +1642,21 @@ impl App {
                         EventResult::ContactQuickActions(email) => {
                             self.handle_contact_quick_actions(&email).await?;
                         }
+                        EventResult::DeleteEmail(account_id, message_id, folder) => {
+                            self.handle_delete_email(&account_id, message_id, &folder).await?;
+                        }
+                        EventResult::ArchiveEmail(account_id, message_id, folder) => {
+                            self.handle_archive_email(&account_id, message_id, &folder).await?;
+                        }
+                        EventResult::MarkEmailRead(account_id, message_id, folder) => {
+                            self.handle_mark_email_read(&account_id, message_id, &folder).await?;
+                        }
+                        EventResult::MarkEmailUnread(account_id, message_id, folder) => {
+                            self.handle_mark_email_unread(&account_id, message_id, &folder).await?;
+                        }
+                        EventResult::ToggleEmailFlag(account_id, message_id, folder) => {
+                            self.handle_toggle_email_flag(&account_id, message_id, &folder).await?;
+                        }
                         EventResult::RetryInitialization => {
                             // Reset initialization flag and retry
                             self.initialization_complete = false;
@@ -1646,6 +1665,25 @@ impl App {
                         EventResult::CancelBackgroundTask => {
                             // Cancel the selected task in enhanced progress overlay
                             self.ui.cancel_enhanced_progress_selected_task().await;
+                        }
+                        // Calendar operations
+                        EventResult::CreateEvent(calendar_id) => {
+                            self.handle_create_event(&calendar_id).await?;
+                        }
+                        EventResult::EditEvent(calendar_id, event_id) => {
+                            self.handle_edit_event(&calendar_id, &event_id).await?;
+                        }
+                        EventResult::DeleteEvent(calendar_id, event_id) => {
+                            self.handle_delete_event(&calendar_id, &event_id).await?;
+                        }
+                        EventResult::ViewEventDetails(calendar_id, event_id) => {
+                            self.handle_view_event_details(&calendar_id, &event_id).await?;
+                        }
+                        EventResult::CreateTodo(calendar_id) => {
+                            self.handle_create_todo(&calendar_id).await?;
+                        }
+                        EventResult::ToggleTodoComplete(calendar_id, event_id) => {
+                            self.handle_toggle_todo_complete(&calendar_id, &event_id).await?;
                         }
                     }
 
@@ -1799,6 +1837,19 @@ impl App {
                     // Don't fail overall initialization - contacts are optional
                 }
             }
+        }
+
+        // Initialize email operations service
+        if let (Some(ref imap_manager), Some(ref database)) = (&self.imap_manager, &self.database) {
+            tracing::debug!("Initializing email operations service");
+            
+            let email_operations_service = Arc::new(crate::email::EmailOperationsService::new(
+                imap_manager.clone(),
+                database.clone(),
+            ));
+            
+            self.email_operations_service = Some(email_operations_service);
+            tracing::info!("Email operations service initialized successfully");
         }
 
             tracing::info!("Services initialized successfully");
@@ -4313,6 +4364,241 @@ impl App {
             tracing::error!("Database not available");
         }
         
+        Ok(())
+    }
+
+    /// Get the email operations service
+    pub fn email_operations_service(&self) -> Option<Arc<crate::email::EmailOperationsService>> {
+        self.email_operations_service.clone()
+    }
+
+    /// Handle delete email operation
+    async fn handle_delete_email(&mut self, account_id: &str, message_id: uuid::Uuid, folder: &str) -> Result<()> {
+        if let Some(ref service) = self.email_operations_service {
+            match service.delete_email_by_id(account_id, message_id, folder).await {
+                Ok(()) => {
+                    self.ui.show_toast_info("Email deleted successfully");
+                    // Refresh the message list to reflect the change
+                    if let Err(e) = self.handle_folder_force_refresh(folder).await {
+                        tracing::warn!("Failed to refresh folder after delete: {}", e);
+                    }
+                }
+                Err(e) => {
+                    let error_msg = format!("Failed to delete email: {}", e);
+                    tracing::error!("{}", error_msg);
+                    self.ui.show_toast_error(&error_msg);
+                }
+            }
+        } else {
+            self.ui.show_toast_error("Email operations service not available");
+        }
+        Ok(())
+    }
+
+    /// Handle archive email operation
+    async fn handle_archive_email(&mut self, account_id: &str, message_id: uuid::Uuid, folder: &str) -> Result<()> {
+        if let Some(ref service) = self.email_operations_service {
+            match service.archive_email_by_id(account_id, message_id, folder).await {
+                Ok(()) => {
+                    self.ui.show_toast_info("Email archived successfully");
+                    // Refresh the message list to reflect the change
+                    if let Err(e) = self.handle_folder_force_refresh(folder).await {
+                        tracing::warn!("Failed to refresh folder after archive: {}", e);
+                    }
+                }
+                Err(e) => {
+                    let error_msg = format!("Failed to archive email: {}", e);
+                    tracing::error!("{}", error_msg);
+                    self.ui.show_toast_error(&error_msg);
+                }
+            }
+        } else {
+            self.ui.show_toast_error("Email operations service not available");
+        }
+        Ok(())
+    }
+
+    /// Handle mark email as read operation
+    async fn handle_mark_email_read(&mut self, account_id: &str, message_id: uuid::Uuid, folder: &str) -> Result<()> {
+        if let Some(ref service) = self.email_operations_service {
+            match service.mark_email_read_by_id(account_id, message_id, folder).await {
+                Ok(()) => {
+                    self.ui.show_toast_info("Email marked as read");
+                    // Update the UI to reflect the change
+                    self.ui.message_list_mut().mark_selected_as_read();
+                }
+                Err(e) => {
+                    let error_msg = format!("Failed to mark email as read: {}", e);
+                    tracing::error!("{}", error_msg);
+                    self.ui.show_toast_error(&error_msg);
+                }
+            }
+        } else {
+            self.ui.show_toast_error("Email operations service not available");
+        }
+        Ok(())
+    }
+
+    /// Handle mark email as unread operation
+    async fn handle_mark_email_unread(&mut self, account_id: &str, message_id: uuid::Uuid, folder: &str) -> Result<()> {
+        if let Some(ref service) = self.email_operations_service {
+            match service.mark_email_unread_by_id(account_id, message_id, folder).await {
+                Ok(()) => {
+                    self.ui.show_toast_info("Email marked as unread");
+                    // Update the UI to reflect the change - need to add a method for this
+                    // For now, just refresh the folder
+                    if let Err(e) = self.handle_folder_force_refresh(folder).await {
+                        tracing::warn!("Failed to refresh folder after mark unread: {}", e);
+                    }
+                }
+                Err(e) => {
+                    let error_msg = format!("Failed to mark email as unread: {}", e);
+                    tracing::error!("{}", error_msg);
+                    self.ui.show_toast_error(&error_msg);
+                }
+            }
+        } else {
+            self.ui.show_toast_error("Email operations service not available");
+        }
+        Ok(())
+    }
+
+    /// Handle toggle email flag operation
+    async fn handle_toggle_email_flag(&mut self, account_id: &str, message_id: uuid::Uuid, folder: &str) -> Result<()> {
+        if let Some(ref service) = self.email_operations_service {
+            match service.toggle_email_flag_by_id(account_id, message_id, folder).await {
+                Ok(is_flagged) => {
+                    let status = if is_flagged { "flagged" } else { "unflagged" };
+                    self.ui.show_toast_info(&format!("Email {}", status));
+                    // Update the UI to reflect the change
+                    self.ui.message_list_mut().toggle_selected_important();
+                }
+                Err(e) => {
+                    let error_msg = format!("Failed to toggle email flag: {}", e);
+                    tracing::error!("{}", error_msg);
+                    self.ui.show_toast_error(&error_msg);
+                }
+            }
+        } else {
+            self.ui.show_toast_error("Email operations service not available");
+        }
+        Ok(())
+    }
+
+    /// Handle creating a new calendar event
+    async fn handle_create_event(&mut self, calendar_id: &str) -> Result<()> {
+        if let Some(ref manager) = self.calendar_manager {
+            // Create a basic event template - in a real implementation this would open an event creation dialog
+            let event = crate::calendar::Event::new(
+                calendar_id.to_string(),
+                "New Event".to_string(),
+                chrono::Utc::now(),
+                chrono::Utc::now() + chrono::Duration::hours(1),
+            );
+
+            match manager.create_event(event).await {
+                Ok(_created_event) => {
+                    self.ui.show_toast_info("Event created successfully");
+                    // TODO: Refresh calendar view to show new event
+                }
+                Err(e) => {
+                    let error_msg = format!("Failed to create event: {}", e);
+                    tracing::error!("{}", error_msg);
+                    self.ui.show_toast_error(&error_msg);
+                }
+            }
+        } else {
+            self.ui.show_toast_error("Calendar manager not available");
+        }
+        Ok(())
+    }
+
+    /// Handle editing an existing calendar event
+    async fn handle_edit_event(&mut self, _calendar_id: &str, event_id: &str) -> Result<()> {
+        if let Some(_manager) = &self.calendar_manager {
+            // TODO: Implement event editing dialog
+            // For now, just show a message that the feature is available
+            self.ui.show_toast_info(&format!("Edit event feature triggered for event: {}", event_id));
+            tracing::info!("Edit event feature would open dialog for event: {}", event_id);
+        } else {
+            self.ui.show_toast_error("Calendar manager not available");
+        }
+        Ok(())
+    }
+
+    /// Handle deleting a calendar event
+    async fn handle_delete_event(&mut self, _calendar_id: &str, event_id: &str) -> Result<()> {
+        if let Some(ref manager) = self.calendar_manager {
+            match manager.delete_event(event_id).await {
+                Ok(_was_deleted) => {
+                    self.ui.show_toast_info("Event deleted successfully");
+                    // TODO: Refresh calendar view to reflect deletion
+                }
+                Err(e) => {
+                    let error_msg = format!("Failed to delete event: {}", e);
+                    tracing::error!("{}", error_msg);
+                    self.ui.show_toast_error(&error_msg);
+                }
+            }
+        } else {
+            self.ui.show_toast_error("Calendar manager not available");
+        }
+        Ok(())
+    }
+
+    /// Handle viewing event details
+    async fn handle_view_event_details(&mut self, _calendar_id: &str, event_id: &str) -> Result<()> {
+        if let Some(_manager) = &self.calendar_manager {
+            // TODO: Implement event details popup
+            // For now, just show a message that the feature is available
+            self.ui.show_toast_info(&format!("View event details for: {}", event_id));
+            tracing::info!("Event details view would show details for event: {}", event_id);
+        } else {
+            self.ui.show_toast_error("Calendar manager not available");
+        }
+        Ok(())
+    }
+
+    /// Handle creating a new todo/task
+    async fn handle_create_todo(&mut self, calendar_id: &str) -> Result<()> {
+        if let Some(ref manager) = self.calendar_manager {
+            // Create a basic todo template - todos are events with special status
+            let mut todo = crate::calendar::Event::new(
+                calendar_id.to_string(),
+                "New Todo".to_string(),
+                chrono::Utc::now(),
+                chrono::Utc::now() + chrono::Duration::hours(1),
+            );
+            todo.description = Some("Task description".to_string());
+            todo.status = crate::calendar::EventStatus::Tentative; // Use Tentative for incomplete todos
+
+            match manager.create_event(todo).await {
+                Ok(_created_todo) => {
+                    self.ui.show_toast_info("Todo created successfully");
+                    // TODO: Refresh todo/calendar view
+                }
+                Err(e) => {
+                    let error_msg = format!("Failed to create todo: {}", e);
+                    tracing::error!("{}", error_msg);
+                    self.ui.show_toast_error(&error_msg);
+                }
+            }
+        } else {
+            self.ui.show_toast_error("Calendar manager not available");
+        }
+        Ok(())
+    }
+
+    /// Handle toggling todo completion status
+    async fn handle_toggle_todo_complete(&mut self, _calendar_id: &str, event_id: &str) -> Result<()> {
+        if let Some(_manager) = &self.calendar_manager {
+            // TODO: Implement todo completion toggle
+            // For now, just show a message that the feature is available
+            self.ui.show_toast_info(&format!("Toggle todo completion for: {}", event_id));
+            tracing::info!("Todo completion toggle triggered for event: {}", event_id);
+        } else {
+            self.ui.show_toast_error("Calendar manager not available");
+        }
         Ok(())
     }
 }

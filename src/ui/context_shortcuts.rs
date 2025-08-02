@@ -203,6 +203,13 @@ impl ContextShortcutsPopup {
     fn get_shortcuts_for_mode(&self, mode: &UIMode) -> Vec<(&'static str, Vec<(&'static str, &'static str)>)> {
         match mode {
             UIMode::Normal => vec![
+                ("AI Assistant", vec![
+                    ("Ctrl+Alt+I", "Toggle AI assistant panel"),
+                    ("Ctrl+Alt+S", "AI email suggestions"),
+                    ("Ctrl+Alt+U", "Summarize email with AI"),
+                    ("Ctrl+Alt+C", "AI compose assistance"),
+                    ("Ctrl+Alt+G", "AI configuration"),
+                ]),
                 ("Navigation", vec![
                     ("Tab", "Switch between panes"),
                     ("Shift+Tab", "Switch panes backward"),
@@ -213,27 +220,34 @@ impl ContextShortcutsPopup {
                 ]),
                 ("Email Actions", vec![
                     ("c", "Compose new email"),
-                    ("r", "Reply to email"),
-                    ("R", "Reply to all"),
-                    ("f", "Forward email"),
-                    ("d", "Delete email"),
-                    ("u", "Mark as unread"),
+                    ("Ctrl+R", "Reply to email"),
+                    ("Shift+R", "Reply to all"),
+                    ("Ctrl+F", "Forward email"),
+                    ("Shift+Delete", "Delete email"),
+                    ("Shift+U", "Mark as unread"),
+                    ("Shift+A", "Archive email"),
                 ]),
                 ("View Modes", vec![
-                    ("g", "Switch to calendar view"),
-                    ("v", "Toggle email view mode"),
+                    ("C", "Switch to calendar view"),
+                    ("E", "Switch to email view"),
+                    ("m", "Toggle email view mode"),
                     ("H", "Toggle headers"),
                     ("/", "Search"),
                     ("?", "Show this help"),
                 ]),
                 ("System", vec![
-                    ("Ctrl+R", "Refresh current folder"),
-                    ("F5", "Sync all accounts"),
-                    ("Ctrl+Q", "Quit application"),
+                    ("F", "Force refresh folder"),
+                    ("Ctrl+A", "Add account"),
+                    ("q", "Quit application"),
                 ]),
             ],
             
             UIMode::Compose => vec![
+                ("AI Assistant", vec![
+                    ("Ctrl+Alt+C", "AI compose assistance"),
+                    ("Ctrl+Alt+R", "Generate quick reply suggestions"),
+                    ("Ctrl+Alt+E", "Generate email content with AI"),
+                ]),
                 ("Navigation", vec![
                     ("Tab", "Next field"),
                     ("Shift+Tab", "Previous field"),
@@ -241,20 +255,29 @@ impl ContextShortcutsPopup {
                     ("Esc", "Cancel composition"),
                 ]),
                 ("Actions", vec![
-                    ("F1", "Send email"),
-                    ("F2", "Save as draft"),
-                    ("Ctrl+S", "Auto-save draft"),
+                    ("Ctrl+S", "Send email"),
+                    ("Ctrl+D", "Save as draft"),
                     ("@", "Contact lookup"),
+                ]),
+                ("Spell Checking", vec![
+                    ("Ctrl+Z", "Toggle spell checking"),
+                    ("Ctrl+N", "Next spelling error"),
+                    ("Ctrl+P", "Previous spelling error"),
+                    ("Ctrl+,", "Spell check configuration"),
                 ]),
                 ("Formatting", vec![
                     ("Ctrl+A", "Select all"),
                     ("Ctrl+C", "Copy"),
                     ("Ctrl+V", "Paste"),
-                    ("Ctrl+Z", "Undo"),
                 ]),
             ],
 
             UIMode::Calendar => vec![
+                ("AI Assistant", vec![
+                    ("Ctrl+Alt+I", "Toggle AI assistant panel"),
+                    ("Ctrl+Alt+L", "AI calendar assistance"),
+                    ("Ctrl+Alt+T", "Parse scheduling requests with AI"),
+                ]),
                 ("Navigation", vec![
                     ("←→", "Previous/Next month"),
                     ("↑↓", "Navigate weeks"),
@@ -305,6 +328,11 @@ impl ContextShortcutsPopup {
             ],
 
             UIMode::EmailViewer => vec![
+                ("AI Assistant", vec![
+                    ("Ctrl+Alt+U", "Summarize email with AI"),
+                    ("Ctrl+Alt+A", "Analyze email content with AI"),
+                    ("Ctrl+Alt+R", "Generate quick reply suggestions"),
+                ]),
                 ("Navigation", vec![
                     ("j/k", "Scroll up/down"),
                     ("↑↓", "Scroll line by line"),
@@ -312,19 +340,19 @@ impl ContextShortcutsPopup {
                     ("Home/End", "Go to top/bottom"),
                 ]),
                 ("Actions", vec![
-                    ("r", "Reply"),
-                    ("R", "Reply all"),
-                    ("f", "Forward"),
+                    ("Ctrl+R", "Reply"),
+                    ("Shift+R", "Reply all"),
+                    ("Ctrl+F", "Forward"),
                     ("c", "Add sender to contacts"),
                     ("Space", "Show actions menu"),
                 ]),
                 ("View Options", vec![
-                    ("v", "Toggle view mode"),
+                    ("m", "Toggle view mode"),
                     ("H", "Show/hide headers"),
                     ("a", "View attachments"),
-                    ("s", "Save attachment"),
+                    ("v", "View selected attachment"),
                 ]),
-                ("Navigation", vec![
+                ("Exit", vec![
                     ("q", "Close viewer"),
                     ("Esc", "Close viewer"),
                 ]),

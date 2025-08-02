@@ -14,6 +14,34 @@ Comunicado's keyboard shortcuts follow these principles:
 - Context-aware design to prevent conflicts
 - Discoverable through help screens and status bars
 
+## ✅ AI Assistant Shortcuts (**NEW - Recently Added**)
+
+All AI shortcuts use **Ctrl+Alt** combinations to avoid conflicts with existing functionality:
+
+### Core AI Features
+- `Ctrl+Alt+I` - Toggle AI assistant panel
+- `Ctrl+Alt+G` - Open AI configuration and settings
+- `Ctrl+Alt+S` - Get AI suggestions for current email
+- `Ctrl+Alt+U` - Generate AI summary of current email
+- `Ctrl+Alt+A` - Analyze email content with AI
+
+### Email Composition AI
+- `Ctrl+Alt+C` - AI assistance for email composition
+- `Ctrl+Alt+R` - Generate quick reply suggestions
+- `Ctrl+Alt+E` - Generate email content with AI
+
+### Calendar AI
+- `Ctrl+Alt+L` - AI calendar assistance
+- `Ctrl+Alt+T` - Parse scheduling requests with AI
+
+### AI Provider Support
+- **Ollama** - Local AI processing (privacy-first)
+- **OpenAI** - Cloud AI with GPT models
+- **Anthropic** - Cloud AI with Claude models
+- **Google AI** - Cloud AI with Gemini models
+
+> **Privacy Note**: Use Ollama for local AI processing if privacy is a concern. Cloud providers require API keys and send data to external services.
+
 ## ✅ Global Shortcuts
 
 These shortcuts work throughout the application:
@@ -215,6 +243,10 @@ The original documentation had many conflicting shortcuts. We resolved these by:
    - `Shift+Delete` deletes messages when message list is focused
 
 ### New Implementations
+- ✅ **AI Assistant Integration** - Complete AI assistance with 10 keyboard shortcuts
+- ✅ **Multi-Provider AI Support** - Ollama (local), OpenAI, Anthropic, Google AI
+- ✅ **Enhanced Calendar Operations** - Create, edit, delete events with backend integration
+- ✅ **Email Operations Backend** - Delete, archive, mark read/unread with IMAP integration
 - ✅ Complete calendar management system
 - ✅ Reply, Reply All, and Forward functionality
 - ✅ Message navigation (next/previous)
@@ -225,11 +257,20 @@ The original documentation had many conflicting shortcuts. We resolved these by:
 
 ## Tips for Current Version
 
+### Getting Started with AI Features
+1. **First Setup**: Press `Ctrl+Alt+G` to configure your AI provider
+   - Choose **Ollama** for local, privacy-first AI processing
+   - Or configure cloud providers (OpenAI, Anthropic, Google) with API keys
+2. **Basic Usage**: Press `Ctrl+Alt+I` to toggle the AI assistant panel
+3. **Context-Aware**: Select an email first, then use AI shortcuts for best results
+4. **Quick Start**: Try `Ctrl+Alt+U` to summarize a selected email
+
 ### Learn the Working Shortcuts First
 Start with the shortcuts marked with ✅ that are actually implemented:
 1. Basic navigation (`j`, `k`, `Enter`)
-2. Message actions (`Ctrl+R`, `Ctrl+F`, `n`, `p`)
-3. Account management (`Ctrl+A`, `Ctrl+X`)
+2. AI assistance (`Ctrl+Alt+I`, `Ctrl+Alt+S`, `Ctrl+Alt+U`)
+3. Message actions (`Ctrl+R`, `Ctrl+F`, `n`, `p`)
+4. Account management (`Ctrl+A`, `Ctrl+X`)
 
 ### Context Awareness
 Remember that shortcuts change meaning based on context:
@@ -245,4 +286,4 @@ Many advanced features are planned but not yet implemented. This documentation w
 
 ---
 
-**Documentation Status**: Updated to reflect F-key removal and calendar implementation as of July 2025. All function keys have been replaced with terminal-friendly alternatives. Features marked as "Planned" are not yet functional. For a complete list of verified working shortcuts, see `keyboard-shortcuts-working.md`.
+**Documentation Status**: Updated to include AI assistant integration and enhanced backend operations as of August 2025. Added 10 new AI keyboard shortcuts using Ctrl+Alt combinations. Email and calendar operations now have full IMAP/CalDAV backend integration. All function keys have been replaced with terminal-friendly alternatives. Features marked as "Planned" are not yet functional. For a complete list of verified working shortcuts, see `keyboard-shortcuts-working.md`.

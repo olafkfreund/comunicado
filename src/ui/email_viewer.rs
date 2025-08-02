@@ -104,6 +104,21 @@ impl EmailViewer {
         }
     }
 
+    /// Get message ID from current message
+    pub fn get_message_id(&self) -> Option<uuid::Uuid> {
+        self.current_message.as_ref().map(|msg| msg.id)
+    }
+
+    /// Get account ID from current message
+    pub fn get_account_id(&self) -> Option<String> {
+        self.current_message.as_ref().map(|msg| msg.account_id.clone())
+    }
+
+    /// Get folder name from current message
+    pub fn get_folder_name(&self) -> Option<String> {
+        self.current_message.as_ref().map(|msg| msg.folder_name.clone())
+    }
+
     /// Toggle view mode
     pub fn toggle_view_mode(&mut self) {
         self.view_mode = match self.view_mode {

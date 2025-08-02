@@ -1,4 +1,3 @@
-use chrono::Local;
 use comunicado::theme::Theme;
 use comunicado::ui::status_bar::{
     CalendarStatusSegment, EmailStatusSegment, NavigationHintsSegment, SeparatorStyle, StatusBar,

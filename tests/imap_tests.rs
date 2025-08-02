@@ -442,7 +442,7 @@ mod integration_tests {
     fn test_full_workflow_simulation() {
         // This test simulates the workflow without actual network calls
         let config = ImapConfig::gmail("test@gmail.com".to_string(), "password".to_string());
-        let mut client = ImapClient::new(config);
+        let client = ImapClient::new(config);
 
         // Simulate connection state changes
         assert!(!client.is_connected());

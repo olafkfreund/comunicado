@@ -1532,7 +1532,7 @@ impl CalendarUI {
     }
 
     /// Get currently selected event ID
-    fn get_selected_event_id(&self) -> Option<String> {
+    pub fn get_selected_event_id(&self) -> Option<String> {
         if let Some(selected) = self.event_list_state.selected() {
             match self.current_view {
                 CalendarViewMode::Month | CalendarViewMode::Week | CalendarViewMode::Day => {
