@@ -11,6 +11,7 @@ use std::io;
 use std::sync::Arc;
 use tokio::time::{Duration, Instant};
 
+use crate::ai::config_manager::AIConfigManager;
 use crate::calendar::CalendarManager;
 use crate::contacts::ContactsManager;
 use crate::email::{EmailDatabase, EmailNotificationManager};
@@ -55,6 +56,8 @@ pub struct App {
     sync_engine: Option<Arc<crate::email::sync_engine::SyncEngine>>,
     // Email operations service
     email_operations_service: Option<Arc<crate::email::EmailOperationsService>>,
+    // AI configuration manager
+    ai_config_manager: Option<Arc<crate::ai::config_manager::AIConfigManager>>,
     // Startup progress manager
     startup_progress_manager: StartupProgressManager,
     // Toast integration service (using simple direct approach now)
@@ -94,6 +97,8 @@ impl App {
             sync_engine: None,
             // Email operations service
             email_operations_service: None,
+            // AI configuration manager
+            ai_config_manager: None,
             // Startup progress manager
             startup_progress_manager: StartupProgressManager::new(),
             // Toast integration service
@@ -270,8 +275,113 @@ impl App {
         self.refresh_calendar_data().await?;
         self.refresh_contacts_data().await?;
         
+        // Initialize AI configuration
+        if let Err(e) = self.initialize_ai_configuration().await {
+            tracing::warn!("Failed to initialize AI configuration: {}", e);
+            // Don't fail the entire initialization for AI config issues
+            self.ui.show_toast_warning("AI features may not be available - check configuration");
+        }
+        
         tracing::info!("✅ Database initialization completed successfully");
         Ok(())
+    }
+
+    /// Initialize AI configuration and validation
+    async fn initialize_ai_configuration(&mut self) -> Result<()> {
+        tracing::info!("🤖 Initializing AI configuration...");
+        
+        // Get config directory (same logic as database initialization)
+        let config_dir = match dirs::config_dir() {
+            Some(dir) => dir.join("comunicado"),
+            None => {
+                return Err(anyhow::anyhow!("Cannot find config directory for AI configuration"));
+            }
+        };
+
+        // Create config directory if it doesn't exist
+        if let Err(e) = std::fs::create_dir_all(&config_dir) {
+            return Err(anyhow::anyhow!("Failed to create config directory: {}", e));
+        }
+
+        let ai_config_path = config_dir.join("ai_config.toml");
+        
+        // Create AI configuration manager
+        let ai_config_manager = Arc::new(AIConfigManager::new(ai_config_path.clone()));
+        
+        // Initialize the configuration (load from file and validate)
+        match ai_config_manager.initialize().await {
+            Ok(()) => {
+                let config = ai_config_manager.get_config().await;
+                
+                // Log configuration status
+                if config.enabled {
+                    tracing::info!("✅ AI features enabled with provider: {}", config.provider);
+                    
+                    // Validate API keys for cloud providers
+                    match config.provider {
+                        crate::ai::config::AIProviderType::OpenAI => {
+                            if config.get_api_key("openai").is_none() {
+                                tracing::warn!("⚠️ OpenAI provider selected but no API key configured");
+                                self.ui.show_toast_warning("OpenAI API key required for AI features");
+                            }
+                        }
+                        crate::ai::config::AIProviderType::Anthropic => {
+                            if config.get_api_key("anthropic").is_none() {
+                                tracing::warn!("⚠️ Anthropic provider selected but no API key configured");
+                                self.ui.show_toast_warning("Anthropic API key required for AI features");
+                            }
+                        }
+                        crate::ai::config::AIProviderType::Google => {
+                            if config.get_api_key("google").is_none() {
+                                tracing::warn!("⚠️ Google provider selected but no API key configured");
+                                self.ui.show_toast_warning("Google API key required for AI features");
+                            }
+                        }
+                        crate::ai::config::AIProviderType::Ollama => {
+                            tracing::info!("🏠 Using local Ollama provider at: {}", config.ollama_endpoint);
+                            // TODO: In future, could ping Ollama endpoint to verify it's accessible
+                        }
+                        crate::ai::config::AIProviderType::None => {
+                            tracing::info!("❌ AI features disabled");
+                        }
+                    }
+                    
+                    // Log feature status
+                    tracing::info!("AI features status:");
+                    tracing::info!("  - Email suggestions: {}", config.email_suggestions_enabled);
+                    tracing::info!("  - Email summarization: {}", config.email_summarization_enabled);
+                    tracing::info!("  - Calendar assistance: {}", config.calendar_assistance_enabled);
+                    tracing::info!("  - Email categorization: {}", config.email_categorization_enabled);
+                    
+                } else {
+                    tracing::info!("❌ AI features are disabled in configuration");
+                }
+                
+                self.ai_config_manager = Some(ai_config_manager);
+                tracing::info!("✅ AI configuration initialized successfully");
+                Ok(())
+            }
+            Err(e) => {
+                tracing::error!("Failed to initialize AI configuration: {}", e);
+                
+                // For certain errors, we might want to create a default config
+                if e.to_string().contains("Failed to read config") {
+                    tracing::info!("Creating default AI configuration...");
+                    let default_config = crate::ai::config::AIConfig::default();
+                    
+                    // Save default configuration
+                    if let Err(save_err) = default_config.save_to_file(&ai_config_path).await {
+                        return Err(anyhow::anyhow!("Failed to save default AI config: {}", save_err));
+                    }
+                    
+                    self.ai_config_manager = Some(ai_config_manager);
+                    tracing::info!("✅ Default AI configuration created and initialized");
+                    Ok(())
+                } else {
+                    Err(anyhow::anyhow!("AI configuration validation failed: {}", e))
+                }
+            }
+        }
     }
 
     /// Get database reference for maintenance operations
@@ -851,6 +961,9 @@ impl App {
                 );
             }
         }
+        
+        // Process AI operation results
+        self.ui.process_ai_results();
     }
 
     /// Load OAuth2 tokens from storage into the TokenManager
@@ -1684,6 +1797,9 @@ impl App {
                         }
                         EventResult::ToggleTodoComplete(calendar_id, event_id) => {
                             self.handle_toggle_todo_complete(&calendar_id, &event_id).await?;
+                        }
+                        EventResult::AISummarizeEmail(message_id) => {
+                            self.handle_ai_summarize_email(message_id).await?;
                         }
                     }
 
@@ -4481,6 +4597,69 @@ impl App {
             }
         } else {
             self.ui.show_toast_error("Email operations service not available");
+        }
+        Ok(())
+    }
+
+    /// Handle AI email summarization with real email content from database
+    async fn handle_ai_summarize_email(&mut self, message_id: uuid::Uuid) -> Result<()> {
+        if let Some(ref database) = self.database {
+            match database.get_message_by_id(message_id).await {
+                Ok(Some(stored_message)) => {
+                    // Convert StoredMessage to EmailMessage for AI processing
+                    let message_id_str = stored_message.message_id.unwrap_or_else(|| format!("msg_{}", message_id));
+                    let message_id_obj = crate::email::MessageId::new(message_id_str);
+                    
+                    // Combine all recipients
+                    let mut recipients = stored_message.to_addrs.clone();
+                    recipients.extend(stored_message.cc_addrs.clone());
+                    recipients.extend(stored_message.bcc_addrs.clone());
+                    
+                    // Use body_text or body_html as content, prefer text
+                    let content = stored_message.body_text
+                        .or(stored_message.body_html)
+                        .unwrap_or_else(|| "No content available".to_string());
+                    
+                    let mut email_message = crate::email::EmailMessage::new(
+                        message_id_obj,
+                        stored_message.subject,
+                        stored_message.from_addr,
+                        recipients,
+                        content,
+                        stored_message.date,
+                    );
+                    
+                    // Set additional properties
+                    email_message.set_read(!stored_message.flags.contains(&"\\Seen".to_string()));
+                    email_message.set_important(stored_message.flags.contains(&"\\Flagged".to_string()));
+                    email_message.set_attachments(!stored_message.attachments.is_empty());
+                    
+                    // Set reply information if available
+                    if let Some(reply_to) = stored_message.in_reply_to {
+                        let reply_to_id = crate::email::MessageId::new(reply_to);
+                        email_message.set_in_reply_to(reply_to_id);
+                    }
+                    
+                    if !stored_message.references.is_empty() {
+                        let references_str = stored_message.references.join(" ");
+                        email_message.set_references(references_str);
+                    }
+
+                    // Start AI summarization with real email content
+                    self.ui.start_ai_email_summarization(email_message);
+                    self.ui.show_toast_info("Starting AI email summarization...");
+                }
+                Ok(None) => {
+                    self.ui.show_toast_error("Email not found in database");
+                }
+                Err(e) => {
+                    let error_msg = format!("Failed to load email from database: {}", e);
+                    tracing::error!("{}", error_msg);
+                    self.ui.show_toast_error(&error_msg);
+                }
+            }
+        } else {
+            self.ui.show_toast_error("Database not available");
         }
         Ok(())
     }

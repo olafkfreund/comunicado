@@ -260,19 +260,39 @@ Some actions are account-specific:
 
 ## Synchronization
 
-### Automatic Sync
+### Automatic Sync 🆕
 
-Comunicado automatically synchronizes with your email servers:
-- New messages are downloaded in real-time
-- Sent messages are uploaded to the server
-- Folder changes are synchronized
-- Message flags and status updates are synced
+Comunicado provides comprehensive automatic synchronization with your email servers:
+
+**Real-time Sync**
+- New messages are downloaded in real-time using IMAP IDLE
+- Sent messages are uploaded to the server immediately
+- Folder changes are synchronized automatically 
+- Message flags and status updates are synced instantly
+
+**Background Sync** (New Feature)
+- Configurable automatic sync intervals (1 minute to 24 hours)
+- Optional startup sync when launching the application
+- Incremental sync for efficient bandwidth usage
+- Concurrent sync limits to prevent system overload
+- Automatic retry with exponential backoff for failed syncs
+
+**Sync Configuration**
+Access sync settings through the Settings panel (Ctrl+,) → General tab:
+- 🔄 **Auto-sync emails**: Enable/disable automatic synchronization
+- ⏱️ **Sync interval**: Configure how often to sync (default: 15 minutes)
+- 🚀 **Fetch on startup**: Sync immediately when app starts
+- 📬 **Use incremental sync**: Download only new/changed messages
+- 🔁 **Max concurrent syncs**: Limit simultaneous sync operations (1-10)
+
+All automatic sync operations run in the background without blocking the user interface.
 
 ### Manual Sync
 
-You can force synchronization:
+You can force synchronization at any time:
 - `Ctrl+R` - Refresh current folder
 - `Ctrl+Shift+S` - Sync all folders and accounts
+- Settings → Force sync specific account or all accounts
 - Sync status is shown in the status bar
 
 ### Offline Mode

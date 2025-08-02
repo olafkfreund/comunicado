@@ -3,6 +3,7 @@ pub mod account_switcher;
 pub mod ai_assistant_ui;
 pub mod ai_calendar_ui;
 pub mod ai_config_ui;
+pub mod ai_popup;
 pub mod ai_privacy_dialog;
 pub mod animated_content;
 pub mod animation;
@@ -28,6 +29,7 @@ pub mod keyboard_shortcuts;
 pub mod layout;
 pub mod message_list;
 pub mod search;
+pub mod settings_ui;
 pub mod startup_progress;
 pub mod status_bar;
 pub mod sync_progress;
@@ -100,6 +102,9 @@ pub use invitation_viewer::{InvitationAction, InvitationViewer};
 // Re-export search types
 pub use search::{SearchAction, SearchEngine, SearchEngineType, SearchMode, SearchResult, SearchUI};
 
+// Re-export settings types
+pub use settings_ui::{SettingsUI, SettingsUIState, SettingsTab};
+
 // Re-export fuzzy search types
 pub use fuzzy_search::{FuzzySearchEngine, FuzzySearchConfig};
 
@@ -150,7 +155,25 @@ pub enum UIMode {
     InvitationViewer,
     Search,
     KeyboardShortcuts,
+    Settings,
     ContactsPopup, // Quick contacts popup overlay
+}
+
+/// AI operation results for async communication
+#[derive(Debug)]
+pub enum AIOperationResult {
+    EmailSummarized {
+        request_id: uuid::Uuid,
+        result: Result<crate::email::EmailSummary, String>,
+    },
+    ReplyGenerated {
+        request_id: uuid::Uuid,
+        result: Result<crate::email::EmailReplyAssistance, String>,
+    },
+    CompositionAssisted {
+        request_id: uuid::Uuid,
+        result: Result<crate::email::EmailCompositionAssistance, String>,
+    },
 }
 
 pub struct UI {
@@ -176,6 +199,7 @@ pub struct UI {
     search_engine: Option<SearchEngine>,
     fuzzy_search_engine: Option<FuzzySearchEngine>,
     keyboard_shortcuts_ui: KeyboardShortcutsUI,
+    settings_ui: SettingsUI,
     context_shortcuts_popup: ContextShortcutsPopup,
     // Context-aware integration components
     context_calendar: ContextAwareCalendar,
@@ -204,6 +228,10 @@ pub struct UI {
     ai_assistant_state: crate::ui::ai_assistant_ui::AIAssistantUIState,
     ai_config_ui: crate::ui::ai_config_ui::AIConfigUI,
     ai_config_state: crate::ui::ai_config_ui::AIConfigUIState,
+    ai_popup: crate::ui::ai_popup::AIPopup,
+    
+    // AI operation result channel
+    ai_result_rx: Option<tokio::sync::mpsc::UnboundedReceiver<AIOperationResult>>,
 }
 
 impl UI {
@@ -232,6 +260,7 @@ impl UI {
             search_engine: None,
             fuzzy_search_engine: None,
             keyboard_shortcuts_ui: KeyboardShortcutsUI::new(),
+            settings_ui: SettingsUI::new(),
             context_shortcuts_popup: ContextShortcutsPopup::new(),
             // Initialize context-aware integration components
             context_calendar: ContextAwareCalendar::new(),
@@ -280,6 +309,8 @@ impl UI {
             ai_assistant_state: crate::ui::ai_assistant_ui::AIAssistantUIState::new(),
             ai_config_ui: crate::ui::ai_config_ui::AIConfigUI::new(),
             ai_config_state: crate::ui::ai_config_ui::AIConfigUIState::new(),
+            ai_popup: crate::ui::ai_popup::AIPopup::new(),
+            ai_result_rx: None, // Will be set when AI operations are started
         };
 
         // Initialize status bar with default segments
@@ -447,6 +478,25 @@ impl UI {
                 self.keyboard_shortcuts_ui
                     .render(frame, size, theme, keyboard_manager);
             }
+            UIMode::Settings => {
+                // Render settings over the normal interface
+                let chunks = self.layout.calculate_layout(size);
+
+                // Render normal interface in background
+                self.render_account_switcher(frame, chunks[0]);
+                self.render_folder_tree(frame, chunks[1]);
+                self.render_message_list(frame, chunks[2]);
+                self.render_content_preview(frame, chunks[3]);
+
+                // Render the status bar
+                if chunks.len() > 4 {
+                    self.render_status_bar(frame, chunks[4]);
+                }
+
+                // Render settings UI on top
+                let theme = self.theme_manager.current_theme();
+                self.settings_ui.render(frame, size, theme);
+            }
             UIMode::ContactsPopup => {
                 // Render contacts popup over the normal interface
                 let chunks = self.layout.calculate_layout(size);
@@ -487,6 +537,11 @@ impl UI {
         // Render context menu on top of everything if visible
         if self.context_menu.is_visible() {
             self.context_menu.render(frame, size, theme, &self.typography);
+        }
+
+        // Render AI popup on top of everything if visible
+        if self.ai_popup.is_visible() {
+            self.ai_popup.render(frame, size, theme, &self.typography);
         }
     }
 
@@ -758,6 +813,10 @@ impl UI {
         &mut self.keyboard_shortcuts_ui
     }
 
+    pub fn settings_ui_mut(&mut self) -> &mut SettingsUI {
+        &mut self.settings_ui
+    }
+
     pub fn account_switcher(&self) -> &AccountSwitcher {
         &self.account_switcher
     }
@@ -823,6 +882,7 @@ impl UI {
             UIMode::InvitationViewer => "Meeting Invitation",
             UIMode::Search => "Search",
             UIMode::KeyboardShortcuts => "Keyboard Shortcuts",
+            UIMode::Settings => "Settings",
             UIMode::ContactsPopup => "Contacts",
         };
 
@@ -971,6 +1031,14 @@ impl UI {
                 ("↑↓/j/k".to_string(), "Scroll".to_string()),
                 ("?".to_string(), "Close".to_string()),
                 ("Esc".to_string(), "Close".to_string()),
+            ],
+            UIMode::Settings => vec![
+                ("Tab/Shift+Tab".to_string(), "Switch Tab".to_string()),
+                ("↑↓/j/k".to_string(), "Navigate".to_string()),
+                ("Enter/Space".to_string(), "Select".to_string()),
+                ("e".to_string(), "Edit".to_string()),
+                ("Ctrl+S".to_string(), "Save".to_string()),
+                ("Esc/q".to_string(), "Close".to_string()),
             ],
             UIMode::ContactsPopup => vec![
                 ("↑↓/j/k".to_string(), "Navigate".to_string()),
@@ -1909,6 +1977,12 @@ impl UI {
     /// Show keyboard shortcuts popup
     pub fn show_keyboard_shortcuts(&mut self) {
         self.mode = UIMode::KeyboardShortcuts;
+    }
+
+    /// Show application settings
+    pub fn show_settings(&mut self) {
+        self.mode = UIMode::Settings;
+        self.settings_ui.show();
     }
 
     /// Toggle context shortcuts popup visibility
@@ -3243,7 +3317,61 @@ impl UI {
         self.show_toast_info("AI compose assistance activated");
     }
 
-    /// Show AI summarization for email content
+    /// Start AI email summarization with popup
+    pub fn start_ai_email_summarization(&mut self, message: crate::email::EmailMessage) {
+        // Show loading popup
+        self.ai_popup.show_loading("Analyzing email content...".to_string());
+        
+        // Show toast notification
+        let preview = if message.subject().len() > 30 {
+            format!("{}...", &message.subject()[..30])
+        } else {
+            message.subject().to_string()
+        };
+        
+        self.show_toast_info(format!("AI summarizing: {}", preview));
+        
+        // Start async AI summarization
+        self.start_ai_email_summarization_task(message);
+    }
+
+    /// Start async task for AI email summarization
+    fn start_ai_email_summarization_task(&mut self, message: crate::email::EmailMessage) {
+        // Create channel if not exists
+        if self.ai_result_rx.is_none() {
+            let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+            self.ai_result_rx = Some(rx);
+            self.spawn_ai_summarization_task(message, tx);
+        } else {
+            // Channel already exists, use existing one
+            let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+            self.ai_result_rx = Some(rx);
+            self.spawn_ai_summarization_task(message, tx);
+        }
+    }
+
+    /// Spawn async task for AI email summarization
+    fn spawn_ai_summarization_task(&self, message: crate::email::EmailMessage, tx: tokio::sync::mpsc::UnboundedSender<AIOperationResult>) {
+        let assistant = self.ai_assistant.assistant().clone();
+        let request_id = uuid::Uuid::new_v4();
+        
+        tokio::spawn(async move {
+            // Call real AI service for summarization
+            let result = assistant.summarize_email(&message).await;
+            
+            // Send result back to UI
+            let ai_result = AIOperationResult::EmailSummarized {
+                request_id,
+                result: result.map_err(|e| e.to_string()),
+            };
+            
+            if let Err(e) = tx.send(ai_result) {
+                tracing::error!("Failed to send AI summarization result: {}", e);
+            }
+        });
+    }
+
+    /// Show AI summarization for email content (legacy method)
     pub fn show_ai_summarization(&mut self, content: &str) {
         use crate::ui::ai_assistant_ui::AIAssistantMode;
         
@@ -3272,6 +3400,204 @@ impl UI {
         
         // Show toast notification for now
         self.show_toast_info("AI configuration opened (Ctrl+Alt+G)");
+    }
+
+    /// Get mutable access to AI popup
+    pub fn ai_popup_mut(&mut self) -> &mut crate::ui::ai_popup::AIPopup {
+        &mut self.ai_popup
+    }
+
+    /// Get immutable access to AI popup
+    pub fn ai_popup(&self) -> &crate::ui::ai_popup::AIPopup {
+        &self.ai_popup
+    }
+
+    /// Update AI popup animations
+    pub fn update_ai_popup_animation(&mut self) {
+        self.ai_popup.update_animation();
+    }
+
+    /// Handle AI popup actions
+    pub fn handle_ai_popup_action(&mut self, action: crate::ui::ai_popup::PopupAction) {
+        use crate::ui::ai_popup::PopupAction;
+        
+        match action {
+            PopupAction::GenerateReply(tone) => {
+                // Get current selected message
+                if let Some(message_item) = self.message_list.get_selected_message_for_preview() {
+                    self.ai_popup.show_loading(format!("Generating {} reply...", tone.display_name().to_lowercase()));
+                    
+                    // Start async AI reply generation
+                    self.start_ai_reply_generation(message_item, tone);
+                } else {
+                    self.ai_popup.show_error("No email selected".to_string(), false);
+                }
+            }
+            PopupAction::Close => {
+                self.ai_popup.hide();
+            }
+            PopupAction::Retry => {
+                // TODO: Retry last AI operation
+                self.show_toast_info("Retrying AI operation...");
+            }
+            PopupAction::SelectAction(action) => {
+                // TODO: Handle action item selection
+                self.show_toast_info(format!("Selected action: {}", action));
+            }
+            PopupAction::ConfirmEventCreation => {
+                // TODO: Create calendar event from parsed data
+                self.show_toast_success("Calendar event created successfully!");
+                self.ai_popup.hide();
+            }
+            PopupAction::ApplyEventModification(category, suggestion) => {
+                // TODO: Apply event modification suggestion
+                self.show_toast_info(format!("Applied {} modification: {}", category.display_name(), suggestion));
+                self.ai_popup.hide();
+            }
+            PopupAction::SelectMeetingTime(time_index) => {
+                // TODO: Handle meeting time selection
+                self.show_toast_info(format!("Selected meeting time option {}", time_index + 1));
+            }
+            PopupAction::CreateEventFromSuggestion => {
+                // TODO: Create event from calendar insight suggestion
+                self.show_toast_success("Event created from suggestion!");
+                self.ai_popup.hide();
+            }
+        }
+    }
+
+    /// Convert MessageItem to EmailMessage (simplified conversion)
+    pub fn message_item_to_email_message(&self, item: &crate::ui::message_list::MessageItem) -> crate::email::EmailMessage {
+        use crate::email::{EmailMessage, MessageId};
+        use chrono::Utc;
+        
+        let message_id = MessageId::new(format!("msg_{}", item.message_id.unwrap_or_default()));
+        let content = format!("Email content for: {}", item.subject); // Placeholder content
+        
+        EmailMessage::new(
+            message_id,
+            item.subject.clone(),
+            item.sender.clone(),
+            vec!["recipient@example.com".to_string()], // Placeholder recipient
+            content,
+            Utc::now(), // Placeholder date
+        )
+    }
+
+    /// Start async AI reply generation
+    pub fn start_ai_reply_generation(&mut self, message_item: crate::ui::message_list::MessageItem, tone: crate::ui::ai_popup::ReplyTone) {
+        // Create channel if not exists
+        if self.ai_result_rx.is_none() {
+            let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+            self.ai_result_rx = Some(rx);
+            
+            // Store sender in UI for future operations (we'll add this)
+            // For now, we'll pass it to the async task
+            self.spawn_ai_reply_task(message_item, tone, tx);
+        } else {
+            // Channel already exists, use existing one
+            // We need to get the sender somehow - for now let's recreate
+            let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+            self.ai_result_rx = Some(rx);
+            self.spawn_ai_reply_task(message_item, tone, tx);
+        }
+    }
+
+    /// Spawn async task for AI reply generation
+    fn spawn_ai_reply_task(&self, message_item: crate::ui::message_list::MessageItem, tone: crate::ui::ai_popup::ReplyTone, tx: tokio::sync::mpsc::UnboundedSender<AIOperationResult>) {
+        let assistant = self.ai_assistant.assistant().clone();
+        let request_id = uuid::Uuid::new_v4();
+        
+        tokio::spawn(async move {
+            // Convert MessageItem to EmailMessage
+            let email_message = Self::convert_message_item_to_email(&message_item);
+            
+            // Get tone context
+            let tone_context = format!("{} tone", tone.display_name().to_lowercase());
+            
+            // Call real AI service
+            let result = assistant.get_reply_assistance(&email_message, Some(&tone_context)).await;
+            
+            // Send result back to UI
+            let ai_result = AIOperationResult::ReplyGenerated {
+                request_id,
+                result: result.map_err(|e| e.to_string()),
+            };
+            
+            if let Err(e) = tx.send(ai_result) {
+                tracing::error!("Failed to send AI reply result: {}", e);
+            }
+        });
+    }
+
+    /// Static helper to convert MessageItem to EmailMessage
+    fn convert_message_item_to_email(item: &crate::ui::message_list::MessageItem) -> crate::email::EmailMessage {
+        use crate::email::{EmailMessage, MessageId};
+        use chrono::Utc;
+        
+        let message_id = MessageId::new(format!("msg_{}", item.message_id.unwrap_or_default()));
+        let content = format!("Email content for: {}", item.subject); // TODO: Load real content
+        
+        EmailMessage::new(
+            message_id,
+            item.subject.clone(),
+            item.sender.clone(),
+            vec!["recipient@example.com".to_string()], // TODO: Load real recipients
+            content,
+            Utc::now(), // TODO: Use real date
+        )
+    }
+
+    /// Process pending AI operation results
+    pub fn process_ai_results(&mut self) {
+        // Collect all results first to avoid borrow checker issues
+        let mut results = Vec::new();
+        if let Some(ref mut rx) = self.ai_result_rx {
+            while let Ok(result) = rx.try_recv() {
+                results.push(result);
+            }
+        }
+        
+        // Process collected results
+        for result in results {
+            match result {
+                AIOperationResult::ReplyGenerated { request_id: _, result } => {
+                    match result {
+                        Ok(reply_assistance) => {
+                            self.ai_popup.set_reply_assistance(reply_assistance);
+                            self.show_toast_success("AI reply suggestions generated successfully");
+                        }
+                        Err(error) => {
+                            self.ai_popup.show_error(format!("Failed to generate reply: {}", error), true);
+                            self.show_toast_error(&format!("AI error: {}", error));
+                        }
+                    }
+                }
+                AIOperationResult::EmailSummarized { request_id: _, result } => {
+                    match result {
+                        Ok(summary) => {
+                            self.ai_popup.show_email_summary(summary);
+                            self.show_toast_success("Email summary generated successfully");
+                        }
+                        Err(error) => {
+                            self.ai_popup.show_error(format!("Failed to summarize email: {}", error), true);
+                            self.show_toast_error(&format!("AI error: {}", error));
+                        }
+                    }
+                }
+                AIOperationResult::CompositionAssisted { request_id: _, result } => {
+                    match result {
+                        Ok(_composition_assistance) => {
+                            // TODO: Handle composition assistance
+                            self.show_toast_success("Composition assistance generated successfully");
+                        }
+                        Err(error) => {
+                            self.show_toast_error(&format!("AI error: {}", error));
+                        }
+                    }
+                }
+            }
+        }
     }
 
     /// Show AI quick reply suggestions

@@ -25,6 +25,8 @@ pub mod sorting;
 pub mod sync_engine;
 pub mod imap_service;
 pub mod async_sync_service;
+pub mod auto_sync_scheduler;
+pub mod sync_config;
 pub mod thread;
 pub mod threading_engine;
 pub mod timestamp_utils;
@@ -96,6 +98,8 @@ pub use sync_engine::{
 };
 pub use imap_service::{ImapService, IdleUpdate};
 pub use async_sync_service::AsyncSyncService;
+pub use auto_sync_scheduler::{AutoSyncScheduler, AutoSyncConfig, AutoSyncStats};
+pub use sync_config::{SyncConfigManager, SyncConfigFile, AccountSyncSettings, ConfigStats};
 pub use thread::{EmailThread, ThreadStatistics};
 pub use threading_engine::{ThreadingAlgorithm, ThreadingEngine};
 pub use timestamp_utils::{TimestampError, TimestampPreserver, TimestampResult, TimestampUtils};

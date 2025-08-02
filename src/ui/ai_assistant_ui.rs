@@ -199,6 +199,11 @@ impl AIAssistantUI {
         Self { assistant }
     }
 
+    /// Get reference to the email assistant
+    pub fn assistant(&self) -> &Arc<AIEmailAssistant> {
+        &self.assistant
+    }
+
     /// Check if AI is available
     pub async fn is_available(&self) -> bool {
         self.assistant.is_available().await

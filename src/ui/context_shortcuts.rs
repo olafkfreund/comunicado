@@ -176,6 +176,7 @@ impl ContextShortcutsPopup {
             UIMode::InvitationViewer => "Meeting Invitation",
             UIMode::Search => "Search",
             UIMode::KeyboardShortcuts => "Help",
+            UIMode::Settings => "Settings",
             UIMode::ContactsPopup => "Contacts",
         }
     }
@@ -195,6 +196,7 @@ impl ContextShortcutsPopup {
             UIMode::InvitationViewer => "Handle meeting invitations",
             UIMode::Search => "Search through emails and calendar events",
             UIMode::KeyboardShortcuts => "View all available keyboard shortcuts",
+            UIMode::Settings => "Configure application settings and preferences",
             UIMode::ContactsPopup => "Browse and manage contacts",
         }
     }

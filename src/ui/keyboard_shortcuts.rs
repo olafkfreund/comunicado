@@ -170,7 +170,8 @@ impl KeyboardShortcutsUI {
                 // Global Actions (0)
                 KeyboardAction::Quit
                 | KeyboardAction::ForceQuit
-                | KeyboardAction::ShowKeyboardShortcuts => 0,
+                | KeyboardAction::ShowKeyboardShortcuts
+                | KeyboardAction::OpenSettings => 0,
                 
                 // AI Assistant (1)
                 KeyboardAction::AIToggleAssistant
@@ -286,6 +287,7 @@ impl KeyboardShortcutsUI {
             KeyboardAction::Quit => "Quit application",
             KeyboardAction::ForceQuit => "Force quit application",
             KeyboardAction::ShowKeyboardShortcuts => "Show this shortcuts dialog",
+            KeyboardAction::OpenSettings => "Open application settings",
             KeyboardAction::NextPane => "Move to next pane",
             KeyboardAction::PreviousPane => "Move to previous pane",
             KeyboardAction::VimMoveLeft => "Move cursor left (vim-style)",

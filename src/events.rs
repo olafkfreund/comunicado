@@ -47,6 +47,7 @@ pub enum EventResult {
     ToggleTodoComplete(String, String), // Calendar ID, Event ID
     RetryInitialization, // Retry failed initialization
     CancelBackgroundTask, // Cancel selected background task
+    AISummarizeEmail(uuid::Uuid), // Message ID to summarize with AI
 }
 
 impl EventHandler {
@@ -79,6 +80,11 @@ impl EventHandler {
         key: KeyEvent,
         ui: &mut UI,
     ) -> EventResult {
+        
+        // Handle AI popup first if it's visible and interactive
+        if ui.ai_popup().is_interactive() {
+            return self.handle_ai_popup_keys(key, ui);
+        }
         
         // Handle global help overlay first (works in all modes)
         if self.handle_help_keys(key, ui) {
@@ -155,6 +161,7 @@ impl EventHandler {
         let mode_result = match ui.mode() {
             UIMode::EmailViewer => self.handle_email_viewer_keys(key, ui).await,
             UIMode::KeyboardShortcuts => self.handle_keyboard_shortcuts_keys(key, ui).await,
+            UIMode::Settings => self.handle_settings_keys(key, ui).await,
             UIMode::ContactsPopup => self.handle_contacts_popup_keys(key, ui).await,
             _ => EventResult::Continue,
         };
@@ -257,6 +264,10 @@ impl EventHandler {
             }
             KeyboardAction::ShowKeyboardShortcuts => {
                 ui.show_keyboard_shortcuts();
+                EventResult::Continue
+            }
+            KeyboardAction::OpenSettings => {
+                ui.show_settings();
                 EventResult::Continue
             }
 
@@ -1013,10 +1024,9 @@ impl EventHandler {
             }
             KeyboardAction::AISummarizeEmail => {
                 if matches!(ui.focused_pane(), FocusedPane::MessageList | FocusedPane::ContentPreview) {
-                    if let Some(_message) = ui.message_list().selected_message() {
-                        if let Some(email_content) = ui.content_preview().get_email_content() {
-                            let body = email_content.body.clone();
-                            ui.show_ai_summarization(&body);
+                    if let Some(message_item) = ui.message_list().selected_message() {
+                        if let Some(message_id) = message_item.message_id {
+                            return EventResult::AISummarizeEmail(message_id);
                         }
                     }
                 }
@@ -1781,6 +1791,24 @@ impl EventHandler {
         }
     }
 
+    /// Handle settings keys when in Settings mode
+    async fn handle_settings_keys(&mut self, key: KeyEvent, ui: &mut UI) -> EventResult {
+        // First try to handle key with the settings UI
+        if ui.settings_ui_mut().handle_key(key.code, key.modifiers) {
+            return EventResult::Continue;
+        }
+
+        // If settings UI didn't handle it, check for global close keys
+        match key.code {
+            KeyCode::Esc | KeyCode::Char('q') => {
+                // Close settings and return to normal interface
+                ui.show_email_interface();
+                EventResult::Continue
+            }
+            _ => EventResult::Continue,
+        }
+    }
+
     /// Handle contacts popup key events
     async fn handle_contacts_popup_keys(&mut self, key: KeyEvent, ui: &mut UI) -> EventResult {
         match key.code {
@@ -1813,6 +1841,48 @@ impl EventHandler {
                 }
                 EventResult::Continue
             }
+        }
+    }
+
+    /// Handle AI popup keyboard input
+    fn handle_ai_popup_keys(&mut self, key: KeyEvent, ui: &mut UI) -> EventResult {
+        use crossterm::event::{KeyCode, KeyModifiers};
+        
+        // Check for global AI toggle shortcut (Ctrl+Alt+I) even when popup is visible
+        if key.modifiers.contains(KeyModifiers::CONTROL | KeyModifiers::ALT) 
+            && key.code == KeyCode::Char('i') {
+            ui.ai_popup_mut().hide();
+            return EventResult::Continue;
+        }
+        
+        match key.code {
+            KeyCode::Esc => {
+                ui.ai_popup_mut().hide();
+                EventResult::Continue
+            }
+            KeyCode::Tab => {
+                ui.ai_popup_mut().next_tab();
+                EventResult::Continue
+            }
+            KeyCode::BackTab => {
+                ui.ai_popup_mut().previous_tab();
+                EventResult::Continue
+            }
+            KeyCode::Up => {
+                ui.ai_popup_mut().move_up();
+                EventResult::Continue
+            }
+            KeyCode::Down => {
+                ui.ai_popup_mut().move_down();
+                EventResult::Continue
+            }
+            KeyCode::Enter => {
+                if let Some(action) = ui.ai_popup_mut().select_current() {
+                    ui.handle_ai_popup_action(action);
+                }
+                EventResult::Continue
+            }
+            _ => EventResult::Continue,
         }
     }
 

@@ -250,6 +250,10 @@ impl ImageManager {
         // Create a simple ASCII art placeholder
         let mut placeholder = String::new();
 
+        // Ensure minimum dimensions
+        let w = w.max(3); // Minimum width of 3 for borders
+        let h = h.max(3); // Minimum height of 3 for borders
+
         // Top border
         placeholder.push('┌');
         for _ in 0..(w - 2) {

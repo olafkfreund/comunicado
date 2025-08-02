@@ -96,6 +96,9 @@ pub struct AIConfig {
     /// Whether to enable email categorization
     pub email_categorization_enabled: bool,
     
+    /// Whether to enable AI email triage and prioritization
+    pub email_triage_enabled: bool,
+    
     /// Temperature/creativity setting for AI responses (0.0-1.0)
     pub creativity: f32,
     
@@ -127,6 +130,7 @@ impl Default for AIConfig {
             email_summarization_enabled: true,
             calendar_assistance_enabled: true,
             email_categorization_enabled: true,
+            email_triage_enabled: true,
             creativity: 0.7,
             fallback_providers: vec![AIProviderType::Ollama],
             consent_given: HashMap::new(),
@@ -236,6 +240,7 @@ impl AIConfig {
             "email_summarization" => self.email_summarization_enabled,
             "calendar_assistance" => self.calendar_assistance_enabled,
             "email_categorization" => self.email_categorization_enabled,
+            "email_triage" => self.email_triage_enabled,
             _ => false,
         }
     }

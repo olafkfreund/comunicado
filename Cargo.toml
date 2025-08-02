@@ -99,6 +99,11 @@ sysinfo = "0.30"
 # Hostname for Maildir unique IDs
 hostname = "0.3"
 
+# D-Bus integration for KDE Connect (optional)
+dbus = { version = "0.9", optional = true }
+dbus-tokio = { version = "0.7", optional = true }
+once_cell = "1.19"
+
 # Maildir support
 maildir = "0.6"
 walkdir = "2.5"
@@ -110,6 +115,10 @@ filetime = "0.2"
 [dev-dependencies]
 # Testing
 tokio-test = "0.4"
+
+[features]
+default = []
+kde-connect = ["dbus", "dbus-tokio"]
 
 [[bin]]
 name = "comunicado"

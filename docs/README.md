@@ -28,6 +28,8 @@ Explore Comunicado's powerful capabilities:
 - [HTML Email Rendering](html-rendering.md) - Rich email display in the terminal
 - [Image and Media Support](media-support.md) - Viewing images and animations
 - [Desktop Notifications](desktop-notifications.md) - System integration and alerts
+- [Automatic Sync](automatic-sync.md) - Background email synchronization system 🆕
+- [SMS/MMS Integration](sms-mms-integration-spec.md) - Mobile messaging through KDE Connect 🆕
 - [Import and Export](import-export.md) - Working with Maildir and other formats
 
 ## Technical Documentation
@@ -39,6 +41,7 @@ For developers and advanced users:
 - [Network Protocols](protocols.md) - IMAP, SMTP, and CalDAV implementation
 - [Terminal Graphics](terminal-graphics.md) - Image and animation rendering
 - [Security Features](security.md) - Privacy and data protection
+- [SMS/MMS Implementation Guide](sms-mms-implementation-guide.md) - Step-by-step development guide 🆕
 
 ## Troubleshooting
 

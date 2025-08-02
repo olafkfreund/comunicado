@@ -13,6 +13,7 @@ pub mod imap;
 pub mod keyboard;
 pub mod maildir;
 pub mod mime;
+pub mod mobile;
 pub mod notifications;
 pub mod oauth2;
 pub mod offline_storage;

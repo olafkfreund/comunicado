@@ -16,9 +16,11 @@
 pub mod desktop;
 pub mod integration;
 pub mod manager;
+pub mod persistence;
 pub mod types;
 
 pub use desktop::DesktopNotificationService;
 pub use integration::{NotificationIntegrationService, NotificationStatistics};
 pub use manager::UnifiedNotificationManager;
+pub use persistence::{NotificationPersistenceManager, PersistentNotification, NotificationStorage, PersistenceSettings};
 pub use types::{NotificationConfig, NotificationEvent, NotificationPriority};

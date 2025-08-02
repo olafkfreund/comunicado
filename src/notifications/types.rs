@@ -13,7 +13,7 @@ pub enum NotificationPriority {
 }
 
 /// Unified notification event that encompasses both email and calendar events
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum NotificationEvent {
     /// Email-related notifications
     Email {
@@ -41,7 +41,7 @@ pub enum NotificationEvent {
 }
 
 /// Types of email notification events
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum EmailEventType {
     NewMessage,
     MessageUpdated,
@@ -55,7 +55,7 @@ pub enum EmailEventType {
 }
 
 /// Types of calendar notification events
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum CalendarEventType {
     EventCreated,
     EventUpdated,
@@ -68,7 +68,7 @@ pub enum CalendarEventType {
 }
 
 /// Types of system notification events
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum SystemEventType {
     AppStarted,
     AppShutdown,

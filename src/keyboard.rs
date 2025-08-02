@@ -363,6 +363,9 @@ pub enum KeyboardAction {
     AIEmailAnalysis,       // Analyze email content
     AIScheduleRequest,     // Parse schedule request with AI
     AIContentGeneration,   // Generate email content
+    
+    // Settings and configuration
+    OpenSettings,          // Open application settings
 }
 
 /// Configuration for keyboard shortcuts
@@ -409,6 +412,10 @@ impl KeyboardConfig {
         self.shortcuts.insert(
             KeyboardShortcut::simple(KeyCode::Char('?')),
             KeyboardAction::ShowKeyboardShortcuts,
+        );
+        self.shortcuts.insert(
+            KeyboardShortcut::ctrl(KeyCode::Char(',')),
+            KeyboardAction::OpenSettings,
         );
 
         // Navigation
@@ -1275,7 +1282,8 @@ impl KeyboardConfig {
         match action {
             KeyboardAction::Quit
             | KeyboardAction::ForceQuit
-            | KeyboardAction::ShowKeyboardShortcuts => "Global".to_string(),
+            | KeyboardAction::ShowKeyboardShortcuts
+            | KeyboardAction::OpenSettings => "Global".to_string(),
             KeyboardAction::NextPane
             | KeyboardAction::PreviousPane
             | KeyboardAction::VimMoveLeft
