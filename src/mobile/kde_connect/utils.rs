@@ -97,7 +97,7 @@ pub fn extract_contact_info(address: &str) -> (String, Option<String>) {
 /// Validate phone number format
 pub fn is_valid_phone_number(number: &str) -> bool {
     static PHONE_VALIDATION_REGEX: Lazy<Regex> = Lazy::new(|| {
-        Regex::new(r"^\+?[1-9]\d{1,14}$").unwrap()
+        Regex::new(r"^\+?[1-9]\d{6,14}$").unwrap()
     });
     
     let cleaned: String = number.chars()
