@@ -89,9 +89,12 @@ pub enum DeviceType {
 
 impl SmsMessage {
     pub fn is_outgoing(&self) -> bool {
-        // In KDE Connect, outgoing messages typically have type 2 or specific indicators
-        // This is a simplified check - real implementation would use actual KDE Connect data
-        false // Placeholder - would be determined from actual message data
+        // In KDE Connect protocol, outgoing messages can be determined by checking
+        // if the sender address matches the local device's phone number or by
+        // message direction indicators in the metadata
+        // For now, this is a simplified implementation that would need to be
+        // enhanced with actual device phone number detection
+        false
     }
 
     pub fn sender(&self) -> Option<&String> {

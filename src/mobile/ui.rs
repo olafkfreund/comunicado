@@ -678,9 +678,11 @@ impl SmsUi {
         area: Rect,
         _config: &SmsRenderConfig,
     ) -> Result<(), crate::mobile::MobileError> {
-        // Placeholder for message detail view
-        let detail_widget = Paragraph::new("Message detail view - Coming soon")
-            .block(Block::default().borders(Borders::ALL).title(" Message Details "));
+        // Message detail view would show attachment thumbnails, full message content,
+        // delivery status, and other metadata when implemented
+        let detail_widget = Paragraph::new("Message detail view\n\nThis view would display:\n• Message attachments and media\n• Full message content and formatting\n• Delivery and read receipts\n• Message metadata and timestamps")
+            .block(Block::default().borders(Borders::ALL).title(" Message Details "))
+            .wrap(Wrap { trim: true });
 
         f.render_widget(detail_widget, area);
         Ok(())

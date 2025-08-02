@@ -341,7 +341,7 @@ impl MobileSyncService {
         kde_connect: &Arc<Mutex<KdeConnectClient>>,
         message_store: &Arc<MessageStore>,
     ) -> Result<u32> {
-        let client = kde_connect.lock().await;
+        let mut client = kde_connect.lock().await;
         
         if !client.is_connected() {
             return Err(crate::mobile::MobileError::DeviceNotPaired("Device not connected".to_string()));
@@ -393,7 +393,7 @@ impl MobileSyncService {
 
     /// Sync mobile notifications
     async fn sync_notifications(kde_connect: &Arc<Mutex<KdeConnectClient>>) -> Result<u32> {
-        let client = kde_connect.lock().await;
+        let mut client = kde_connect.lock().await;
         
         if !client.is_connected() {
             return Err(crate::mobile::MobileError::DeviceNotPaired("Device not connected".to_string()));

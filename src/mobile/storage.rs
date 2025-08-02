@@ -895,9 +895,7 @@ mod tests {
     use chrono::Utc;
 
     async fn create_test_store() -> MessageStore {
-        let temp_dir = tempdir().unwrap();
-        let db_path = temp_dir.path().join("test_messages.db");
-        MessageStore::new(db_path).await.unwrap()
+        MessageStore::new(":memory:").await.unwrap()
     }
 
     fn create_test_message() -> SmsMessage {

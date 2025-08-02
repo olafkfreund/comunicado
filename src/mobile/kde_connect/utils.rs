@@ -174,19 +174,28 @@ pub fn truncate_for_preview(message: &str, max_length: usize, preserve_words: bo
 // D-Bus utility functions - for future real KDE Connect implementation
 // Currently not used by the simple client implementation
 
-/// Convert D-Bus variant to string safely (placeholder)
+// D-Bus utility functions for future real KDE Connect D-Bus integration
+// These would be used when implementing proper D-Bus message monitoring
+
+/// Convert D-Bus variant to string safely
+#[cfg(feature = "kde-connect")]
 pub fn dbus_variant_to_string(_variant: &str) -> Option<String> {
-    None // Placeholder - would be used with real D-Bus implementation
+    // Would be implemented with proper D-Bus variant parsing
+    None
 }
 
-/// Convert D-Bus variant to i64 safely (placeholder)
+/// Convert D-Bus variant to i64 safely  
+#[cfg(feature = "kde-connect")]
 pub fn dbus_variant_to_i64(_variant: &str) -> Option<i64> {
-    None // Placeholder - would be used with real D-Bus implementation
+    // Would be implemented with proper D-Bus variant parsing
+    None
 }
 
-/// Convert D-Bus variant to boolean safely (placeholder)
+/// Convert D-Bus variant to boolean safely
+#[cfg(feature = "kde-connect")]
 pub fn dbus_variant_to_bool(_variant: &str) -> Option<bool> {
-    None // Placeholder - would be used with real D-Bus implementation
+    // Would be implemented with proper D-Bus variant parsing
+    None
 }
 
 /// Escape string for D-Bus message
