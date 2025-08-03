@@ -1,6 +1,7 @@
 pub mod ai;
 pub mod animation;
 pub mod app;
+pub mod app_modular;
 pub mod calendar;
 pub mod cli;
 pub mod clipboard;
@@ -29,4 +30,8 @@ pub mod tea;
 pub mod theme;
 pub mod ui;
 
+#[cfg(test)]
+pub mod integration_test;
+
 pub use app::App;
+pub use app_modular::ModularApp;

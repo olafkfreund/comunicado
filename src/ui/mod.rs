@@ -1,6 +1,7 @@
 pub mod account_inspector;
 pub mod account_switcher;
 pub mod ai_assistant_ui;
+pub mod components;
 pub mod ai_calendar_ui;
 pub mod ai_config_ui;
 pub mod ai_popup;

@@ -1,7 +1,12 @@
 use anyhow::Result;
 use clap::Parser;
-use comunicado::app::App;
 use comunicado::cli::{Cli, CliHandler};
+
+// Feature flag to switch between implementations
+#[cfg(feature = "modular-ui")]
+use comunicado::ModularApp as App;
+#[cfg(not(feature = "modular-ui"))]
+use comunicado::App;
 
 
 #[tokio::main]
