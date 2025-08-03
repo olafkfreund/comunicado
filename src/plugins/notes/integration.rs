@@ -7,12 +7,8 @@ use super::scanner::{DirectoryScanner, ScanConfig};
 use super::types::WatchedDirectory;
 use super::manager::NoteResult;
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::time::Duration;
-use std::fs::File;
-use std::io::Write;
-use tempfile::TempDir;
-use tokio::time::{sleep, timeout};
 
 /// Integrated file system monitor that combines watching and scanning
 pub struct FileSystemMonitor {

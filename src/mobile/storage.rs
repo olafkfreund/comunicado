@@ -877,6 +877,56 @@ impl MessageStore {
         Ok(results)
     }
 
+    /// Get recent messages across all conversations
+    pub async fn get_recent_messages(&self, limit: usize) -> Result<Vec<SmsMessage>> {
+        debug!("Getting {} recent messages", limit);
+
+        let rows = sqlx::query(r#"
+            SELECT 
+                id, conversation_id, body, timestamp, message_type, 
+                read_status, sub_id, metadata
+            FROM messages 
+            ORDER BY timestamp DESC 
+            LIMIT ?
+        "#)
+        .bind(limit as i64)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(crate::mobile::MobileError::DatabaseError)?;
+
+        let mut messages = Vec::new();
+        for row in rows {
+            // Parse metadata to get addresses
+            let metadata: String = row.get("metadata");
+            let addresses: Vec<String> = if metadata.is_empty() {
+                Vec::new()
+            } else {
+                // Try to parse JSON metadata, fallback to empty if it fails
+                serde_json::from_str(&metadata).unwrap_or_else(|_| Vec::new())
+            };
+
+            let message = SmsMessage {
+                id: row.get::<i32, _>("id"),
+                thread_id: row.get::<i64, _>("conversation_id"),
+                body: row.get("body"),
+                addresses,
+                date: row.get::<i64, _>("timestamp"),
+                message_type: match row.get::<i32, _>("message_type") {
+                    2 => MessageType::Mms,
+                    _ => MessageType::Sms,
+                },
+                read: row.get("read_status"),
+                sub_id: row.get("sub_id"),
+                attachments: Vec::new(), // Would need separate query for attachments
+            };
+
+            messages.push(message);
+        }
+
+        debug!("Retrieved {} recent messages", messages.len());
+        Ok(messages)
+    }
+
     /// Get the database pool for advanced operations
     pub fn pool(&self) -> &SqlitePool {
         &self.pool

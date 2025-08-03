@@ -8,6 +8,7 @@ If you're new to Comunicado, start here:
 
 - [Installation Guide](installation.md) - How to install and set up Comunicado
 - [Quick Start](quick-start.md) - Get up and running in minutes
+- [Mobile Quick Start](mobile-quick-start.md) - Set up SMS/MMS in 5 minutes 📱 **NEW**
 - [Configuration](configuration.md) - Basic configuration options
 
 ## User Guide
@@ -16,6 +17,7 @@ Learn how to use Comunicado effectively:
 
 - [Email Management](email-management.md) - Reading, composing, and organizing emails
 - [Calendar Features](calendar-features.md) - Managing events and appointments
+- [Mobile Messaging](sms-mms-user-manual.md) - SMS/MMS integration with Android devices 📱 **NEW**
 - [Keyboard Shortcuts](keyboard-shortcuts.md) - Complete reference of all shortcuts
 - [Account Management](account-management.md) - Setting up and managing multiple accounts
 
@@ -29,7 +31,6 @@ Explore Comunicado's powerful capabilities:
 - [Image and Media Support](media-support.md) - Viewing images and animations
 - [Desktop Notifications](desktop-notifications.md) - System integration and alerts
 - [Automatic Sync](automatic-sync.md) - Background email synchronization system 🆕
-- [SMS/MMS Integration](sms-mms-integration-spec.md) - Mobile messaging through KDE Connect 🆕
 - [Import and Export](import-export.md) - Working with Maildir and other formats
 
 ## Technical Documentation
@@ -40,7 +41,8 @@ For developers and advanced users:
 - [Database Structure](database.md) - Email and calendar data storage
 - [Network Protocols](protocols.md) - IMAP, SMTP, and CalDAV implementation
 - [Terminal Graphics](terminal-graphics.md) - Image and animation rendering
-- [Security Features](security.md) - Privacy and data protection
+- [Security Features](security.md) - Privacy and data protection  
+- [KDE Connect Plugin Guide](kde-connect-plugin-guide.md) - Technical integration documentation 📱 **NEW**
 - [SMS/MMS Implementation Guide](sms-mms-implementation-guide.md) - Step-by-step development guide 🆕
 
 ## Troubleshooting

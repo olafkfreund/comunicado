@@ -37,6 +37,9 @@ pub enum NoteError {
     
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
+    
+    #[error("External service error: {0}")]
+    External(String),
 }
 
 pub type NoteResult<T> = Result<T, NoteError>;

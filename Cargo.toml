@@ -14,6 +14,7 @@ default-run = "comunicado"
 # TUI Framework
 ratatui = { version = "0.26", features = ["serde"] }
 crossterm = "0.27"
+tui-textarea = "0.4"
 arboard = "3.4"
 
 # Async Runtime
@@ -27,6 +28,7 @@ thiserror = "1.0"
 # Configuration
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+serde_yaml = "0.9"
 toml = "0.8"
 
 # Command Line Interface
@@ -75,6 +77,9 @@ calcard = "0.1"
 # Desktop notifications
 notify-rust = "4.10"
 percent-encoding = "2.3"
+
+# File system watching
+notify = "6.1"
 
 # SMTP email sending
 lettre = { version = "0.11", features = ["tokio1-rustls-tls", "smtp-transport", "builder", "pool"], default-features = false }

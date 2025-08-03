@@ -5,8 +5,8 @@
 
 use super::types::{Note, NoteId};
 use super::storage::NoteStorage;
-use super::manager::{NoteError, NoteResult};
-use crate::email::message::{EmailMessage, MessageId};
+use super::manager::NoteResult;
+use crate::email::message::EmailMessage;
 
 use std::collections::HashMap;
 use std::sync::Arc;

@@ -6,7 +6,7 @@ use super::manager::{NoteError, NoteResult};
 use super::types::{WatchedDirectory, NoteId};
 
 use std::path::{Path, PathBuf};
-use std::fs::{self, File, Metadata};
+use std::fs::{File, Metadata};
 use std::time::SystemTime;
 use std::collections::{HashMap, HashSet};
 use walkdir::{WalkDir, DirEntry};

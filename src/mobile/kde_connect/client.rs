@@ -544,6 +544,115 @@ impl KdeConnectClient {
             }
         }
     }
+
+    /// Send a notification to a mobile device
+    pub fn send_notification(&self, device_id: &str, notification: &MobileNotification) -> crate::mobile::Result<()> {
+        debug!("Sending notification to device: {}", device_id);
+
+        #[cfg(feature = "kde-connect")]
+        {
+            let path = format!("/modules/kdeconnect/devices/{}", device_id);
+            let proxy = self.connection.with_proxy(
+                KDECONNECT_SERVICE,
+                path,
+                self.timeout,
+            );
+
+            // Send notification via KDE Connect notification plugin
+            proxy
+                .method_call(
+                    "org.kde.kdeconnect.device.notifications",
+                    "sendNotification",
+                    (&notification.title, &notification.text),
+                )
+                .context("Failed to send notification")
+                .map_err(|e| crate::mobile::MobileError::NotificationFailed(e.to_string()))?;
+
+            info!("Notification sent successfully to device: {}", device_id);
+        }
+
+        #[cfg(not(feature = "kde-connect"))]
+        {
+            warn!("KDE Connect notifications not available - feature disabled");
+            return Err(crate::mobile::MobileError::KdeConnectNotAvailable(
+                "KDE Connect feature not enabled".to_string()
+            ));
+        }
+
+        Ok(())
+    }
+
+    /// Share a file to a mobile device via KDE Connect
+    pub fn share_file(&self, device_id: &str, file_path: &str) -> crate::mobile::Result<()> {
+        debug!("Sharing file {} to device: {}", file_path, device_id);
+
+        #[cfg(feature = "kde-connect")]
+        {
+            let path = format!("/modules/kdeconnect/devices/{}", device_id);
+            let proxy = self.connection.with_proxy(
+                KDECONNECT_SERVICE,
+                path,
+                self.timeout,
+            );
+
+            // Share file via KDE Connect share plugin
+            proxy
+                .method_call(
+                    "org.kde.kdeconnect.device.share",
+                    "shareUrl",
+                    (file_path,),
+                )
+                .context("Failed to share file")
+                .map_err(|e| crate::mobile::MobileError::MessageSendFailed(e.to_string()))?;
+
+            info!("File shared successfully to device: {}", device_id);
+        }
+
+        #[cfg(not(feature = "kde-connect"))]
+        {
+            warn!("KDE Connect file sharing not available - feature disabled");
+            return Err(crate::mobile::MobileError::KdeConnectNotAvailable(
+                "KDE Connect feature not enabled".to_string()
+            ));
+        }
+
+        Ok(())
+    }
+
+    /// Check if a device supports specific capabilities
+    pub fn get_device_capabilities(&self, device_id: &str) -> crate::mobile::Result<Vec<String>> {
+        debug!("Getting capabilities for device: {}", device_id);
+
+        #[cfg(feature = "kde-connect")]
+        {
+            let path = format!("/modules/kdeconnect/devices/{}", device_id);
+            let proxy = self.connection.with_proxy(
+                KDECONNECT_SERVICE,
+                path,
+                self.timeout,
+            );
+
+            let capabilities: Vec<String> = proxy
+                .method_call(
+                    "org.kde.kdeconnect.device",
+                    "loadedPlugins",
+                    (),
+                )
+                .context("Failed to get device capabilities")
+                .map_err(|e| crate::mobile::MobileError::DbusConnectionFailed(
+                    dbus::Error::new_failed(&e.to_string())
+                ))?;
+
+            debug!("Device {} capabilities: {:?}", device_id, capabilities);
+            Ok(capabilities)
+        }
+
+        #[cfg(not(feature = "kde-connect"))]
+        {
+            warn!("KDE Connect capabilities check not available - feature disabled");
+            Ok(vec![])
+        }
+    }
 }
 
 impl Drop for KdeConnectClient {

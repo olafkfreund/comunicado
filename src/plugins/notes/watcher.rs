@@ -9,8 +9,8 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 use std::collections::HashMap;
 use tokio::sync::mpsc;
-use tokio::time::{sleep, timeout};
-use notify::{RecommendedWatcher, Watcher, RecursiveMode, Event, EventKind, event::{CreateKind, ModifyKind, RemoveKind, RenameMode, DataChange}};
+use tokio::time::timeout;
+use notify::{RecommendedWatcher, Watcher, RecursiveMode, Event, EventKind, event::{CreateKind, ModifyKind, RemoveKind, RenameMode}};
 
 /// Types of file system events we track
 #[derive(Debug, Clone, PartialEq)]

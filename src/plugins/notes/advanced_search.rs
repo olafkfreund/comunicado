@@ -235,6 +235,7 @@ struct SearchCacheEntry {
 }
 
 /// Advanced search engine with filtering and ranking
+#[derive(Debug, Clone)]
 pub struct AdvancedSearchEngine {
     /// Storage layer for database queries
     storage: Arc<NoteStorage>,

@@ -16,6 +16,10 @@ pub mod integration;
 pub mod plugin;
 pub mod advanced_search;
 pub mod email_integration;
+pub mod mobile_integration;
+pub mod calendar_integration;
+pub mod tui;
+pub mod tui_render;
 
 #[cfg(test)]
 mod ignore_patterns_test;
@@ -41,3 +45,6 @@ pub use scanner::{DirectoryScanner, ScannedFile, ScanResult, ScanConfig};
 pub use integration::{FileSystemMonitor, ProcessingResult, MonitoringStats};
 pub use advanced_search::{AdvancedSearchEngine, AdvancedSearchOptions, SearchFilters, SearchCategory, RankingConfig, EnhancedSearchResult, SearchResultSummary};
 pub use email_integration::{EmailIntegrationService, EmailNote, EmailLinkType, EmailContact, EmailThread, EmailNotesStats};
+pub use mobile_integration::{MobileNotesIntegration, MobileNotesConfig, MobileNoteEvent, SmsConversionCandidate, MobileNotesStats};
+pub use calendar_integration::{CalendarNotesIntegration, CalendarNotesConfig, CalendarNoteEvent, EventLinkType, MeetingNote, MeetingAttendee, ActionItem, CalendarNotesStats};
+pub use tui::{NoteTUI, TUIMode, TUIConfig, TUITheme, TUIStats, PopupState};
