@@ -45,6 +45,7 @@ pub mod manager;
 pub mod registry;
 pub mod loader;
 pub mod types;
+pub mod notes;
 
 
 // Re-export main types for convenience
@@ -52,6 +53,9 @@ pub use core::{Plugin, PluginInfo, PluginResult, PluginError, PluginType, Plugin
 pub use manager::PluginManager;
 pub use registry::PluginRegistry;
 pub use loader::PluginLoader;
+
+// Notes plugin
+pub use notes::NotesPlugin;
 
 // Plugin trait specializations
 pub use types::{
