@@ -21,6 +21,7 @@ use crate::notifications::{NotificationConfig, UnifiedNotificationManager};
 use crate::oauth2::{AccountConfig, SecureStorage, TokenManager};
 use crate::smtp::{SmtpService, SmtpServiceBuilder};
 use crate::ui::{ComposeAction, DraftAction, UI};
+use crate::ui::command_palette::CommandAction;
 use crate::performance::background_processor::{BackgroundProcessor, BackgroundTask, TaskResult};
 use crate::email::sync_engine::SyncProgress;
 use crate::startup::StartupProgressManager;
@@ -1697,6 +1698,9 @@ impl App {
                         EventResult::DraftAction(action) => {
                             self.handle_draft_action(action).await?;
                         }
+                        EventResult::CommandAction(action) => {
+                            self.handle_command_action(action).await?;
+                        }
                         EventResult::AccountSwitch(account_id) => {
                             self.handle_account_switch(&account_id).await;
                         }
@@ -2219,6 +2223,13 @@ impl App {
                 // This is handled within the draft list UI
             }
         }
+        Ok(())
+    }
+
+    /// Handle command palette actions
+    async fn handle_command_action(&mut self, action: CommandAction) -> Result<()> {
+        // Delegate to UI for command execution
+        self.ui.execute_command_action(action);
         Ok(())
     }
 

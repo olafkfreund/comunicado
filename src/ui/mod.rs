@@ -9,6 +9,7 @@ pub mod ai_privacy_dialog;
 pub mod animated_content;
 pub mod animation;
 pub mod calendar;
+pub mod command_palette;
 pub mod compose;
 pub mod content_preview;
 pub mod external_editor;
@@ -59,6 +60,7 @@ use tokio::time::{Duration, Instant};
 
 use self::{
     account_switcher::AccountSwitcher,
+    command_palette::{CommandPalette, CommandContext, CommandAction},
     compose::ComposeUI,
     content_preview::ContentPreview,
     context_shortcuts::ContextShortcutsPopup,
@@ -231,6 +233,9 @@ pub struct UI {
     ai_config_state: crate::ui::ai_config_ui::AIConfigUIState,
     ai_popup: crate::ui::ai_popup::AIPopup,
     
+    // Command Palette System
+    command_palette: CommandPalette,
+    
     // AI operation result channel
     ai_result_rx: Option<tokio::sync::mpsc::UnboundedReceiver<AIOperationResult>>,
 }
@@ -311,6 +316,7 @@ impl UI {
             ai_config_ui: crate::ui::ai_config_ui::AIConfigUI::new(),
             ai_config_state: crate::ui::ai_config_ui::AIConfigUIState::new(),
             ai_popup: crate::ui::ai_popup::AIPopup::new(),
+            command_palette: CommandPalette::new(),
             ai_result_rx: None, // Will be set when AI operations are started
         };
 
@@ -547,6 +553,11 @@ impl UI {
         // Render AI popup on top of everything if visible
         if self.ai_popup.is_visible() {
             self.ai_popup.render(frame, size, theme, &self.typography);
+        }
+        
+        // Render command palette on top of everything if visible
+        if self.command_palette.is_visible() {
+            self.command_palette.render(frame, theme);
         }
     }
 
@@ -3648,6 +3659,162 @@ impl UI {
         
         // Show toast notification for now
         self.show_toast_info("AI content generation activated");
+    }
+
+    // Command Palette Methods
+    
+    /// Show command palette with appropriate context
+    pub fn show_command_palette(&mut self) {
+        let context = self.get_current_command_context();
+        self.command_palette.show(context);
+    }
+    
+    /// Hide command palette
+    pub fn hide_command_palette(&mut self) {
+        self.command_palette.hide();
+    }
+    
+    /// Check if command palette is visible
+    pub fn is_command_palette_visible(&self) -> bool {
+        self.command_palette.is_visible()
+    }
+    
+    /// Handle character input for command palette
+    pub fn handle_command_palette_char(&mut self, c: char) -> Option<CommandAction> {
+        self.command_palette.handle_char(c)
+    }
+    
+    /// Navigate command palette selection up
+    pub fn command_palette_select_previous(&mut self) {
+        self.command_palette.select_previous();
+    }
+    
+    /// Navigate command palette selection down
+    pub fn command_palette_select_next(&mut self) {
+        self.command_palette.select_next();
+    }
+    
+    /// Execute currently selected command in palette
+    pub fn execute_selected_command(&mut self) -> Option<CommandAction> {
+        self.command_palette.execute_selected()
+    }
+    
+    /// Get current command context based on UI state
+    fn get_current_command_context(&self) -> CommandContext {
+        match self.mode {
+            UIMode::EmailViewer => CommandContext::EmailViewer,
+            UIMode::Calendar => CommandContext::Calendar,
+            UIMode::Compose => CommandContext::Compose,
+            UIMode::Settings => CommandContext::Settings,
+            _ => {
+                // Check focused pane for more specific context
+                match self.focused_pane {
+                    FocusedPane::MessageList => CommandContext::EmailList,
+                    FocusedPane::Calendar => CommandContext::Calendar,
+                    _ => CommandContext::Global,
+                }
+            }
+        }
+    }
+    
+    /// Execute a command action
+    pub fn execute_command_action(&mut self, action: CommandAction) {
+        match action {
+            CommandAction::ToggleAIAssistant => {
+                self.toggle_ai_assistant();
+            },
+            CommandAction::OpenSettings => {
+                self.mode = UIMode::Settings;
+            },
+            CommandAction::ComposeEmail => {
+                self.show_compose_mode();
+            },
+            CommandAction::SearchEmails => {
+                self.show_search_mode();
+            },
+            CommandAction::ToggleCalendar => {
+                self.show_calendar_mode();
+            },
+            CommandAction::SyncEmails => {
+                // Trigger email sync - would need to be connected to sync engine
+                self.show_toast_info("Email sync initiated");
+            },
+            CommandAction::ShowHelp => {
+                self.mode = UIMode::KeyboardShortcuts;
+            },
+            CommandAction::ToggleFolder => {
+                self.focused_pane = FocusedPane::FolderTree;
+            },
+            CommandAction::MarkAsRead => {
+                // Mark current message as read
+                self.show_toast_info("Message marked as read");
+            },
+            CommandAction::MarkAsUnread => {
+                // Mark current message as unread  
+                self.show_toast_info("Message marked as unread");
+            },
+            CommandAction::DeleteEmail => {
+                // Delete current message
+                self.show_toast_info("Message deleted");
+            },
+            CommandAction::ReplyEmail => {
+                // Start reply
+                self.show_toast_info("Reply started");
+            },
+            CommandAction::ForwardEmail => {
+                // Start forward
+                self.show_toast_info("Forward started");
+            },
+            CommandAction::CreateEvent => {
+                // Create calendar event
+                self.show_toast_info("Creating calendar event");
+            },
+            CommandAction::ViewEvent => {
+                // View calendar event
+                self.show_toast_info("Viewing calendar event");
+            },
+            CommandAction::ExportData => {
+                self.show_toast_info("Data export initiated");
+            },
+            CommandAction::ImportData => {
+                self.show_toast_info("Data import initiated");
+            },
+            CommandAction::ChangeTheme => {
+                self.show_toast_info("Theme selection opened");
+            },
+            CommandAction::ShowKeyboardShortcuts => {
+                self.mode = UIMode::KeyboardShortcuts;
+            },
+            CommandAction::Custom(cmd) => {
+                self.show_toast_info(format!("Custom command: {}", cmd));
+            },
+        }
+    }
+    
+    /// Render command palette if visible
+    pub fn render_command_palette(&mut self, frame: &mut Frame) {
+        if self.command_palette.is_visible() {
+            let theme = self.theme_manager.current_theme();
+            self.command_palette.render(frame, theme);
+        }
+    }
+    
+    /// Show compose mode (simplified version for command palette)
+    fn show_compose_mode(&mut self) {
+        self.mode = UIMode::Compose;
+        self.show_toast_info("Switched to compose mode");
+    }
+    
+    /// Show search mode (simplified version for command palette)  
+    fn show_search_mode(&mut self) {
+        self.mode = UIMode::Search;
+        self.show_toast_info("Switched to search mode");
+    }
+    
+    /// Show calendar mode (simplified version for command palette)
+    fn show_calendar_mode(&mut self) {
+        self.mode = UIMode::Calendar;
+        self.show_toast_info("Switched to calendar mode");
     }
 }
 

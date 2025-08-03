@@ -1,7 +1,8 @@
 use crate::keyboard::{KeyboardAction, KeyboardManager};
 use crate::tea::message::ViewMode;
 use crate::ui::{ComposeAction, DraftAction, FocusedPane, UIMode, UI};
-use crossterm::event::{KeyCode, KeyEvent};
+use crate::ui::command_palette::CommandAction;
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use chrono::Datelike;
 
 pub struct EventHandler {
@@ -15,6 +16,7 @@ pub enum EventResult {
     Continue,
     ComposeAction(ComposeAction),
     DraftAction(DraftAction),
+    CommandAction(CommandAction), // Command palette action
     AccountSwitch(String),  // Account ID to switch to
     AddAccount,             // Launch account setup wizard
     RemoveAccount(String),  // Account ID to remove
@@ -80,6 +82,17 @@ impl EventHandler {
         key: KeyEvent,
         ui: &mut UI,
     ) -> EventResult {
+        
+        // Handle command palette with highest priority (except for AI popup)
+        if ui.is_command_palette_visible() {
+            return self.handle_command_palette_keys(key, ui);
+        }
+        
+        // Check for global Ctrl+D to show command palette
+        if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('d') {
+            ui.show_command_palette();
+            return EventResult::Continue;
+        }
         
         // Handle AI popup first if it's visible and interactive
         if ui.ai_popup().is_interactive() {
@@ -1880,6 +1893,42 @@ impl EventHandler {
             KeyCode::Enter => {
                 if let Some(action) = ui.ai_popup_mut().select_current() {
                     ui.handle_ai_popup_action(action);
+                }
+                EventResult::Continue
+            }
+            _ => EventResult::Continue,
+        }
+    }
+
+    /// Handle command palette keyboard input
+    fn handle_command_palette_keys(&mut self, key: KeyEvent, ui: &mut UI) -> EventResult {
+        match key.code {
+            KeyCode::Esc => {
+                // Close command palette
+                ui.hide_command_palette();
+                EventResult::Continue
+            }
+            KeyCode::Up | KeyCode::Char('k') => {
+                // Navigate up in command list
+                ui.command_palette_select_previous();
+                EventResult::Continue
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                // Navigate down in command list
+                ui.command_palette_select_next();
+                EventResult::Continue
+            }
+            KeyCode::Enter => {
+                // Execute selected command
+                if let Some(action) = ui.execute_selected_command() {
+                    return EventResult::CommandAction(action);
+                }
+                EventResult::Continue
+            }
+            KeyCode::Char(c) => {
+                // Handle letter shortcuts
+                if let Some(action) = ui.handle_command_palette_char(c) {
+                    return EventResult::CommandAction(action);
                 }
                 EventResult::Continue
             }
