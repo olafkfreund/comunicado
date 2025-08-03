@@ -45,7 +45,7 @@ pub use ai_assistant::{
 pub use attachment_viewer::{AttachmentViewer, ViewResult, ViewerMode};
 pub use attachments::{AttachmentInfo, AttachmentManager, AttachmentType};
 pub use database::{
-    BackupResult, CleanupResult, DatabaseError, DatabaseResult, DatabaseStats, EmailDatabase,
+    BackupResult, CleanupResult, DatabaseError, DatabaseResult, DatabaseStats, EmailAccount, EmailDatabase,
     FolderSyncState, RestoreResult, StoredAttachment, StoredMessage, SyncStatus,
 };
 pub use database_optimizations::{

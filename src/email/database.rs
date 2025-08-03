@@ -141,6 +141,17 @@ pub struct StoredDraft {
     pub auto_saved: bool,
 }
 
+/// Email account information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EmailAccount {
+    pub id: String,
+    pub display_name: String,
+    pub email: String,
+    pub provider: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
 /// Email database manager
 pub struct EmailDatabase {
     pub pool: SqlitePool,
@@ -798,6 +809,57 @@ impl EmailDatabase {
             Some(row) => Ok(Some(self.row_to_stored_message(row)?)),
             None => Ok(None),
         }
+    }
+
+    /// Get all accounts from database 
+    pub async fn get_accounts(&self) -> DatabaseResult<Vec<EmailAccount>> {
+        let rows = sqlx::query(r"
+            SELECT id, name, email, provider, created_at, updated_at
+            FROM accounts
+            ORDER BY name
+        ")
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut accounts = Vec::new();
+        for row in rows {
+            accounts.push(EmailAccount {
+                id: row.get("id"),
+                display_name: row.get("name"),
+                email: row.get("email"),
+                provider: row.get("provider"),
+                created_at: chrono::DateTime::parse_from_rfc3339(&row.get::<String, _>("created_at"))
+                    .unwrap()
+                    .with_timezone(&chrono::Utc),
+                updated_at: chrono::DateTime::parse_from_rfc3339(&row.get::<String, _>("updated_at"))
+                    .unwrap()
+                    .with_timezone(&chrono::Utc),
+            });
+        }
+        Ok(accounts)
+    }
+
+    /// Get all messages for an account (for debugging purposes)
+    pub async fn get_all_messages_for_account(&self, account_id: &str) -> DatabaseResult<Vec<StoredMessage>> {
+        let rows = sqlx::query(r"
+            SELECT id, account_id, folder_name, imap_uid, message_id, thread_id, in_reply_to, message_references,
+                   subject, from_addr, from_name, to_addrs, cc_addrs, bcc_addrs, reply_to, date,
+                   body_text, body_html, attachments,
+                   flags, labels, size, priority,
+                   created_at, updated_at, last_synced, sync_version, is_draft, is_deleted
+            FROM messages
+            WHERE account_id = ?1 AND is_deleted = FALSE
+            ORDER BY folder_name, date DESC
+        ")
+        .bind(account_id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut messages = Vec::new();
+        for row in rows {
+            messages.push(self.row_to_stored_message(row)?);
+        }
+        Ok(messages)
     }
 
     /// Search messages with full-text search

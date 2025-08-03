@@ -1852,6 +1852,7 @@ impl EventHandler {
         if key.modifiers.contains(KeyModifiers::CONTROL | KeyModifiers::ALT) 
             && key.code == KeyCode::Char('i') {
             ui.ai_popup_mut().hide();
+            ui.toggle_ai_assistant(); // Also toggle the AI assistant
             return EventResult::Continue;
         }
         

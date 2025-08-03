@@ -316,6 +316,10 @@ impl UI {
 
         // Initialize status bar with default segments
         ui.initialize_status_bar();
+        
+        // Ensure sample messages are shown when no database is available
+        ui.message_list.ensure_sample_messages_if_no_database();
+        
         ui
     }
 
