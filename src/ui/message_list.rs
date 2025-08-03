@@ -172,114 +172,93 @@ impl MessageList {
     }
 
     fn initialize_sample_messages(&mut self) {
-        self.messages = vec![
-            MessageItem::new(
-                "Security alert".to_string(),
-                "Google".to_string(),
-                "11:08".to_string(),
-            )
-            .unread(),
-            MessageItem::new(
-                "On-demand webinar: Introduction to...".to_string(),
-                "Red Hat Partner Program".to_string(),
-                "11:03".to_string(),
-            ),
-            MessageItem::new(
-                "Security alert".to_string(),
-                "Google".to_string(),
-                "10:03".to_string(),
-            )
-            .unread(),
-            MessageItem::new(
-                "There was an error with a recent...".to_string(),
-                "Steam Support".to_string(), 
-                "06:59".to_string(),
-            ),
-            MessageItem::new(
-                "BrodieOnGames just went live on...".to_string(),
-                "Twitch".to_string(),
-                "01:31".to_string(),
-            ),
-            MessageItem::new(
-                "Updates from David, Joachim, an...".to_string(),
-                "Goodreads".to_string(),
-                "01:06".to_string(),
-            ),
-            MessageItem::new(
-                "Re: [olafkfreund/comunicado] M...".to_string(),
-                "claude[bot]".to_string(),
-                "30/07/2025, 11:26".to_string(),
-            )
-            .unread(),
-            MessageItem::new(
-                "Tune Into the Battlefield 6 Multip...".to_string(),
-                "BATTLEFIELD".to_string(),
-                "30/07/2025, 20:38".to_string(),
-            ),
-            MessageItem::new(  
-                "Exclusive referral code: just for...".to_string(),
-                "Pixel Superfans".to_string(),
-                "30/07/2025, 17:16".to_string(),
-            ),
-            MessageItem::new(
-                "Did you know you can 3D prin...".to_string(),
-                "XDA".to_string(),
-                "30/07/2025, 14:30".to_string(),
-            )
-            .unread(),
-            MessageItem::new(
-                "[Ending Tomorrow] Take the 10 M...".to_string(),
-                "GeeksforGeeks".to_string(),
-                "30/07/2025, 12:06".to_string(),
-            ),
-            MessageItem::new(
-                "Re: [olafkfreund/comunicado] Ad...".to_string(),
-                "claude[bot]".to_string(),
-                "30/07/2025, 11:23".to_string(),
-            )
-            .unread(),
-            MessageItem::new(
-                "Re: [olafkfreund/comunicado] ...".to_string(),
-                "Copilot".to_string(),
-                "30/07/2025, 11:23".to_string(),
-            ),
-            MessageItem::new(
-                "Re: [olafkfreund/comunicado] ...".to_string(),
-                "claude[bot]".to_string(),
-                "30/07/2025, 11:24".to_string(),
-            ),
-            MessageItem::new(
-                "Thank you for your Steam purch...".to_string(),
-                "Steam Support".to_string(),
-                "30/07/2025, 11:16".to_string(),
-            ),
-            MessageItem::new(
-                "Award-winning things to do in Eu...".to_string(),
-                "Tripadvisor".to_string(),
-                "30/07/2025, 10:23".to_string(),
-            ),
-            MessageItem::new(
-                "Your ModelStudioDeployment Cl...".to_string(),
-                "Alibaba Cloud".to_string(),
-                "30/07/2025, 09:24".to_string(),
-            ),
-            MessageItem::new(
-                "Your ModelStudioInference Clou...".to_string(),
-                "Alibaba Cloud".to_string(),
-                "30/07/2025, 09:24".to_string(),
-            ),
-            MessageItem::new(
-                "Welcome to Alibaba Cloud Servic...".to_string(),
-                "Alibaba Cloud".to_string(),
-                "30/07/2025, 09:12".to_string(),
-            ),
-            MessageItem::new(
-                "[GitHub] A third-party OAuth app...".to_string(),
-                "GitHub".to_string(),
-                "30/07/2025, 09:11".to_string(),
-            )
-            .unread(),
-        ];
+        // Create folder-appropriate sample messages
+        let folder = self.current_folder.as_deref().unwrap_or("INBOX");
+        
+        tracing::info!("Initializing sample messages for folder: {}", folder);
+        
+        self.messages = match folder {
+            "INBOX" => vec![
+                MessageItem::new(
+                    "Welcome to Comunicado!".to_string(),
+                    "Comunicado Team".to_string(),
+                    "Today 10:30".to_string(),
+                )
+                .unread()
+                .important(),
+                MessageItem::new(
+                    "Your account is now set up".to_string(),
+                    "System Administrator".to_string(),
+                    "Today 09:15".to_string(),
+                ),
+                MessageItem::new(
+                    "Security alert: New login detected".to_string(),
+                    "Security Team".to_string(),
+                    "Yesterday 16:45".to_string(),
+                )
+                .unread(),
+                MessageItem::new(
+                    "Daily digest: 3 new messages".to_string(),
+                    "Mail System".to_string(),
+                    "Yesterday 08:00".to_string(),
+                ),
+            ],
+            "Sent" => vec![
+                MessageItem::new(
+                    "Thank you for your help".to_string(),
+                    "You".to_string(),
+                    "Today 14:20".to_string(),
+                ),
+                MessageItem::new(
+                    "Re: Project meeting tomorrow".to_string(),
+                    "You".to_string(),
+                    "Yesterday 11:30".to_string(),
+                ),
+                MessageItem::new(
+                    "Vacation request submitted".to_string(),
+                    "You".to_string(),
+                    "Mon 09:45".to_string(),
+                ),
+            ],
+            "Drafts" => vec![
+                MessageItem::new(
+                    "[Draft] Meeting notes from today".to_string(),
+                    "You".to_string(),
+                    "Today 15:30".to_string(),
+                ),
+                MessageItem::new(
+                    "[Draft] Quarterly report".to_string(),
+                    "You".to_string(),
+                    "Yesterday 17:00".to_string(),
+                ),
+            ],
+            "Trash" => vec![
+                MessageItem::new(
+                    "Spam message about crypto".to_string(),
+                    "unknown@spam.com".to_string(),
+                    "Last week".to_string(),
+                ),
+                MessageItem::new(
+                    "Old newsletter from 2023".to_string(),
+                    "Newsletter Service".to_string(),
+                    "Last month".to_string(),
+                ),
+            ],
+            _ => vec![
+                MessageItem::new(
+                    format!("Sample message for {}", folder),
+                    "Sample Sender".to_string(),
+                    "Today 12:00".to_string(),
+                ),
+                MessageItem::new(
+                    format!("Another message in {}", folder),
+                    "Another Sender".to_string(),
+                    "Yesterday 15:30".to_string(),
+                ),
+            ],
+        };
+        
+        tracing::info!("Initialized {} sample messages for folder '{}'", self.messages.len(), folder);
     }
 
     pub fn render(
@@ -805,9 +784,10 @@ impl MessageList {
     }
 
     fn build_flat_view(&mut self) {
-        // Only initialize sample messages if we don't have real messages loaded
-        if self.current_account.is_none() && self.current_folder.is_none() {
-            tracing::info!("No real messages loaded, using sample messages");
+        // Initialize sample messages if we don't have any real messages loaded from database
+        // This happens when database is empty or not populated yet
+        if self.messages.is_empty() {
+            tracing::info!("No messages available, using sample messages for demonstration");
             self.initialize_sample_messages();
         } else {
             tracing::info!(
@@ -821,9 +801,10 @@ impl MessageList {
     }
 
     fn build_threaded_view(&mut self) {
-        // Only use sample threaded messages if we don't have real messages loaded
-        if self.current_account.is_none() && self.current_folder.is_none() {
-            tracing::info!("No real messages loaded, using sample threaded messages");
+        // Use sample threaded messages if we don't have any real messages loaded from database
+        // This happens when database is empty or not populated yet
+        if self.messages.is_empty() {
+            tracing::info!("No messages available, using sample threaded messages for demonstration");
             // Clear current view
             self.messages.clear();
             // Generate sample threaded messages for demonstration
@@ -1099,6 +1080,12 @@ impl MessageList {
                 .collect();
 
             tracing::info!("Converted to {} MessageItems", self.messages.len());
+            
+            // If database returned no messages, show appropriate sample messages for this folder
+            if self.messages.is_empty() {
+                tracing::info!("Database returned no messages for folder '{}', showing sample messages", folder_name);
+                self.initialize_sample_messages();
+            }
 
             // Enrich messages with sender recognition
             self.enrich_with_sender_recognition().await;
