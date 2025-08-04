@@ -64,6 +64,10 @@ async fn main() -> Result<()> {
     let mut app = App::new()?;
     println!("✅ Application created");
     
+    // Pass the database from CLI to the App
+    app.set_database(cli_handler.database());
+    println!("📊 Database connected to application");
+    
     // Set initial UI mode based on CLI arguments
     app.set_initial_mode(startup_mode);
     println!("🔧 Initial mode set");

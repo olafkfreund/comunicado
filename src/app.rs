@@ -406,6 +406,14 @@ impl App {
     pub fn set_initial_mode(&mut self, mode: crate::cli::StartupMode) {
         self.ui.set_initial_mode(mode);
     }
+
+    /// Set the database instance for the application
+    pub fn set_database(&mut self, database: Arc<EmailDatabase>) {
+        self.database = Some(database.clone());
+        // Also set the database on the UI components
+        self.ui.set_database(database);
+        tracing::info!("📊 Database set for application and UI components");
+    }
     
     /// Refresh calendar data from database and update UI
     pub async fn refresh_calendar_data(&mut self) -> Result<()> {

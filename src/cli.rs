@@ -941,6 +941,11 @@ impl CliHandler {
         })
     }
 
+    /// Get the database instance for use by the main application
+    pub fn database(&self) -> Arc<EmailDatabase> {
+        Arc::clone(&self.database)
+    }
+
     /// Handle CLI commands
     pub async fn handle_command(&self, command: Commands, dry_run: bool) -> Result<()> {
         match command {
