@@ -542,7 +542,16 @@ impl SettingsUI {
         match self.state.selected_index {
             0 => { // Cache size
                 if let Ok(size) = value.parse::<u64>() {
-                    self.state.set_status(format!("Cache size set to {} MB", size));
+                    if size <= 10000 { // Max 10GB as per validation
+                        self.config.performance.cache_size_mb = size;
+                        if let Err(e) = self.config.save() {
+                            self.state.set_status(format!("Failed to save config: {}", e));
+                        } else {
+                            self.state.set_status(format!("Cache size set to {} MB", size));
+                        }
+                    } else {
+                        self.state.set_status("Cache size must be 10GB or less".to_string());
+                    }
                 } else {
                     self.state.set_status("Invalid cache size".to_string());
                 }
@@ -550,7 +559,12 @@ impl SettingsUI {
             2 => { // Max concurrent
                 if let Ok(count) = value.parse::<u32>() {
                     if count > 0 && count <= 50 {
-                        self.state.set_status(format!("Max concurrent operations set to {}", count));
+                        self.config.performance.max_concurrent_operations = count;
+                        if let Err(e) = self.config.save() {
+                            self.state.set_status(format!("Failed to save config: {}", e));
+                        } else {
+                            self.state.set_status(format!("Max concurrent operations set to {}", count));
+                        }
                     } else {
                         self.state.set_status("Concurrent operations must be between 1 and 50".to_string());
                     }
@@ -560,7 +574,16 @@ impl SettingsUI {
             }
             4 => { // Cleanup interval
                 if let Ok(hours) = value.parse::<u32>() {
-                    self.state.set_status(format!("Cleanup interval set to {} hours", hours));
+                    if hours <= 8760 { // Max 1 year as per validation
+                        self.config.performance.cleanup_interval_hours = hours;
+                        if let Err(e) = self.config.save() {
+                            self.state.set_status(format!("Failed to save config: {}", e));
+                        } else {
+                            self.state.set_status(format!("Cleanup interval set to {} hours", hours));
+                        }
+                    } else {
+                        self.state.set_status("Cleanup interval must be 1 year or less".to_string());
+                    }
                 } else {
                     self.state.set_status("Invalid cleanup interval".to_string());
                 }
@@ -765,12 +788,24 @@ impl SettingsUI {
     }
 
     fn toggle_preload_images(&mut self) {
-        self.state.set_status("Image preloading toggled".to_string());
+        self.config.performance.preload_images = !self.config.performance.preload_images;
+        let status = if self.config.performance.preload_images { "enabled" } else { "disabled" };
+        if let Err(e) = self.config.save() {
+            self.state.set_status(format!("Failed to save config: {}", e));
+        } else {
+            self.state.set_status(format!("Image preloading {}", status));
+        }
         self.state.modified = true;
     }
 
     fn toggle_background_sync(&mut self) {
-        self.state.set_status("Background sync toggled".to_string());
+        self.config.performance.background_sync = !self.config.performance.background_sync;
+        let status = if self.config.performance.background_sync { "enabled" } else { "disabled" };
+        if let Err(e) = self.config.save() {
+            self.state.set_status(format!("Failed to save config: {}", e));
+        } else {
+            self.state.set_status(format!("Background sync {}", status));
+        }
         self.state.modified = true;
     }
 
@@ -1027,11 +1062,13 @@ impl SettingsUI {
 
     fn render_performance_tab(&mut self, frame: &mut Frame, area: Rect, theme: &Theme) {
         let items = vec![
-            ListItem::new("💾 Cache size: 500 MB"),
-            ListItem::new("🖼️ Preload images: Enabled"),
-            ListItem::new("🔄 Max concurrent: 10"),
-            ListItem::new("⚡ Background sync: Enabled"),
-            ListItem::new("🧹 Cleanup interval: 24 hours"),
+            ListItem::new(format!("💾 Cache size: {} MB", self.config.performance.cache_size_mb)),
+            ListItem::new(format!("🖼️ Preload images: {}", 
+                if self.config.performance.preload_images { "Enabled" } else { "Disabled" })),
+            ListItem::new(format!("🔄 Max concurrent: {}", self.config.performance.max_concurrent_operations)),
+            ListItem::new(format!("⚡ Background sync: {}", 
+                if self.config.performance.background_sync { "Enabled" } else { "Disabled" })),
+            ListItem::new(format!("🧹 Cleanup interval: {} hours", self.config.performance.cleanup_interval_hours)),
             ListItem::new("🗑️ Run cleanup now"),
         ];
 
