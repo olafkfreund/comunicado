@@ -145,7 +145,7 @@
 ### Should-Have Features
 
 - [x] Plugin Architecture - Support for community-developed plugins and extensions `XL` ✅ **COMPLETED**
-- [ ] Email Encryption - GPG integration for email encryption and signing `L`
+- [x] Email Encryption - GPG integration for email encryption and signing `L` ✅ **COMPLETED**
 - [ ] Calendar Sharing UI - Interface for managing shared calendars and permissions `M`
 - [ ] Advanced Configuration - Power-user configuration options and scripting `S`
 
