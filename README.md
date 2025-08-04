@@ -184,4 +184,4 @@ This project follows the Agent OS development workflow. See the documentation in
 
 ## License
 
-MIT or Apache-2.0
+AGPL-3.0
