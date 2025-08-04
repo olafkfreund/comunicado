@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use base64::Engine;
 use clap::{Args, Parser, Subcommand};
 use std::io::Write;
@@ -922,6 +922,12 @@ impl CliHandler {
                 .join("databases")
                 .join("email.db")
         };
+
+        // Ensure parent directory exists before creating database
+        if let Some(parent) = db_path.parent() {
+            std::fs::create_dir_all(parent)
+                .with_context(|| format!("Failed to create database directory: {}", parent.display()))?;
+        }
 
         let database = Arc::new(EmailDatabase::new(db_path.to_str().unwrap()).await?);
 
