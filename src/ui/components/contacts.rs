@@ -3,24 +3,22 @@
 //! Implements a modular contacts component with search, management, and integration features.
 
 use super::{
-    ComponentId, ComponentState, UIComponent, ComponentError, ComponentResult,
+    ComponentId, ComponentState, UIComponent, ComponentResult,
     RenderContext, UIEvent, EventResult, ComponentMetrics,
 };
 use crate::{
     contacts::{
-        Contact, ContactsManager, ContactsDatabase, AdvancedContactSearch,
-        ContactAutocomplete, SenderRecognitionService, ContactsError,
+        Contact, ContactsManager, AdvancedContactSearch,
+        ContactAutocomplete, SenderRecognitionService,
     },
-    theme::Theme,
 };
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
-    style::{Color, Modifier, Style},
-    text::{Line, Span, Text},
+    style::{Modifier, Style},
+    text::{Line, Span},
     widgets::{
-        Block, Borders, Cell, List, ListItem, ListState, Paragraph, Row, Table, Tabs, Wrap,
+        Block, Borders, List, ListItem, ListState, Paragraph, Tabs, Wrap,
     },
-    Frame,
 };
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -206,7 +204,7 @@ impl ContactsComponent {
         self.sender_recognition = sender_recognition;
         
         // Initialize search and autocomplete if manager is available
-        if let Some(ref manager) = self.contacts_manager {
+        if let Some(ref _manager) = self.contacts_manager {
             // TODO: Initialize advanced search and autocomplete
             // self.advanced_search = Some(AdvancedContactSearch::new(manager.clone()));
             // self.autocomplete = Some(ContactAutocomplete::new(manager.clone()));
@@ -325,7 +323,7 @@ impl ContactsComponent {
                 self.set_tab(tab)?;
                 Ok(EventResult::Handled)
             }
-            ContactAction::ComposeEmail(email) => {
+            ContactAction::ComposeEmail(_email) => {
                 // TODO: Trigger email composition with this address
                 Ok(EventResult::RequestModeChange("compose".to_string()))
             }
@@ -437,7 +435,7 @@ impl ContactsComponent {
         let tab_titles: Vec<Line> = ContactTab::all()
             .iter()
             .enumerate()
-            .map(|(i, tab)| {
+            .map(|(_i, tab)| {
                 let count = match tab {
                     ContactTab::All => self.total_contacts,
                     ContactTab::Local => self.local_contacts,
@@ -924,28 +922,27 @@ mod tests {
         component.initialize().unwrap();
         
         // Add some test contacts
-        let contacts = vec![
-            Contact {
-                id: Some(1),
-                display_name: "John Doe".to_string(),
-                first_name: Some("John".to_string()),
-                last_name: Some("Doe".to_string()),
-                company: Some("Acme Corp".to_string()),
-                emails: vec![],
-                phones: vec![],
-                ..Default::default()
-            },
-            Contact {
-                id: Some(2),
-                display_name: "Jane Smith".to_string(),
-                first_name: Some("Jane".to_string()),
-                last_name: Some("Smith".to_string()),
-                company: Some("Tech Inc".to_string()),
-                emails: vec![],
-                phones: vec![],
-                ..Default::default()
-            },
-        ];
+        let mut contact1 = Contact::new(
+            "john-doe-1".to_string(),
+            crate::contacts::ContactSource::Local,
+            "John Doe".to_string()
+        );
+        contact1.id = Some(1);
+        contact1.first_name = Some("John".to_string());
+        contact1.last_name = Some("Doe".to_string());
+        contact1.company = Some("Acme Corp".to_string());
+
+        let mut contact2 = Contact::new(
+            "jane-smith-2".to_string(),
+            crate::contacts::ContactSource::Local,
+            "Jane Smith".to_string()
+        );
+        contact2.id = Some(2);
+        contact2.first_name = Some("Jane".to_string());
+        contact2.last_name = Some("Smith".to_string());
+        contact2.company = Some("Tech Inc".to_string());
+
+        let contacts = vec![contact1, contact2];
         
         component.set_contacts(contacts);
         

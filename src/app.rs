@@ -647,7 +647,7 @@ impl App {
 
         // Phase 3: Account Setup (with robust timeout handling)
         print!("📋 Loading accounts...");
-        std::io::Write::flush(&mut std::io::stdout()).unwrap();
+        let _ = std::io::Write::flush(&mut std::io::stdout());
         
         // Load existing accounts with timeout (should be fast now - just loading cached data)
         match tokio::time::timeout(
@@ -673,7 +673,7 @@ impl App {
 
         // Phase 4: Background Processor (essential for IMAP sync)
         print!("🔄 Initializing background processor...");
-        std::io::Write::flush(&mut std::io::stdout()).unwrap();
+        let _ = std::io::Write::flush(&mut std::io::stdout());
         
         // Initialize background processor (optional - don't fail startup if it fails)
         match self.initialize_background_processor().await {
@@ -691,7 +691,7 @@ impl App {
         // Perform immediate IMAP sync with timeout to populate emails (replaces broken background sync)
         if let Some(current_account_id) = self.ui.get_current_account_id().cloned() {
             print!("📬 Fetching initial emails...");
-            std::io::Write::flush(&mut std::io::stdout()).unwrap();
+            let _ = std::io::Write::flush(&mut std::io::stdout());
             tracing::info!("📬 Starting immediate IMAP sync for account: {}", current_account_id);
             
             // Run IMAP sync with 15-second timeout to prevent hanging
@@ -1805,6 +1805,9 @@ impl App {
                         EventResult::AISummarizeEmail(message_id) => {
                             self.handle_ai_summarize_email(message_id).await?;
                         }
+                        EventResult::TriggerEmailSync => {
+                            self.trigger_manual_sync().await?;
+                        }
                     }
 
                     // Check for quit command
@@ -2228,8 +2231,19 @@ impl App {
 
     /// Handle command palette actions
     async fn handle_command_action(&mut self, action: CommandAction) -> Result<()> {
-        // Delegate to UI for command execution
-        self.ui.execute_command_action(action);
+        // Delegate to UI for command execution - may return additional app-level actions
+        if let Some(app_event) = self.ui.execute_command_action(action) {
+            // Handle app-level events that the UI can't handle directly
+            match app_event {
+                crate::events::EventResult::TriggerEmailSync => {
+                    self.trigger_manual_sync().await?;
+                },
+                _ => {
+                    // Other events would be handled here if needed
+                    tracing::warn!("Unhandled app-level event from command palette: {:?}", app_event);
+                }
+            }
+        }
         Ok(())
     }
 
@@ -2374,13 +2388,16 @@ impl App {
             .await
             .map_err(|e| anyhow::anyhow!("Failed to get access token: {}", e))?;
 
+        let access_token = token.as_ref()
+            .ok_or_else(|| anyhow::anyhow!("No access token available for account {}", account_id))?;
+
         // Initialize SMTP for this account
         smtp_service
             .initialize_account(
                 account_id,
                 &config.provider,
                 &config.email_address,
-                &token.unwrap().token,
+                &access_token.token,
             )
             .await
             .map_err(|e| {
@@ -3066,19 +3083,17 @@ impl App {
         }
 
         // Check for timestamp patterns
-        if regex::Regex::new(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}")
-            .unwrap()
-            .is_match(line)
-        {
-            return true;
+        if let Ok(timestamp_regex) = regex::Regex::new(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}") {
+            if timestamp_regex.is_match(line) {
+                return true;
+            }
         }
 
         // Check for IP addresses and server names
-        if regex::Regex::new(r"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b")
-            .unwrap()
-            .is_match(line)
-        {
-            return true;
+        if let Ok(ip_regex) = regex::Regex::new(r"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b") {
+            if ip_regex.is_match(line) {
+                return true;
+            }
         }
 
         false
@@ -4088,6 +4103,95 @@ impl App {
         );
     }
 
+    /// Trigger manual sync for all accounts (called from command palette)
+    /// Uses background tasks to avoid blocking the UI thread
+    async fn trigger_manual_sync(&mut self) -> Result<()> {
+        tracing::info!("Manual sync triggered - queuing background tasks for all accounts");
+
+        // Get all account IDs
+        let account_ids = if let Some(ref database) = self.database {
+            match sqlx::query("SELECT id FROM accounts")
+                .fetch_all(&database.pool)
+                .await
+            {
+                Ok(rows) => rows
+                    .into_iter()
+                    .map(|row| row.get::<String, _>("id"))
+                    .collect::<Vec<_>>(),
+                Err(e) => {
+                    let error_msg = format!("Failed to get account IDs for manual sync: {}", e);
+                    tracing::error!("{}", error_msg);
+                    self.ui.show_toast_error(&error_msg);
+                    return Err(anyhow::anyhow!(error_msg));
+                }
+            }
+        } else {
+            let error_msg = "Database not available for manual sync";
+            tracing::error!("{}", error_msg);
+            self.ui.show_toast_error(error_msg);
+            return Err(anyhow::anyhow!(error_msg));
+        };
+
+        if account_ids.is_empty() {
+            let info_msg = "No accounts configured for sync";
+            tracing::info!("{}", info_msg);
+            self.ui.show_toast_info(info_msg);
+            return Ok(());
+        }
+
+        tracing::info!("Queuing background sync tasks for {} accounts", account_ids.len());
+
+        // Queue background sync tasks for each account (non-blocking)
+        let mut queued_tasks = 0;
+        let mut failed_queues = 0;
+
+        for account_id in &account_ids {
+            let sync_task = crate::performance::background_processor::BackgroundTask {
+                id: uuid::Uuid::new_v4(),
+                name: format!("Manual sync for account: {}", account_id),
+                priority: crate::performance::background_processor::TaskPriority::High,
+                account_id: account_id.clone(),
+                folder_name: None, // Sync all folders
+                task_type: crate::performance::background_processor::BackgroundTaskType::AccountSync {
+                    strategy: crate::email::sync_engine::SyncStrategy::Incremental,
+                },
+                created_at: std::time::Instant::now(),
+                estimated_duration: Some(std::time::Duration::from_secs(30)),
+            };
+
+            match self.queue_background_task(sync_task).await {
+                Ok(task_id) => {
+                    tracing::debug!("Queued background sync task {} for account: {}", task_id, account_id);
+                    queued_tasks += 1;
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to queue background sync for account {}: {}", account_id, e);
+                    failed_queues += 1;
+                }
+            }
+        }
+
+        // Provide immediate user feedback
+        if queued_tasks > 0 {
+            self.ui.show_toast_success(&format!(
+                "✓ Email sync started for {} accounts (background processing)",
+                queued_tasks
+            ));
+            tracing::info!("Successfully queued {} background sync tasks", queued_tasks);
+        }
+
+        if failed_queues > 0 {
+            self.ui.show_toast_warning(&format!(
+                "⚠ Failed to queue sync for {} accounts",
+                failed_queues
+            ));
+        }
+
+        // Show progress overlay to track background tasks
+        self.ui.show_enhanced_progress_overlay();
+
+        Ok(())
+    }
 
     /// Check and refresh expired tokens with UI updates
     pub async fn check_and_refresh_tokens(&mut self) -> Result<()> {

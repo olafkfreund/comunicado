@@ -253,9 +253,9 @@ pub struct SystemIntegrationService {
     // Core components
     email_database: Arc<EmailDatabase>,
     calendar: Arc<CalendarManager>,
-    notification_service: Arc<NotificationIntegrationService>,
+    notification_service: Arc<RwLock<NotificationIntegrationService>>,
     #[allow(dead_code)]
-    plugin_manager: Arc<PluginManager>,
+    plugin_manager: Arc<RwLock<PluginManager>>,
     
     // Animation and UI components
     #[allow(dead_code)]
@@ -321,16 +321,16 @@ impl SystemIntegrationService {
                 .map_err(|e| SystemIntegrationError::Calendar(e.to_string()))?
         );
         
-        let notification_service = Arc::new(
+        let notification_service = Arc::new(RwLock::new(
             NotificationIntegrationService::new(config.notification_config.clone())
-        );
+        ));
         
         let plugin_manager = PluginManager::new(
             vec![config.plugin_config.plugin_directory.clone()],
             "0.1.0".to_string(),
             std::path::PathBuf::from("./data")
         ).map_err(|e| SystemIntegrationError::Plugin(e.to_string()))?;
-        let plugin_manager = Arc::new(plugin_manager);
+        let plugin_manager = Arc::new(RwLock::new(plugin_manager));
         
         // Initialize animation manager if enabled
         let animation_manager = if config.ui_config.enable_animations {
@@ -361,10 +361,9 @@ impl SystemIntegrationService {
         info!("Starting Comunicado system integration");
         
         // Start notification service
-        // TODO: Fix Arc mutability issue - notification service start not available through Arc
-        // self.notification_service.start()
-        //     .await
-        //     .map_err(|e| SystemIntegrationError::Notification(e.to_string()))?;
+        self.notification_service.write().await.start()
+            .await
+            .map_err(|e| SystemIntegrationError::Notification(e.to_string()))?;
         
         // Load and start plugins
         if self.config.plugin_config.enable_plugins {
@@ -404,7 +403,7 @@ impl SystemIntegrationService {
         }
         
         // Send notification
-        self.notification_service.handle_new_email(message)
+        self.notification_service.read().await.handle_new_email(message)
             .await
             .map_err(|e| SystemIntegrationError::Notification(e.to_string()))?;
         
@@ -439,7 +438,7 @@ impl SystemIntegrationService {
         
         // Schedule notifications if reminders are enabled
         if self.config.calendar_config.enable_reminders {
-            self.notification_service.handle_calendar_event(event)
+            self.notification_service.read().await.handle_calendar_event(event)
                 .await
                 .map_err(|e| SystemIntegrationError::Notification(e.to_string()))?;
         }
@@ -565,15 +564,14 @@ impl SystemIntegrationService {
             format!("Sync completed for {} with {} errors", account_id, result.errors.len())
         };
         
-        // TODO: Fix Arc mutability issue - notify_system not available through Arc
-        // self.notification_service.notify_system(&message, 
-        //     if result.success { 
-        //         crate::notifications::types::NotificationPriority::Low 
-        //     } else { 
-        //         crate::notifications::types::NotificationPriority::High 
-        //     })
-        //     .await
-        //     .map_err(|e| SystemIntegrationError::Notification(e.to_string()))?;
+        // Send notification about sync completion
+        if let Err(e) = self.notification_service.read().await.notify_sync_complete(
+            account_id, 
+            result.items_processed, 
+            result.errors.len()
+        ).await {
+            warn!("Failed to send sync notification: {}", e);
+        }
         
         if result.success {
             Ok(())
@@ -601,10 +599,9 @@ impl SystemIntegrationService {
     /// Start plugin system
     async fn start_plugin_system(&self) -> SystemResult<()> {
         if self.config.plugin_config.auto_load_plugins {
-            // TODO: Fix Arc mutability issue - scan_plugins requires mutable access
-            // let _ = self.plugin_manager.scan_plugins()
-            //     .await
-            //     .map_err(|e| SystemIntegrationError::Plugin(e.to_string()))?;
+            let _ = self.plugin_manager.write().await.scan_plugins()
+                .await
+                .map_err(|e| SystemIntegrationError::Plugin(e.to_string()))?;
         }
         
         info!("Plugin system started");
@@ -795,8 +792,7 @@ impl SystemIntegrationService {
         self.config = config.clone();
         
         // Update component configurations
-        // TODO: Fix Arc mutability issue - update_config not available through Arc
-        // self.notification_service.update_config(config.notification_config);
+        self.notification_service.write().await.update_config(config.notification_config);
         
         info!("System configuration updated");
         Ok(())

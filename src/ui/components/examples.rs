@@ -4,12 +4,11 @@
 
 use super::{
     ComponentRegistry, EmailComponent, EmailComponentMode, UIServices, LayoutManager,
-    LayoutSpec, LayoutTemplate, UIComponent, ComponentResult, RenderContext,
+    UIComponent, ComponentResult,
     UIEvent, EventResult,
 };
 use crate::theme::Theme;
 use ratatui::{layout::Rect, Frame};
-use std::sync::Arc;
 
 /// Example application using the new component system
 pub struct ComponentBasedUI {
@@ -22,7 +21,7 @@ pub struct ComponentBasedUI {
 impl ComponentBasedUI {
     /// Create a new component-based UI
     pub fn new() -> ComponentResult<Self> {
-        let mut registry = ComponentRegistry::new();
+        let registry = ComponentRegistry::new();
         let layout_manager = LayoutManager::default();
         let services = UIServices::new();
         
@@ -50,9 +49,9 @@ impl ComponentBasedUI {
     }
     
     /// Render the entire UI
-    pub fn render(&mut self, frame: &mut Frame, area: Rect, theme: &Theme) -> ComponentResult<()> {
+    pub fn render(&mut self, frame: &mut Frame, area: Rect, _theme: &Theme) -> ComponentResult<()> {
         // Calculate layout
-        let layout_areas = self.layout_manager.calculate_layout("email_main", area)?;
+        let _layout_areas = self.layout_manager.calculate_layout("email_main", area)?;
         
         // For now, skip both context creation and registry rendering to avoid borrowing issues
         // TODO: Fix RenderContext lifetime issues and implement individual component rendering
@@ -85,9 +84,9 @@ impl ComponentBasedUI {
     }
     
     /// Switch email component mode
-    pub fn set_email_mode(&mut self, mode: EmailComponentMode) -> ComponentResult<()> {
+    pub fn set_email_mode(&mut self, _mode: EmailComponentMode) -> ComponentResult<()> {
         if let Some(id) = self.email_component_id {
-            if let Some(handle) = self.registry.get_mut(id) {
+            if let Some(_handle) = self.registry.get_mut(id) {
                 // TODO: Need to access the underlying component to call set_mode
                 // This would require extending the ComponentHandle API
                 // For now, this is a placeholder
@@ -180,7 +179,7 @@ mod examples {
 
 /// Performance comparison helper
 pub mod performance {
-    use super::*;
+    // Performance comparison utilities
     use std::time::{Duration, Instant};
     
     /// Compare performance between old monolithic approach and new component system
@@ -232,6 +231,7 @@ pub mod performance {
 #[cfg(test)]
 mod performance_tests {
     use super::performance::*;
+    use std::time::Duration;
     
     #[test]
     fn test_performance_comparison() {

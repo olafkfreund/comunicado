@@ -267,9 +267,11 @@ impl HtmlRenderer {
                                 self.flush_current_line(lines, current_line);
                                 let text = element_ref.text().collect::<String>();
                                 if !text.trim().is_empty() {
-                                    let level =
-                                        tag_name.chars().last().unwrap().to_digit(10).unwrap_or(1)
-                                            as usize;
+                                    let level = tag_name
+                                        .chars()
+                                        .last()
+                                        .and_then(|c| c.to_digit(10))
+                                        .unwrap_or(1) as usize;
                                     let style = match level {
                                         1 => Style::default()
                                             .fg(Color::Yellow)
@@ -424,6 +426,55 @@ impl HtmlRenderer {
                                     };
                                     current_line
                                         .push(Span::styled(format!("{} ", text.trim()), style));
+                                }
+                            }
+
+                            "img" => {
+                                // Handle image tags - show placeholder with image info
+                                let src = element_ref.value().attr("src").unwrap_or("");
+                                let alt = element_ref.value().attr("alt").unwrap_or("Image");
+                                
+                                if !src.is_empty() {
+                                    // Determine image type
+                                    let image_type = if src.to_lowercase().contains(".gif") {
+                                        "🎞️ GIF"
+                                    } else if src.to_lowercase().ends_with(".png") {
+                                        "🖼️ PNG"
+                                    } else if src.to_lowercase().ends_with(".jpg") || src.to_lowercase().ends_with(".jpeg") {
+                                        "📷 JPG"
+                                    } else if src.starts_with("data:image/") {
+                                        "📊 Embedded Image"
+                                    } else {
+                                        "🖼️ Image"
+                                    };
+                                    
+                                    // Create a styled placeholder for the image
+                                    current_line.push(Span::styled(
+                                        format!("[{}: {}]", image_type, alt),
+                                        Style::default()
+                                            .fg(Color::Cyan)
+                                            .add_modifier(Modifier::BOLD),
+                                    ));
+                                    
+                                    // Add image URL if it's not a data URL (for reference)
+                                    if !src.starts_with("data:") && src.len() > 50 {
+                                        current_line.push(Span::styled(
+                                            format!(" ({}...)", &src[..47]),
+                                            Style::default()
+                                                .fg(Color::Blue)
+                                                .add_modifier(Modifier::DIM),
+                                        ));
+                                    } else if !src.starts_with("data:") {
+                                        current_line.push(Span::styled(
+                                            format!(" ({})", src),
+                                            Style::default()
+                                                .fg(Color::Blue)
+                                                .add_modifier(Modifier::DIM),
+                                        ));
+                                    }
+                                    
+                                    // Add line break after image for better formatting
+                                    self.flush_current_line(lines, current_line);
                                 }
                             }
 
@@ -805,6 +856,26 @@ mod tests {
 
         // Should have at least one line of content
         assert!(!result.lines.is_empty());
+    }
+
+    #[test]
+    fn test_image_rendering() {
+        let mut renderer = HtmlRenderer::new(80);
+        let html = r#"<p>Check out this image: <img src="https://example.com/test.jpg" alt="Test Image"> and this GIF: <img src="data:image/gif;base64,R0lGODlh" alt="Animated GIF"></p>"#;
+        let result = renderer.render_html(html);
+
+        // Should have content with image placeholders
+        assert!(!result.lines.is_empty());
+        
+        // Convert to string to check content
+        let content = result.lines.iter()
+            .map(|line| line.spans.iter().map(|span| span.content.as_ref()).collect::<String>())
+            .collect::<Vec<String>>()
+            .join("\n");
+        
+        // Should contain image placeholders
+        assert!(content.contains("📷 JPG: Test Image"));
+        assert!(content.contains("📊 Embedded Image: Animated GIF"));
     }
 
     #[test]

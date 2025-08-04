@@ -430,7 +430,7 @@ impl DirectoryScanner {
 mod tests {
     use super::*;
     use tempfile::TempDir;
-    use std::fs::File;
+    use std::fs::{self, File};
     use std::io::Write;
     
     fn create_test_config() -> ScanConfig {

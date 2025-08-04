@@ -3,7 +3,7 @@
 //! Provides a clean separation between UI components and business logic.
 
 use crate::{
-    email::{EmailDatabase, EmailNotificationManager},
+    email::EmailDatabase,
     calendar::CalendarManager,
     contacts::ContactsManager,
     notifications::UnifiedNotificationManager,
@@ -12,7 +12,6 @@ use crate::{
     smtp::SmtpService,
 };
 use std::sync::Arc;
-use tokio::sync::RwLock;
 use uuid::Uuid;
 use thiserror::Error;
 
@@ -267,7 +266,7 @@ impl EmailService {
     }
     
     /// Get messages for a folder
-    pub async fn get_messages(&self, folder_id: &str) -> ServiceResult<Vec<crate::email::StoredMessage>> {
+    pub async fn get_messages(&self, _folder_id: &str) -> ServiceResult<Vec<crate::email::StoredMessage>> {
         // Implementation would fetch messages from database
         // This is a placeholder for the actual implementation
         Ok(Vec::new())

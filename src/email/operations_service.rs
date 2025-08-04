@@ -198,12 +198,13 @@ impl EmailOperationsService {
         // Select folder
         client.select_folder(folder_name).await?;
 
-        // Add Seen flag
+        // Add Seen flag to IMAP server
         let uid_set = message_uid.to_string();
         client.uid_store_flags(&uid_set, &[MessageFlag::Seen], false).await?;
 
-        // Note: Database will be updated on next sync
-        // TODO: Implement proper flag synchronization with database
+        // Update database immediately for consistent state
+        let flags = vec!["\\Seen".to_string()];
+        self.database.update_message_flags(account_id, folder_name, message_uid, flags).await?;
 
         info!("Successfully marked email UID {} as read in {}/{}", message_uid, account_id, folder_name);
         Ok(())
@@ -240,12 +241,13 @@ impl EmailOperationsService {
         // Select folder
         client.select_folder(folder_name).await?;
 
-        // Remove Seen flag
+        // Remove Seen flag from IMAP server
         let uid_set = message_uid.to_string();
         client.uid_remove_flags(&uid_set, &[MessageFlag::Seen]).await?;
 
-        // Note: Database will be updated on next sync
-        // TODO: Implement proper flag synchronization with database
+        // Update database immediately for consistent state
+        let flags: Vec<String> = Vec::new(); // Empty flags means unread
+        self.database.update_message_flags(account_id, folder_name, message_uid, flags).await?;
 
         info!("Successfully marked email UID {} as unread in {}/{}", message_uid, account_id, folder_name);
         Ok(())
@@ -318,16 +320,18 @@ impl EmailOperationsService {
 
         let uid_set = message_uid.to_string();
         
-        if is_flagged {
-            // Remove flag
+        let flags = if is_flagged {
+            // Remove flag from IMAP server
             client.uid_remove_flags(&uid_set, &[MessageFlag::Flagged]).await?;
+            Vec::new() // Empty flags means unflagged
         } else {
-            // Add flag
+            // Add flag to IMAP server
             client.uid_store_flags(&uid_set, &[MessageFlag::Flagged], false).await?;
-        }
+            vec!["\\Flagged".to_string()]
+        };
 
-        // Note: Database will be updated on next sync
-        // TODO: Implement proper flag synchronization with database
+        // Update database immediately for consistent state
+        self.database.update_message_flags(account_id, folder_name, message_uid, flags).await?;
 
         let new_status = !is_flagged;
         info!("Successfully {} email UID {} in {}/{}", 

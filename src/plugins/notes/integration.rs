@@ -205,7 +205,11 @@ pub struct MonitoringStats {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio::time::timeout;
+    use tokio::time::{timeout, sleep};
+    use std::path::Path;
+    use std::fs::File;
+    use std::io::Write;
+    use tempfile::TempDir;
     
     async fn create_test_file(dir: &Path, name: &str, content: &str) -> PathBuf {
         let file_path = dir.join(name);

@@ -7,7 +7,7 @@
 use crate::theme::Theme;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Margin, Rect},
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph},
     Frame,
@@ -28,6 +28,7 @@ pub enum CommandContext {
     EmailList,
     EmailViewer,
     Calendar,
+    Contacts,
     Compose,
     Settings,
     Global, // Always available commands
@@ -47,25 +48,60 @@ pub struct Command {
 /// Actions that commands can perform
 #[derive(Debug, Clone)]
 pub enum CommandAction {
+    // Global actions
     ToggleAIAssistant,
     OpenSettings,
     ComposeEmail,
     SearchEmails,
     ToggleCalendar,
+    ToggleContacts,
     SyncEmails,
     ShowHelp,
     ToggleFolder,
+    ShowKeyboardShortcuts,
+    ChangeTheme,
+    ExportData,
+    ImportData,
+    
+    // Email actions
     MarkAsRead,
     MarkAsUnread,
     DeleteEmail,
     ReplyEmail,
+    ReplyAllEmail,
     ForwardEmail,
+    ArchiveEmail,
+    FlagEmail,
+    MoveEmail,
+    
+    // Calendar actions
     CreateEvent,
     ViewEvent,
-    ExportData,
-    ImportData,
-    ChangeTheme,
-    ShowKeyboardShortcuts,
+    EditEvent,
+    DeleteEvent,
+    CreateTodo,
+    ViewWeek,
+    ViewMonth,
+    ViewDay,
+    SyncCalendar,
+    
+    // Contact actions
+    CreateContact,
+    EditContact,
+    DeleteContact,
+    ViewContact,
+    SearchContacts,
+    ImportContacts,
+    ExportContacts,
+    AddToFavorites,
+    
+    // Compose actions
+    SendEmail,
+    SaveDraft,
+    AttachFile,
+    ToggleFormat,
+    InsertSignature,
+    
     Custom(String), // For extensibility
 }
 
@@ -155,6 +191,22 @@ impl CommandPalette {
                 context: CommandContext::Global,
                 action: CommandAction::SearchEmails,
             },
+            Command {
+                id: "calendar".to_string(),
+                name: "Calendar".to_string(),
+                description: "Open calendar view".to_string(),
+                shortcut: 'l',
+                context: CommandContext::Global,
+                action: CommandAction::ToggleCalendar,
+            },
+            Command {
+                id: "contacts".to_string(),
+                name: "Contacts".to_string(),
+                description: "Open contacts view".to_string(),
+                shortcut: 'o',
+                context: CommandContext::Global,
+                action: CommandAction::ToggleContacts,
+            },
         ];
         
         // Email list specific commands
@@ -183,6 +235,30 @@ impl CommandPalette {
                 context: CommandContext::EmailList,
                 action: CommandAction::DeleteEmail,
             },
+            Command {
+                id: "archive".to_string(),
+                name: "Archive Email".to_string(),
+                description: "Archive selected email".to_string(),
+                shortcut: 'e',
+                context: CommandContext::EmailList,
+                action: CommandAction::ArchiveEmail,
+            },
+            Command {
+                id: "flag".to_string(),
+                name: "Flag Email".to_string(),
+                description: "Flag selected email".to_string(),
+                shortcut: 'g',
+                context: CommandContext::EmailList,
+                action: CommandAction::FlagEmail,
+            },
+            Command {
+                id: "move".to_string(),
+                name: "Move Email".to_string(),
+                description: "Move selected email to folder".to_string(),
+                shortcut: 'm',
+                context: CommandContext::EmailList,
+                action: CommandAction::MoveEmail,
+            },
         ];
         
         // Email viewer specific commands
@@ -196,12 +272,36 @@ impl CommandPalette {
                 action: CommandAction::ReplyEmail,
             },
             Command {
+                id: "reply_all".to_string(),
+                name: "Reply All".to_string(),
+                description: "Reply to all recipients".to_string(),
+                shortcut: 'e',
+                context: CommandContext::EmailViewer,
+                action: CommandAction::ReplyAllEmail,
+            },
+            Command {
                 id: "forward".to_string(),
                 name: "Forward".to_string(),
                 description: "Forward this email".to_string(),
                 shortcut: 'w',
                 context: CommandContext::EmailViewer,
                 action: CommandAction::ForwardEmail,
+            },
+            Command {
+                id: "delete_viewer".to_string(),
+                name: "Delete".to_string(),
+                description: "Delete this email".to_string(),
+                shortcut: 'd',
+                context: CommandContext::EmailViewer,
+                action: CommandAction::DeleteEmail,
+            },
+            Command {
+                id: "archive_viewer".to_string(),
+                name: "Archive".to_string(),
+                description: "Archive this email".to_string(),
+                shortcut: 'v',
+                context: CommandContext::EmailViewer,
+                action: CommandAction::ArchiveEmail,
             },
         ];
         
@@ -223,12 +323,182 @@ impl CommandPalette {
                 context: CommandContext::Calendar,
                 action: CommandAction::ViewEvent,
             },
+            Command {
+                id: "edit_event".to_string(),
+                name: "Edit Event".to_string(),
+                description: "Edit selected calendar event".to_string(),
+                shortcut: 'e',
+                context: CommandContext::Calendar,
+                action: CommandAction::EditEvent,
+            },
+            Command {
+                id: "delete_event".to_string(),
+                name: "Delete Event".to_string(),
+                description: "Delete selected calendar event".to_string(),
+                shortcut: 'd',
+                context: CommandContext::Calendar,
+                action: CommandAction::DeleteEvent,
+            },
+            Command {
+                id: "create_todo".to_string(),
+                name: "Create Todo".to_string(),
+                description: "Create a new todo item".to_string(),
+                shortcut: 't',
+                context: CommandContext::Calendar,
+                action: CommandAction::CreateTodo,
+            },
+            Command {
+                id: "view_day".to_string(),
+                name: "Day View".to_string(),
+                description: "Switch to day view".to_string(),
+                shortcut: 'j',
+                context: CommandContext::Calendar,
+                action: CommandAction::ViewDay,
+            },
+            Command {
+                id: "view_week".to_string(),
+                name: "Week View".to_string(),
+                description: "Switch to week view".to_string(),
+                shortcut: 'w',
+                context: CommandContext::Calendar,
+                action: CommandAction::ViewWeek,
+            },
+            Command {
+                id: "view_month".to_string(),
+                name: "Month View".to_string(),
+                description: "Switch to month view".to_string(),
+                shortcut: 'm',
+                context: CommandContext::Calendar,
+                action: CommandAction::ViewMonth,
+            },
+            Command {
+                id: "sync_calendar".to_string(),
+                name: "Sync Calendar".to_string(),
+                description: "Synchronize calendar data".to_string(),
+                shortcut: 'y',
+                context: CommandContext::Calendar,
+                action: CommandAction::SyncCalendar,
+            },
+        ];
+        
+        // Contacts specific commands
+        let contacts_commands = vec![
+            Command {
+                id: "create_contact".to_string(),
+                name: "Create Contact".to_string(),
+                description: "Create a new contact".to_string(),
+                shortcut: 'n',
+                context: CommandContext::Contacts,
+                action: CommandAction::CreateContact,
+            },
+            Command {
+                id: "edit_contact".to_string(),
+                name: "Edit Contact".to_string(),
+                description: "Edit selected contact".to_string(),
+                shortcut: 'e',
+                context: CommandContext::Contacts,
+                action: CommandAction::EditContact,
+            },
+            Command {
+                id: "delete_contact".to_string(),
+                name: "Delete Contact".to_string(),
+                description: "Delete selected contact".to_string(),
+                shortcut: 'd',
+                context: CommandContext::Contacts,
+                action: CommandAction::DeleteContact,
+            },
+            Command {
+                id: "view_contact".to_string(),
+                name: "View Contact".to_string(),
+                description: "View contact details".to_string(),
+                shortcut: 'v',
+                context: CommandContext::Contacts,
+                action: CommandAction::ViewContact,
+            },
+            Command {
+                id: "search_contacts".to_string(),
+                name: "Search Contacts".to_string(),
+                description: "Search through contacts".to_string(),
+                shortcut: 'f',
+                context: CommandContext::Contacts,
+                action: CommandAction::SearchContacts,
+            },
+            Command {
+                id: "import_contacts".to_string(),
+                name: "Import Contacts".to_string(),
+                description: "Import contacts from file".to_string(),
+                shortcut: 'i',
+                context: CommandContext::Contacts,
+                action: CommandAction::ImportContacts,
+            },
+            Command {
+                id: "export_contacts".to_string(),
+                name: "Export Contacts".to_string(),
+                description: "Export contacts to file".to_string(),
+                shortcut: 'x',
+                context: CommandContext::Contacts,
+                action: CommandAction::ExportContacts,
+            },
+            Command {
+                id: "add_favorite".to_string(),
+                name: "Add to Favorites".to_string(),
+                description: "Add contact to favorites".to_string(),
+                shortcut: 'g',
+                context: CommandContext::Contacts,
+                action: CommandAction::AddToFavorites,
+            },
+        ];
+        
+        // Compose specific commands
+        let compose_commands = vec![
+            Command {
+                id: "send_email".to_string(),
+                name: "Send Email".to_string(),
+                description: "Send the composed email".to_string(),
+                shortcut: 's',
+                context: CommandContext::Compose,
+                action: CommandAction::SendEmail,
+            },
+            Command {
+                id: "save_draft".to_string(),
+                name: "Save Draft".to_string(),
+                description: "Save email as draft".to_string(),
+                shortcut: 'd',
+                context: CommandContext::Compose,
+                action: CommandAction::SaveDraft,
+            },
+            Command {
+                id: "attach_file".to_string(),
+                name: "Attach File".to_string(),
+                description: "Attach a file to email".to_string(),
+                shortcut: 'a',
+                context: CommandContext::Compose,
+                action: CommandAction::AttachFile,
+            },
+            Command {
+                id: "toggle_format".to_string(),
+                name: "Toggle Format".to_string(),
+                description: "Toggle between HTML and plain text".to_string(),
+                shortcut: 't',
+                context: CommandContext::Compose,
+                action: CommandAction::ToggleFormat,
+            },
+            Command {
+                id: "insert_signature".to_string(),
+                name: "Insert Signature".to_string(),
+                description: "Insert email signature".to_string(),
+                shortcut: 'g',
+                context: CommandContext::Compose,
+                action: CommandAction::InsertSignature,
+            },
         ];
         
         self.commands.insert(CommandContext::Global, global_commands);
         self.commands.insert(CommandContext::EmailList, email_list_commands);
         self.commands.insert(CommandContext::EmailViewer, email_viewer_commands);
         self.commands.insert(CommandContext::Calendar, calendar_commands);
+        self.commands.insert(CommandContext::Contacts, contacts_commands);
+        self.commands.insert(CommandContext::Compose, compose_commands);
     }
     
     /// Show the command palette
@@ -258,14 +528,17 @@ impl CommandPalette {
     fn update_filtered_commands(&mut self) {
         let mut commands = Vec::new();
         
-        // Always include global commands
-        if let Some(global_cmds) = self.commands.get(&CommandContext::Global) {
-            commands.extend(global_cmds.clone());
-        }
-        
-        // Add context-specific commands
+        // Add context-specific commands first
         if let Some(context_cmds) = self.commands.get(&self.current_context) {
             commands.extend(context_cmds.clone());
+        }
+        
+        // Add global commands only if we're not already in Global context
+        // This prevents duplicates when current_context is Global
+        if self.current_context != CommandContext::Global {
+            if let Some(global_cmds) = self.commands.get(&CommandContext::Global) {
+                commands.extend(global_cmds.clone());
+            }
         }
         
         // Filter by search query if present
@@ -352,63 +625,68 @@ impl CommandPalette {
         // Clear the background
         frame.render_widget(Clear, popup_area);
         
-        // Create the main block
+        // Create the main block - context menu style
         let block = Block::default()
-            .title(" Command Palette (Ctrl+D) ")
+            .title(" Commands ")
             .borders(Borders::ALL)
             .border_style(Style::default().fg(theme.colors.palette.accent))
             .style(Style::default().bg(theme.colors.palette.background));
             
         frame.render_widget(block, popup_area);
         
-        // Layout for content
+        // Layout for content - more compact context menu style
         let inner_area = popup_area.inner(&Margin::new(1, 1));
-        let chunks = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Length(2), // Header
-                Constraint::Min(5),    // Command list
-                Constraint::Length(2), // Footer
-            ])
-            .split(inner_area);
         
-        // Render header
-        self.render_header(frame, chunks[0], theme);
-        
-        // Render command list
-        self.render_command_list(frame, chunks[1], theme);
-        
-        // Render footer
-        self.render_footer(frame, chunks[2], theme);
+        // Skip header/footer for compact context menu - just show commands
+        if inner_area.height > 6 {
+            // If we have enough space, show minimal header and commands
+            let chunks = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([
+                    Constraint::Length(1), // Minimal header
+                    Constraint::Min(3),    // Command list (most space)
+                    Constraint::Length(1), // Minimal footer
+                ])
+                .split(inner_area);
+            
+            self.render_compact_header(frame, chunks[0], theme);
+            self.render_command_list(frame, chunks[1], theme);
+            self.render_compact_footer(frame, chunks[2], theme);
+        } else {
+            // Very compact - just show commands
+            self.render_command_list(frame, inner_area, theme);
+        }
     }
     
-    /// Render the header section
-    fn render_header(&self, frame: &mut Frame, area: Rect, theme: &Theme) {
+    /// Render compact header for context menu
+    fn render_compact_header(&self, frame: &mut Frame, area: Rect, theme: &Theme) {
         let context_name = match self.current_context {
-            CommandContext::EmailList => "Email List",
-            CommandContext::EmailViewer => "Email Viewer", 
+            CommandContext::EmailList => "Email",
+            CommandContext::EmailViewer => "View", 
             CommandContext::Calendar => "Calendar",
+            CommandContext::Contacts => "Contacts",
             CommandContext::Compose => "Compose",
             CommandContext::Settings => "Settings",
             CommandContext::Global => "Global",
         };
         
-        let text = format!("Context: {} | {} commands available", 
-                          context_name, self.filtered_commands.len());
+        let text = format!("{} ({})", context_name, self.filtered_commands.len());
         
         let paragraph = Paragraph::new(text)
             .style(Style::default()
                 .fg(theme.colors.palette.text_secondary)
-                .add_modifier(Modifier::ITALIC))
+                .add_modifier(Modifier::DIM))
             .alignment(Alignment::Center);
             
         frame.render_widget(paragraph, area);
     }
+
     
-    /// Render the command list
+    /// Render the command list - compact context menu style
     fn render_command_list(&mut self, frame: &mut Frame, area: Rect, theme: &Theme) {
         let items: Vec<ListItem> = self.filtered_commands
             .iter()
+            .take(area.height.saturating_sub(1) as usize) // Limit to visible area
             .map(|command| {
                 let shortcut_style = Style::default()
                     .fg(theme.colors.palette.accent)
@@ -416,14 +694,24 @@ impl CommandPalette {
                     
                 let name_style = Style::default()
                     .fg(theme.colors.palette.text_primary);
-                    
+                
+                // More compact format - shorter descriptions for context menu
+                let desc_preview = if command.description.len() > 20 {
+                    format!("{}…", &command.description[..17])
+                } else {
+                    command.description.clone()
+                };
+                
                 let desc_style = Style::default()
-                    .fg(theme.colors.palette.text_secondary);
+                    .fg(theme.colors.palette.text_secondary)
+                    .add_modifier(Modifier::DIM);
                 
                 let line = Line::from(vec![
-                    Span::styled(format!(" {} ", command.shortcut.to_uppercase()), shortcut_style),
+                    Span::styled(format!("{}", command.shortcut.to_uppercase()), shortcut_style),
+                    Span::raw(" "),
                     Span::styled(format!("{}", command.name), name_style),
-                    Span::styled(format!(" - {}", command.description), desc_style),
+                    Span::raw(" "),
+                    Span::styled(format!("{}", desc_preview), desc_style),
                 ]);
                 
                 ListItem::new(line)
@@ -435,31 +723,49 @@ impl CommandPalette {
                 .bg(theme.colors.palette.accent)
                 .fg(theme.colors.palette.background)
                 .add_modifier(Modifier::BOLD))
-            .highlight_symbol("► ");
+            .highlight_symbol("▶ ");
             
         frame.render_stateful_widget(list, area, &mut self.list_state);
     }
     
-    /// Render the footer section
-    fn render_footer(&self, frame: &mut Frame, area: Rect, theme: &Theme) {
-        let text = "Press letter key to execute • ↑↓ to navigate • Enter to execute • Esc to close";
+    /// Render compact footer for context menu
+    fn render_compact_footer(&self, frame: &mut Frame, area: Rect, theme: &Theme) {
+        let text = "Key: select • ↑↓: nav • Esc: close";
         
         let paragraph = Paragraph::new(text)
             .style(Style::default()
                 .fg(theme.colors.palette.text_secondary)
-                .add_modifier(Modifier::ITALIC))
+                .add_modifier(Modifier::DIM))
             .alignment(Alignment::Center);
             
         frame.render_widget(paragraph, area);
     }
+
     
-    /// Calculate popup area (centered, 60% width, 70% height)
+    /// Calculate popup area for context menu style (smaller, positioned contextually)
     fn get_popup_area(&self, area: Rect) -> Rect {
-        let popup_width = area.width.saturating_mul(60) / 100;
-        let popup_height = area.height.saturating_mul(70) / 100;
+        // Context menu style - much smaller and more compact
+        let max_commands = self.filtered_commands.len().min(12); // Show max 12 commands
+        let content_height = max_commands + 3; // Commands + header + footer + borders
         
-        let x = area.x + (area.width.saturating_sub(popup_width)) / 2;
-        let y = area.y + (area.height.saturating_sub(popup_height)) / 2;
+        // Width based on longest command name, but with reasonable limits
+        let max_command_width = self.filtered_commands
+            .iter()
+            .map(|cmd| cmd.name.len() + cmd.description.len() + 8) // 8 for formatting
+            .max()
+            .unwrap_or(30);
+        
+        let popup_width = ((max_command_width + 4).min(60).max(35) as u16).min(area.width); // 35-60 char width
+        let popup_height = ((content_height + 2).min(16).max(8) as u16).min(area.height); // 8-16 rows height
+        
+        // Position slightly off-center, more like a context menu
+        // Place it in upper-right area to feel more contextual
+        let x = area.x + (area.width.saturating_mul(60) / 100).saturating_sub(popup_width);
+        let y = area.y + (area.height / 6); // Upper portion of screen
+        
+        // Ensure it fits within screen bounds
+        let x = x.min(area.width.saturating_sub(popup_width));
+        let y = y.min(area.height.saturating_sub(popup_height));
         
         Rect::new(x, y, popup_width, popup_height)
     }

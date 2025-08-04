@@ -725,6 +725,34 @@ impl EmailDatabase {
         Ok(())
     }
 
+    /// Update message flags by IMAP UID
+    pub async fn update_message_flags(
+        &self,
+        account_id: &str,
+        folder_name: &str,
+        imap_uid: u32,
+        flags: Vec<String>,
+    ) -> DatabaseResult<()> {
+        let now = chrono::Utc::now().to_rfc3339();
+        
+        sqlx::query(r"
+            UPDATE messages SET
+                flags = ?1,
+                updated_at = ?2
+            WHERE account_id = ?3 AND folder_name = ?4 AND imap_uid = ?5
+        ")
+        .bind(serde_json::to_string(&flags)?)
+        .bind(&now)
+        .bind(account_id)
+        .bind(folder_name)
+        .bind(imap_uid as i64)
+        .execute(&self.pool)
+        .await?;
+
+        tracing::debug!("Updated flags for message UID {} in {}/{}", imap_uid, account_id, folder_name);
+        Ok(())
+    }
+
     /// Get messages from a folder
     pub async fn get_messages(
         &self,
@@ -829,10 +857,10 @@ impl EmailDatabase {
                 email: row.get("email"),
                 provider: row.get("provider"),
                 created_at: chrono::DateTime::parse_from_rfc3339(&row.get::<String, _>("created_at"))
-                    .unwrap()
+                    .map_err(DatabaseError::DateParse)?
                     .with_timezone(&chrono::Utc),
                 updated_at: chrono::DateTime::parse_from_rfc3339(&row.get::<String, _>("updated_at"))
-                    .unwrap()
+                    .map_err(DatabaseError::DateParse)?
                     .with_timezone(&chrono::Utc),
             });
         }
@@ -1652,7 +1680,8 @@ impl StoredMessage {
             let uid = imap_message.uid.unwrap_or(0);
             let id_string = format!("{}:{}:{}", account_id, folder_name, uid);
             // Use a deterministic UUID based on the combination
-            let namespace = Uuid::parse_str("6ba7b810-9dad-11d1-80b4-00c04fd430c8").unwrap();
+            let namespace = Uuid::parse_str("6ba7b810-9dad-11d1-80b4-00c04fd430c8")
+                .expect("Hardcoded UUID should always be valid");
             Uuid::new_v5(&namespace, id_string.as_bytes())
         };
 

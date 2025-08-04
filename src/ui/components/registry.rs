@@ -473,6 +473,7 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
     
     // Test component implementation
+    #[derive(Debug)]
     struct TestComponent {
         id: ComponentId,
         name: String,
@@ -506,7 +507,7 @@ mod tests {
             self.state
         }
         
-        fn render(&mut self, _context: RenderContext<'_>) -> ComponentResult<()> {
+        fn render(&mut self, _context: &mut RenderContext<'_>) -> ComponentResult<()> {
             self.render_count.fetch_add(1, Ordering::Relaxed);
             Ok(())
         }

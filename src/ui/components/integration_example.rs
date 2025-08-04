@@ -333,7 +333,7 @@ pub mod performance_demo {
 #[allow(dead_code)]
 async fn example_main() -> Result<(), Box<dyn std::error::Error>> {
     use crossterm::{
-        event::{self, DisableMouseCapture, EnableMouseCapture, Event},
+        event::{self, DisableMouseCapture, EnableMouseCapture},
         execute,
         terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     };

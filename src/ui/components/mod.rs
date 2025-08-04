@@ -31,8 +31,6 @@ pub use modular_ui::{ModularUI, AppMode, ModularUIMetrics};
 
 use std::any::TypeId;
 use uuid::Uuid;
-use ratatui::{layout::Rect, Frame};
-use crate::theme::Theme;
 
 /// Unique identifier for UI components
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

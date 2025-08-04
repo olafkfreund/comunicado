@@ -483,6 +483,7 @@ mod tests {
     use super::*;
     use tempfile::TempDir;
     use std::fs::File;
+    use tokio::time::sleep;
 
     fn create_test_config() -> WatcherConfig {
         WatcherConfig {

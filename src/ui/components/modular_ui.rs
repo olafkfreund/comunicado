@@ -4,8 +4,8 @@
 
 use super::{
     ComponentRegistry, UIServices, LayoutManager, EmailComponent, CalendarComponent, 
-    ContactsComponent, ComponentId, ComponentState, UIComponent, ComponentResult,
-    RenderContext, UIEvent, EventResult, ComponentMetrics, LayoutSpec, LayoutTemplate,
+    ContactsComponent, ComponentId, UIComponent, ComponentResult,
+    UIEvent, EventResult, ComponentMetrics, LayoutSpec, LayoutTemplate,
 };
 use crate::{
     theme::Theme,
@@ -20,7 +20,7 @@ use crate::{
 use ratatui::{layout::Rect, Frame, style::{Style, Modifier}};
 use std::sync::Arc;
 use std::collections::HashMap;
-use crossterm::event::{KeyCode, KeyEvent};
+use crossterm::event::KeyCode;
 
 /// Application modes for the modular UI
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -543,7 +543,7 @@ impl ModularUI {
     /// Render help overlay
     fn render_help_overlay(&self, frame: &mut Frame, area: Rect, theme: &Theme) {
         use ratatui::widgets::{Block, Borders, Paragraph, Clear};
-        use ratatui::layout::{Layout, Constraint, Direction, Alignment, Margin};
+        use ratatui::layout::{Alignment, Margin};
         
         let popup_area = area.inner(&Margin { vertical: 4, horizontal: 8 });
         
@@ -578,7 +578,7 @@ impl ModularUI {
     /// Render settings overlay
     fn render_settings_overlay(&self, frame: &mut Frame, area: Rect, theme: &Theme) {
         use ratatui::widgets::{Block, Borders, Paragraph, Clear};
-        use ratatui::layout::{Layout, Constraint, Direction, Alignment, Margin};
+        use ratatui::layout::{Alignment, Margin};
         
         let popup_area = area.inner(&Margin { vertical: 4, horizontal: 8 });
         

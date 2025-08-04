@@ -3,22 +3,20 @@
 //! Implements a modular calendar component with multi-view support and event management.
 
 use super::{
-    ComponentId, ComponentState, UIComponent, ComponentError, ComponentResult,
+    ComponentId, ComponentState, UIComponent, ComponentResult, ComponentError,
     RenderContext, UIEvent, EventResult, ComponentMetrics,
 };
 use crate::{
-    calendar::{Event, EventPriority, EventStatus, Calendar, CalendarManager},
-    theme::Theme,
+    calendar::{Event, Calendar, CalendarManager},
 };
-use chrono::{DateTime, Datelike, Duration, Local, NaiveDate, Timelike, Utc};
+use chrono::{DateTime, Datelike, Duration, Local, NaiveDate};
 use ratatui::{
-    layout::{Alignment, Constraint, Direction, Layout, Margin, Rect},
-    style::{Color, Modifier, Style},
-    text::{Line, Span, Text},
-    widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Tabs, Wrap},
-    Frame,
+    layout::{Alignment, Constraint, Direction, Layout, Rect},
+    style::{Modifier, Style},
+    text::Line,
+    widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Tabs},
 };
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::{Duration as StdDuration, Instant};
 use crossterm::event::{KeyCode, KeyEvent};
@@ -388,7 +386,8 @@ impl CalendarComponent {
         lines.push(Line::from("Su  Mo  Tu  We  Th  Fr  Sa"));
         
         // Get first day of month and calculate grid
-        let first_day = self.current_date.with_day(1).unwrap();
+        let first_day = self.current_date.with_day(1)
+            .ok_or_else(|| ComponentError::RenderFailed("Invalid date: cannot get first day of month".to_string()))?;
         let days_in_month = first_day.with_day(32).unwrap_or(first_day).day() - 1;
         let start_weekday = first_day.weekday().num_days_from_sunday() as usize;
         

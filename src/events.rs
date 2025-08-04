@@ -17,6 +17,7 @@ pub enum EventResult {
     ComposeAction(ComposeAction),
     DraftAction(DraftAction),
     CommandAction(CommandAction), // Command palette action
+    TriggerEmailSync, // Trigger manual email sync
     AccountSwitch(String),  // Account ID to switch to
     AddAccount,             // Launch account setup wizard
     RemoveAccount(String),  // Account ID to remove
@@ -167,6 +168,64 @@ impl EventHandler {
                     return EventResult::Continue;
                 }
                 _ => {} // Fall through to keyboard manager for other keys
+            }
+        }
+
+        // Handle AI Assistant navigation if it's visible and enabled
+        if ui.ai_assistant_state().enabled {
+            use crate::ui::ai_assistant_ui::AIAssistantMode;
+            if ui.ai_assistant_state().mode != AIAssistantMode::Hidden {
+                match key.code {
+                    KeyCode::Up | KeyCode::Char('k') => {
+                        ui.ai_assistant_state_mut().move_up();
+                        return EventResult::Continue;
+                    }
+                    KeyCode::Down | KeyCode::Char('j') => {
+                        ui.ai_assistant_state_mut().move_down();
+                        return EventResult::Continue;
+                    }
+                    KeyCode::Enter => {
+                        // Use the selected suggestion
+                        if let Some(suggestion) = ui.ai_assistant_state().get_selected_suggestion() {
+                            // Handle different modes appropriately
+                            match ui.ai_assistant_state().mode {
+                                AIAssistantMode::Compose => {
+                                    // For compose mode, we could insert the suggestion into the compose field
+                                    // For now, just show a toast message
+                                    ui.show_toast_info(format!("Selected suggestion: {}", 
+                                        if suggestion.len() > 50 {
+                                            format!("{}...", &suggestion[..47])
+                                        } else {
+                                            suggestion
+                                        }
+                                    ));
+                                }
+                                AIAssistantMode::Reply => {
+                                    // For reply mode, start a reply with the suggestion
+                                    ui.show_toast_info(format!("Reply suggestion: {}", 
+                                        if suggestion.len() > 50 {
+                                            format!("{}...", &suggestion[..47])
+                                        } else {
+                                            suggestion
+                                        }
+                                    ));
+                                }
+                                _ => {
+                                    ui.show_toast_info("AI suggestion selected".to_string());
+                                }
+                            }
+                        }
+                        return EventResult::Continue;
+                    }
+                    KeyCode::Esc => {
+                        // Hide the AI assistant
+                        ui.ai_assistant_state_mut().hide();
+                        return EventResult::Continue;
+                    }
+                    _ => {
+                        // Let other keys fall through
+                    }
+                }
             }
         }
 

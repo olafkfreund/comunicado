@@ -22,7 +22,6 @@ use ratatui::{
 };
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use uuid::Uuid;
 use crossterm::event::{KeyCode, KeyEvent};
 
 /// Email component state
@@ -300,7 +299,7 @@ impl EmailComponent {
         match key.code {
             KeyCode::Enter => {
                 // Open selected message in viewer
-                if let Some(selected_message) = self.selected_message.clone() {
+                if let Some(_selected_message) = self.selected_message.clone() {
                     self.set_mode(EmailComponentMode::EmailViewer)?;
                     Ok(EventResult::Handled)
                 } else {
