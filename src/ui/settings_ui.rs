@@ -424,6 +424,7 @@ impl SettingsUI {
             SettingsTab::General => self.apply_general_edit(value),
             SettingsTab::UI => self.apply_ui_edit(value),
             SettingsTab::Performance => self.apply_performance_edit(value),
+            SettingsTab::AI => self.apply_ai_edit(value),
             _ => {}
         }
         self.state.modified = true;
@@ -505,6 +506,21 @@ impl SettingsUI {
                 }
             }
             _ => {}
+        }
+    }
+
+    fn apply_ai_edit(&mut self, value: String) {
+        match self.state.selected_index {
+            1 => { // AI Provider
+                if !value.trim().is_empty() {
+                    self.state.set_status(format!("AI provider set to '{}'", value.trim()));
+                } else {
+                    self.state.set_status("AI provider cannot be empty".to_string());
+                }
+            }
+            _ => {
+                self.state.set_status("This AI setting is not editable".to_string());
+            }
         }
     }
 
