@@ -569,6 +569,7 @@ impl NotesDatabase {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::plugins::notes::NoteFrontmatter;
     use tempfile::TempDir;
 
     async fn create_test_database() -> NotesDatabase {
