@@ -714,10 +714,8 @@ impl KeyboardConfig {
             KeyboardShortcut::ctrl(KeyCode::Char('m')),
             KeyboardAction::ShowEmail,
         );
-        self.shortcuts.insert(
-            KeyboardShortcut::simple(KeyCode::Char('e')),
-            KeyboardAction::CreateEvent,
-        );
+        // 'e' for CreateEvent is now handled context-sensitively in event handler
+        // No global binding to avoid conflicts with settings UI
         self.shortcuts.insert(
             KeyboardShortcut::ctrl(KeyCode::Char('e')),
             KeyboardAction::EditEvent,

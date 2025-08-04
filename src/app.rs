@@ -1692,6 +1692,7 @@ impl App {
                     // Handle the event result
                     match event_result {
                         EventResult::Continue => {}
+                        EventResult::Handled => {} // Key was handled by mode-specific handler
                         EventResult::ComposeAction(action) => {
                             self.handle_compose_action(action).await?;
                         }

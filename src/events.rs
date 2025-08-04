@@ -14,6 +14,7 @@ pub struct EventHandler {
 #[derive(Debug, Clone)]
 pub enum EventResult {
     Continue,
+    Handled, // Key was handled by mode-specific handler, stop further processing
     ComposeAction(ComposeAction),
     DraftAction(DraftAction),
     CommandAction(CommandAction), // Command palette action
@@ -1867,7 +1868,7 @@ impl EventHandler {
     async fn handle_settings_keys(&mut self, key: KeyEvent, ui: &mut UI) -> EventResult {
         // First try to handle key with the settings UI
         if ui.settings_ui_mut().handle_key(key.code, key.modifiers) {
-            return EventResult::Continue;
+            return EventResult::Handled;
         }
 
         // If settings UI didn't handle it, check for global close keys
