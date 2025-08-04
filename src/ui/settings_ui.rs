@@ -439,7 +439,12 @@ impl SettingsUI {
             1 => { // Sync interval
                 if let Ok(interval) = value.parse::<u64>() {
                     if interval >= 1 && interval <= 1440 { // 1 minute to 24 hours
-                        self.state.set_status(format!("Sync interval set to {} minutes", interval));
+                        self.config.general.sync_interval_minutes = interval;
+                        if let Err(e) = self.config.save() {
+                            self.state.set_status(format!("Failed to save config: {}", e));
+                        } else {
+                            self.state.set_status(format!("Sync interval set to {} minutes", interval));
+                        }
                     } else {
                         self.state.set_status("Sync interval must be between 1 and 1440 minutes".to_string());
                     }
@@ -450,7 +455,12 @@ impl SettingsUI {
             4 => { // Max concurrent syncs
                 if let Ok(count) = value.parse::<u32>() {
                     if count >= 1 && count <= 10 {
-                        self.state.set_status(format!("Max concurrent syncs set to {}", count));
+                        self.config.general.max_concurrent_syncs = count;
+                        if let Err(e) = self.config.save() {
+                            self.state.set_status(format!("Failed to save config: {}", e));
+                        } else {
+                            self.state.set_status(format!("Max concurrent syncs set to {}", count));
+                        }
                     } else {
                         self.state.set_status("Max concurrent syncs must be between 1 and 10".to_string());
                     }
@@ -459,7 +469,35 @@ impl SettingsUI {
                 }
             }
             5 => { // Default folder
-                self.state.set_status(format!("Default folder set to '{}'", value));
+                if !value.trim().is_empty() {
+                    self.config.general.default_folder = value.trim().to_string();
+                    if let Err(e) = self.config.save() {
+                        self.state.set_status(format!("Failed to save config: {}", e));
+                    } else {
+                        self.state.set_status(format!("Default folder set to '{}'", value.trim()));
+                    }
+                } else {
+                    self.state.set_status("Default folder cannot be empty".to_string());
+                }
+            }
+            8 => { // Thread grouping
+                use crate::config::ThreadGrouping;
+                let grouping = match value.trim().to_lowercase().as_str() {
+                    "subject" => ThreadGrouping::Subject,
+                    "references" => ThreadGrouping::References,
+                    "messageid" => ThreadGrouping::MessageId,
+                    "none" => ThreadGrouping::None,
+                    _ => {
+                        self.state.set_status("Thread grouping must be one of: Subject, References, MessageId, None".to_string());
+                        return;
+                    }
+                };
+                self.config.general.thread_grouping = grouping;
+                if let Err(e) = self.config.save() {
+                    self.state.set_status(format!("Failed to save config: {}", e));
+                } else {
+                    self.state.set_status(format!("Thread grouping set to {:?}", grouping));
+                }
             }
             _ => {}
         }
@@ -470,12 +508,30 @@ impl SettingsUI {
             4 => { // Font size
                 if let Ok(size) = value.parse::<u16>() {
                     if size >= 8 && size <= 24 {
-                        self.state.set_status(format!("Font size set to {}", size));
+                        self.config.ui.font_size = size;
+                        if let Err(e) = self.config.save() {
+                            self.state.set_status(format!("Failed to save config: {}", e));
+                        } else {
+                            self.state.set_status(format!("Font size set to {}", size));
+                        }
                     } else {
                         self.state.set_status("Font size must be between 8 and 24".to_string());
                     }
                 } else {
                     self.state.set_status("Invalid font size".to_string());
+                }
+            }
+            6 => { // Layout
+                let layouts = ["Standard", "Compact", "Wide"];
+                if layouts.contains(&value.trim()) {
+                    self.config.ui.layout = value.trim().to_string();
+                    if let Err(e) = self.config.save() {
+                        self.state.set_status(format!("Failed to save config: {}", e));
+                    } else {
+                        self.state.set_status(format!("Layout set to {}", value.trim()));
+                    }
+                } else {
+                    self.state.set_status("Layout must be one of: Standard, Compact, Wide".to_string());
                 }
             }
             _ => {}
@@ -533,34 +589,70 @@ impl SettingsUI {
         }
     }
 
-    // Placeholder methods for setting actions
+    // Real setting actions with config persistence
     fn toggle_auto_sync(&mut self) {
-        self.state.set_status("Auto-sync toggled".to_string());
+        self.config.general.auto_sync = !self.config.general.auto_sync;
+        let status = if self.config.general.auto_sync { "enabled" } else { "disabled" };
+        if let Err(e) = self.config.save() {
+            self.state.set_status(format!("Failed to save config: {}", e));
+        } else {
+            self.state.set_status(format!("Auto-sync {}", status));
+        }
         self.state.modified = true;
     }
 
     fn toggle_startup_fetch(&mut self) {
-        self.state.set_status("Startup fetch toggled".to_string());
+        self.config.general.fetch_on_startup = !self.config.general.fetch_on_startup;
+        let status = if self.config.general.fetch_on_startup { "enabled" } else { "disabled" };
+        if let Err(e) = self.config.save() {
+            self.state.set_status(format!("Failed to save config: {}", e));
+        } else {
+            self.state.set_status(format!("Startup fetch {}", status));
+        }
         self.state.modified = true;
     }
 
     fn toggle_confirm_delete(&mut self) {
-        self.state.set_status("Delete confirmation toggled".to_string());
+        self.config.general.confirm_delete = !self.config.general.confirm_delete;
+        let status = if self.config.general.confirm_delete { "enabled" } else { "disabled" };
+        if let Err(e) = self.config.save() {
+            self.state.set_status(format!("Failed to save config: {}", e));
+        } else {
+            self.state.set_status(format!("Delete confirmation {}", status));
+        }
         self.state.modified = true;
     }
 
     fn toggle_show_notifications(&mut self) {
-        self.state.set_status("Notifications toggled".to_string());
+        self.config.general.show_notifications = !self.config.general.show_notifications;
+        let status = if self.config.general.show_notifications { "enabled" } else { "disabled" };
+        if let Err(e) = self.config.save() {
+            self.state.set_status(format!("Failed to save config: {}", e));
+        } else {
+            self.state.set_status(format!("Notifications {}", status));
+        }
         self.state.modified = true;
     }
 
     fn toggle_mark_read_on_reply(&mut self) {
-        self.state.set_status("Mark read on reply toggled".to_string());
+        self.config.general.mark_read_on_reply = !self.config.general.mark_read_on_reply;
+        let status = if self.config.general.mark_read_on_reply { "enabled" } else { "disabled" };
+        if let Err(e) = self.config.save() {
+            self.state.set_status(format!("Failed to save config: {}", e));
+        } else {
+            self.state.set_status(format!("Mark read on reply {}", status));
+        }
         self.state.modified = true;
     }
 
     fn toggle_incremental_sync(&mut self) {
-        self.state.set_status("Incremental sync mode toggled".to_string());
+        self.config.general.incremental_sync = !self.config.general.incremental_sync;
+        let status = if self.config.general.incremental_sync { "enabled" } else { "disabled" };
+        if let Err(e) = self.config.save() {
+            self.state.set_status(format!("Failed to save config: {}", e));
+        } else {
+            self.state.set_status(format!("Incremental sync {}", status));
+        }
         self.state.modified = true;
     }
 
@@ -589,27 +681,60 @@ impl SettingsUI {
     }
 
     fn cycle_theme(&mut self) {
-        self.state.set_status("Theme changed".to_string());
+        let themes = ["Dark", "Light", "Auto"];
+        let current_index = themes.iter().position(|&t| t == self.config.ui.theme).unwrap_or(0);
+        let next_index = (current_index + 1) % themes.len();
+        self.config.ui.theme = themes[next_index].to_string();
+        
+        if let Err(e) = self.config.save() {
+            self.state.set_status(format!("Failed to save config: {}", e));
+        } else {
+            self.state.set_status(format!("Theme changed to {}", self.config.ui.theme));
+        }
         self.state.modified = true;
     }
 
     fn toggle_compact_mode(&mut self) {
-        self.state.set_status("Compact mode toggled".to_string());
+        self.config.ui.compact_mode = !self.config.ui.compact_mode;
+        let status = if self.config.ui.compact_mode { "enabled" } else { "disabled" };
+        if let Err(e) = self.config.save() {
+            self.state.set_status(format!("Failed to save config: {}", e));
+        } else {
+            self.state.set_status(format!("Compact mode {}", status));
+        }
         self.state.modified = true;
     }
 
     fn toggle_show_sidebar(&mut self) {
-        self.state.set_status("Sidebar visibility toggled".to_string());
+        self.config.ui.show_sidebar = !self.config.ui.show_sidebar;
+        let status = if self.config.ui.show_sidebar { "enabled" } else { "disabled" };
+        if let Err(e) = self.config.save() {
+            self.state.set_status(format!("Failed to save config: {}", e));
+        } else {
+            self.state.set_status(format!("Sidebar {}", status));
+        }
         self.state.modified = true;
     }
 
     fn toggle_show_status_bar(&mut self) {
-        self.state.set_status("Status bar visibility toggled".to_string());
+        self.config.ui.show_status_bar = !self.config.ui.show_status_bar;
+        let status = if self.config.ui.show_status_bar { "enabled" } else { "disabled" };
+        if let Err(e) = self.config.save() {
+            self.state.set_status(format!("Failed to save config: {}", e));
+        } else {
+            self.state.set_status(format!("Status bar {}", status));
+        }
         self.state.modified = true;
     }
 
     fn toggle_animations(&mut self) {
-        self.state.set_status("Animations toggled".to_string());
+        self.config.ui.animations = !self.config.ui.animations;
+        let status = if self.config.ui.animations { "enabled" } else { "disabled" };
+        if let Err(e) = self.config.save() {
+            self.state.set_status(format!("Failed to save config: {}", e));
+        } else {
+            self.state.set_status(format!("Animations {}", status));
+        }
         self.state.modified = true;
     }
 
@@ -816,16 +941,22 @@ impl SettingsUI {
 
     fn render_general_tab(&mut self, frame: &mut Frame, area: Rect, theme: &Theme) {
         let items = vec![
-            ListItem::new("🔄 Auto-sync emails: Enabled"),
-            ListItem::new("⏱️  Sync interval: 15 minutes"),
-            ListItem::new("🚀 Fetch on startup: Enabled"),
-            ListItem::new("📬 Use incremental sync: Enabled"),
-            ListItem::new("🔁 Max concurrent syncs: 3"),
-            ListItem::new("📂 Default folder: INBOX"),
-            ListItem::new("⚠️  Confirm before delete: Enabled"),
-            ListItem::new("🔔 Show notifications: Enabled"),
-            ListItem::new("🧵 Thread grouping: By subject"),
-            ListItem::new("👁️  Mark as read on reply: Enabled"),
+            ListItem::new(format!("🔄 Auto-sync emails: {}", 
+                if self.config.general.auto_sync { "Enabled" } else { "Disabled" })),
+            ListItem::new(format!("⏱️  Sync interval: {} minutes", self.config.general.sync_interval_minutes)),
+            ListItem::new(format!("🚀 Fetch on startup: {}", 
+                if self.config.general.fetch_on_startup { "Enabled" } else { "Disabled" })),
+            ListItem::new(format!("📬 Use incremental sync: {}", 
+                if self.config.general.incremental_sync { "Enabled" } else { "Disabled" })),
+            ListItem::new(format!("🔁 Max concurrent syncs: {}", self.config.general.max_concurrent_syncs)),
+            ListItem::new(format!("📂 Default folder: {}", self.config.general.default_folder)),
+            ListItem::new(format!("⚠️  Confirm before delete: {}", 
+                if self.config.general.confirm_delete { "Enabled" } else { "Disabled" })),
+            ListItem::new(format!("🔔 Show notifications: {}", 
+                if self.config.general.show_notifications { "Enabled" } else { "Disabled" })),
+            ListItem::new(format!("🧵 Thread grouping: {:?}", self.config.general.thread_grouping)),
+            ListItem::new(format!("👁️  Mark as read on reply: {}", 
+                if self.config.general.mark_read_on_reply { "Enabled" } else { "Disabled" })),
         ];
 
         let list = List::new(items)
@@ -856,13 +987,17 @@ impl SettingsUI {
 
     fn render_ui_tab(&mut self, frame: &mut Frame, area: Rect, theme: &Theme) {
         let items = vec![
-            ListItem::new("🎨 Theme: Dark"),
-            ListItem::new("📏 Compact mode: Disabled"),
-            ListItem::new("📂 Show sidebar: Enabled"),
-            ListItem::new("📊 Show status bar: Enabled"),
-            ListItem::new("🔤 Font size: 14"),
-            ListItem::new("✨ Animations: Enabled"),
-            ListItem::new("🖼️ Configure layout"),
+            ListItem::new(format!("🎨 Theme: {}", self.config.ui.theme)),
+            ListItem::new(format!("📏 Compact mode: {}", 
+                if self.config.ui.compact_mode { "Enabled" } else { "Disabled" })),
+            ListItem::new(format!("📂 Show sidebar: {}", 
+                if self.config.ui.show_sidebar { "Enabled" } else { "Disabled" })),
+            ListItem::new(format!("📊 Show status bar: {}", 
+                if self.config.ui.show_status_bar { "Enabled" } else { "Disabled" })),
+            ListItem::new(format!("🔤 Font size: {}", self.config.ui.font_size)),
+            ListItem::new(format!("✨ Animations: {}", 
+                if self.config.ui.animations { "Enabled" } else { "Disabled" })),
+            ListItem::new(format!("🖼️ Layout: {}", self.config.ui.layout)),
         ];
 
         let list = List::new(items)
