@@ -72,8 +72,10 @@ pub struct ComposeUI {
     encryption_manager: Option<Arc<EncryptionManager>>,
     is_encryption_enabled: bool,
     is_signing_enabled: bool,
+    #[allow(dead_code)]
     encrypt_to_self: bool,
     signing_key: Option<String>,
+    #[allow(dead_code)]
     available_keys: Vec<KeyInfo>,
     is_encryption_config_visible: bool,
 }

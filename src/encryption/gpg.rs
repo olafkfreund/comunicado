@@ -25,41 +25,47 @@ use std::io::{Read, Cursor};
 use std::fs::{File, read_dir};
 use chrono::{DateTime, Utc};
 
-/// Helper struct for decryption operations
+
+/// Helper struct for decryption operations - Future implementation
+/// This will be used for actual PGP message decryption with session keys
+#[allow(dead_code)] // Future implementation - Phase 7
 struct DecryptionHelper {
-    session_key: SessionKey,
+    secret_keys: Vec<Cert>,
+    policy: &'static StandardPolicy<'static>,
 }
 
 /// Helper struct for signature verification
 struct VerificationHelper {
     certs: Vec<Cert>,
+    #[allow(dead_code)]
     policy: &'static StandardPolicy<'static>,
 }
 
 impl openpgp::parse::stream::DecryptionHelper for DecryptionHelper {
-    fn decrypt<D>(&mut self, pkesks: &[PKESK], _skesks: &[SKESK], _sym_algo: Option<SymmetricAlgorithm>, mut decrypt: D) -> openpgp::Result<Option<openpgp::Fingerprint>>
+    fn decrypt<D>(&mut self, _pkesks: &[PKESK], _skesks: &[SKESK], sym_algo: Option<SymmetricAlgorithm>, _decrypt: D) -> openpgp::Result<Option<openpgp::Fingerprint>>
     where
         D: FnMut(SymmetricAlgorithm, &SessionKey) -> bool,
     {
-        // Try to use our session key
-        if decrypt(SymmetricAlgorithm::AES256, &self.session_key) {
-            // We don't have specific key information in this context
-            return Ok(None);
-        }
+        // Future implementation: Real decryption with session keys
+        // This would iterate through our secret keys and try to decrypt
+        // the session key from the PKESK packets
         
-        // If that doesn't work, return an error
-        Err(anyhow::anyhow!("Session key decryption failed").into())
+        // For now, return error to indicate actual decryption not implemented
+        use openpgp::Error;
+        Err(Error::UnsupportedSymmetricAlgorithm(
+            sym_algo.unwrap_or(SymmetricAlgorithm::AES256)
+        ).into())
     }
 }
 
 impl openpgp::parse::stream::VerificationHelper for DecryptionHelper {
     fn get_certs(&mut self, _ids: &[openpgp::KeyHandle]) -> openpgp::Result<Vec<Cert>> {
-        // Return empty vector - we're only decrypting, not verifying signatures
-        Ok(Vec::new())
+        // Return our certificates for signature verification during decryption
+        Ok(self.secret_keys.clone())
     }
 
     fn check(&mut self, _structure: openpgp::parse::stream::MessageStructure) -> openpgp::Result<()> {
-        // For decryption-only, we don't need to verify signatures
+        // Accept any signature verification result for now
         Ok(())
     }
 }
@@ -69,7 +75,7 @@ impl openpgp::parse::stream::VerificationHelper for VerificationHelper {
         // Find certificates matching the requested key IDs
         let mut matching_certs = Vec::new();
         
-        for id in ids {
+        for _id in ids {
             for cert in &self.certs {
                 // Match by KeyHandle - more complex matching logic would be needed here
                 // For now, we'll just return all certs if any IDs are requested
@@ -604,28 +610,6 @@ impl SequoiaGpgBackend {
         None
     }
     
-    /// Helper method to decrypt data using a session key
-    async fn decrypt_with_session_key<R: Read + Send + Sync>(
-        &self,
-        reader: R,
-        session_key: &SessionKey,
-        output: &mut Vec<u8>
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        use openpgp::parse::stream::DecryptorBuilder;
-        
-        // Create a decryption helper that uses our session key
-        let helper = DecryptionHelper {
-            session_key: session_key.clone(),
-        };
-        
-        let mut decryptor = DecryptorBuilder::from_reader(reader)?
-            .with_policy(self._policy, None, helper)?;
-        
-        // Read the decrypted data
-        std::io::copy(&mut decryptor, output)?;
-        
-        Ok(())
-    }
     
     /// Helper method to verify signatures using a verification helper
     async fn verify_with_helper<R: Read + Send + Sync>(

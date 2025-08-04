@@ -58,6 +58,7 @@ pub struct AccountManagerUI {
     accounts: Vec<ImapAccount>,
     list_state: ListState,
     selected_account_type: AccountType,
+    #[allow(dead_code)]
     account_type_index: usize,
     
     // Form fields for adding/editing accounts

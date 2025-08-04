@@ -141,25 +141,6 @@ modular-ui = []
 name = "comunicado"
 path = "src/main.rs"
 
-[[bin]]
-name = "check-account-tokens"
-path = "check_account_tokens.rs"
-
-[[bin]]
-name = "test_modular_ui"
-path = "test_modular_ui.rs"
-
-[[bin]]
-name = "minimal_test"
-path = "minimal_test.rs"
-
-[[bin]]
-name = "debug-storage-vs-direct"
-path = "debug_storage_vs_direct.rs"
-
-[[bin]]
-name = "simple-v-test"
-path = "simple_v_test.rs"
 
 [profile.release]
 strip = true

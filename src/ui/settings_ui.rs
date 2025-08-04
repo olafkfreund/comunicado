@@ -779,7 +779,7 @@ impl SettingsUI {
             }
             3 => { // OAuth redirect port
                 if let Ok(port) = value.parse::<u16>() {
-                    if port >= 1024 && port <= 65535 { // Non-privileged ports
+                    if port >= 1024 { // Non-privileged ports (u16 max is 65535)
                         self.config.accounts.oauth_redirect_port = port;
                         if let Err(e) = self.config.save() {
                             self.state.set_status(format!("Failed to save config: {}", e));
@@ -974,18 +974,22 @@ impl SettingsUI {
         // For now, just show placeholder message
     }
 
+    #[allow(dead_code)] // Future implementation - OAuth configuration UI
     fn configure_oauth(&mut self) {
         self.state.set_status("Configuring OAuth...".to_string());
     }
 
+    #[allow(dead_code)] // Future implementation - Account backup feature
     fn backup_accounts(&mut self) {
         self.state.set_status("Backing up accounts...".to_string());
     }
 
+    #[allow(dead_code)] // Future implementation - Account restore feature
     fn restore_accounts(&mut self) {
         self.state.set_status("Restoring accounts...".to_string());
     }
 
+    #[allow(dead_code)] // Future implementation - Account import feature
     fn import_accounts(&mut self) {
         self.state.set_status("Importing accounts...".to_string());
     }
@@ -1063,6 +1067,7 @@ impl SettingsUI {
         self.state.set_status("Configuring layout...".to_string());
     }
 
+    #[allow(dead_code)] // Future implementation - Keyboard config UI
     fn open_keyboard_config(&mut self) {
         self.state.set_status("Opening keyboard configuration...".to_string());
     }
@@ -1077,10 +1082,12 @@ impl SettingsUI {
         self.state.modified = true;
     }
 
+    #[allow(dead_code)] // Future implementation - Import keyboard config
     fn import_keyboard_config(&mut self) {
         self.state.set_status("Importing keyboard configuration...".to_string());
     }
 
+    #[allow(dead_code)] // Future implementation - Export keyboard config
     fn export_keyboard_config(&mut self) {
         self.state.set_status("Exporting keyboard configuration...".to_string());
     }
@@ -1160,6 +1167,7 @@ impl SettingsUI {
         self.state.modified = true;
     }
 
+    #[allow(dead_code)] // Future implementation - Data retention settings
     fn configure_data_retention(&mut self) {
         self.state.set_status("Configuring data retention...".to_string());
     }
@@ -1171,6 +1179,7 @@ impl SettingsUI {
         self.state.modified = true;
     }
 
+    #[allow(dead_code)] // Future implementation - Data export
     fn export_data(&mut self) {
         self.state.set_status("Exporting data...".to_string());
     }
@@ -1201,31 +1210,38 @@ impl SettingsUI {
         self.state.modified = true;
     }
 
+    #[allow(dead_code)] // Future implementation - AI provider cycling
     fn cycle_ai_provider(&mut self) {
         self.state.set_status("AI provider changed".to_string());
         self.state.modified = true;
     }
 
+    #[allow(dead_code)] // Future implementation - AI privacy config
     fn configure_ai_privacy(&mut self) {
         self.state.set_status("Configuring AI privacy...".to_string());
     }
 
+    #[allow(dead_code)] // Future implementation - AI connection test
     fn test_ai_connection(&mut self) {
         self.state.set_status("Testing AI connection...".to_string());
     }
 
+    #[allow(dead_code)] // Future implementation - AI features config
     fn configure_ai_features(&mut self) {
         self.state.set_status("Configuring AI features...".to_string());
     }
 
+    #[allow(dead_code)] // Future implementation - AI cache settings
     fn ai_cache_settings(&mut self) {
         self.state.set_status("Configuring AI cache...".to_string());
     }
 
+    #[allow(dead_code)] // Future implementation - AI performance settings
     fn ai_performance_settings(&mut self) {
         self.state.set_status("Configuring AI performance...".to_string());
     }
 
+    #[allow(dead_code)] // Future implementation - Full AI config UI
     fn open_full_ai_config(&mut self) {
         self.state.set_status("Opening full AI configuration...".to_string());
     }
@@ -1258,6 +1274,7 @@ impl SettingsUI {
         self.state.modified = true;
     }
 
+    #[allow(dead_code)] // Future implementation - Logging configuration
     fn configure_logging(&mut self) {
         self.state.set_status("Configuring logging...".to_string());
     }
@@ -1271,10 +1288,12 @@ impl SettingsUI {
         self.state.modified = true;
     }
 
+    #[allow(dead_code)] // Future implementation - Export configuration
     fn export_configuration(&mut self) {
         self.state.set_status("Exporting configuration...".to_string());
     }
 
+    #[allow(dead_code)] // Future implementation - Import configuration
     fn import_configuration(&mut self) {
         self.state.set_status("Importing configuration...".to_string());
     }

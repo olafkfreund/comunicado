@@ -96,6 +96,7 @@ pub struct KeyboardBindingsUI {
     
     // Available actions
     actions: Vec<KeyAction>,
+    #[allow(dead_code)]
     filtered_actions: Vec<KeyAction>,
 }
 
