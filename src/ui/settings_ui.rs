@@ -398,13 +398,13 @@ impl SettingsUI {
     fn handle_ai_select(&mut self) {
         match self.state.selected_index {
             0 => self.toggle_ai_enabled(),
-            1 => self.cycle_ai_provider(),
-            2 => self.configure_ai_privacy(),
-            3 => self.test_ai_connection(),
-            4 => self.configure_ai_features(),
-            5 => self.ai_cache_settings(),
-            6 => self.ai_performance_settings(),
-            7 => self.open_full_ai_config(),
+            1 => self.state.start_edit(), // Provider
+            2 => self.state.start_edit(), // Model
+            3 => self.state.start_edit(), // API key
+            4 => self.state.start_edit(), // Endpoint
+            5 => self.cycle_ai_privacy_mode(),
+            6 => self.state.start_edit(), // Temperature
+            7 => self.state.start_edit(), // Max tokens
             _ => {}
         }
     }
@@ -764,6 +764,84 @@ impl SettingsUI {
                     self.state.set_status("AI provider cannot be empty".to_string());
                 }
             }
+            2 => { // AI Model
+                if !value.trim().is_empty() {
+                    self.config.ai.model = value.trim().to_string();
+                    if let Err(e) = self.config.save() {
+                        self.state.set_status(format!("Failed to save config: {}", e));
+                    } else {
+                        self.state.set_status(format!("AI model set to '{}'", value.trim()));
+                    }
+                } else {
+                    self.state.set_status("AI model cannot be empty".to_string());
+                }
+            }
+            3 => { // API Key
+                if !value.trim().is_empty() {
+                    self.config.ai.api_key = Some(value.trim().to_string());
+                    if let Err(e) = self.config.save() {
+                        self.state.set_status(format!("Failed to save config: {}", e));
+                    } else {
+                        self.state.set_status("API key updated".to_string());
+                    }
+                } else {
+                    self.config.ai.api_key = None;
+                    if let Err(e) = self.config.save() {
+                        self.state.set_status(format!("Failed to save config: {}", e));
+                    } else {
+                        self.state.set_status("API key cleared".to_string());
+                    }
+                }
+            }
+            4 => { // Endpoint
+                if !value.trim().is_empty() {
+                    self.config.ai.endpoint = Some(value.trim().to_string());
+                    if let Err(e) = self.config.save() {
+                        self.state.set_status(format!("Failed to save config: {}", e));
+                    } else {
+                        self.state.set_status(format!("AI endpoint set to '{}'", value.trim()));
+                    }
+                } else {
+                    self.config.ai.endpoint = None;
+                    if let Err(e) = self.config.save() {
+                        self.state.set_status(format!("Failed to save config: {}", e));
+                    } else {
+                        self.state.set_status("AI endpoint reset to default".to_string());
+                    }
+                }
+            }
+            6 => { // Temperature
+                if let Ok(temp) = value.parse::<f32>() {
+                    if temp >= 0.0 && temp <= 2.0 {
+                        self.config.ai.temperature = temp;
+                        if let Err(e) = self.config.save() {
+                            self.state.set_status(format!("Failed to save config: {}", e));
+                        } else {
+                            self.state.set_status(format!("AI temperature set to {:.1}", temp));
+                        }
+                    } else {
+                        self.state.set_status("Temperature must be between 0.0 and 2.0".to_string());
+                    }
+                } else {
+                    self.state.set_status("Invalid temperature value".to_string());
+                }
+            }
+            7 => { // Max tokens
+                if let Ok(tokens) = value.parse::<u32>() {
+                    if tokens >= 1 && tokens <= 32000 {
+                        self.config.ai.max_tokens = tokens;
+                        if let Err(e) = self.config.save() {
+                            self.state.set_status(format!("Failed to save config: {}", e));
+                        } else {
+                            self.state.set_status(format!("Max tokens set to {}", tokens));
+                        }
+                    } else {
+                        self.state.set_status("Max tokens must be between 1 and 32000".to_string());
+                    }
+                } else {
+                    self.state.set_status("Invalid token count".to_string());
+                }
+            }
             _ => {
                 self.state.set_status("This AI setting is not editable".to_string());
             }
@@ -838,11 +916,13 @@ impl SettingsUI {
     }
 
     fn open_account_manager(&mut self) {
-        self.state.set_status("Opening account manager...".to_string());
+        self.state.set_status("Account manager (feature coming soon)".to_string());
     }
 
     fn test_connection(&mut self) {
-        self.state.set_status("Testing connection...".to_string());
+        self.state.set_status("Connection test started...".to_string());
+        // TODO: Implement actual connection testing
+        // For now, just show placeholder message
     }
 
     fn configure_oauth(&mut self) {
@@ -1046,7 +1126,28 @@ impl SettingsUI {
     }
 
     fn toggle_ai_enabled(&mut self) {
-        self.state.set_status("AI assistant toggled".to_string());
+        self.config.ai.enabled = !self.config.ai.enabled;
+        let status = if self.config.ai.enabled { "enabled" } else { "disabled" };
+        if let Err(e) = self.config.save() {
+            self.state.set_status(format!("Failed to save config: {}", e));
+        } else {
+            self.state.set_status(format!("AI assistant {}", status));
+        }
+        self.state.modified = true;
+    }
+
+    fn cycle_ai_privacy_mode(&mut self) {
+        use crate::config::AIPrivacyMode;
+        self.config.ai.privacy_mode = match self.config.ai.privacy_mode {
+            AIPrivacyMode::LocalOnly => AIPrivacyMode::CloudWithConsent,
+            AIPrivacyMode::CloudWithConsent => AIPrivacyMode::CloudAlways,
+            AIPrivacyMode::CloudAlways => AIPrivacyMode::LocalOnly,
+        };
+        if let Err(e) = self.config.save() {
+            self.state.set_status(format!("Failed to save config: {}", e));
+        } else {
+            self.state.set_status(format!("AI privacy mode set to {:?}", self.config.ai.privacy_mode));
+        }
         self.state.modified = true;
     }
 
@@ -1336,16 +1437,23 @@ impl SettingsUI {
     }
 
     fn render_ai_tab(&mut self, frame: &mut Frame, area: Rect, theme: &Theme) {
+        let api_key_display = self.config.ai.api_key.as_ref()
+            .map(|key| if key.len() > 8 { format!("{}...", &key[..8]) } else { "Set".to_string() })
+            .unwrap_or_else(|| "Not set".to_string());
+        
+        let endpoint_display = self.config.ai.endpoint.as_ref()
+            .unwrap_or(&"Default".to_string()).clone();
+
         let items = vec![
             ListItem::new(format!("🤖 AI assistant: {}", 
                 if self.config.ai.enabled { "Enabled" } else { "Disabled" })),
             ListItem::new(format!("🔧 Provider: {}", self.config.ai.provider)),
+            ListItem::new(format!("🤖 Model: {}", self.config.ai.model)),
+            ListItem::new(format!("🔑 API key: {}", api_key_display)),
+            ListItem::new(format!("🌐 Endpoint: {}", endpoint_display)),
             ListItem::new(format!("🔒 Privacy mode: {:?}", self.config.ai.privacy_mode)),
-            ListItem::new("🔍 Test connection"),
-            ListItem::new("⚙️ Configure features"),
-            ListItem::new("💾 Cache settings"),
-            ListItem::new("⚡ Performance settings"),
-            ListItem::new("🛠️ Advanced AI config"),
+            ListItem::new(format!("🌡️ Temperature: {:.1}", self.config.ai.temperature)),
+            ListItem::new(format!("📝 Max tokens: {}", self.config.ai.max_tokens)),
         ];
 
         let list = List::new(items)
