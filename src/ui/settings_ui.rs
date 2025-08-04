@@ -1,6 +1,7 @@
 //! Application settings UI components for comprehensive configuration management
 
 use crate::theme::Theme;
+use crate::config::AppConfig;
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     text::Line,
@@ -204,12 +205,15 @@ impl SettingsUIState {
 /// Settings UI component
 pub struct SettingsUI {
     state: SettingsUIState,
+    config: AppConfig,
 }
 
 impl SettingsUI {
     pub fn new() -> Self {
+        let config = AppConfig::load().unwrap_or_default();
         Self {
             state: SettingsUIState::new(),
+            config,
         }
     }
 
@@ -513,7 +517,12 @@ impl SettingsUI {
         match self.state.selected_index {
             1 => { // AI Provider
                 if !value.trim().is_empty() {
-                    self.state.set_status(format!("AI provider set to '{}'", value.trim()));
+                    self.config.ai.provider = value.trim().to_string();
+                    if let Err(e) = self.config.save() {
+                        self.state.set_status(format!("Failed to save config: {}", e));
+                    } else {
+                        self.state.set_status(format!("AI provider set to '{}'", value.trim()));
+                    }
                 } else {
                     self.state.set_status("AI provider cannot be empty".to_string());
                 }
@@ -918,9 +927,10 @@ impl SettingsUI {
 
     fn render_ai_tab(&mut self, frame: &mut Frame, area: Rect, theme: &Theme) {
         let items = vec![
-            ListItem::new("🤖 AI assistant: Enabled"),
-            ListItem::new("🔧 Provider: Ollama"),
-            ListItem::new("🔒 Privacy mode: Local only"),
+            ListItem::new(format!("🤖 AI assistant: {}", 
+                if self.config.ai.enabled { "Enabled" } else { "Disabled" })),
+            ListItem::new(format!("🔧 Provider: {}", self.config.ai.provider)),
+            ListItem::new(format!("🔒 Privacy mode: {:?}", self.config.ai.privacy_mode)),
             ListItem::new("🔍 Test connection"),
             ListItem::new("⚙️ Configure features"),
             ListItem::new("💾 Cache settings"),
