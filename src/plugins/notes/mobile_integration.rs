@@ -23,6 +23,7 @@ use uuid::Uuid;
 /// Service that bridges mobile communications with notes
 pub struct MobileNotesIntegration {
     note_storage: Arc<NoteStorage>,
+    #[allow(dead_code)]
     mobile_client: Arc<RwLock<KdeConnectClient>>,
     message_store: Arc<MessageStore>,
     contact_notes: Arc<RwLock<HashMap<String, Vec<NoteId>>>>,

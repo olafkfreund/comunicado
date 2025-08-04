@@ -75,10 +75,12 @@ pub struct ModularUI {
     is_initialized: bool,
     show_help: bool,
     show_settings: bool,
+    #[allow(dead_code)]
     global_focus: bool,
     
     // Performance tracking
     frame_count: u64,
+    #[allow(dead_code)]
     last_performance_check: std::time::Instant,
     average_frame_time: std::time::Duration,
 }

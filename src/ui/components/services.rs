@@ -247,8 +247,11 @@ impl Default for UIServices {
 
 /// Email service wrapper
 pub struct EmailService {
+    #[allow(dead_code)]
     database: Arc<EmailDatabase>,
+    #[allow(dead_code)]
     imap_manager: Arc<ImapAccountManager>,
+    #[allow(dead_code)]
     smtp_service: Option<SmtpService>,
 }
 
@@ -287,6 +290,7 @@ impl EmailService {
 
 /// Calendar service wrapper
 pub struct CalendarService {
+    #[allow(dead_code)]
     calendar_manager: Arc<CalendarManager>,
 }
 
@@ -314,6 +318,7 @@ impl CalendarService {
 
 /// Contacts service wrapper
 pub struct ContactsService {
+    #[allow(dead_code)]
     contacts_manager: Arc<ContactsManager>,
 }
 
@@ -360,6 +365,7 @@ impl CacheService {
 
 /// Notification service wrapper
 pub struct NotificationService {
+    #[allow(dead_code)]
     notification_manager: Arc<UnifiedNotificationManager>,
 }
 

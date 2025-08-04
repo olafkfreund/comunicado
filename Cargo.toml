@@ -120,6 +120,11 @@ filetime = "0.2"
 [dev-dependencies]
 # Testing
 tokio-test = "0.4"
+assert_cmd = "2.0"      # Command line testing
+predicates = "3.0"      # Assertions for command testing
+tempfile = "3.8"        # Temporary files for testing
+serial_test = "3.0"     # Sequential test execution
+proptest = "1.4"        # Property-based testing
 
 [features]
 default = []

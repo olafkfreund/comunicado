@@ -1,0 +1,22 @@
+{
+  "name": "comunicado",
+  "version": "1.0.0",
+  "description": "A modern TUI-based email and calendar client for terminal power users.",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs",
+    "example": "examples",
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@microsoft/tui-test": "^0.0.1-rc.5",
+    "@types/node": "^24.2.0",
+    "tsx": "^4.20.3"
+  }
+}

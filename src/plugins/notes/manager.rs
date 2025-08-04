@@ -46,9 +46,13 @@ pub type NoteResult<T> = Result<T, NoteError>;
 
 /// Main note manager coordinating all note operations
 pub struct NoteManager {
+    #[allow(dead_code)]
     storage: Arc<NoteStorage>,
+    #[allow(dead_code)]
     indexer: Arc<NoteIndexer>,
+    #[allow(dead_code)]
     watcher: Arc<FileWatcher>,
+    #[allow(dead_code)]
     config: NotesConfig,
 }
 

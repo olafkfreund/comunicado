@@ -81,6 +81,7 @@ pub struct AutoSyncStats {
 /// Information about a scheduled sync operation
 #[derive(Debug, Clone)]
 struct ScheduledSync {
+    #[allow(dead_code)]
     account_id: String,
     task_id: Option<Uuid>,
     last_sync: Option<DateTime<Utc>>,
@@ -99,6 +100,7 @@ pub struct AutoSyncScheduler {
     active_sync_tasks: Arc<Mutex<HashMap<String, JoinHandle<()>>>>,
     stats: Arc<RwLock<AutoSyncStats>>,
     scheduler_handle: Arc<Mutex<Option<JoinHandle<()>>>>,
+    #[allow(dead_code)]
     progress_receiver: Arc<Mutex<Option<mpsc::UnboundedReceiver<SyncProgress>>>>,
     is_running: Arc<RwLock<bool>>,
 }

@@ -2,7 +2,7 @@
 //! 
 //! Provides SQLite-based storage with FTS5 full-text search capabilities.
 
-use super::types::{Note, WatchedDirectory, NoteSearchResult, NoteFrontmatter};
+use super::types::{Note, WatchedDirectory, NoteSearchResult};
 use super::manager::{NoteError, NoteResult};
 
 use chrono::{DateTime, Utc};

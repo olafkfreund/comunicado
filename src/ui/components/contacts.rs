@@ -133,7 +133,9 @@ pub struct ContactsComponent {
     // Data and services
     contacts_manager: Option<Arc<ContactsManager>>,
     sender_recognition: Option<Arc<SenderRecognitionService>>,
+    #[allow(dead_code)]
     advanced_search: Option<AdvancedContactSearch>,
+    #[allow(dead_code)]
     autocomplete: Option<ContactAutocomplete>,
     
     // Contact data
@@ -149,6 +151,7 @@ pub struct ContactsComponent {
     
     // Contact editing
     editing_contact: Option<Contact>,
+    #[allow(dead_code)]
     focused_field: ContactField,
     
     // Statistics
@@ -158,6 +161,7 @@ pub struct ContactsComponent {
     outlook_contacts: usize,
     
     // Performance tracking
+    #[allow(dead_code)]
     last_render_time: Instant,
     render_count: u64,
 }

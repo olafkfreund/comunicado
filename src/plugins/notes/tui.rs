@@ -24,6 +24,7 @@ pub struct NoteTUI {
     /// Note storage backend
     storage: Arc<NoteStorage>,
     /// Advanced search engine
+    #[allow(dead_code)]
     search_engine: Arc<AdvancedSearchEngine>,
     /// Current application mode
     mode: TUIMode,
@@ -44,6 +45,7 @@ pub struct NoteTUI {
     /// Watched directories
     directories: Vec<WatchedDirectory>,
     /// Directory list state
+    #[allow(dead_code)]
     directory_state: ListState,
     /// Status message
     status_message: Option<String>,
@@ -52,10 +54,12 @@ pub struct NoteTUI {
     /// Popup state
     popup: Option<PopupState>,
     /// Scroll states for various components
+    #[allow(dead_code)]
     scroll_states: ScrollStates,
     /// Configuration
     config: TUIConfig,
     /// Statistics cache
+    #[allow(dead_code)]
     stats_cache: Arc<RwLock<Option<TUIStats>>>,
 }
 

@@ -60,6 +60,7 @@ pub struct EmailComponent {
     focused_section: EmailSection,
     
     // Performance tracking
+    #[allow(dead_code)]
     last_render_time: Instant,
     render_count: u64,
 }

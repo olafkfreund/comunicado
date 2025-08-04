@@ -14,6 +14,7 @@ use ratatui::{layout::Rect, Frame};
 pub struct ComponentBasedUI {
     registry: ComponentRegistry,
     layout_manager: LayoutManager,
+    #[allow(dead_code)]
     services: UIServices,
     email_component_id: Option<super::ComponentId>,
 }

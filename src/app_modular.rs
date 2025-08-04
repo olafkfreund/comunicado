@@ -41,9 +41,11 @@ pub struct ModularApp {
     should_quit: bool,
     ui: ModularUI,
     theme: Theme,
+    #[allow(dead_code)]
     theme_manager: ThemeManager,
     
     // Legacy event handler for compatibility
+    #[allow(dead_code)]
     event_handler: EventHandler,
     
     // Service managers
@@ -51,7 +53,9 @@ pub struct ModularApp {
     notification_manager: Option<Arc<EmailNotificationManager>>,
     storage: SecureStorage,
     imap_manager: Option<Arc<ImapAccountManager>>,
+    #[allow(dead_code)]
     token_manager: Option<TokenManager>,
+    #[allow(dead_code)]
     token_refresh_scheduler: Option<crate::oauth2::token::TokenRefreshScheduler>,
     smtp_service: Option<SmtpService>,
     contacts_manager: Option<Arc<ContactsManager>>,
@@ -64,23 +68,30 @@ pub struct ModularApp {
     
     // Initialization state
     initialization_complete: bool,
+    #[allow(dead_code)]
     initialization_in_progress: bool,
     
     // Background processing
+    #[allow(dead_code)]
     background_processor: Option<Arc<BackgroundProcessor>>,
+    #[allow(dead_code)]
     sync_progress_rx: Option<mpsc::UnboundedReceiver<SyncProgress>>,
+    #[allow(dead_code)]
     task_completion_rx: Option<mpsc::UnboundedReceiver<TaskResult>>,
     
     // Sync engine for email operations
+    #[allow(dead_code)]
     sync_engine: Option<Arc<crate::email::sync_engine::SyncEngine>>,
     
     // Email operations service
+    #[allow(dead_code)]
     email_operations_service: Option<Arc<crate::email::EmailOperationsService>>,
     
     // AI configuration manager
     ai_config_manager: Option<Arc<AIConfigManager>>,
     
     // Startup progress manager
+    #[allow(dead_code)]
     startup_progress_manager: StartupProgressManager,
     
     // Performance tracking

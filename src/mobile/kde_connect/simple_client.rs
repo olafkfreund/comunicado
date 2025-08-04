@@ -8,6 +8,7 @@ use super::types::{DeviceInfo, SmsMessage, MobileNotification};
 /// when KDE Connect is available, otherwise provides clear error messages
 pub struct KdeConnectClient {
     device_id: Option<String>,
+    #[allow(dead_code)]
     timeout: Duration,
     kde_connect_available: bool,
 }

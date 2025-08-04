@@ -231,6 +231,7 @@ struct SearchCacheEntry {
     results: Vec<EnhancedSearchResult>,
     summary: SearchResultSummary,
     timestamp: SystemTime,
+    #[allow(dead_code)]
     options: AdvancedSearchOptions,
 }
 

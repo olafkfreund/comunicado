@@ -100,7 +100,9 @@ pub struct CalendarComponent {
     
     // UI state
     view_tab_index: usize,
+    #[allow(dead_code)]
     event_list_state: ListState,
+    #[allow(dead_code)]
     calendar_list_state: ListState,
     show_event_details: bool,
     show_calendar_list: bool,
@@ -113,6 +115,7 @@ pub struct CalendarComponent {
     delete_confirmation_selected: usize,
     
     // Performance tracking
+    #[allow(dead_code)]
     last_render_time: Instant,
     render_count: u64,
 }
