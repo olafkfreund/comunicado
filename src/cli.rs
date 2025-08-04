@@ -2706,7 +2706,7 @@ impl CliHandler {
             .ok_or_else(|| anyhow::anyhow!("Missing 'client_id' in secret file"))?
             .to_string();
         
-        let client_secret_value = secret_json["client_secret"]
+        let _client_secret_value = secret_json["client_secret"]
             .as_str()
             .ok_or_else(|| anyhow::anyhow!("Missing 'client_secret' in secret file"))?
             .to_string();

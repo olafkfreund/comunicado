@@ -88,6 +88,11 @@ lettre = { version = "0.11", features = ["tokio1-rustls-tls", "smtp-transport", 
 # Secure storage
 keyring = "2.3"
 
+# GPG encryption and signing (pure Rust implementation)
+# Use Rust crypto backend to avoid system dependencies like nettle
+# Note: This uses experimental crypto for development - production should use nettle
+sequoia-openpgp = { version = "1.19", default-features = false, features = ["compression", "crypto-rust", "allow-experimental-crypto", "allow-variable-time-crypto"] }
+
 # Database and caching
 sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "sqlite", "chrono", "uuid"] }
 uuid = { version = "1.6", features = ["v4", "v5", "serde"] }

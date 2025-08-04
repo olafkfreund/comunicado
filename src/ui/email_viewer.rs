@@ -11,6 +11,8 @@ use crate::email::StoredMessage;
 use crate::theme::Theme;
 use crate::ui::content_preview::{ContentType, EmailContent, EmailHeader, ViewMode};
 use crate::images::{ImageManager, extract_images_from_html};
+use crate::encryption::{EncryptionManager, types::SecureEmailContent};
+use std::sync::Arc;
 
 /// Email viewer actions
 #[derive(Debug, Clone, PartialEq)]
@@ -24,6 +26,7 @@ pub enum EmailViewerAction {
     MarkAsRead,
     MarkAsUnread,
     AddToContacts,
+    Decrypt,
     Close,
 }
 
@@ -40,6 +43,22 @@ pub struct EmailViewer {
     actions: Vec<EmailViewerAction>,
     #[allow(dead_code)]
     image_manager: ImageManager,
+    
+    // Encryption-related fields
+    encryption_manager: Option<Arc<EncryptionManager>>,
+    decrypted_content: Option<SecureEmailContent>,
+    is_encrypted: bool,
+    decryption_status: DecryptionStatus,
+}
+
+/// Status of email decryption
+#[derive(Debug, Clone, PartialEq)]
+pub enum DecryptionStatus {
+    NotEncrypted,
+    Encrypted,
+    Decrypting,
+    DecryptionSuccessful,
+    DecryptionFailed(String),
 }
 
 impl EmailViewer {
@@ -62,20 +81,92 @@ impl EmailViewer {
                 EmailViewerAction::Archive,
                 EmailViewerAction::MarkAsRead,
                 EmailViewerAction::AddToContacts,
+                EmailViewerAction::Decrypt,
                 EmailViewerAction::Close,
             ],
             image_manager: ImageManager::new().unwrap_or_default(),
+            encryption_manager: None,
+            decrypted_content: None,
+            is_encrypted: false,
+            decryption_status: DecryptionStatus::NotEncrypted,
         }
     }
 
     /// Set email content to display
     pub fn set_email(&mut self, message: StoredMessage, email_content: EmailContent) {
         self.current_message = Some(message);
-        self.email_content = Some(email_content);
+        self.email_content = Some(email_content.clone());
         self.sender_contact = None; // Reset contact info when setting new email
         self.scroll_position = 0;
         self.show_actions = false;
         self.selected_action = 0;
+        
+        // Check if email is encrypted
+        self.analyze_encryption_status(&email_content);
+    }
+    
+    /// Set encryption manager for decryption operations
+    pub fn set_encryption_manager(&mut self, encryption_manager: Arc<EncryptionManager>) {
+        self.encryption_manager = Some(encryption_manager);
+    }
+    
+    /// Analyze if the email content is encrypted
+    fn analyze_encryption_status(&mut self, email_content: &EmailContent) {
+        // Check if the email body contains PGP encrypted content
+        self.is_encrypted = email_content.body.contains("-----BEGIN PGP MESSAGE-----") ||
+                           email_content.body.contains("-----BEGIN PGP ENCRYPTED MESSAGE-----");
+        
+        if self.is_encrypted {
+            self.decryption_status = DecryptionStatus::Encrypted;
+        } else {
+            self.decryption_status = DecryptionStatus::NotEncrypted;
+        }
+        
+        // Reset decrypted content when setting new email
+        self.decrypted_content = None;
+    }
+    
+    /// Check if current email is encrypted
+    pub fn is_encrypted(&self) -> bool {
+        self.is_encrypted
+    }
+    
+    /// Get current decryption status
+    pub fn decryption_status(&self) -> &DecryptionStatus {
+        &self.decryption_status
+    }
+    
+    /// Attempt to decrypt the current email
+    pub async fn decrypt_email(&mut self) -> Result<(), String> {
+        if !self.is_encrypted {
+            return Err("Email is not encrypted".to_string());
+        }
+        
+        let encryption_manager = self.encryption_manager.as_ref()
+            .ok_or("Encryption manager not available")?;
+        
+        let current_content = self.email_content.as_ref()
+            .ok_or("No email content available")?;
+        
+        self.decryption_status = DecryptionStatus::Decrypting;
+        
+        match encryption_manager.decrypt_email(&current_content.body).await {
+            Ok(secure_content) => {
+                self.decrypted_content = Some(secure_content);
+                self.decryption_status = DecryptionStatus::DecryptionSuccessful;
+                Ok(())
+            }
+            Err(e) => {
+                let error_msg = e.to_string();
+                self.decryption_status = DecryptionStatus::DecryptionFailed(error_msg.clone());
+                Err(error_msg)
+            }
+        }
+    }
+    
+    /// Get decrypted content if available
+    pub fn decrypted_content(&self) -> Option<&SecureEmailContent> {
+        self.decrypted_content.as_ref()
     }
 
     /// Set sender contact information
@@ -237,6 +328,13 @@ impl EmailViewer {
             KeyCode::Char('m') => Some(EmailViewerAction::MarkAsRead),
             KeyCode::Char('u') => Some(EmailViewerAction::MarkAsUnread),
             KeyCode::Char('c') => Some(EmailViewerAction::AddToContacts),
+            KeyCode::Char('D') => {
+                if self.is_encrypted {
+                    Some(EmailViewerAction::Decrypt)
+                } else {
+                    None
+                }
+            }
             KeyCode::Char('v') => {
                 self.toggle_view_mode();
                 None
@@ -343,7 +441,16 @@ impl EmailViewer {
             ViewMode::Headers => "[Headers]",
         };
 
-        let header_text = format!("{} {}", title, view_mode_text);
+        // Add encryption status to header
+        let encryption_status = match &self.decryption_status {
+            DecryptionStatus::NotEncrypted => "",
+            DecryptionStatus::Encrypted => " 🔒[Encrypted - Press D to decrypt]",
+            DecryptionStatus::Decrypting => " 🔄[Decrypting...]",
+            DecryptionStatus::DecryptionSuccessful => " ✅[Decrypted]",
+            DecryptionStatus::DecryptionFailed(_) => " ❌[Decryption Failed]",
+        };
+
+        let header_text = format!("{} {}{}", title, view_mode_text, encryption_status);
 
         let header = Paragraph::new(header_text)
             .block(
@@ -367,10 +474,54 @@ impl EmailViewer {
 
         // Extract data needed for rendering before borrowing self
         let email_ref = self.email_content.as_ref();
+        let decrypted_ref = self.decrypted_content.as_ref();
         let _sender_contact_ref = self.sender_contact.as_ref();
         let view_mode = self.view_mode;
+        let decryption_status = &self.decryption_status;
 
-        let lines = if let Some(email) = email_ref {
+        let lines = if let Some(decrypted_content) = decrypted_ref {
+            // Show decrypted content if available
+            let mut decrypted_lines = vec![];
+            
+            // Add decryption success header
+            decrypted_lines.push(Line::from(vec![
+                Span::styled("✅ Successfully decrypted email", 
+                    Style::default().fg(ratatui::style::Color::Green).add_modifier(Modifier::BOLD))
+            ]));
+            decrypted_lines.push(Line::from(""));
+            
+            // Show decrypted body content
+            if let Some(ref content) = decrypted_content.decrypted_content {
+                for line in content.as_str().lines() {
+                    decrypted_lines.push(Line::from(line));
+                }
+            } else {
+                decrypted_lines.push(Line::from("No decrypted content available"));
+            }
+            
+            decrypted_lines
+        } else if matches!(decryption_status, DecryptionStatus::DecryptionFailed(_)) {
+            // Show decryption error
+            let mut error_lines = vec![];
+            error_lines.push(Line::from(vec![
+                Span::styled("❌ Decryption failed", 
+                    Style::default().fg(ratatui::style::Color::Red).add_modifier(Modifier::BOLD))
+            ]));
+            if let DecryptionStatus::DecryptionFailed(err) = decryption_status {
+                error_lines.push(Line::from(format!("Error: {}", err)));
+            }
+            error_lines.push(Line::from(""));
+            error_lines.push(Line::from("Showing original encrypted content:"));
+            error_lines.push(Line::from(""));
+            
+            // Show original encrypted content
+            if let Some(email) = email_ref {
+                error_lines.extend(Self::render_formatted_email_static(email, theme));
+            }
+            
+            error_lines
+        } else if let Some(email) = email_ref {
+            // Show regular email content (encrypted or not)
             match view_mode {
                 ViewMode::Formatted => Self::render_formatted_email_static(email, theme),
                 ViewMode::Raw => Self::render_raw_email_static(email, theme),
@@ -469,6 +620,7 @@ impl EmailViewer {
                 EmailViewerAction::MarkAsRead => "Mark Read",
                 EmailViewerAction::MarkAsUnread => "Mark Unread",
                 EmailViewerAction::AddToContacts => "Add to Contacts",
+                EmailViewerAction::Decrypt => "Decrypt Email",
                 EmailViewerAction::Close => "Close",
             };
 
@@ -493,6 +645,8 @@ impl EmailViewer {
     fn render_footer_bar(&self, frame: &mut Frame, area: Rect, theme: &Theme) {
         let instructions = if self.show_actions {
             "↑↓: Select Action | Enter: Execute | Esc: Hide Actions | r: Reply | f: Forward | c: Add Contact | q: Quit"
+        } else if self.is_encrypted {
+            "j/k/↑↓: Scroll | PgUp/PgDn: Page | D: Decrypt | Space: Actions | v: View | c: Add Contact | q: Quit"
         } else {
             "j/k/↑↓: Scroll | PgUp/PgDn: Page | Home/End: Top/Bottom | Space: Actions | v: View | c: Add Contact | q: Quit"
         };

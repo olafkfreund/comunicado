@@ -226,6 +226,10 @@ impl EmailComponent {
                 // TODO: Add sender to contacts
                 Ok(EventResult::Handled)
             }
+            EmailViewerAction::Decrypt => {
+                // TODO: Handle decrypt action
+                Ok(EventResult::Handled)
+            }
             EmailViewerAction::Edit => {
                 // TODO: Edit draft message
                 Ok(EventResult::Handled)

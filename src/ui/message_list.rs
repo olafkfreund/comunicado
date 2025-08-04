@@ -1,4 +1,6 @@
 use crate::contacts::{SenderInfo, SenderRecognitionService};
+use crate::encryption::types::MessageSecurityStatus;
+use crate::encryption::EncryptionManager;
 use crate::email::{
     EmailDatabase, EmailMessage, EmailThread, MessageId, MultiCriteriaSorter, SortCriteria,
     StoredMessage, ThreadingAlgorithm, ThreadingEngine,
@@ -31,6 +33,7 @@ pub struct MessageItem {
     pub is_thread_root: bool,
     pub message_id: Option<Uuid>, // Database ID for loading full content
     pub sender_info: Option<SenderInfo>, // Contact information for sender
+    pub security_status: Option<MessageSecurityStatus>, // Encryption/signature information
 }
 
 impl MessageItem {
@@ -49,6 +52,7 @@ impl MessageItem {
             is_thread_root: false,
             message_id: None,
             sender_info: None,
+            security_status: None,
         }
     }
 
@@ -73,6 +77,7 @@ impl MessageItem {
             is_thread_root: thread_depth == 0,
             message_id: None,
             sender_info: None,
+            security_status: None,
         }
     }
 
@@ -141,6 +146,8 @@ pub struct MessageList {
     threading_cache_key: Option<String>,
     // Sender recognition service for contact lookup
     sender_recognition: Option<Arc<SenderRecognitionService>>,
+    // Encryption manager for security analysis
+    encryption_manager: Option<Arc<EncryptionManager>>,
 }
 
 impl MessageList {
@@ -162,6 +169,7 @@ impl MessageList {
             threading_cache: HashMap::new(),
             threading_cache_key: None,
             sender_recognition: None,
+            encryption_manager: None,
         };
 
         // Don't initialize with sample messages initially - they will be loaded from database
@@ -424,7 +432,7 @@ impl MessageList {
         // Threading visualization
         let threading_prefix = self.get_threading_prefix(message);
         
-        // Status indicators (unread dot, importance, attachments)
+        // Status indicators (unread dot, importance, attachments, security)
         let mut status_icons = String::new();
         if !message.is_read {
             status_icons.push('●'); // Unread indicator
@@ -436,6 +444,30 @@ impl MessageList {
         }
         if message.has_attachments {
             status_icons.push('📎'); // Attachment icon
+        }
+        
+        // Add encryption/signature status indicators
+        if let Some(ref security_status) = message.security_status {
+            if security_status.has_security() {
+                if security_status.encryption.is_encrypted {
+                    if security_status.encryption.decryption_successful {
+                        status_icons.push('🔒'); // Successfully decrypted
+                    } else {
+                        status_icons.push('🔐'); // Encrypted but couldn't decrypt
+                    }
+                }
+                if security_status.signatures.is_signed {
+                    use crate::encryption::types::SignatureValidity;
+                    match security_status.signatures.overall_validity {
+                        SignatureValidity::Valid => status_icons.push('✅'), // Valid signature
+                        SignatureValidity::Invalid | SignatureValidity::BadSignature => status_icons.push('❌'), // Invalid signature
+                        SignatureValidity::KeyNotFound => status_icons.push('❓'), // Unknown key
+                        SignatureValidity::KeyExpired => status_icons.push('⏰'), // Expired key
+                        SignatureValidity::KeyRevoked => status_icons.push('🚫'), // Revoked key
+                        SignatureValidity::Unknown => status_icons.push('❔'), // Unknown signature status
+                    }
+                }
+            }
         }
         
         // Format subject with threading and truncation
@@ -947,6 +979,10 @@ impl MessageList {
         self.sender_recognition = Some(sender_recognition);
     }
 
+    pub fn set_encryption_manager(&mut self, encryption_manager: Arc<EncryptionManager>) {
+        self.encryption_manager = Some(encryption_manager);
+    }
+
     /// Enrich loaded messages with sender recognition information
     async fn enrich_with_sender_recognition(&mut self) {
         if let Some(ref sender_recognition) = self.sender_recognition {
@@ -978,6 +1014,41 @@ impl MessageList {
             tracing::info!("Completed sender recognition enrichment");
         } else {
             tracing::debug!("Sender recognition service not available, skipping enrichment");
+        }
+    }
+
+    /// Enrich loaded messages with encryption/signature analysis
+    async fn enrich_with_security_status(&mut self) {
+        if let Some(ref encryption_manager) = self.encryption_manager {
+            if let Some(ref database) = self.database {
+                tracing::info!("Enriching {} messages with security status", self.messages.len());
+                
+                for message in &mut self.messages {
+                    if let Some(message_id) = message.message_id {
+                        // Load the full message content from database
+                        if let Ok(Some(stored_message)) = database.get_message_by_id(message_id).await {
+                            // Analyze the message content for encryption/signatures
+                            if let Some(ref body_text) = stored_message.body_text {
+                                match encryption_manager.decrypt_email(body_text).await {
+                                    Ok(secure_content) => {
+                                        message.set_security_status(secure_content.security_status);
+                                        tracing::debug!("Analyzed security for message: {}", stored_message.subject);
+                                    }
+                                    Err(e) => {
+                                        tracing::debug!("Failed to analyze security for message {}: {}", stored_message.subject, e);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                tracing::info!("Completed security status enrichment");
+            } else {
+                tracing::debug!("Database not available, skipping security enrichment");
+            }
+        } else {
+            tracing::debug!("Encryption manager not available, skipping security enrichment");
         }
     }
 
@@ -1089,6 +1160,9 @@ impl MessageList {
 
             // Enrich messages with sender recognition
             self.enrich_with_sender_recognition().await;
+            
+            // Enrich messages with security status
+            self.enrich_with_security_status().await;
 
             // Sort messages by date (newest first)
             self.messages.sort_by(|a, b| b.date.cmp(&a.date));
@@ -1582,7 +1656,13 @@ impl MessageItem {
             is_thread_root: false,
             message_id: Some(stored.id),
             sender_info: None,
+            security_status: None, // TODO: Extract from stored message when encryption info is available
         }
+    }
+
+    /// Set the security status for this message item
+    pub fn set_security_status(&mut self, security_status: MessageSecurityStatus) {
+        self.security_status = Some(security_status);
     }
 
     /// Helper function to format message dates in a human-readable way

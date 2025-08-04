@@ -1,4 +1,5 @@
 use crate::contacts::{ContactAutocomplete, ContactsManager};
+use crate::encryption::{EncryptionManager, KeyInfo};
 use crate::spell::{SpellCheckResult, SpellChecker};
 use crate::theme::Theme;
 use crate::ui::external_editor::{ExternalEditor, EditorConfig};
@@ -6,7 +7,7 @@ use crossterm::event::KeyModifiers;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
-    text::{Line, Text},
+    text::{Line, Span, Text},
     widgets::{Block, Borders, Clear, Paragraph, Wrap},
     Frame,
 };
@@ -66,6 +67,15 @@ pub struct ComposeUI {
     last_auto_save: Option<std::time::Instant>,
     auto_save_interval: std::time::Duration,
     has_auto_save_changes: bool,
+
+    // Encryption state
+    encryption_manager: Option<Arc<EncryptionManager>>,
+    is_encryption_enabled: bool,
+    is_signing_enabled: bool,
+    encrypt_to_self: bool,
+    signing_key: Option<String>,
+    available_keys: Vec<KeyInfo>,
+    is_encryption_config_visible: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -75,6 +85,7 @@ pub enum ComposeField {
     Bcc,
     Subject,
     Body,
+    EncryptionConfig,
 }
 
 impl ComposeUI {
@@ -120,7 +131,38 @@ impl ComposeUI {
             last_auto_save: None,
             auto_save_interval: std::time::Duration::from_secs(30), // Auto-save every 30 seconds
             has_auto_save_changes: false,
+            encryption_manager: None,
+            is_encryption_enabled: false,
+            is_signing_enabled: false,
+            encrypt_to_self: false,
+            signing_key: None,
+            available_keys: Vec::new(),
+            is_encryption_config_visible: false,
         }
+    }
+
+    /// Set the encryption manager
+    pub fn set_encryption_manager(&mut self, manager: Arc<EncryptionManager>) {
+        self.encryption_manager = Some(manager);
+        // Load available keys asynchronously in a real implementation
+        // For now, we'll keep the keys list empty until populated
+    }
+
+    /// Toggle encryption on/off
+    pub fn toggle_encryption(&mut self) {
+        self.is_encryption_enabled = !self.is_encryption_enabled;
+        self.is_modified = true;
+    }
+
+    /// Toggle signing on/off
+    pub fn toggle_signing(&mut self) {
+        self.is_signing_enabled = !self.is_signing_enabled;
+        self.is_modified = true;
+    }
+
+    /// Toggle encryption config visibility
+    pub fn toggle_encryption_config(&mut self) {
+        self.is_encryption_config_visible = !self.is_encryption_config_visible;
     }
 
     /// Create a new compose UI for replying to a message
@@ -175,7 +217,7 @@ impl ComposeUI {
         let inner = block.inner(area);
         f.render_widget(block, area);
 
-        // Layout: header fields + body
+        // Layout: header fields + encryption controls + body
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
@@ -183,6 +225,7 @@ impl ComposeUI {
                 Constraint::Length(2), // Cc field
                 Constraint::Length(2), // Bcc field
                 Constraint::Length(2), // Subject field
+                Constraint::Length(2), // Encryption controls
                 Constraint::Length(1), // Separator
                 Constraint::Min(0),    // Body
             ])
@@ -226,13 +269,16 @@ impl ComposeUI {
             theme,
         );
 
+        // Encryption controls
+        self.render_encryption_controls(f, chunks[4], theme);
+
         // Separator line
-        let separator = Paragraph::new("─".repeat(chunks[4].width as usize))
+        let separator = Paragraph::new("─".repeat(chunks[5].width as usize))
             .style(Style::default().fg(Color::Gray));
-        f.render_widget(separator, chunks[4]);
+        f.render_widget(separator, chunks[5]);
 
         // Body area
-        self.render_body(f, chunks[5], theme);
+        self.render_body(f, chunks[6], theme);
 
         // Render autocomplete suggestions if visible
         if self.contact_autocomplete.is_visible() {
@@ -316,6 +362,75 @@ impl ComposeUI {
         f.render_widget(input_paragraph, chunks[1]);
     }
 
+    /// Render encryption controls
+    fn render_encryption_controls(&self, f: &mut Frame, area: Rect, theme: &Theme) {
+        let is_focused = self.current_field == ComposeField::EncryptionConfig;
+
+        // Create encryption status text
+        let mut encryption_text = Vec::new();
+        
+        // Encryption status
+        if self.is_encryption_enabled {
+            encryption_text.push(Span::styled("🔒 Encrypt", Style::default().fg(Color::Green)));
+        } else {
+            encryption_text.push(Span::styled("🔓 No Encryption", Style::default().fg(Color::Red)));
+        }
+        
+        encryption_text.push(Span::raw(" | "));
+        
+        // Signing status
+        if self.is_signing_enabled {
+            encryption_text.push(Span::styled("✏️ Sign", Style::default().fg(Color::Green)));
+        } else {
+            encryption_text.push(Span::styled("✗ No Signing", Style::default().fg(Color::Yellow)));
+        }
+
+        // Add key info if available
+        if let Some(ref key) = self.signing_key {
+            encryption_text.push(Span::raw(format!(" ({})", key)));
+        }
+
+        // Create paragraph with encryption status
+        let style = if is_focused {
+            theme.get_component_style("input_focused", true)
+        } else {
+            theme.get_component_style("input", true)
+        };
+
+        // Layout for label and controls
+        let chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Length(10), Constraint::Min(0)])
+            .split(area);
+
+        // Label
+        let label = Paragraph::new("Security:")
+            .style(theme.get_component_style("label", true));
+        f.render_widget(label, chunks[0]);
+
+        // Controls
+        let controls_paragraph = Paragraph::new(Line::from(encryption_text))
+            .style(style)
+            .block(Block::default().borders(Borders::ALL));
+        f.render_widget(controls_paragraph, chunks[1]);
+
+        // Show help text when focused
+        if is_focused {
+            let help_text = " Press [E] to toggle encryption, [S] to toggle signing, [C] to configure ";
+            let help_style = Style::default().fg(Color::Gray);
+            let help_area = Rect {
+                x: chunks[1].x + 1,
+                y: chunks[1].y + chunks[1].height - 1,
+                width: chunks[1].width.saturating_sub(2).min(help_text.len() as u16),
+                height: 1,
+            };
+            f.render_widget(
+                Paragraph::new(help_text).style(help_style),
+                help_area
+            );
+        }
+    }
+
     /// Render the email body
     fn render_body(&self, f: &mut Frame, area: Rect, theme: &Theme) {
         let is_focused = self.current_field == ComposeField::Body;
@@ -372,6 +487,7 @@ impl ComposeUI {
             ComposeField::Cc => area.y + 4,     // Second field
             ComposeField::Bcc => area.y + 6,    // Third field
             ComposeField::Subject => area.y + 8, // Fourth field
+            ComposeField::EncryptionConfig => area.y + 10, // Encryption controls
             ComposeField::Body => area.y + 12,  // Body area
         };
         
@@ -795,6 +911,25 @@ impl ComposeUI {
                 ComposeAction::Continue
             }
             KeyCode::Char(c) => {
+                // Handle encryption config field specially
+                if self.current_field == ComposeField::EncryptionConfig {
+                    match c.to_ascii_lowercase() {
+                        'e' => {
+                            self.toggle_encryption();
+                            return ComposeAction::Continue;
+                        }
+                        's' => {
+                            self.toggle_signing();
+                            return ComposeAction::Continue;
+                        }
+                        'c' => {
+                            self.toggle_encryption_config();
+                            return ComposeAction::Continue;
+                        }
+                        _ => return ComposeAction::Continue, // Ignore other keys in encryption field
+                    }
+                }
+
                 self.insert_char(c);
 
                 // Check if we should trigger autocomplete for email fields
@@ -1036,7 +1171,8 @@ impl ComposeUI {
             ComposeField::To => ComposeField::Cc,
             ComposeField::Cc => ComposeField::Bcc,
             ComposeField::Bcc => ComposeField::Subject,
-            ComposeField::Subject => ComposeField::Body,
+            ComposeField::Subject => ComposeField::EncryptionConfig,
+            ComposeField::EncryptionConfig => ComposeField::Body,
             ComposeField::Body => ComposeField::To,
         };
     }
@@ -1047,7 +1183,8 @@ impl ComposeUI {
             ComposeField::Cc => ComposeField::To,
             ComposeField::Bcc => ComposeField::Cc,
             ComposeField::Subject => ComposeField::Bcc,
-            ComposeField::Body => ComposeField::Subject,
+            ComposeField::EncryptionConfig => ComposeField::Subject,
+            ComposeField::Body => ComposeField::EncryptionConfig,
         };
     }
 
@@ -1077,6 +1214,9 @@ impl ComposeUI {
                     line.insert(self.body_cursor, c);
                     self.body_cursor += 1;
                 }
+            }
+            ComposeField::EncryptionConfig => {
+                // Encryption config field handles keys specially, no text insertion
             }
         }
     }
@@ -1128,6 +1268,9 @@ impl ComposeUI {
                         prev_line.push_str(&current_line);
                     }
                 }
+            }
+            ComposeField::EncryptionConfig => {
+                // Encryption config field doesn't support text deletion
             }
         }
     }
@@ -1190,6 +1333,9 @@ impl ComposeUI {
                         .unwrap_or(0);
                 }
             }
+            ComposeField::EncryptionConfig => {
+                // No cursor movement for encryption config (handled by sub-field navigation)
+            }
         }
     }
 
@@ -1225,6 +1371,9 @@ impl ComposeUI {
                         self.body_cursor = 0;
                     }
                 }
+            }
+            ComposeField::EncryptionConfig => {
+                // No cursor movement for encryption config (handled by sub-field navigation)
             }
         }
     }
@@ -1263,6 +1412,7 @@ impl ComposeUI {
             ComposeField::Bcc => self.bcc_field.clone(),
             ComposeField::Subject => self.subject_field.clone(),
             ComposeField::Body => self.body_lines.join("\n"),
+            ComposeField::EncryptionConfig => String::new(), // No editable value for encryption config
         }
     }
 
@@ -1294,6 +1444,9 @@ impl ComposeUI {
                 self.body_line_index = self.body_lines.len() - 1;
                 self.body_cursor = self.body_lines.last().map(|line| line.len()).unwrap_or(0);
             }
+            ComposeField::EncryptionConfig => {
+                // No value setting for encryption config (handled by specific methods)
+            }
         }
     }
 
@@ -1304,7 +1457,13 @@ impl ComposeUI {
             ComposeField::Bcc => self.bcc_cursor,
             ComposeField::Subject => self.subject_cursor,
             ComposeField::Body => self.body_cursor,
+            ComposeField::EncryptionConfig => 0, // No cursor in encryption config
         }
+    }
+
+    /// Get encryption settings
+    pub fn get_encryption_settings(&self) -> (bool, bool, Option<String>) {
+        (self.is_encryption_enabled, self.is_signing_enabled, self.signing_key.clone())
     }
 
     /// Get email data for sending

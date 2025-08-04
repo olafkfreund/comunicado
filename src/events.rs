@@ -1691,6 +1691,10 @@ impl EventHandler {
                     // Add sender to contacts
                     self.handle_email_add_to_contacts(ui).await
                 }
+                crate::ui::email_viewer::EmailViewerAction::Decrypt => {
+                    // Decrypt current email
+                    self.handle_email_decrypt(ui).await
+                }
                 crate::ui::email_viewer::EmailViewerAction::Close => {
                     // Exit email viewer
                     ui.exit_email_viewer();
@@ -2038,6 +2042,26 @@ impl EventHandler {
                 EventResult::Continue
             }
             _ => EventResult::Continue,
+        }
+    }
+
+    /// Handle decrypt action from email viewer
+    async fn handle_email_decrypt(&mut self, ui: &mut UI) -> EventResult {
+        // Get reference to email viewer
+        let email_viewer = ui.email_viewer_mut();
+        
+        // Attempt to decrypt the email
+        match email_viewer.decrypt_email().await {
+            Ok(()) => {
+                // Decryption successful - no additional action needed
+                // The UI will automatically show the decrypted content
+                EventResult::Continue
+            }
+            Err(err) => {
+                // Decryption failed - error is already stored in the viewer
+                tracing::error!("Failed to decrypt email: {}", err);
+                EventResult::Continue
+            }
         }
     }
 

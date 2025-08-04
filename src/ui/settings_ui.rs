@@ -481,7 +481,6 @@ impl SettingsUI {
             SettingsTab::Advanced => self.apply_advanced_edit(value),
             SettingsTab::Accounts => self.apply_accounts_edit(value),
             SettingsTab::AI => self.apply_ai_edit(value),
-            _ => {}
         }
         self.state.modified = true;
     }
