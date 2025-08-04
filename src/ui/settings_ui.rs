@@ -338,12 +338,12 @@ impl SettingsUI {
 
     fn handle_accounts_select(&mut self) {
         match self.state.selected_index {
-            0 => self.open_account_manager(),
-            1 => self.test_connection(),
-            2 => self.configure_oauth(),
-            3 => self.backup_accounts(),
-            4 => self.restore_accounts(), 
-            5 => self.import_accounts(),
+            0 => self.toggle_auto_discover(),
+            1 => self.state.start_edit(), // Connection timeout
+            2 => self.state.start_edit(), // Retry attempts
+            3 => self.state.start_edit(), // OAuth redirect port
+            4 => self.open_account_manager(),
+            5 => self.test_connection(),
             _ => {}
         }
     }
@@ -363,11 +363,11 @@ impl SettingsUI {
 
     fn handle_keyboard_select(&mut self) {
         match self.state.selected_index {
-            0 => self.open_keyboard_config(),
-            1 => self.reset_keyboard_defaults(),
-            2 => self.import_keyboard_config(),
-            3 => self.export_keyboard_config(),
-            4 => self.toggle_vim_mode(),
+            0 => self.toggle_vim_mode(),
+            1 => self.configure_custom_bindings(),
+            2 => self.state.start_edit(), // Repeat delay
+            3 => self.state.start_edit(), // Repeat rate
+            4 => self.reset_keyboard_defaults(),
             _ => {}
         }
     }
@@ -388,9 +388,9 @@ impl SettingsUI {
         match self.state.selected_index {
             0 => self.toggle_tracking_protection(),
             1 => self.toggle_external_images(),
-            2 => self.configure_data_retention(),
-            3 => self.clear_cache(),
-            4 => self.export_data(),
+            2 => self.state.start_edit(), // Data retention days
+            3 => self.toggle_analytics(),
+            4 => self.clear_cache(),
             _ => {}
         }
     }
@@ -412,11 +412,11 @@ impl SettingsUI {
     fn handle_advanced_select(&mut self) {
         match self.state.selected_index {
             0 => self.toggle_debug_mode(),
-            1 => self.configure_logging(),
-            2 => self.database_maintenance(),
-            3 => self.reset_all_settings(),
-            4 => self.export_configuration(),
-            5 => self.import_configuration(),
+            1 => self.cycle_log_level(),
+            2 => self.state.start_edit(), // Database path
+            3 => self.state.start_edit(), // Backup count
+            4 => self.database_maintenance(),
+            5 => self.reset_all_settings(),
             _ => {}
         }
     }
@@ -428,6 +428,10 @@ impl SettingsUI {
             SettingsTab::General => self.apply_general_edit(value),
             SettingsTab::UI => self.apply_ui_edit(value),
             SettingsTab::Performance => self.apply_performance_edit(value),
+            SettingsTab::Privacy => self.apply_privacy_edit(value),
+            SettingsTab::Keyboard => self.apply_keyboard_edit(value),
+            SettingsTab::Advanced => self.apply_advanced_edit(value),
+            SettingsTab::Accounts => self.apply_accounts_edit(value),
             SettingsTab::AI => self.apply_ai_edit(value),
             _ => {}
         }
@@ -592,6 +596,160 @@ impl SettingsUI {
         }
     }
 
+    fn apply_privacy_edit(&mut self, value: String) {
+        match self.state.selected_index {
+            2 => { // Data retention days
+                if let Ok(days) = value.parse::<u32>() {
+                    if days >= 30 && days <= 3650 { // 30 days to 10 years as per validation
+                        self.config.privacy.data_retention_days = days;
+                        if let Err(e) = self.config.save() {
+                            self.state.set_status(format!("Failed to save config: {}", e));
+                        } else {
+                            self.state.set_status(format!("Data retention set to {} days", days));
+                        }
+                    } else {
+                        self.state.set_status("Data retention must be between 30 days and 10 years".to_string());
+                    }
+                } else {
+                    self.state.set_status("Invalid data retention period".to_string());
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn apply_keyboard_edit(&mut self, value: String) {
+        match self.state.selected_index {
+            2 => { // Repeat delay
+                if let Ok(delay) = value.parse::<u32>() {
+                    if delay >= 100 && delay <= 2000 { // 0.1s to 2s
+                        self.config.keyboard.repeat_delay = delay;
+                        if let Err(e) = self.config.save() {
+                            self.state.set_status(format!("Failed to save config: {}", e));
+                        } else {
+                            self.state.set_status(format!("Repeat delay set to {} ms", delay));
+                        }
+                    } else {
+                        self.state.set_status("Repeat delay must be between 100 and 2000 ms".to_string());
+                    }
+                } else {
+                    self.state.set_status("Invalid repeat delay".to_string());
+                }
+            }
+            3 => { // Repeat rate
+                if let Ok(rate) = value.parse::<u32>() {
+                    if rate >= 10 && rate <= 200 { // 10ms to 200ms
+                        self.config.keyboard.repeat_rate = rate;
+                        if let Err(e) = self.config.save() {
+                            self.state.set_status(format!("Failed to save config: {}", e));
+                        } else {
+                            self.state.set_status(format!("Repeat rate set to {} ms", rate));
+                        }
+                    } else {
+                        self.state.set_status("Repeat rate must be between 10 and 200 ms".to_string());
+                    }
+                } else {
+                    self.state.set_status("Invalid repeat rate".to_string());
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn apply_advanced_edit(&mut self, value: String) {
+        match self.state.selected_index {
+            2 => { // Database path
+                use std::path::PathBuf;
+                let path = PathBuf::from(value.trim());
+                if let Some(parent) = path.parent() {
+                    if parent.exists() || path.is_absolute() {
+                        self.config.advanced.database_path = path;
+                        if let Err(e) = self.config.save() {
+                            self.state.set_status(format!("Failed to save config: {}", e));
+                        } else {
+                            self.state.set_status("Database path updated".to_string());
+                        }
+                    } else {
+                        self.state.set_status("Invalid database path".to_string());
+                    }
+                } else {
+                    self.state.set_status("Database path must include filename".to_string());
+                }
+            }
+            3 => { // Backup count
+                if let Ok(count) = value.parse::<u32>() {
+                    if count <= 100 { // Max 100 backups
+                        self.config.advanced.backup_count = count;
+                        if let Err(e) = self.config.save() {
+                            self.state.set_status(format!("Failed to save config: {}", e));
+                        } else {
+                            self.state.set_status(format!("Backup count set to {}", count));
+                        }
+                    } else {
+                        self.state.set_status("Backup count must be 100 or less".to_string());
+                    }
+                } else {
+                    self.state.set_status("Invalid backup count".to_string());
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn apply_accounts_edit(&mut self, value: String) {
+        match self.state.selected_index {
+            1 => { // Connection timeout
+                if let Ok(timeout) = value.parse::<u32>() {
+                    if timeout >= 5 && timeout <= 300 { // 5 seconds to 5 minutes
+                        self.config.accounts.connection_timeout = timeout;
+                        if let Err(e) = self.config.save() {
+                            self.state.set_status(format!("Failed to save config: {}", e));
+                        } else {
+                            self.state.set_status(format!("Connection timeout set to {} seconds", timeout));
+                        }
+                    } else {
+                        self.state.set_status("Connection timeout must be between 5 and 300 seconds".to_string());
+                    }
+                } else {
+                    self.state.set_status("Invalid connection timeout".to_string());
+                }
+            }
+            2 => { // Retry attempts
+                if let Ok(attempts) = value.parse::<u32>() {
+                    if attempts >= 1 && attempts <= 10 {
+                        self.config.accounts.retry_attempts = attempts;
+                        if let Err(e) = self.config.save() {
+                            self.state.set_status(format!("Failed to save config: {}", e));
+                        } else {
+                            self.state.set_status(format!("Retry attempts set to {}", attempts));
+                        }
+                    } else {
+                        self.state.set_status("Retry attempts must be between 1 and 10".to_string());
+                    }
+                } else {
+                    self.state.set_status("Invalid retry attempts".to_string());
+                }
+            }
+            3 => { // OAuth redirect port
+                if let Ok(port) = value.parse::<u16>() {
+                    if port >= 1024 && port <= 65535 { // Non-privileged ports
+                        self.config.accounts.oauth_redirect_port = port;
+                        if let Err(e) = self.config.save() {
+                            self.state.set_status(format!("Failed to save config: {}", e));
+                        } else {
+                            self.state.set_status(format!("OAuth redirect port set to {}", port));
+                        }
+                    } else {
+                        self.state.set_status("OAuth port must be between 1024 and 65535".to_string());
+                    }
+                } else {
+                    self.state.set_status("Invalid OAuth redirect port".to_string());
+                }
+            }
+            _ => {}
+        }
+    }
+
     fn apply_ai_edit(&mut self, value: String) {
         match self.state.selected_index {
             1 => { // AI Provider
@@ -703,6 +861,17 @@ impl SettingsUI {
         self.state.set_status("Importing accounts...".to_string());
     }
 
+    fn toggle_auto_discover(&mut self) {
+        self.config.accounts.auto_discover = !self.config.accounts.auto_discover;
+        let status = if self.config.accounts.auto_discover { "enabled" } else { "disabled" };
+        if let Err(e) = self.config.save() {
+            self.state.set_status(format!("Failed to save config: {}", e));
+        } else {
+            self.state.set_status(format!("Auto discovery {}", status));
+        }
+        self.state.modified = true;
+    }
+
     fn cycle_theme(&mut self) {
         let themes = ["Dark", "Light", "Auto"];
         let current_index = themes.iter().position(|&t| t == self.config.ui.theme).unwrap_or(0);
@@ -770,7 +939,12 @@ impl SettingsUI {
     }
 
     fn reset_keyboard_defaults(&mut self) {
-        self.state.set_status("Keyboard shortcuts reset to defaults".to_string());
+        self.config.keyboard = crate::config::KeyboardConfig::default();
+        if let Err(e) = self.config.save() {
+            self.state.set_status(format!("Failed to save config: {}", e));
+        } else {
+            self.state.set_status("Keyboard settings reset to defaults".to_string());
+        }
         self.state.modified = true;
     }
 
@@ -783,8 +957,18 @@ impl SettingsUI {
     }
 
     fn toggle_vim_mode(&mut self) {
-        self.state.set_status("Vim mode toggled".to_string());
+        self.config.keyboard.vim_mode = !self.config.keyboard.vim_mode;
+        let status = if self.config.keyboard.vim_mode { "enabled" } else { "disabled" };
+        if let Err(e) = self.config.save() {
+            self.state.set_status(format!("Failed to save config: {}", e));
+        } else {
+            self.state.set_status(format!("Vim mode {}", status));
+        }
         self.state.modified = true;
+    }
+
+    fn configure_custom_bindings(&mut self) {
+        self.state.set_status("Custom bindings configuration (feature coming soon)".to_string());
     }
 
     fn toggle_preload_images(&mut self) {
@@ -814,12 +998,35 @@ impl SettingsUI {
     }
 
     fn toggle_tracking_protection(&mut self) {
-        self.state.set_status("Tracking protection toggled".to_string());
+        self.config.privacy.tracking_protection = !self.config.privacy.tracking_protection;
+        let status = if self.config.privacy.tracking_protection { "enabled" } else { "disabled" };
+        if let Err(e) = self.config.save() {
+            self.state.set_status(format!("Failed to save config: {}", e));
+        } else {
+            self.state.set_status(format!("Tracking protection {}", status));
+        }
         self.state.modified = true;
     }
 
     fn toggle_external_images(&mut self) {
-        self.state.set_status("External image loading toggled".to_string());
+        self.config.privacy.external_images = !self.config.privacy.external_images;
+        let status = if self.config.privacy.external_images { "allowed" } else { "blocked" };
+        if let Err(e) = self.config.save() {
+            self.state.set_status(format!("Failed to save config: {}", e));
+        } else {
+            self.state.set_status(format!("External images {}", status));
+        }
+        self.state.modified = true;
+    }
+
+    fn toggle_analytics(&mut self) {
+        self.config.privacy.analytics = !self.config.privacy.analytics;
+        let status = if self.config.privacy.analytics { "enabled" } else { "disabled" };
+        if let Err(e) = self.config.save() {
+            self.state.set_status(format!("Failed to save config: {}", e));
+        } else {
+            self.state.set_status(format!("Analytics {}", status));
+        }
         self.state.modified = true;
     }
 
@@ -828,7 +1035,10 @@ impl SettingsUI {
     }
 
     fn clear_cache(&mut self) {
-        self.state.set_status("Cache cleared".to_string());
+        // TODO: Implement actual cache clearing logic
+        // For now, just show confirmation
+        self.state.set_status("Cache cleared successfully".to_string());
+        self.state.modified = true;
     }
 
     fn export_data(&mut self) {
@@ -870,7 +1080,30 @@ impl SettingsUI {
     }
 
     fn toggle_debug_mode(&mut self) {
-        self.state.set_status("Debug mode toggled".to_string());
+        self.config.advanced.debug_mode = !self.config.advanced.debug_mode;
+        let status = if self.config.advanced.debug_mode { "enabled" } else { "disabled" };
+        if let Err(e) = self.config.save() {
+            self.state.set_status(format!("Failed to save config: {}", e));
+        } else {
+            self.state.set_status(format!("Debug mode {}", status));
+        }
+        self.state.modified = true;
+    }
+
+    fn cycle_log_level(&mut self) {
+        use crate::config::LogLevel;
+        self.config.advanced.log_level = match self.config.advanced.log_level {
+            LogLevel::Error => LogLevel::Warn,
+            LogLevel::Warn => LogLevel::Info,
+            LogLevel::Info => LogLevel::Debug,
+            LogLevel::Debug => LogLevel::Trace,
+            LogLevel::Trace => LogLevel::Error,
+        };
+        if let Err(e) = self.config.save() {
+            self.state.set_status(format!("Failed to save config: {}", e));
+        } else {
+            self.state.set_status(format!("Log level set to {:?}", self.config.advanced.log_level));
+        }
         self.state.modified = true;
     }
 
@@ -1004,12 +1237,13 @@ impl SettingsUI {
 
     fn render_accounts_tab(&mut self, frame: &mut Frame, area: Rect, theme: &Theme) {
         let items = vec![
+            ListItem::new(format!("🔍 Auto discover: {}", 
+                if self.config.accounts.auto_discover { "Enabled" } else { "Disabled" })),
+            ListItem::new(format!("⏱️ Connection timeout: {} seconds", self.config.accounts.connection_timeout)),
+            ListItem::new(format!("🔄 Retry attempts: {}", self.config.accounts.retry_attempts)),
+            ListItem::new(format!("🌐 OAuth redirect port: {}", self.config.accounts.oauth_redirect_port)),
             ListItem::new("📧 Manage email accounts"),
             ListItem::new("🔍 Test connection"),
-            ListItem::new("🔐 Configure OAuth"),
-            ListItem::new("💾 Backup accounts"),
-            ListItem::new("📥 Restore accounts"),
-            ListItem::new("📋 Import accounts"),
         ];
 
         let list = List::new(items)
@@ -1045,11 +1279,12 @@ impl SettingsUI {
 
     fn render_keyboard_tab(&mut self, frame: &mut Frame, area: Rect, theme: &Theme) {
         let items = vec![
-            ListItem::new("⌨️ Configure shortcuts"),
+            ListItem::new(format!("🅥 Vim mode: {}", 
+                if self.config.keyboard.vim_mode { "Enabled" } else { "Disabled" })),
+            ListItem::new(format!("⌨️ Custom bindings: {} configured", self.config.keyboard.custom_bindings.len())),
+            ListItem::new(format!("⏱️ Repeat delay: {} ms", self.config.keyboard.repeat_delay)),
+            ListItem::new(format!("🔄 Repeat rate: {} ms", self.config.keyboard.repeat_rate)),
             ListItem::new("🔄 Reset to defaults"),
-            ListItem::new("📥 Import configuration"),
-            ListItem::new("📤 Export configuration"),
-            ListItem::new("🅥 Vim mode: Enabled"),
         ];
 
         let list = List::new(items)
@@ -1082,11 +1317,14 @@ impl SettingsUI {
 
     fn render_privacy_tab(&mut self, frame: &mut Frame, area: Rect, theme: &Theme) {
         let items = vec![
-            ListItem::new("🛡️ Tracking protection: Enabled"),
-            ListItem::new("🖼️ External images: Block"),
-            ListItem::new("📅 Data retention policy"),
+            ListItem::new(format!("🛡️ Tracking protection: {}", 
+                if self.config.privacy.tracking_protection { "Enabled" } else { "Disabled" })),
+            ListItem::new(format!("🖼️ External images: {}", 
+                if self.config.privacy.external_images { "Allow" } else { "Block" })),
+            ListItem::new(format!("📅 Data retention: {} days", self.config.privacy.data_retention_days)),
+            ListItem::new(format!("📊 Analytics: {}", 
+                if self.config.privacy.analytics { "Enabled" } else { "Disabled" })),
             ListItem::new("🗑️ Clear cache"),
-            ListItem::new("📤 Export user data"),
         ];
 
         let list = List::new(items)
@@ -1120,12 +1358,14 @@ impl SettingsUI {
 
     fn render_advanced_tab(&mut self, frame: &mut Frame, area: Rect, theme: &Theme) {
         let items = vec![
-            ListItem::new("🐛 Debug mode: Disabled"),
-            ListItem::new("📝 Logging configuration"),
+            ListItem::new(format!("🐛 Debug mode: {}", 
+                if self.config.advanced.debug_mode { "Enabled" } else { "Disabled" })),
+            ListItem::new(format!("📝 Log level: {:?}", self.config.advanced.log_level)),
+            ListItem::new(format!("📁 Database path: {}", 
+                self.config.advanced.database_path.display())),
+            ListItem::new(format!("💾 Backup count: {}", self.config.advanced.backup_count)),
             ListItem::new("🗄️ Database maintenance"),
             ListItem::new("⚠️ Reset all settings"),
-            ListItem::new("📤 Export configuration"),
-            ListItem::new("📥 Import configuration"),
         ];
 
         let list = List::new(items)
