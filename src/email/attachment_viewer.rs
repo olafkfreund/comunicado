@@ -668,6 +668,25 @@ impl AttachmentViewer {
         }
         Ok(())
     }
+
+    /// Get the current attachment info if one is being viewed
+    pub fn get_current_attachment(&self) -> Option<&AttachmentInfo> {
+        self.current_attachment.as_ref()
+    }
+
+    /// Save the current attachment to a specific path
+    pub async fn save_current_attachment_to_path(
+        &self,
+        save_path: &std::path::Path,
+        data: &[u8],
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        if let Some(parent) = save_path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        
+        std::fs::write(save_path, data)?;
+        Ok(())
+    }
 }
 
 impl Default for AttachmentViewer {

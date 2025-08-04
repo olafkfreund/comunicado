@@ -53,6 +53,7 @@ pulldown-cmark = "0.9"  # Enhanced markdown support for better text formatting
 # Image processing and terminal graphics
 image = { version = "0.24", features = ["jpeg", "png", "gif", "webp"] }
 imageproc = "0.23"
+gif = "0.13"
 
 # Email and networking
 base64 = "0.22"

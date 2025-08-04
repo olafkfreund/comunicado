@@ -12,8 +12,9 @@ use crate::{
         content_preview::EmailContent,
         email_viewer::{EmailViewer, EmailViewerAction},
         message_list::MessageList,
+        compose::{ComposeUI, ComposeAction},
     },
-    contacts::SenderRecognitionService,
+    contacts::{SenderRecognitionService, ContactsManager},
 };
 use ratatui::{
     layout::{Constraint, Direction, Layout},
@@ -45,10 +46,12 @@ pub struct EmailComponent {
     // UI components
     message_list: MessageList,
     email_viewer: EmailViewer,
+    compose_ui: Option<ComposeUI>,
     
     // Data and services
     database: Option<Arc<EmailDatabase>>,
     sender_recognition: Option<Arc<SenderRecognitionService>>,
+    contacts_manager: Option<Arc<ContactsManager>>,
     
     // Current state
     current_account: Option<String>,
@@ -83,8 +86,10 @@ impl EmailComponent {
             mode: EmailComponentMode::MessageList,
             message_list: MessageList::new(),
             email_viewer: EmailViewer::new(),
+            compose_ui: None,
             database: None,
             sender_recognition: None,
+            contacts_manager: None,
             current_account: None,
             current_folder: None,
             selected_message: None,
@@ -100,9 +105,11 @@ impl EmailComponent {
         mut self,
         database: Option<Arc<EmailDatabase>>,
         sender_recognition: Option<Arc<SenderRecognitionService>>,
+        contacts_manager: Option<Arc<ContactsManager>>,
     ) -> Self {
         self.database = database;
         self.sender_recognition = sender_recognition;
+        self.contacts_manager = contacts_manager;
         self
     }
     
@@ -131,7 +138,10 @@ impl EmailComponent {
                 self.focused_section = EmailSection::MessagePreview;
             }
             EmailComponentMode::Compose => {
-                // TODO: Initialize compose view
+                // Initialize compose UI if we have contacts manager
+                if let Some(ref contacts_manager) = self.contacts_manager {
+                    self.compose_ui = Some(ComposeUI::new(contacts_manager.clone()));
+                }
             }
         }
         
@@ -223,6 +233,87 @@ impl EmailComponent {
         }
     }
     
+    /// Start compose mode for new email
+    pub fn start_compose(&mut self) -> ComponentResult<()> {
+        self.set_mode(EmailComponentMode::Compose)?;
+        Ok(())
+    }
+    
+    /// Start compose mode for reply
+    pub fn start_reply(&mut self, message: &StoredMessage) -> ComponentResult<()> {
+        if let Some(ref contacts_manager) = self.contacts_manager {
+            let reply_to = &message.from_addr;
+            let subject = if message.subject.starts_with("Re: ") {
+                message.subject.clone()
+            } else {
+                format!("Re: {}", message.subject)
+            };
+            
+            self.compose_ui = Some(ComposeUI::new_reply(
+                contacts_manager.clone(),
+                reply_to,
+                &subject,
+            ));
+            self.set_mode(EmailComponentMode::Compose)?;
+        }
+        Ok(())
+    }
+    
+    /// Start compose mode for forward
+    pub fn start_forward(&mut self, message: &StoredMessage) -> ComponentResult<()> {
+        if let Some(ref contacts_manager) = self.contacts_manager {
+            let subject = if message.subject.starts_with("Fwd: ") {
+                message.subject.clone()
+            } else {
+                format!("Fwd: {}", message.subject)
+            };
+            
+            let original_body = message.body_text.as_deref().unwrap_or("");
+            
+            self.compose_ui = Some(ComposeUI::new_forward(
+                contacts_manager.clone(),
+                &subject,
+                original_body,
+            ));
+            self.set_mode(EmailComponentMode::Compose)?;
+        }
+        Ok(())
+    }
+    
+    /// Handle compose key events
+    pub async fn handle_compose_key(&mut self, key: KeyEvent) -> ComponentResult<Option<ComposeAction>> {
+        if let Some(ref mut compose_ui) = self.compose_ui {
+            let action = compose_ui.handle_key(key).await;
+            Ok(Some(action))
+        } else {
+            Ok(None)
+        }
+    }
+    
+    /// Get compose data for sending
+    pub fn get_compose_data(&self) -> Option<crate::ui::EmailComposeData> {
+        self.compose_ui.as_ref().map(|ui| ui.get_email_data())
+    }
+    
+    /// Check if compose form is modified
+    pub fn is_compose_modified(&self) -> bool {
+        self.compose_ui.as_ref().map(|ui| ui.is_modified()).unwrap_or(false)
+    }
+    
+    /// Clear compose modifications (after saving)
+    pub fn clear_compose_modified(&mut self) {
+        if let Some(ref mut compose_ui) = self.compose_ui {
+            compose_ui.clear_modified();
+        }
+    }
+    
+    /// Exit compose mode
+    pub fn exit_compose(&mut self) -> ComponentResult<()> {
+        self.compose_ui = None;
+        self.set_mode(EmailComponentMode::MessageList)?;
+        Ok(())
+    }
+    
     /// Render the message list view
     fn render_message_list(&mut self, context: &mut RenderContext<'_>) -> ComponentResult<()> {
         // Create layout for folder tree and message list
@@ -282,16 +373,20 @@ impl EmailComponent {
     
     /// Render the compose view
     fn render_compose(&mut self, context: &mut RenderContext<'_>) -> ComponentResult<()> {
-        // TODO: Implement compose view rendering
-        let placeholder = Paragraph::new("Compose view - Not implemented yet")
-            .block(
-                Block::default()
-                    .title("Compose Email")
-                    .borders(Borders::ALL)
-                    .border_style(Style::default().fg(context.theme.colors.palette.border))
-            );
-        
-        context.frame.render_widget(placeholder, context.area);
+        if let Some(ref mut compose_ui) = self.compose_ui {
+            compose_ui.render(context.frame, context.area, context.theme);
+        } else {
+            // Show fallback message if no compose UI is available
+            let placeholder = Paragraph::new("Compose view requires contacts manager to be initialized")
+                .block(
+                    Block::default()
+                        .title("Compose Email")
+                        .borders(Borders::ALL)
+                        .border_style(Style::default().fg(context.theme.colors.palette.border))
+                );
+            
+            context.frame.render_widget(placeholder, context.area);
+        }
         Ok(())
     }
     
@@ -339,9 +434,10 @@ impl EmailComponent {
         }
     }
     
-    /// Handle key events for compose mode
-    fn handle_compose_key(&mut self, _key: KeyEvent) -> ComponentResult<EventResult> {
-        // TODO: Implement compose key handling
+    /// Handle key events for compose mode (internal)
+    fn handle_compose_key_internal(&mut self, _key: KeyEvent) -> ComponentResult<EventResult> {
+        // This would handle compose key events synchronously if needed
+        // For now, delegate to the async version via the main event loop
         Ok(EventResult::Ignored)
     }
 }
@@ -400,7 +496,7 @@ impl UIComponent for EmailComponent {
                 match self.mode {
                     EmailComponentMode::MessageList => self.handle_message_list_key(*key),
                     EmailComponentMode::EmailViewer => self.handle_email_viewer_key(*key),
-                    EmailComponentMode::Compose => self.handle_compose_key(*key),
+                    EmailComponentMode::Compose => self.handle_compose_key_internal(*key),
                 }
             }
             UIEvent::FocusGained => {

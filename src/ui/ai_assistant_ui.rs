@@ -1,6 +1,6 @@
 //! AI assistant UI components for email management
 
-use crate::email::{AIEmailAssistant, EmailCompositionAssistance, EmailReplyAssistance, EmailSummary};
+use crate::email::{AIEmailAssistant, EmailCompositionAssistance, EmailReplyAssistance, EmailSummary, BulkEmailAnalysis, BulkAnalysisStats};
 use crate::theme::Theme;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -26,6 +26,8 @@ pub struct AIAssistantUIState {
     pub reply_assistance: Option<EmailReplyAssistance>,
     /// Current email summary
     pub email_summary: Option<EmailSummary>,
+    /// Current bulk analysis results
+    pub bulk_analysis: Option<BulkEmailAnalysis>,
     /// Selected suggestion index
     pub selected_suggestion: usize,
     /// Error message if any
@@ -58,6 +60,7 @@ impl Default for AIAssistantUIState {
             composition_assistance: None,
             reply_assistance: None,
             email_summary: None,
+            bulk_analysis: None,
             selected_suggestion: 0,
             error_message: None,
             list_state: ListState::default(),
@@ -526,23 +529,211 @@ impl AIAssistantUI {
         frame.render_widget(instructions, chunks[4]);
     }
 
-    /// Render bulk analysis placeholder
+    /// Render bulk analysis interface
     fn render_bulk_analysis(
         &self,
         frame: &mut Frame,
         area: Rect,
-        _state: &AIAssistantUIState,
+        state: &AIAssistantUIState,
         theme: &Theme,
         block: Block,
     ) {
         let inner = block.inner(area);
         frame.render_widget(block, area);
 
-        let placeholder = Paragraph::new("Bulk email analysis feature coming soon...")
+        if let Some(bulk_analysis) = &state.bulk_analysis {
+            self.render_bulk_analysis_results(frame, inner, bulk_analysis, theme);
+        } else {
+            self.render_bulk_analysis_start_screen(frame, inner, theme);
+        }
+    }
+
+    /// Render bulk analysis results
+    fn render_bulk_analysis_results(
+        &self,
+        frame: &mut Frame,
+        area: Rect,
+        analysis: &BulkEmailAnalysis,
+        theme: &Theme,
+    ) {
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(8),  // Stats overview
+                Constraint::Length(6),  // Category distribution
+                Constraint::Min(0),     // Insights
+            ])
+            .split(area);
+
+        // Stats overview
+        self.render_analysis_stats(frame, chunks[0], &analysis.stats, theme);
+        
+        // Category distribution
+        self.render_category_distribution(frame, chunks[1], &analysis.category_distribution, theme);
+        
+        // Overall insights
+        self.render_analysis_insights(frame, chunks[2], &analysis.insights, theme);
+    }
+
+    /// Render analysis statistics
+    fn render_analysis_stats(
+        &self,
+        frame: &mut Frame,
+        area: Rect,
+        stats: &BulkAnalysisStats,
+        theme: &Theme,
+    ) {
+        let success_rate = if stats.total_processed > 0 {
+            (stats.successful as f32 / stats.total_processed as f32) * 100.0
+        } else {
+            0.0
+        };
+
+        let stats_text = format!(
+            "📊 Analysis Statistics\n\n\
+            Total Emails Processed: {}\n\
+            Successfully Analyzed: {} ({:.1}%)\n\
+            Failed Analyses: {}\n\
+            Processing Time: {:.2}s",
+            stats.total_processed,
+            stats.successful,
+            success_rate,
+            stats.failed,
+            stats.processing_time_ms as f32 / 1000.0
+        );
+
+        let stats_widget = Paragraph::new(stats_text)
+            .style(Style::default().fg(theme.ai_assistant_text()))
+            .block(
+                Block::default()
+                    .title("Statistics")
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(theme.ai_assistant_border()))
+            )
+            .wrap(Wrap { trim: true });
+        
+        frame.render_widget(stats_widget, area);
+    }
+
+    /// Render category distribution
+    fn render_category_distribution(
+        &self,
+        frame: &mut Frame,
+        area: Rect,
+        categories: &std::collections::HashMap<crate::ai::EmailCategory, usize>,
+        theme: &Theme,
+    ) {
+        let mut category_items = Vec::new();
+        for (category, count) in categories {
+            let category_name = match category {
+                crate::ai::EmailCategory::Work => "💼 Work",
+                crate::ai::EmailCategory::Personal => "👤 Personal", 
+                crate::ai::EmailCategory::Promotional => "📢 Promotional",
+                crate::ai::EmailCategory::Social => "👥 Social",
+                crate::ai::EmailCategory::Financial => "💰 Financial",
+                crate::ai::EmailCategory::Travel => "✈️ Travel",
+                crate::ai::EmailCategory::Shopping => "🛒 Shopping",
+                crate::ai::EmailCategory::Newsletter => "📰 Newsletter",
+                crate::ai::EmailCategory::System => "⚙️ System",
+                crate::ai::EmailCategory::Spam => "🚫 Spam",
+                crate::ai::EmailCategory::Uncategorized => "📁 Uncategorized",
+            };
+            category_items.push(ListItem::new(format!("  {} - {} emails", category_name, count)));
+        }
+
+        let category_list = List::new(category_items)
+            .style(Style::default().fg(theme.ai_assistant_text()))
+            .block(
+                Block::default()
+                    .title("Email Categories")
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(theme.ai_assistant_border()))
+            );
+
+        frame.render_widget(category_list, area);
+    }
+
+    /// Render analysis insights
+    fn render_analysis_insights(
+        &self,
+        frame: &mut Frame,
+        area: Rect,
+        insights: &[String],
+        theme: &Theme,
+    ) {
+        let insights_text = if insights.is_empty() {
+            "No specific insights available for this analysis.".to_string()
+        } else {
+            format!("🔍 Key Insights:\n\n• {}", insights.join("\n• "))
+        };
+
+        let insights_widget = Paragraph::new(insights_text)
+            .style(Style::default().fg(theme.ai_assistant_text()))
+            .block(
+                Block::default()
+                    .title("Analysis Insights")
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(theme.ai_assistant_border()))
+            )
+            .wrap(Wrap { trim: true });
+
+        frame.render_widget(insights_widget, area);
+    }
+
+    /// Render bulk analysis start screen
+    fn render_bulk_analysis_start_screen(
+        &self,
+        frame: &mut Frame,
+        area: Rect,
+        theme: &Theme,
+    ) {
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(6),  // Title and description
+                Constraint::Min(0),     // Instructions
+            ])
+            .split(area);
+
+        // Title and description
+        let title_text = "🤖 AI Bulk Email Analysis\n\n\
+            Analyze multiple emails at once to:\n\
+            • Categorize emails automatically\n\
+            • Extract key insights and patterns\n\
+            • Generate summary reports";
+
+        let title_widget = Paragraph::new(title_text)
             .style(Style::default().fg(theme.ai_assistant_text()))
             .alignment(Alignment::Center)
             .wrap(Wrap { trim: true });
-        frame.render_widget(placeholder, inner);
+
+        frame.render_widget(title_widget, chunks[0]);
+
+        // Instructions
+        let instructions_text = "📋 How to Use:\n\n\
+            1. Select emails in your inbox that you want to analyze\n\
+            2. Press 'A' to start bulk analysis\n\
+            3. Choose analysis parameters (categories, insights, etc.)\n\
+            4. Review results and insights\n\n\
+            💡 Features:\n\
+            • Smart email categorization\n\
+            • Sentiment analysis\n\
+            • Priority detection\n\
+            • Action item extraction\n\
+            • Duplicate detection\n\n\
+            Press 'A' when you have emails selected to begin analysis.";
+
+        let instructions_widget = Paragraph::new(instructions_text)
+            .style(Style::default().fg(theme.ai_assistant_context()))
+            .block(
+                Block::default()
+                    .title("Getting Started")
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(theme.ai_assistant_border()))
+            )
+            .wrap(Wrap { trim: true });
+
+        frame.render_widget(instructions_widget, chunks[1]);
     }
 
     /// Render loading state

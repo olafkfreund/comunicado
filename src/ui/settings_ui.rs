@@ -2,6 +2,8 @@
 
 use crate::theme::Theme;
 use crate::config::AppConfig;
+use crate::ui::account_manager_ui::AccountManagerUI;
+use crate::ui::keyboard_bindings_ui::KeyboardBindingsUI;
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     text::Line,
@@ -206,14 +208,23 @@ impl SettingsUIState {
 pub struct SettingsUI {
     state: SettingsUIState,
     config: AppConfig,
+    account_manager_ui: AccountManagerUI,
+    show_account_manager: bool,
+    keyboard_bindings_ui: KeyboardBindingsUI,
+    show_keyboard_bindings: bool,
 }
 
 impl SettingsUI {
     pub fn new() -> Self {
         let config = AppConfig::load().unwrap_or_default();
+        let keyboard_bindings_ui = KeyboardBindingsUI::with_bindings(config.keyboard.custom_bindings.clone());
         Self {
             state: SettingsUIState::new(),
             config,
+            account_manager_ui: AccountManagerUI::new(),
+            show_account_manager: false,
+            keyboard_bindings_ui,
+            show_keyboard_bindings: false,
         }
     }
 
@@ -236,10 +247,47 @@ impl SettingsUI {
     pub fn is_visible(&self) -> bool {
         self.state.is_visible()
     }
+    
+    /// Initialize account manager with IMAP account manager reference
+    pub fn initialize_account_manager(&mut self, imap_manager: std::sync::Arc<tokio::sync::RwLock<crate::imap::account_manager::ImapAccountManager>>) {
+        self.account_manager_ui.set_account_manager(imap_manager);
+    }
 
     pub fn handle_key(&mut self, key: KeyCode, modifiers: KeyModifiers) -> bool {
         if !self.state.visible {
             return false;
+        }
+        
+        // Handle account manager if it's shown
+        if self.show_account_manager {
+            if self.account_manager_ui.handle_key(key) {
+                return true;
+            } else {
+                // Account manager returned false, meaning close it
+                self.show_account_manager = false;
+                return true;
+            }
+        }
+        
+        // Handle keyboard bindings manager if it's shown
+        if self.show_keyboard_bindings {
+            if self.keyboard_bindings_ui.handle_key(key) {
+                // Update config with new bindings if modified
+                if self.keyboard_bindings_ui.is_modified() {
+                    self.config.keyboard.custom_bindings = self.keyboard_bindings_ui.get_bindings();
+                    self.state.modified = true;
+                }
+                return true;
+            } else {
+                // Keyboard bindings manager returned false, meaning close it
+                self.show_keyboard_bindings = false;
+                // Save any changes before closing
+                if self.keyboard_bindings_ui.is_modified() {
+                    self.config.keyboard.custom_bindings = self.keyboard_bindings_ui.get_bindings();
+                    self.state.modified = true;
+                }
+                return true;
+            }
         }
 
         if self.state.edit_mode {
@@ -916,7 +964,9 @@ impl SettingsUI {
     }
 
     fn open_account_manager(&mut self) {
-        self.state.set_status("Account manager (feature coming soon)".to_string());
+        self.show_account_manager = true;
+        self.state.set_status("Opening account manager...".to_string());
+        // TODO: Refresh account list when we have the account manager reference
     }
 
     fn test_connection(&mut self) {
@@ -1048,7 +1098,8 @@ impl SettingsUI {
     }
 
     fn configure_custom_bindings(&mut self) {
-        self.state.set_status("Custom bindings configuration (feature coming soon)".to_string());
+        self.show_keyboard_bindings = true;
+        self.state.set_status("Opening keyboard bindings configuration...".to_string());
     }
 
     fn toggle_preload_images(&mut self) {
@@ -1274,6 +1325,16 @@ impl SettingsUI {
 
         // Render footer with status and shortcuts
         self.render_footer(frame, chunks[2], theme);
+        
+        // Render account manager overlay if shown
+        if self.show_account_manager {
+            self.account_manager_ui.render(frame, area, theme);
+        }
+        
+        // Render keyboard bindings manager overlay if shown
+        if self.show_keyboard_bindings {
+            self.keyboard_bindings_ui.render(frame, area, theme);
+        }
     }
 
     fn render_tab_bar(&self, frame: &mut Frame, area: Rect, theme: &Theme) {

@@ -16,6 +16,7 @@ use crate::{
     oauth2::SecureStorage,
     imap::ImapAccountManager,
     smtp::SmtpService,
+    ui::settings_ui::SettingsUI,
 };
 use ratatui::{layout::Rect, Frame, style::{Style, Modifier}};
 use std::sync::Arc;
@@ -75,6 +76,7 @@ pub struct ModularUI {
     is_initialized: bool,
     show_help: bool,
     show_settings: bool,
+    settings_ui: SettingsUI,
     #[allow(dead_code)]
     global_focus: bool,
     
@@ -101,6 +103,7 @@ impl ModularUI {
             is_initialized: false,
             show_help: false,
             show_settings: false,
+            settings_ui: SettingsUI::new(),
             global_focus: true,
             frame_count: 0,
             last_performance_check: std::time::Instant::now(),
@@ -132,7 +135,7 @@ impl ModularUI {
         
         // Create and register email component
         let mut email_component = EmailComponent::new()
-            .with_services(database, None /* sender_recognition service */);
+            .with_services(database, None /* sender_recognition service */, None /* contacts_manager */);
         email_component.initialize()?;
         let email_id = self.component_registry.register(email_component)?;
         self.email_component_id = Some(email_id);
@@ -328,10 +331,10 @@ impl ModularUI {
         // TODO: Fix borrowing issues with component rendering
         match self.current_mode {
             AppMode::Settings => {
-                self.render_settings_placeholder(frame, main_area, theme);
+                self.render_settings(frame, main_area, theme);
             }
             AppMode::Help => {
-                self.render_help_placeholder(frame, main_area, theme);
+                self.render_help(frame, main_area, theme);
             }
             _ => {
                 // Render a placeholder for now while we work on the borrowing issues
@@ -504,42 +507,96 @@ impl ModularUI {
         Ok(())
     }
     
-    /// Render settings placeholder
-    fn render_settings_placeholder(&self, frame: &mut Frame, area: Rect, theme: &Theme) {
-        use ratatui::widgets::{Block, Borders, Paragraph};
-        use ratatui::layout::Alignment;
-        
-        let settings_text = "⚙️ Settings\n\nSettings interface coming soon...";
-        let settings_widget = Paragraph::new(settings_text)
-            .block(
-                Block::default()
-                    .title("Settings")
-                    .borders(Borders::ALL)
-                    .border_style(Style::default().fg(theme.colors.palette.border))
-            )
-            .alignment(Alignment::Center)
-            .style(Style::default().fg(theme.colors.palette.text_muted));
-            
-        frame.render_widget(settings_widget, area);
+    /// Render settings interface
+    fn render_settings(&mut self, frame: &mut Frame, area: Rect, theme: &Theme) {
+        self.settings_ui.render(frame, area, theme);
     }
     
-    /// Render help placeholder
-    fn render_help_placeholder(&self, frame: &mut Frame, area: Rect, theme: &Theme) {
-        use ratatui::widgets::{Block, Borders, Paragraph};
-        use ratatui::layout::Alignment;
+    /// Render help interface
+    fn render_help(&self, frame: &mut Frame, area: Rect, theme: &Theme) {
+        use ratatui::widgets::{Block, Borders, Paragraph, List, ListItem};
+        use ratatui::layout::{Alignment, Constraint, Direction, Layout};
+        use ratatui::text::{Line, Span};
+        use ratatui::style::{Color, Modifier};
         
-        let help_text = "❓ Help\n\nHelp system coming soon...";
-        let help_widget = Paragraph::new(help_text)
+        // Create layout with title and main content
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(3), // Title area
+                Constraint::Min(0),    // Content area
+            ])
+            .split(area);
+        
+        // Title area
+        let title_widget = Paragraph::new("🔥 Comunicado Help System")
             .block(
                 Block::default()
-                    .title("Help")
                     .borders(Borders::ALL)
                     .border_style(Style::default().fg(theme.colors.palette.border))
             )
             .alignment(Alignment::Center)
-            .style(Style::default().fg(theme.colors.palette.text_muted));
-            
-        frame.render_widget(help_widget, area);
+            .style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD));
+        
+        frame.render_widget(title_widget, chunks[0]);
+        
+        // Main content area with keyboard shortcuts
+        let help_content = vec![
+            ListItem::new(Line::from(vec![
+                Span::styled("📧 EMAIL SHORTCUTS", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
+            ])),
+            ListItem::new("  F3 / e       - Switch to Email mode"),
+            ListItem::new("  ↑↓ / j/k     - Navigate email list"),
+            ListItem::new("  Enter        - View selected email"),
+            ListItem::new("  d            - Delete email"),
+            ListItem::new("  a            - Archive email"), 
+            ListItem::new("  r            - Mark as read/unread"),
+            ListItem::new("  Shift+S      - Save attachment"),
+            ListItem::new("  s            - Save attachment (in viewer)"),
+            ListItem::new(""),
+            ListItem::new(Line::from(vec![
+                Span::styled("📅 CALENDAR SHORTCUTS", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD))
+            ])),
+            ListItem::new("  F4 / c       - Switch to Calendar mode"),
+            ListItem::new("  ←→           - Navigate periods"),
+            ListItem::new("  n            - New event"),
+            ListItem::new("  Enter        - View/Edit event"),
+            ListItem::new("  d            - Delete event"),
+            ListItem::new(""),
+            ListItem::new(Line::from(vec![
+                Span::styled("👥 CONTACT SHORTCUTS", Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD))
+            ])),
+            ListItem::new("  F5 / o       - Switch to Contacts mode"),
+            ListItem::new("  ↑↓ / j/k     - Navigate contact list"),
+            ListItem::new("  Enter        - View contact details"),
+            ListItem::new("  n            - New contact"),
+            ListItem::new("  e            - Edit contact"),
+            ListItem::new(""),
+            ListItem::new(Line::from(vec![
+                Span::styled("⚙️  GLOBAL SHORTCUTS", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))
+            ])),
+            ListItem::new("  F1 / ?       - Toggle this help"),
+            ListItem::new("  F2           - Settings"),
+            ListItem::new("  Ctrl+D       - Command palette"),
+            ListItem::new("  Tab          - Cycle through panes"),
+            ListItem::new("  Esc          - Close overlays/go back"),
+            ListItem::new("  Ctrl+C / q   - Quit application"),
+            ListItem::new(""),
+            ListItem::new(Line::from(vec![
+                Span::styled("Press F1 or ? to close this help", Style::default().fg(Color::Gray).add_modifier(Modifier::ITALIC))
+            ])),
+        ];
+        
+        let help_list = List::new(help_content)
+            .block(
+                Block::default()
+                    .title("Keyboard Shortcuts & Usage Guide")
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(theme.colors.palette.border))
+            )
+            .style(Style::default().fg(theme.colors.palette.text_primary));
+        
+        frame.render_widget(help_list, chunks[1]);
     }
     
     /// Render help overlay
@@ -652,6 +709,7 @@ impl Default for ModularUI {
                 is_initialized: false,
                 show_help: false,
                 show_settings: false,
+                settings_ui: SettingsUI::new(),
                 global_focus: true,
                 frame_count: 0,
                 last_performance_check: std::time::Instant::now(),

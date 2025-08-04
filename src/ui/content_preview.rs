@@ -3155,6 +3155,23 @@ This is a sample email showcasing the modern email display format."
         
         Ok(())
     }
+
+    /// Get reference to the attachment viewer
+    pub fn attachment_viewer(&self) -> &AttachmentViewer {
+        &self.attachment_viewer
+    }
+
+    /// Save attachment from current viewer with optional custom path
+    pub async fn save_attachment_from_current_viewer(
+        &self,
+        save_path: Option<std::path::PathBuf>,
+    ) -> Result<std::path::PathBuf, Box<dyn std::error::Error>> {
+        if let Some(attachment_info) = self.attachment_viewer.get_current_attachment() {
+            self.save_attachment_from_viewer(attachment_info, save_path).await
+        } else {
+            Err("No attachment currently being viewed".into())
+        }
+    }
 }
 
 impl Default for ContentPreview {

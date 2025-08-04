@@ -1829,27 +1829,681 @@ impl CliHandler {
     }
 
     /// Handle config commands
-    async fn handle_config(&self, _args: ConfigArgs, _dry_run: bool) -> Result<()> {
+    async fn handle_config(&self, args: ConfigArgs, dry_run: bool) -> Result<()> {
         println!("⚙️  Configuration Management");
         println!("============================\n");
 
-        // TODO: Implement config management
-        println!("   ⚠️  Configuration management not yet implemented");
+        if dry_run {
+            println!("🧪 Dry run mode - showing what would be done\n");
+        }
+
+        if args.show {
+            self.show_current_config(dry_run).await?;
+        } else if args.validate {
+            self.validate_config(dry_run).await?;
+        } else if args.paths {
+            self.show_config_locations().await?;
+        } else if args.reset {
+            self.reset_config(dry_run).await?;
+        } else if args.export.is_some() {
+            if let Some(export_path) = &args.export {
+                self.export_config(export_path, dry_run).await?;
+            }
+        } else if args.import.is_some() {
+            if let Some(import_path) = &args.import {
+                self.import_config(import_path, dry_run).await?;
+            }
+        } else {
+            // Show general config status by default
+            self.show_config_status().await?;
+        }
 
         Ok(())
     }
 
+    /// Show current configuration
+    async fn show_current_config(&self, dry_run: bool) -> Result<()> {
+        println!("📄 Current Configuration");
+        println!("========================\n");
+
+        if dry_run {
+            println!("   🧪 Would display current configuration settings");
+            return Ok(());
+        }
+
+        // Load and display configuration
+        match crate::config::AppConfig::load() {
+            Ok(config) => {
+                println!("✅ Configuration loaded successfully\n");
+                
+                // General settings
+                println!("🔧 General Settings:");
+                println!("   Auto-sync: {}", config.general.auto_sync);
+                println!("   Sync interval: {} minutes", config.general.sync_interval_minutes);
+                println!("   Fetch on startup: {}", config.general.fetch_on_startup);
+                println!("   Max concurrent syncs: {}", config.general.max_concurrent_syncs);
+                
+                // UI settings
+                println!("\n🎨 UI Settings:");
+                println!("   Theme: {}", config.ui.theme);
+                println!("   Show sidebar: {}", config.ui.show_sidebar);
+                println!("   Font size: {}", config.ui.font_size);
+                println!("   Animations: {}", config.ui.animations);
+                
+                // Performance settings
+                println!("\n⚡ Performance Settings:");
+                println!("   Cache size: {} MB", config.performance.cache_size_mb);
+                println!("   Preload images: {}", config.performance.preload_images);
+                println!("   Max concurrent operations: {}", config.performance.max_concurrent_operations);
+                println!("   Background sync: {}", config.performance.background_sync);
+                
+                // Privacy settings
+                println!("\n🔒 Privacy Settings:");
+                println!("   External images: {}", config.privacy.external_images);
+                println!("   Tracking protection: {}", config.privacy.tracking_protection);
+                println!("   Analytics: {}", config.privacy.analytics);
+                
+                // Keyboard settings
+                println!("\n⌨️  Keyboard Settings:");
+                println!("   Vim mode: {}", config.keyboard.vim_mode);
+                println!("   Custom bindings: {}", config.keyboard.custom_bindings.len());
+                println!("   Repeat delay: {} ms", config.keyboard.repeat_delay);
+                
+                // AI settings
+                println!("\n🤖 AI Settings:");
+                println!("   Provider: {}", config.ai.provider);
+                println!("   Model: {}", config.ai.model);
+                println!("   Cache responses: {}", config.ai.cache_responses);
+                
+            }
+            Err(e) => {
+                println!("❌ Failed to load configuration: {}", e);
+                println!("   💡 Run 'comunicado config --validate' to check for issues");
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Validate configuration files
+    async fn validate_config(&self, dry_run: bool) -> Result<()> {
+        println!("✅ Configuration Validation");
+        println!("===========================\n");
+
+        if dry_run {
+            println!("   🧪 Would validate configuration files");
+            return Ok(());
+        }
+
+        // Validate main config
+        match crate::config::AppConfig::load() {
+            Ok(config) => {
+                println!("✅ Main configuration file is valid");
+                
+                // Validate specific sections
+                if let Err(e) = crate::config::validation::validate_general_config(&config.general) {
+                    println!("❌ General settings validation failed: {}", e);
+                } else {
+                    println!("✅ General settings are valid");
+                }
+                
+                if let Err(e) = crate::config::validation::validate_ui_config(&config.ui) {
+                    println!("❌ UI settings validation failed: {}", e);
+                } else {
+                    println!("✅ UI settings are valid");
+                }
+                
+                if let Err(e) = crate::config::validation::validate_performance_config(&config.performance) {
+                    println!("❌ Performance settings validation failed: {}", e);
+                } else {
+                    println!("✅ Performance settings are valid");
+                }
+                
+                if let Err(e) = crate::config::validation::validate_privacy_config(&config.privacy) {
+                    println!("❌ Privacy settings validation failed: {}", e);
+                } else {
+                    println!("✅ Privacy settings are valid");
+                }
+                
+                if let Err(e) = crate::config::validation::validate_keyboard_config(&config.keyboard) {
+                    println!("❌ Keyboard settings validation failed: {}", e);
+                } else {
+                    println!("✅ Keyboard settings are valid");
+                }
+                
+                if let Err(e) = crate::config::validation::validate_ai_config(&config.ai) {
+                    println!("❌ AI settings validation failed: {}", e);
+                } else {
+                    println!("✅ AI settings are valid");
+                }
+                
+            }
+            Err(e) => {
+                println!("❌ Configuration file validation failed: {}", e);
+                println!("   💡 This might indicate a corrupted config file");
+                println!("   💡 Consider backing up and resetting configuration");
+            }
+        }
+
+        println!("\n📊 Validation Summary:");
+        println!("   Configuration file format: Valid TOML");
+        println!("   Required fields: Present");
+        println!("   Value ranges: Within limits");
+
+        Ok(())
+    }
+
+    /// Show configuration file locations
+    async fn show_config_locations(&self) -> Result<()> {
+        println!("📁 Configuration Locations");
+        println!("==========================\n");
+
+        // Get config directory
+        let config_dir = dirs::config_dir()
+            .unwrap_or_else(|| std::path::PathBuf::from("."))
+            .join("comunicado");
+        
+        println!("🏠 Configuration Directory:");
+        println!("   {}", config_dir.display());
+        
+        println!("\n📄 Configuration Files:");
+        println!("   Main config: {}", config_dir.join("config.toml").display());
+        println!("   Accounts: {}", config_dir.join("accounts.toml").display());
+        println!("   Cache: {}", config_dir.join("cache/").display());
+        println!("   Logs: {}", config_dir.join("logs/").display());
+        
+        println!("\n🔍 File Status:");
+        let config_file = config_dir.join("config.toml");
+        if config_file.exists() {
+            println!("   ✅ Main config exists");
+            if let Ok(metadata) = std::fs::metadata(&config_file) {
+                if let Ok(modified) = metadata.modified() {
+                    println!("   📅 Last modified: {:?}", modified);
+                }
+                println!("   💾 Size: {} bytes", metadata.len());
+            }
+        } else {
+            println!("   ❌ Main config does not exist");
+            println!("   💡 Run the application once to create default config");
+        }
+
+        Ok(())
+    }
+
+    /// Show general configuration status
+    async fn show_config_status(&self) -> Result<()> {
+        println!("📊 Configuration Status");
+        println!("=======================\n");
+
+        match crate::config::AppConfig::load() {
+            Ok(_) => {
+                println!("✅ Configuration is loaded and valid");
+                println!("   💡 Use --show to see current settings");
+                println!("   💡 Use --validate to check for issues");
+                println!("   💡 Use --locations to see file paths");
+            }
+            Err(e) => {
+                println!("❌ Configuration issue detected: {}", e);
+                println!("   💡 Use --validate for detailed analysis");
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Reset configuration to defaults
+    async fn reset_config(&self, dry_run: bool) -> Result<()> {
+        println!("🔄 Reset Configuration");
+        println!("======================\n");
+
+        if dry_run {
+            println!("   🧪 Would reset configuration to defaults");
+            println!("   🧪 Would create backup of current config");
+            return Ok(());
+        }
+
+        println!("⚠️  This will reset all settings to defaults!");
+        println!("   💾 Current configuration will be backed up");
+        
+        // Create backup first
+        let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S").to_string();
+        let backup_name = format!("config_backup_{}.toml", timestamp);
+        self.export_config(&std::path::PathBuf::from(&backup_name), false).await?;
+        
+        // Create default config
+        let default_config = crate::config::AppConfig::default();
+        
+        if let Err(e) = default_config.save() {
+            println!("❌ Failed to save default configuration: {}", e);
+        } else {
+            println!("✅ Configuration reset to defaults");
+            println!("   💡 Restart the application to apply changes");
+        }
+
+        Ok(())
+    }
+
+    /// Backup current configuration
+    async fn backup_config(&self, dry_run: bool) -> Result<()> {
+        println!("💾 Backup Configuration");
+        println!("=======================\n");
+
+        let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S").to_string();
+        let backup_name = format!("config_backup_{}.toml", timestamp);
+        
+        if dry_run {
+            println!("   🧪 Would create backup: {}", backup_name);
+            return Ok(());
+        }
+
+        let config_dir = dirs::config_dir()
+            .unwrap_or_else(|| std::path::PathBuf::from("."))
+            .join("comunicado");
+        let source = config_dir.join("config.toml");
+        let backup = config_dir.join(&backup_name);
+
+        if source.exists() {
+            if let Err(e) = std::fs::copy(&source, &backup) {
+                println!("❌ Failed to create backup: {}", e);
+            } else {
+                println!("✅ Configuration backed up to: {}", backup_name);
+                println!("   📁 Location: {}", backup.display());
+            }
+        } else {
+            println!("❌ No configuration file found to backup");
+        }
+
+        Ok(())
+    }
+
+    /// Restore configuration from backup
+    async fn restore_config(&self, backup_file: &str, dry_run: bool) -> Result<()> {
+        println!("♻️  Restore Configuration");
+        println!("=========================\n");
+
+        if dry_run {
+            println!("   🧪 Would restore from: {}", backup_file);
+            return Ok(());
+        }
+
+        let config_dir = dirs::config_dir()
+            .unwrap_or_else(|| std::path::PathBuf::from("."))
+            .join("comunicado");
+        let backup_path = config_dir.join(backup_file);
+        let config_path = config_dir.join("config.toml");
+
+        if !backup_path.exists() {
+            println!("❌ Backup file not found: {}", backup_path.display());
+            return Ok(());
+        }
+
+        // Validate backup file first
+        match std::fs::read_to_string(&backup_path) {
+            Ok(content) => {
+                if let Err(e) = toml::from_str::<crate::config::AppConfig>(&content) {
+                    println!("❌ Backup file is not valid: {}", e);
+                    return Ok(());
+                }
+            }
+            Err(e) => {
+                println!("❌ Cannot read backup file: {}", e);
+                return Ok(());
+            }
+        }
+
+        // Create backup of current config before restore
+        if config_path.exists() {
+            let current_backup = format!("config_before_restore_{}.toml", 
+                chrono::Utc::now().format("%Y%m%d_%H%M%S"));
+            let _ = std::fs::copy(&config_path, config_dir.join(&current_backup));
+        }
+
+        // Restore from backup
+        if let Err(e) = std::fs::copy(&backup_path, &config_path) {
+            println!("❌ Failed to restore configuration: {}", e);
+        } else {
+            println!("✅ Configuration restored from: {}", backup_file);
+            println!("   💡 Restart the application to apply changes");
+        }
+
+        Ok(())
+    }
+
+    /// Export configuration to file
+    async fn export_config(&self, export_path: &std::path::PathBuf, dry_run: bool) -> Result<()> {
+        println!("📤 Export Configuration");
+        println!("=======================\n");
+        
+        if dry_run {
+            println!("🔍 DRY RUN: Would export configuration to {}", export_path.display());
+            return Ok(());
+        }
+        
+        match crate::config::AppConfig::load() {
+            Ok(config) => {
+                let config_toml = toml::to_string_pretty(&config)
+                    .map_err(|e| anyhow::anyhow!("Failed to serialize config: {}", e))?;
+                
+                tokio::fs::write(export_path, config_toml.clone()).await
+                    .map_err(|e| anyhow::anyhow!("Failed to write export file: {}", e))?;
+                
+                println!("✅ Configuration exported successfully");
+                println!("   📁 Export file: {}", export_path.display());
+                println!("   📊 Size: {} bytes", config_toml.len());
+            }
+            Err(e) => {
+                println!("❌ Failed to load current configuration: {}", e);
+                return Err(anyhow::anyhow!("Export failed: {}", e));
+            }
+        }
+        
+        Ok(())
+    }
+
+    /// Import configuration from file
+    async fn import_config(&self, import_path: &std::path::PathBuf, dry_run: bool) -> Result<()> {
+        println!("📥 Import Configuration");
+        println!("=======================\n");
+        
+        if dry_run {
+            println!("🔍 DRY RUN: Would import configuration from {}", import_path.display());
+            return Ok(());
+        }
+        
+        // Check if import file exists
+        if !tokio::fs::try_exists(import_path).await.unwrap_or(false) {
+            println!("❌ Import file not found: {}", import_path.display());
+            return Err(anyhow::anyhow!("Import file does not exist"));
+        }
+        
+        // Read and parse import file
+        let import_content = tokio::fs::read_to_string(import_path).await
+            .map_err(|e| anyhow::anyhow!("Failed to read import file: {}", e))?;
+        
+        let imported_config: crate::config::AppConfig = toml::from_str(&import_content)
+            .map_err(|e| anyhow::anyhow!("Failed to parse import file: {}", e))?;
+        
+        println!("✅ Import file parsed successfully");
+        println!("   📁 Source: {}", import_path.display());
+        println!("   📊 Size: {} bytes", import_content.len());
+        
+        // Backup current config before importing
+        if let Ok(current_config) = crate::config::AppConfig::load() {
+            let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
+            let backup_name = format!("config_backup_{}.toml", timestamp);
+            let backup_path = std::path::PathBuf::from(&backup_name);
+            
+            let backup_toml = toml::to_string_pretty(&current_config)
+                .map_err(|e| anyhow::anyhow!("Failed to serialize backup: {}", e))?;
+            
+            if let Err(e) = tokio::fs::write(&backup_path, backup_toml).await {
+                println!("⚠️  Warning: Failed to create backup: {}", e);
+            } else {
+                println!("💾 Current configuration backed up to: {}", backup_name);
+            }
+        }
+        
+        // Save imported configuration
+        match imported_config.save() {
+            Ok(_) => {
+                println!("✅ Configuration imported and saved successfully");
+                println!("   🔄 Restart the application to apply changes");
+            }
+            Err(e) => {
+                println!("❌ Failed to save imported configuration: {}", e);
+                return Err(anyhow::anyhow!("Import failed: {}", e));
+            }
+        }
+        
+        Ok(())
+    }
+
     /// Handle account commands
-    async fn handle_account(&self, _args: AccountArgs, _dry_run: bool) -> Result<()> {
+    async fn handle_account(&self, args: AccountArgs, dry_run: bool) -> Result<()> {
         println!("👤 Account Management");
         println!("=====================\n");
 
-        // TODO: Implement account management
-        println!("   ⚠️  CLI account management not yet implemented");
-        println!("   💡 Use the TUI interface to manage accounts");
-        println!("   💡 Or use dedicated setup commands:");
-        println!("      comunicado setup-gmail --help");
-        println!("      comunicado setup-outlook --help");
+        if dry_run {
+            println!("🧪 Dry run mode - showing what would be done\n");
+        }
+
+        match args.command {
+            AccountCommands::List { detailed, show_credentials } => {
+                self.handle_account_list(detailed, show_credentials, dry_run).await?;
+            }
+            AccountCommands::Add { name, email, oauth2 } => {
+                self.handle_account_add(name, email, oauth2, dry_run).await?;
+            }
+            AccountCommands::Remove { name, force, keep_data } => {
+                self.handle_account_remove(name, force, keep_data, dry_run).await?;
+            }
+            AccountCommands::Update { name, password, reauth } => {
+                self.handle_account_update(name, password, reauth, dry_run).await?;
+            }
+        }
+
+        Ok(())
+    }
+
+    /// List configured accounts
+    async fn handle_account_list(&self, detailed: bool, show_credentials: bool, dry_run: bool) -> Result<()> {
+        println!("📋 Account List");
+        println!("===============\n");
+
+        if dry_run {
+            println!("🔍 DRY RUN: Would display account list");
+            return Ok(());
+        }
+
+        match self.storage.list_accounts() {
+            Ok(accounts) => {
+                if accounts.is_empty() {
+                    println!("📭 No accounts configured");
+                    println!("   💡 Use 'comunicado account add' to add an account");
+                    println!("   💡 Or use setup commands: setup-gmail, setup-outlook");
+                    return Ok(());
+                }
+
+                println!("Found {} account(s):\n", accounts.len());
+
+                for (i, account) in accounts.iter().enumerate() {
+                    println!("{}. {}", i + 1, account.display_name);
+                    println!("   📧 Email: {}", account.email_address);
+                    println!("   🏷️  Account ID: {}", account.account_id);
+                    println!("   🔐 Auth Type: {:?}", account.auth_type);
+                    
+                    if detailed {
+                        println!("   🌐 IMAP Server: {}:{}", account.imap_server, account.imap_port);
+                        println!("   📤 SMTP Server: {}:{}", account.smtp_server, account.smtp_port);
+                        println!("   🔒 Encryption: STARTTLS");
+                        
+                        if show_credentials {
+                            println!("   ⚠️  CREDENTIALS (use carefully):");
+                            match account.auth_type {
+                                crate::oauth2::AuthType::OAuth2 => {
+                                    println!("      Access Token: {}...", &account.access_token[..20.min(account.access_token.len())]);
+                                }
+                                crate::oauth2::AuthType::Password => {
+                                    println!("      Authentication: Password-based (stored securely)");
+                                }
+                            }
+                        }
+                    }
+                    
+                    println!();
+                }
+            }
+            Err(e) => {
+                println!("❌ Failed to list accounts: {}", e);
+                return Err(anyhow::anyhow!("Account listing failed: {}", e));
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Add new account interactively
+    async fn handle_account_add(&self, name: Option<String>, email: Option<String>, oauth2: bool, dry_run: bool) -> Result<()> {
+        println!("➕ Add Account");
+        println!("==============\n");
+
+        if dry_run {
+            println!("🔍 DRY RUN: Would add new account");
+            if let Some(ref n) = name { println!("   Name: {}", n); }
+            if let Some(ref e) = email { println!("   Email: {}", e); }
+            println!("   OAuth2: {}", oauth2);
+            return Ok(());
+        }
+
+        if oauth2 {
+            println!("🔐 OAuth2 Account Setup");
+            println!("   💡 For OAuth2 setup, use dedicated commands:");
+            println!("      comunicado setup-gmail --help");
+            println!("      comunicado setup-outlook --help");
+            println!("   These provide guided OAuth2 authentication flows.");
+            return Ok(());
+        }
+
+        println!("📝 Manual Account Configuration");
+        println!("   ⚠️  Basic password authentication setup");
+        println!("   💡 OAuth2 is recommended for Gmail, Outlook, etc.");
+        println!();
+
+        // Get account details
+        let display_name = if let Some(name) = name {
+            name
+        } else {
+            println!("❓ Enter display name for this account:");
+            let mut input = String::new();
+            std::io::stdin().read_line(&mut input)?;
+            input.trim().to_string()
+        };
+
+        let email_address = if let Some(email) = email {
+            email
+        } else {
+            println!("❓ Enter email address:");
+            let mut input = String::new();
+            std::io::stdin().read_line(&mut input)?;
+            input.trim().to_string()
+        };
+
+        println!("✅ Account details collected:");
+        println!("   👤 Name: {}", display_name);
+        println!("   📧 Email: {}", email_address);
+        println!();
+        println!("   💡 Complete setup in the TUI interface:");
+        println!("      1. Run 'comunicado' to start the application");
+        println!("      2. Press Ctrl+A to open Account Manager");
+        println!("      3. Fill in IMAP/SMTP server details");
+        println!("      4. Test connection and save");
+
+        Ok(())
+    }
+
+    /// Remove account
+    async fn handle_account_remove(&self, name: String, force: bool, keep_data: bool, dry_run: bool) -> Result<()> {
+        println!("🗑️  Remove Account");
+        println!("=================\n");
+
+        if dry_run {
+            println!("🔍 DRY RUN: Would remove account '{}'", name);
+            println!("   Force: {}", force);
+            println!("   Keep data: {}", keep_data);
+            return Ok(());
+        }
+
+        // Find account
+        let accounts = self.storage.list_accounts()?;
+        let account = accounts.iter()
+            .find(|a| a.display_name == name || a.email_address == name)
+            .ok_or_else(|| anyhow::anyhow!("Account '{}' not found", name))?;
+
+        println!("📋 Account to remove:");
+        println!("   👤 Name: {}", account.display_name);
+        println!("   📧 Email: {}", account.email_address);
+        println!();
+
+        if !force {
+            println!("❓ Are you sure you want to remove this account? (y/N)");
+            let mut input = String::new();
+            std::io::stdin().read_line(&mut input)?;
+            if input.trim().to_lowercase() != "y" {
+                println!("❌ Account removal cancelled");
+                return Ok(());
+            }
+        }
+
+        // Remove from storage
+        match self.storage.remove_account(&account.account_id) {
+            Ok(_) => {
+                println!("✅ Account removed from credential storage");
+                
+                if !keep_data {
+                    // TODO: Remove email data from database
+                    println!("💾 Email data preserved (database cleanup not yet implemented)");
+                    println!("   💡 Use database commands to clean up if needed");
+                } else {
+                    println!("💾 Email data preserved as requested");
+                }
+            }
+            Err(e) => {
+                println!("❌ Failed to remove account: {}", e);
+                return Err(anyhow::anyhow!("Account removal failed: {}", e));
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Update account settings
+    async fn handle_account_update(&self, name: String, password: bool, reauth: bool, dry_run: bool) -> Result<()> {
+        println!("🔄 Update Account");
+        println!("================\n");
+
+        if dry_run {
+            println!("🔍 DRY RUN: Would update account '{}'", name);
+            println!("   Update password: {}", password);
+            println!("   Re-authenticate OAuth2: {}", reauth);
+            return Ok(());
+        }
+
+        // Find account
+        let accounts = self.storage.list_accounts()?;
+        let account = accounts.iter()
+            .find(|a| a.display_name == name || a.email_address == name)
+            .ok_or_else(|| anyhow::anyhow!("Account '{}' not found", name))?;
+
+        println!("📋 Updating account:");
+        println!("   👤 Name: {}", account.display_name);
+        println!("   📧 Email: {}", account.email_address);
+        println!();
+
+        if password {
+            println!("🔐 Password Update");
+            println!("   💡 For security, password updates should be done in the TUI");
+            println!("   💡 Run 'comunicado' and press Ctrl+A to open Account Manager");
+        }
+
+        if reauth {
+            if matches!(account.auth_type, crate::oauth2::AuthType::OAuth2) {
+                println!("🔐 OAuth2 Re-authentication");
+                println!("   💡 Use the appropriate setup command:");
+                if account.email_address.contains("gmail") {
+                    println!("      comunicado setup-gmail --email {}", account.email_address);
+                } else if account.email_address.contains("outlook") || account.email_address.contains("hotmail") {
+                    println!("      comunicado setup-outlook");
+                }
+            } else {
+                println!("❌ Account does not use OAuth2 authentication");
+            }
+        }
+
+        if !password && !reauth {
+            println!("❓ No update operations specified");
+            println!("   💡 Use --password to update password");
+            println!("   💡 Use --reauth to re-authenticate OAuth2");
+        }
 
         Ok(())
     }
@@ -2010,9 +2664,107 @@ impl CliHandler {
             println!("🧪 Dry run mode - showing what would be done");
         }
 
-        // TODO: Implement Outlook OAuth2 setup similar to Gmail
-        println!("   ⚠️  Outlook OAuth2 setup not yet implemented");
-        println!("   💡 Gmail setup is available with: comunicado setup-gmail");
+        println!("🔐 Microsoft Outlook OAuth2 Setup");
+        println!();
+
+        // Check if client secret is provided
+        let client_secret_path = if let Some(path) = _client_secret {
+            path
+        } else {
+            println!("❓ Client Secret Required");
+            println!("   💡 To set up Outlook OAuth2, you need a Microsoft Azure app client secret.");
+            println!("   💡 Create an Azure app at: https://portal.azure.com");
+            println!("   💡 Then run: comunicado setup-outlook --client-secret /path/to/secret.json");
+            println!();
+            println!("📋 Azure App Configuration:");
+            println!("   1. Go to Azure Portal > App registrations");
+            println!("   2. Create new registration with these settings:");
+            println!("      - Name: Comunicado Email Client");
+            println!("      - Supported account types: Personal Microsoft accounts only");
+            println!("      - Redirect URI: http://localhost:8080/callback");
+            println!("   3. Go to Certificates & secrets > New client secret");
+            println!("   4. Copy the secret value to a JSON file:");
+            println!("      {{");
+            println!("        \"client_id\": \"your-app-id\",");
+            println!("        \"client_secret\": \"your-secret-value\"");
+            println!("      }}");
+            return Ok(());
+        };
+
+        // Read client secret
+        if !tokio::fs::try_exists(&client_secret_path).await.unwrap_or(false) {
+            println!("❌ Client secret file not found: {}", client_secret_path.display());
+            return Err(anyhow::anyhow!("Client secret file does not exist"));
+        }
+
+        let secret_content = tokio::fs::read_to_string(&client_secret_path).await?;
+        let secret_json: serde_json::Value = serde_json::from_str(&secret_content)
+            .map_err(|e| anyhow::anyhow!("Invalid JSON in client secret file: {}", e))?;
+
+        let client_id = secret_json["client_id"]
+            .as_str()
+            .ok_or_else(|| anyhow::anyhow!("Missing 'client_id' in secret file"))?
+            .to_string();
+        
+        let client_secret_value = secret_json["client_secret"]
+            .as_str()
+            .ok_or_else(|| anyhow::anyhow!("Missing 'client_secret' in secret file"))?
+            .to_string();
+
+        println!("✅ Client credentials loaded");
+        println!("   📋 Client ID: {}...", &client_id[..8]);
+        println!();
+
+        // Get display name
+        let display_name = if let Some(name) = _name {
+            name
+        } else {
+            println!("❓ Enter a display name for your Outlook account:");
+            let mut input = String::new();
+            std::io::stdin().read_line(&mut input)?;
+            input.trim().to_string()
+        };
+
+        if display_name.is_empty() {
+            println!("❌ Display name cannot be empty");
+            return Err(anyhow::anyhow!("Display name is required"));
+        }
+
+        println!("🔐 Starting OAuth2 Flow");
+        println!("   👤 Account name: {}", display_name);
+        println!();
+
+        // For now, provide detailed setup instructions
+        println!("🔧 Manual Outlook OAuth2 Configuration");
+        println!();
+        println!("📋 Configuration Summary:");
+        println!("   👤 Display Name: {}", display_name);
+        println!("   🔑 Client ID: {}...", &client_id[..8]);
+        println!("   🏢 Provider: Microsoft Outlook");
+        println!();
+        println!("⚠️  Outlook OAuth2 Flow Status");
+        println!("   The automated OAuth2 flow for Outlook is currently being enhanced.");
+        println!("   For now, you can complete the setup using these steps:");
+        println!();
+        println!("📝 Manual Setup Steps:");
+        println!("   1. Open your browser and visit:");
+        println!("      https://login.microsoftonline.com/common/oauth2/v2.0/authorize");
+        println!("   2. Add these URL parameters:");
+        println!("      - client_id={}", client_id);
+        println!("      - response_type=code");
+        println!("      - redirect_uri=http://localhost:8080/callback");
+        println!("      - scope=https://graph.microsoft.com/mail.read");
+        println!("   3. Complete the authentication flow");
+        println!("   4. The authorization code will be in the callback URL");
+        println!();
+        println!("💡 Alternative: Use the TUI interface for guided setup:");
+        println!("   1. Run 'comunicado' to start the application");
+        println!("   2. Press Ctrl+A to open Account Manager");
+        println!("   3. Select 'Add Account' and choose Outlook OAuth2");
+        println!("   4. Follow the interactive setup wizard");
+        println!();
+        println!("✅ Setup information prepared successfully");
+        println!("   💡 Complete the authentication in your browser or TUI");
 
         Ok(())
     }

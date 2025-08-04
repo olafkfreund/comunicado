@@ -1361,11 +1361,46 @@ impl EventHandler {
             KeyboardAction::SaveAttachment => {
                 if ui.focused_pane() == FocusedPane::ContentPreview {
                     if ui.content_preview().is_viewing_attachment() {
-                        // TODO: Implement save attachment functionality
-                        tracing::info!("Save attachment action triggered");
-                        // For now, show a toast message
-                        ui.show_toast_info("Save attachment functionality coming soon");
+                        // Get current attachment filename before any mutable borrows
+                        let attachment_filename = ui.content_preview()
+                            .attachment_viewer()
+                            .get_current_attachment()
+                            .map(|info| info.display_name.clone());
+                        
+                        if let Some(default_filename) = attachment_filename {
+                            ui.show_toast_info(&format!("Save attachment: {}", default_filename));
+                            
+                            // For now, save to Downloads directory with original filename
+                            // In the future, we can add a proper file dialog
+                            if let Some(downloads_dir) = dirs::download_dir() {
+                                let save_path = downloads_dir.join(&default_filename);
+                                
+                                // Use the existing save functionality
+                                match tokio::task::block_in_place(|| {
+                                    tokio::runtime::Handle::current().block_on(async {
+                                        ui.content_preview_mut().save_attachment_from_current_viewer(Some(save_path)).await
+                                    })
+                                }) {
+                                    Ok(saved_path) => {
+                                        ui.show_toast_success(&format!("Attachment saved to: {}", saved_path.display()));
+                                        tracing::info!("Attachment saved to: {:?}", saved_path);
+                                    }
+                                    Err(e) => {
+                                        ui.show_toast_error(&format!("Failed to save attachment: {}", e));
+                                        tracing::error!("Failed to save attachment: {}", e);
+                                    }
+                                }
+                            } else {
+                                ui.show_toast_error("Could not determine downloads directory");
+                            }
+                        } else {
+                            ui.show_toast_error("No attachment currently viewed");
+                        }
+                    } else {
+                        ui.show_toast_info("Not viewing an attachment");
                     }
+                } else {
+                    ui.show_toast_info("Focus on content preview to save attachments");
                 }
                 EventResult::Continue
             }
@@ -1723,15 +1758,18 @@ impl EventHandler {
     async fn handle_email_delete(&mut self, ui: &mut UI) -> EventResult {
         // Get current email data from email viewer
         if let Some(message) = ui.email_viewer_mut().current_message.clone() {
-            // TODO: Implement actual email deletion
             tracing::info!(
                 "Delete email action requested for message: {}",
                 message.subject
             );
-            // For now, just exit the viewer
+            
+            // Exit the viewer first
             ui.exit_email_viewer();
-            EventResult::Continue
+            
+            // Return email operation for main app to handle
+            EventResult::DeleteEmail(message.account_id, message.id, message.folder_name)
         } else {
+            tracing::warn!("Delete action requested but no current message");
             EventResult::Continue
         }
     }
@@ -1740,15 +1778,18 @@ impl EventHandler {
     async fn handle_email_archive(&mut self, ui: &mut UI) -> EventResult {
         // Get current email data from email viewer
         if let Some(message) = ui.email_viewer_mut().current_message.clone() {
-            // TODO: Implement actual email archiving
             tracing::info!(
                 "Archive email action requested for message: {}",
                 message.subject
             );
-            // For now, just exit the viewer
+            
+            // Exit the viewer first
             ui.exit_email_viewer();
-            EventResult::Continue
+            
+            // Return email operation for main app to handle
+            EventResult::ArchiveEmail(message.account_id, message.id, message.folder_name)
         } else {
+            tracing::warn!("Archive action requested but no current message");
             EventResult::Continue
         }
     }
@@ -1757,13 +1798,15 @@ impl EventHandler {
     async fn handle_email_mark_read(&mut self, ui: &mut UI) -> EventResult {
         // Get current email data from email viewer
         if let Some(message) = ui.email_viewer_mut().current_message.clone() {
-            // TODO: Implement actual mark as read
             tracing::info!(
                 "Mark as read action requested for message: {}",
                 message.subject
             );
-            EventResult::Continue
+            
+            // Return email operation for main app to handle
+            EventResult::MarkEmailRead(message.account_id, message.id, message.folder_name)
         } else {
+            tracing::warn!("Mark as read action requested but no current message");
             EventResult::Continue
         }
     }
@@ -1772,13 +1815,15 @@ impl EventHandler {
     async fn handle_email_mark_unread(&mut self, ui: &mut UI) -> EventResult {
         // Get current email data from email viewer
         if let Some(message) = ui.email_viewer_mut().current_message.clone() {
-            // TODO: Implement actual mark as unread
             tracing::info!(
                 "Mark as unread action requested for message: {}",
                 message.subject
             );
-            EventResult::Continue
+            
+            // Return email operation for main app to handle
+            EventResult::MarkEmailUnread(message.account_id, message.id, message.folder_name)
         } else {
+            tracing::warn!("Mark as unread action requested but no current message");
             EventResult::Continue
         }
     }

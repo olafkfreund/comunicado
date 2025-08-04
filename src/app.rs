@@ -3776,25 +3776,87 @@ impl App {
                 account_id
             );
 
-            // TODO: Implement folder properties dialog
-            // For now, just log the information
-            if let Some(ref database) = self.database {
-                let stats = sqlx::query_as::<_, (i64, i64, Option<i64>)>(
+            // Get local database statistics
+            let local_stats = if let Some(ref database) = self.database {
+                match sqlx::query_as::<_, (i64, i64, Option<i64>)>(
                     "SELECT COUNT(*), COUNT(CASE WHEN is_read = 0 THEN 1 END), SUM(size) FROM messages WHERE account_id = ? AND folder_name = ?"
                 )
                 .bind(account_id)
                 .bind(&folder_path)
                 .fetch_one(&database.pool)
-                .await?;
+                .await {
+                    Ok(stats) => Some(stats),
+                    Err(e) => {
+                        tracing::error!("Failed to get local folder statistics: {}", e);
+                        None
+                    }
+                }
+            } else {
+                None
+            };
 
-                tracing::info!(
-                    "Folder {} statistics: {} total messages, {} unread, {} bytes",
-                    folder_path,
-                    stats.0,
-                    stats.1,
-                    stats.2.unwrap_or(0)
-                );
-            }
+            // Get IMAP server statistics
+            let server_stats = if let Some(ref imap_manager) = self.imap_manager {
+                if let Some(client_arc) = imap_manager.get_client(account_id).await.ok() {
+                    let mut client = client_arc.lock().await;
+                    match client.get_folder_status(&folder_path, &["MESSAGES", "RECENT", "UIDNEXT", "UIDVALIDITY", "UNSEEN"]).await {
+                        Ok(folder_info) => Some(folder_info),
+                        Err(e) => {
+                            tracing::error!("Failed to get server folder properties for {}: {}", folder_path, e);
+                            None
+                        }
+                    }
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+
+            // Create comprehensive properties notification
+            let properties_text = if let (Some(local), Some(ref server)) = (local_stats.as_ref(), server_stats.as_ref()) {
+                format!(
+                    "📁 {}: {} msg (local: {}, {} unread), Server: {} msg, {} recent, {} unseen",
+                    selected_folder.name,
+                    server.exists.unwrap_or(0),
+                    local.0,
+                    local.1,
+                    server.exists.unwrap_or(0),
+                    server.recent.unwrap_or(0),
+                    server.unseen.unwrap_or(0)
+                )
+            } else if let Some(local) = local_stats {
+                format!(
+                    "📁 {}: {} total messages, {} unread, {} bytes (local only)",
+                    selected_folder.name,
+                    local.0,
+                    local.1,
+                    local.2.unwrap_or(0)
+                )
+            } else if let Some(server) = server_stats {
+                format!(
+                    "📁 {}: {} messages, {} recent, {} unseen (server only)",
+                    selected_folder.name,
+                    server.exists.unwrap_or(0),
+                    server.recent.unwrap_or(0),
+                    server.unseen.unwrap_or(0)
+                )
+            } else {
+                format!("📁 Properties: {} ({})", selected_folder.name, folder_path)
+            };
+
+            tracing::info!("Folder properties: {}", properties_text);
+            
+            // Show properties in notification (in a full implementation, this would be a dialog)
+            self.ui.show_notification(
+                properties_text,
+                std::time::Duration::from_secs(6)
+            );
+        } else {
+            self.ui.show_notification(
+                "No folder selected".to_string(),
+                std::time::Duration::from_secs(2)
+            );
         }
 
         Ok(())
@@ -3812,20 +3874,55 @@ impl App {
             parent_path
         );
 
-        // TODO: Implement folder creation dialog
-        // For now, create a default folder name
-        let folder_name = if parent_path.is_some() {
-            "New Subfolder"
+        // Determine folder name - for now use a default name
+        // In a full implementation, this would show a dialog to get the name
+        let folder_name = if let Some(parent) = parent_path {
+            format!("{}/New Subfolder", parent)
         } else {
-            "New Folder"
+            "New Folder".to_string()
         };
 
-        // TODO: Implement IMAP CREATE command
-        tracing::info!(
-            "Would create folder: {} in account: {}",
-            folder_name,
-            account_id
-        );
+        // Get IMAP client and create the folder
+        if let Some(ref imap_manager) = self.imap_manager {
+            if let Some(client_arc) = imap_manager.get_client(account_id).await.ok() {
+                let mut client = client_arc.lock().await;
+                match client.create_folder(&folder_name).await {
+                    Ok(()) => {
+                        tracing::info!("Successfully created folder: {} in account: {}", folder_name, account_id);
+                        
+                        // Refresh folder list to show the new folder
+                        if let Err(e) = self.handle_folder_refresh(account_id).await {
+                            tracing::error!("Failed to refresh folders after creation: {}", e);
+                        }
+                        
+                        // Show success notification
+                        self.ui.show_notification(
+                            format!("✅ Created folder: {}", folder_name),
+                            std::time::Duration::from_secs(3)
+                        );
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to create folder {}: {}", folder_name, e);
+                        self.ui.show_notification(
+                            format!("❌ Failed to create folder: {}", e),
+                            std::time::Duration::from_secs(5)
+                        );
+                    }
+                }
+            } else {
+                tracing::error!("No IMAP client available for account: {}", account_id);
+                self.ui.show_notification(
+                    "❌ No connection available".to_string(),
+                    std::time::Duration::from_secs(3)
+                );
+            }
+        } else {
+            tracing::error!("No IMAP manager available");
+            self.ui.show_notification(
+                "❌ No IMAP manager available".to_string(),
+                std::time::Duration::from_secs(3)
+            );
+        }
 
         Ok(())
     }
@@ -3838,13 +3935,58 @@ impl App {
             account_id
         );
 
-        // TODO: Implement confirmation dialog
-        // TODO: Implement IMAP DELETE command
-        tracing::info!(
-            "Would delete folder: {} from account: {}",
-            folder_path,
-            account_id
-        );
+        // Check if this is a system folder that shouldn't be deleted
+        let folder_name = folder_path.split('/').last().unwrap_or(folder_path);
+        if ["INBOX", "Sent", "Drafts", "Trash", "Junk", "Spam"].contains(&folder_name) {
+            tracing::warn!("Attempted to delete system folder: {}", folder_path);
+            self.ui.show_notification(
+                "❌ Cannot delete system folder".to_string(),
+                std::time::Duration::from_secs(3)
+            );
+            return Ok(());
+        }
+
+        // Get IMAP client and delete the folder
+        if let Some(ref imap_manager) = self.imap_manager {
+            if let Some(client_arc) = imap_manager.get_client(account_id).await.ok() {
+                let mut client = client_arc.lock().await;
+                match client.delete_folder(folder_path).await {
+                    Ok(()) => {
+                        tracing::info!("Successfully deleted folder: {} from account: {}", folder_path, account_id);
+                        
+                        // Refresh folder list to remove the deleted folder
+                        if let Err(e) = self.handle_folder_refresh(account_id).await {
+                            tracing::error!("Failed to refresh folders after deletion: {}", e);
+                        }
+                        
+                        // Show success notification
+                        self.ui.show_notification(
+                            format!("✅ Deleted folder: {}", folder_path),
+                            std::time::Duration::from_secs(3)
+                        );
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to delete folder {}: {}", folder_path, e);
+                        self.ui.show_notification(
+                            format!("❌ Failed to delete folder: {}", e),
+                            std::time::Duration::from_secs(5)
+                        );
+                    }
+                }
+            } else {
+                tracing::error!("No IMAP client available for account: {}", account_id);
+                self.ui.show_notification(
+                    "❌ No connection available".to_string(),
+                    std::time::Duration::from_secs(3)
+                );
+            }
+        } else {
+            tracing::error!("No IMAP manager available");
+            self.ui.show_notification(
+                "❌ No IMAP manager available".to_string(),
+                std::time::Duration::from_secs(3)
+            );
+        }
 
         Ok(())
     }
@@ -3857,13 +3999,71 @@ impl App {
             account_id
         );
 
-        // TODO: Implement rename dialog
-        // TODO: Implement IMAP RENAME command
-        tracing::info!(
-            "Would rename folder: {} in account: {}",
-            folder_path,
-            account_id
-        );
+        // Check if this is a system folder that shouldn't be renamed
+        let folder_name = folder_path.split('/').last().unwrap_or(folder_path);
+        if ["INBOX", "Sent", "Drafts", "Trash", "Junk", "Spam"].contains(&folder_name) {
+            tracing::warn!("Attempted to rename system folder: {}", folder_path);
+            self.ui.show_notification(
+                "❌ Cannot rename system folder".to_string(),
+                std::time::Duration::from_secs(3)
+            );
+            return Ok(());
+        }
+
+        // Generate a new name - for now use a simple renamed version
+        // In a full implementation, this would show a dialog to get the new name
+        let new_name = if folder_path.contains('/') {
+            let parts: Vec<&str> = folder_path.rsplitn(2, '/').collect();
+            if parts.len() == 2 {
+                format!("{}/{}_renamed", parts[1], parts[0])
+            } else {
+                format!("{}_renamed", folder_path)
+            }
+        } else {
+            format!("{}_renamed", folder_path)
+        };
+
+        // Get IMAP client and rename the folder
+        if let Some(ref imap_manager) = self.imap_manager {
+            if let Some(client_arc) = imap_manager.get_client(account_id).await.ok() {
+                let mut client = client_arc.lock().await;
+                match client.rename_folder(folder_path, &new_name).await {
+                    Ok(()) => {
+                        tracing::info!("Successfully renamed folder {} to {} in account: {}", folder_path, new_name, account_id);
+                        
+                        // Refresh folder list to show the renamed folder
+                        if let Err(e) = self.handle_folder_refresh(account_id).await {
+                            tracing::error!("Failed to refresh folders after rename: {}", e);
+                        }
+                        
+                        // Show success notification
+                        self.ui.show_notification(
+                            format!("✅ Renamed folder to: {}", new_name),
+                            std::time::Duration::from_secs(3)
+                        );
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to rename folder {} to {}: {}", folder_path, new_name, e);
+                        self.ui.show_notification(
+                            format!("❌ Failed to rename folder: {}", e),
+                            std::time::Duration::from_secs(5)
+                        );
+                    }
+                }
+            } else {
+                tracing::error!("No IMAP client available for account: {}", account_id);
+                self.ui.show_notification(
+                    "❌ No connection available".to_string(),
+                    std::time::Duration::from_secs(3)
+                );
+            }
+        } else {
+            tracing::error!("No IMAP manager available");
+            self.ui.show_notification(
+                "❌ No IMAP manager available".to_string(),
+                std::time::Duration::from_secs(3)
+            );
+        }
 
         Ok(())
     }
@@ -3876,13 +4076,96 @@ impl App {
             account_id
         );
 
-        // TODO: Implement confirmation dialog
-        // TODO: Implement IMAP STORE/EXPUNGE commands to delete all messages
-        tracing::info!(
-            "Would empty folder: {} in account: {}",
-            folder_path,
-            account_id
-        );
+        // Check if this is INBOX - be extra careful
+        if folder_path.to_uppercase() == "INBOX" {
+            tracing::warn!("Attempted to empty INBOX folder: {}", folder_path);
+            self.ui.show_notification(
+                "⚠️ Cannot empty INBOX folder".to_string(),
+                std::time::Duration::from_secs(3)
+            );
+            return Ok(());
+        }
+
+        // Get IMAP client and empty the folder
+        if let Some(ref imap_manager) = self.imap_manager {
+            if let Some(client_arc) = imap_manager.get_client(account_id).await.ok() {
+                let mut client = client_arc.lock().await;
+                
+                // Select the folder first
+                match client.select_folder(folder_path).await {
+                    Ok(_folder_info) => {
+                        // Mark all messages as deleted and expunge
+                        match client.uid_store_flags("1:*", &[crate::imap::MessageFlag::Deleted], false).await {
+                            Ok(()) => {
+                                match client.expunge().await {
+                                    Ok(()) => {
+                                        tracing::info!("Successfully emptied folder: {} in account: {}", folder_path, account_id);
+                                        
+                                        // Update database by deleting all messages from this folder
+                                        if let Some(ref database) = self.database {
+                                            // Use the existing method to delete all messages for this folder
+                                            if let Err(e) = sqlx::query(
+                                                "DELETE FROM messages WHERE account_id = ? AND folder_name = ?"
+                                            )
+                                            .bind(account_id)
+                                            .bind(folder_path)
+                                            .execute(&database.pool)
+                                            .await {
+                                                tracing::error!("Failed to update database after emptying folder: {}", e);
+                                            }
+                                        }
+                                        
+                                        // Refresh folder to show empty state
+                                        if let Err(e) = self.handle_folder_force_refresh(folder_path).await {
+                                            tracing::error!("Failed to refresh folder after emptying: {}", e);
+                                        }
+                                        
+                                        // Show success notification
+                                        self.ui.show_notification(
+                                            format!("✅ Emptied folder: {}", folder_path),
+                                            std::time::Duration::from_secs(3)
+                                        );
+                                    }
+                                    Err(e) => {
+                                        tracing::error!("Failed to expunge folder {}: {}", folder_path, e);
+                                        self.ui.show_notification(
+                                            format!("❌ Failed to empty folder: {}", e),
+                                            std::time::Duration::from_secs(5)
+                                        );
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                tracing::error!("Failed to mark messages as deleted in folder {}: {}", folder_path, e);
+                                self.ui.show_notification(
+                                    format!("❌ Failed to mark messages for deletion: {}", e),
+                                    std::time::Duration::from_secs(5)
+                                );
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to select folder {}: {}", folder_path, e);
+                        self.ui.show_notification(
+                            format!("❌ Failed to access folder: {}", e),
+                            std::time::Duration::from_secs(5)
+                        );
+                    }
+                }
+            } else {
+                tracing::error!("No IMAP client available for account: {}", account_id);
+                self.ui.show_notification(
+                    "❌ No connection available".to_string(),
+                    std::time::Duration::from_secs(3)
+                );
+            }
+        } else {
+            tracing::error!("No IMAP manager available");
+            self.ui.show_notification(
+                "❌ No IMAP manager available".to_string(),
+                std::time::Duration::from_secs(3)
+            );
+        }
 
         Ok(())
     }
@@ -3906,11 +4189,55 @@ impl App {
             account_id
         );
 
-        // TODO: Implement IMAP SUBSCRIBE/UNSUBSCRIBE commands
-        // For now, just update local state
-        self.ui
-            .folder_tree_mut()
-            .mark_folder_synced(folder_path, 0, 0);
+        // Get IMAP client and handle subscription
+        if let Some(ref imap_manager) = self.imap_manager {
+            if let Some(client_arc) = imap_manager.get_client(account_id).await.ok() {
+                let mut client = client_arc.lock().await;
+                let result = if subscribe {
+                    client.subscribe_folder(folder_path).await
+                } else {
+                    client.unsubscribe_folder(folder_path).await
+                };
+
+                match result {
+                    Ok(()) => {
+                        let action_past = if subscribe { "subscribed to" } else { "unsubscribed from" };
+                        tracing::info!("Successfully {} folder: {} in account: {}", action_past, folder_path, account_id);
+                        
+                        // Update local state
+                        self.ui
+                            .folder_tree_mut()
+                            .mark_folder_synced(folder_path, 0, 0);
+                        
+                        // Show success notification
+                        let emoji = if subscribe { "✅" } else { "❌" };
+                        self.ui.show_notification(
+                            format!("{} {} folder: {}", emoji, action_past, folder_path),
+                            std::time::Duration::from_secs(3)
+                        );
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to {} folder {}: {}", action.to_lowercase(), folder_path, e);
+                        self.ui.show_notification(
+                            format!("❌ Failed to {} folder: {}", action.to_lowercase(), e),
+                            std::time::Duration::from_secs(5)
+                        );
+                    }
+                }
+            } else {
+                tracing::error!("No IMAP client available for account: {}", account_id);
+                self.ui.show_notification(
+                    "❌ No connection available".to_string(),
+                    std::time::Duration::from_secs(3)
+                );
+            }
+        } else {
+            tracing::error!("No IMAP manager available");
+            self.ui.show_notification(
+                "❌ No IMAP manager available".to_string(),
+                std::time::Duration::from_secs(3)
+            );
+        }
 
         Ok(())
     }

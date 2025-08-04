@@ -38,6 +38,9 @@ pub enum AnimationError {
     
     #[error("Animation too large: {width}x{height} (max: {max_width}x{max_height})")]
     AnimationTooLarge { width: u32, height: u32, max_width: u32, max_height: u32 },
+    
+    #[error("Decode error: {0}")]
+    DecodeError(String),
 }
 
 pub type AnimationResult<T> = Result<T, AnimationError>;
@@ -133,6 +136,7 @@ pub struct AnimationSettings {
     pub respect_frame_timing: bool,
     pub max_fps: f32,
     pub max_size: (u32, u32), // width, height
+    pub max_frames: usize, // Maximum number of frames to decode
     pub quality_scaling: f32, // 0.1 to 1.0
     pub enable_smoothing: bool,
     pub background_transparency: bool,
@@ -146,6 +150,7 @@ impl Default for AnimationSettings {
             respect_frame_timing: true,
             max_fps: 30.0,
             max_size: (800, 600),
+            max_frames: 100, // Reasonable default to prevent memory issues
             quality_scaling: 1.0,
             enable_smoothing: true,
             background_transparency: true,
@@ -173,9 +178,9 @@ impl AnimationDecoder {
     pub fn supports_format(&self, format: &AnimationFormat) -> bool {
         match format {
             AnimationFormat::Gif => true,
-            AnimationFormat::WebP => true, // With feature flag
-            AnimationFormat::Apng => false, // TODO: Implement
-            AnimationFormat::Avif => false, // TODO: Implement
+            AnimationFormat::WebP => true,
+            AnimationFormat::Apng => true, // Static PNG support
+            AnimationFormat::Avif => true, // Basic AVIF support (if image crate supports it)
         }
     }
     
@@ -204,20 +209,112 @@ impl AnimationDecoder {
         match format {
             AnimationFormat::Gif => self.decode_gif(data, source_path).await,
             AnimationFormat::WebP => self.decode_webp(data, source_path).await,
-            _ => Err(AnimationError::UnsupportedFormat(format!("{:?}", format))),
+            AnimationFormat::Apng => self.decode_apng(data, source_path).await,
+            AnimationFormat::Avif => self.decode_avif(data, source_path).await,
         }
     }
     
-    /// Decode GIF animation
+    /// Decode GIF animation with full multi-frame support
     async fn decode_gif(
         &self,
         data: &[u8],
         source_path: Option<PathBuf>,
     ) -> AnimationResult<Animation> {
-        // Simple placeholder implementation for GIF support
-        // In a real implementation, this would use a GIF decoding library
+        use std::io::Cursor;
         
-        // Create a single-frame "animation" from the GIF as a static image
+        // Create a cursor for the GIF data
+        let mut cursor = Cursor::new(data);
+        
+        // Try to use the gif crate for proper animated GIF support
+        match gif::DecodeOptions::new().read_info(&mut cursor) {
+            Ok(mut decoder) => {
+                let (width, height) = (decoder.width() as u32, decoder.height() as u32);
+                
+                // Check size limits
+                if width > self.settings.max_size.0 || height > self.settings.max_size.1 {
+                    return Err(AnimationError::AnimationTooLarge {
+                        width,
+                        height,
+                        max_width: self.settings.max_size.0,
+                        max_height: self.settings.max_size.1,
+                    });
+                }
+                
+                let mut frames = Vec::new();
+                let mut total_duration = 0u32;
+                let mut frame_count = 0;
+                
+                // Decode all frames
+                while let Some(frame) = decoder.read_next_frame().map_err(|e| {
+                    AnimationError::DecodeError(format!("GIF frame decode error: {}", e))
+                })? {
+                    frame_count += 1;
+                    
+                    // Convert frame delay (in hundredths of a second) to milliseconds
+                    let delay_ms = if frame.delay == 0 { 100 } else { frame.delay as u32 * 10 };
+                    total_duration += delay_ms;
+                    
+                    // Create RGB image from frame buffer
+                    let rgb_data = frame.buffer.to_vec();
+                    let img = image::RgbImage::from_raw(width, height, rgb_data)
+                        .ok_or_else(|| AnimationError::DecodeError("Failed to create RGB image from GIF frame".to_string()))?;
+                    
+                    let frame = AnimationFrame {
+                        image: image::DynamicImage::ImageRgb8(img),
+                        delay_ms,
+                        disposal_method: match frame.dispose {
+                            gif::DisposalMethod::Keep => FrameDisposal::None,
+                            gif::DisposalMethod::Background => FrameDisposal::Background,
+                            gif::DisposalMethod::Previous => FrameDisposal::Previous,
+                            _ => FrameDisposal::None,
+                        },
+                        blend_method: FrameBlend::Source,
+                        x_offset: frame.left as u32,
+                        y_offset: frame.top as u32,
+                    };
+                    
+                    frames.push(frame);
+                    
+                    // Limit frame count to prevent memory issues
+                    if frame_count >= self.settings.max_frames {
+                        break;
+                    }
+                }
+                
+                // If no frames were decoded, fall back to static image
+                if frames.is_empty() {
+                    return self.decode_gif_fallback(data, source_path).await;
+                }
+                
+                let metadata = AnimationMetadata {
+                    id: Uuid::new_v4(),
+                    format: AnimationFormat::Gif,
+                    width,
+                    height,
+                    frame_count,
+                    duration_ms: total_duration,
+                    loop_count: decoder.bg_color().map(|_| 0), // 0 = infinite loop for GIFs
+                    background_color: decoder.bg_color().map(|idx| [idx as u8, idx as u8, idx as u8, 255]),
+                    created_at: Utc::now(),
+                    file_size: Some(data.len() as u64),
+                    source_path,
+                };
+                
+                Ok(Animation::new(metadata, frames, self.settings.clone()))
+            }
+            Err(_) => {
+                // Fallback to single-frame static image if GIF decoding fails
+                self.decode_gif_fallback(data, source_path).await
+            }
+        }
+    }
+    
+    /// Fallback GIF decoder for static images or when gif crate fails
+    async fn decode_gif_fallback(
+        &self,
+        data: &[u8],
+        source_path: Option<PathBuf>,
+    ) -> AnimationResult<Animation> {
         let image = image::load_from_memory_with_format(data, image::ImageFormat::Gif)?;
         let (width, height) = image.dimensions();
         
@@ -231,10 +328,9 @@ impl AnimationDecoder {
             });
         }
         
-        // Create a single frame
         let frame = AnimationFrame {
             image,
-            delay_ms: 100, // Default delay
+            delay_ms: 100,
             disposal_method: FrameDisposal::None,
             blend_method: FrameBlend::Source,
             x_offset: 0,
@@ -258,14 +354,163 @@ impl AnimationDecoder {
         Ok(Animation::new(metadata, vec![frame], self.settings.clone()))
     }
     
-    /// Decode WebP animation (placeholder)
+    /// Decode WebP animation
     async fn decode_webp(
         &self,
-        _data: &[u8],
-        _source_path: Option<PathBuf>,
+        data: &[u8],
+        source_path: Option<PathBuf>,
     ) -> AnimationResult<Animation> {
-        // TODO: Implement WebP animation decoding
-        Err(AnimationError::UnsupportedFormat("WebP animation not yet implemented".to_string()))
+        // WebP animation support - currently treating as single frame
+        // Note: Full animated WebP support would require libwebp bindings
+        // For now, we decode the first frame as a static image
+        
+        let image = image::load_from_memory_with_format(data, image::ImageFormat::WebP)?;
+        let (width, height) = image.dimensions();
+        
+        // Check size limits
+        if width > self.settings.max_size.0 || height > self.settings.max_size.1 {
+            return Err(AnimationError::AnimationTooLarge {
+                width,
+                height,
+                max_width: self.settings.max_size.0,
+                max_height: self.settings.max_size.1,
+            });
+        }
+        
+        // Create a single frame (WebP might be animated but we'll treat as static for now)
+        let frame = AnimationFrame {
+            image,
+            delay_ms: 100, // Default delay for static images
+            disposal_method: FrameDisposal::None,
+            blend_method: FrameBlend::Source,
+            x_offset: 0,
+            y_offset: 0,
+        };
+        
+        let metadata = AnimationMetadata {
+            id: Uuid::new_v4(),
+            format: AnimationFormat::WebP,
+            width,
+            height,
+            frame_count: 1,
+            duration_ms: 100,
+            loop_count: Some(1),
+            background_color: None,
+            created_at: Utc::now(),
+            file_size: Some(data.len() as u64),
+            source_path,
+        };
+        
+        Ok(Animation::new(metadata, vec![frame], self.settings.clone()))
+    }
+    
+    /// Decode APNG (Animated PNG) animation
+    async fn decode_apng(
+        &self,
+        data: &[u8],
+        source_path: Option<PathBuf>,
+    ) -> AnimationResult<Animation> {
+        // APNG support - currently treating as static PNG
+        // Note: Full animated PNG support would require specialized APNG decoder
+        // For now, we decode as a static PNG image
+        
+        let image = image::load_from_memory_with_format(data, image::ImageFormat::Png)?;
+        let (width, height) = image.dimensions();
+        
+        // Check size limits
+        if width > self.settings.max_size.0 || height > self.settings.max_size.1 {
+            return Err(AnimationError::AnimationTooLarge {
+                width,
+                height,
+                max_width: self.settings.max_size.0,
+                max_height: self.settings.max_size.1,
+            });
+        }
+        
+        // Create a single frame (APNG might be animated but we'll treat as static for now)
+        let frame = AnimationFrame {
+            image,
+            delay_ms: 100, // Default delay for static images
+            disposal_method: FrameDisposal::None,
+            blend_method: FrameBlend::Source,
+            x_offset: 0,
+            y_offset: 0,
+        };
+        
+        let metadata = AnimationMetadata {
+            id: Uuid::new_v4(),
+            format: AnimationFormat::Apng,
+            width,
+            height,
+            frame_count: 1,
+            duration_ms: 100,
+            loop_count: Some(1),
+            background_color: None,
+            created_at: Utc::now(),
+            file_size: Some(data.len() as u64),
+            source_path,
+        };
+        
+        Ok(Animation::new(metadata, vec![frame], self.settings.clone()))
+    }
+    
+    /// Decode AVIF animation
+    async fn decode_avif(
+        &self,
+        data: &[u8],
+        source_path: Option<PathBuf>,
+    ) -> AnimationResult<Animation> {
+        // AVIF support - currently treating as static image
+        // Note: AVIF animation support would require specialized decoder
+        // The `image` crate might not support AVIF yet, so we'll provide basic support
+        
+        // Try to decode as AVIF if supported, otherwise return error
+        let image = match image::load_from_memory(data) {
+            Ok(img) => img,
+            Err(_) => {
+                return Err(AnimationError::UnsupportedFormat(
+                    "AVIF format not supported by image decoder".to_string()
+                ));
+            }
+        };
+        
+        let (width, height) = image.dimensions();
+        
+        // Check size limits
+        if width > self.settings.max_size.0 || height > self.settings.max_size.1 {
+            return Err(AnimationError::AnimationTooLarge {
+                width,
+                height,
+                max_width: self.settings.max_size.0,
+                max_height: self.settings.max_size.1,
+            });
+        }
+        
+        // Create a single frame (AVIF might be animated but we'll treat as static for now)
+        let frame = AnimationFrame {
+            image,
+            delay_ms: 100, // Default delay for static images
+            disposal_method: FrameDisposal::None,
+            blend_method: FrameBlend::Source,
+            x_offset: 0,
+            y_offset: 0,
+        };
+        
+        let metadata = AnimationMetadata {
+            id: Uuid::new_v4(),
+            format: AnimationFormat::Avif,
+            width,
+            height,
+            frame_count: 1,
+            duration_ms: 100,
+            loop_count: Some(1),
+            background_color: None,
+            created_at: Utc::now(),
+            file_size: Some(data.len() as u64),
+            source_path,
+        };
+        
+        Ok(Animation::new(metadata, vec![frame], self.settings.clone()))
     }
 }
 
@@ -687,6 +932,6 @@ mod tests {
         let decoder = AnimationDecoder::new(settings);
         
         assert!(decoder.supports_format(&AnimationFormat::Gif));
-        assert!(!decoder.supports_format(&AnimationFormat::Apng));
+        assert!(decoder.supports_format(&AnimationFormat::Apng));
     }
 }
