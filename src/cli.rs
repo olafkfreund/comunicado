@@ -5707,10 +5707,14 @@ impl CliHandler {
                 .map_err(|e| anyhow!("Failed to create contacts database directory: {}", e))?;
         }
         
-        // Initialize database
-        let database = crate::contacts::ContactsDatabase::new(
+        // Initialize database with sqlite: URL format (same format as app.rs)
+        let database_url = format!(
+            "sqlite:{}",
             contacts_db_path.to_str().ok_or_else(|| anyhow!("Invalid contacts database path"))?
-        ).await
+        );
+        
+        
+        let database = crate::contacts::ContactsDatabase::new(&database_url).await
             .map_err(|e| anyhow!("Failed to initialize contacts database: {}", e))?;
         
         // Use existing token manager or create a new one
