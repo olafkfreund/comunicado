@@ -5,6 +5,7 @@ pub mod app_modular;
 pub mod calendar;
 pub mod cli;
 pub mod clipboard;
+pub mod config;
 pub mod contacts;
 pub mod email;
 pub mod events;
