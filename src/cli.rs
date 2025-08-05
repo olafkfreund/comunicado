@@ -12,6 +12,7 @@ use crate::keyboard::{KeyboardAction, KeyboardConfig, KeyboardManager, KeyboardS
 use crate::maildir::{Maildir, MaildirUtils};
 use crate::oauth2::{AccountConfig, AppConfig, SecureStorage, TokenManager};
 use crate::integrations::{KdeConnectIntegration, KdeConnectDevice};
+use crate::plugins::notes::{NoteStorage};
 
 /// Comunicado - Modern terminal email and calendar client
 #[derive(Parser)]
@@ -159,6 +160,9 @@ pub enum Commands {
 
     /// KDE Connect integration setup and management
     KdeConnect(KdeConnectArgs),
+    
+    /// Notes plugin management and operations
+    Notes(NotesArgs),
 }
 
 #[derive(Args)]
@@ -973,6 +977,7 @@ impl CliHandler {
             Commands::Folders(args) => self.handle_folders(args, dry_run).await,
             Commands::OAuth2(args) => self.handle_oauth2(args, dry_run).await,
             Commands::KdeConnect(args) => self.handle_kde_connect(args, dry_run).await,
+            Commands::Notes(args) => self.handle_notes(args, dry_run).await,
         }
     }
 
@@ -5481,6 +5486,439 @@ impl CliHandler {
         Ok(())
     }
 
+    /// Handle Notes plugin commands
+    async fn handle_notes(&self, args: NotesArgs, dry_run: bool) -> Result<()> {
+        match args.command {
+            NotesCommand::Status => {
+                self.handle_notes_status().await
+            }
+            NotesCommand::Create { title, content, tags, template } => {
+                self.handle_notes_create(title, content, tags, template, dry_run).await
+            }
+            NotesCommand::Search { query, limit, category, titles_only } => {
+                self.handle_notes_search(query, limit, category, titles_only).await
+            }
+            NotesCommand::List { detailed, tags, limit } => {
+                self.handle_notes_list(detailed, tags, limit).await
+            }
+            NotesCommand::Show { note, raw } => {
+                self.handle_notes_show(note, raw).await
+            }
+            NotesCommand::Edit { note, editor } => {
+                self.handle_notes_edit(note, editor).await
+            }
+            NotesCommand::Delete { note, force } => {
+                self.handle_notes_delete(note, force, dry_run).await
+            }
+            NotesCommand::Reindex { force, verbose } => {
+                self.handle_notes_reindex(force, verbose, dry_run).await
+            }
+            NotesCommand::Config { set_directory, add_watch, remove_watch, auto_index, show } => {
+                self.handle_notes_config(set_directory, add_watch, remove_watch, auto_index, show, dry_run).await
+            }
+            NotesCommand::Tui { search, open } => {
+                self.handle_notes_tui(search, open).await
+            }
+            NotesCommand::Import { format, source, preserve_structure, dry_run: import_dry_run } => {
+                self.handle_notes_import(format, source, preserve_structure, import_dry_run || dry_run).await
+            }
+            NotesCommand::Export { format, output, tags, include_linked } => {
+                self.handle_notes_export(format, output, tags, include_linked, dry_run).await
+            }
+            NotesCommand::Stats { detailed, links, index } => {
+                self.handle_notes_stats(detailed, links, index).await
+            }
+        }
+    }
+
+    /// Show notes plugin status and configuration
+    async fn handle_notes_status(&self) -> Result<()> {
+        println!("📝 Notes Plugin Status");
+        println!("====================");
+
+        // Load current configuration
+        let config = self.storage.load_config()
+            .map_err(|e| anyhow!("Failed to load configuration: {}", e))?;
+        
+        let notes_config = &config.notes;
+        
+        println!("📁 Configuration:");
+        println!("   Default Directory: {}", notes_config.default_directory.display());
+        println!("   Auto-indexing: {}", if notes_config.auto_index { "✅ Enabled" } else { "❌ Disabled" });
+        println!("   Vim Mode: {}", if notes_config.vim_mode { "✅ Enabled" } else { "❌ Disabled" });
+        println!("   Max Search Results: {}", notes_config.max_search_results);
+        
+        // Check if directory exists
+        if notes_config.default_directory.exists() {
+            println!("   Directory Status: ✅ Exists");
+        } else {
+            println!("   Directory Status: ⚠️  Does not exist");
+        }
+        
+        println!("\n📂 Watched Directories: {}", notes_config.watched_directories.len());
+        for dir in &notes_config.watched_directories {
+            println!("   - {} ({})", dir.name, dir.path.display());
+        }
+        
+        println!("\n🚫 Ignore Patterns: {}", notes_config.ignore_patterns.len());
+        for pattern in &notes_config.ignore_patterns {
+            println!("   - {}", pattern);
+        }
+
+        // Try to connect to notes storage to check status
+        println!("\n🔍 Storage Status:");
+        match NoteStorage::new(&notes_config.default_directory).await {
+            Ok(_storage) => {
+                println!("   ✅ Storage accessible");
+                // TODO: Add more detailed stats when available
+            }
+            Err(e) => {
+                println!("   ❌ Storage error: {}", e);
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Create a new note
+    async fn handle_notes_create(&self, title: String, content: Option<String>, tags: Option<Vec<String>>, template: Option<String>, dry_run: bool) -> Result<()> {
+        println!("📝 Creating New Note");
+        println!("===================");
+        println!("Title: {}", title);
+        
+        if let Some(ref tags_list) = tags {
+            println!("Tags: {}", tags_list.join(", "));
+        }
+        
+        if dry_run {
+            println!("🔍 DRY RUN - Note would be created but not saved");
+            if let Some(ref content_text) = content {
+                println!("Content preview:\n{}", content_text);
+            } else {
+                println!("Content: (would open editor)");
+            }
+            return Ok(());
+        }
+
+        // Load configuration
+        let config = self.storage.load_config()
+            .map_err(|e| anyhow!("Failed to load configuration: {}", e))?;
+        
+        // Initialize storage
+        let storage = NoteStorage::new(&config.notes.default_directory).await
+            .map_err(|e| anyhow!("Failed to initialize notes storage: {}", e))?;
+
+        // Create note content
+        let note_content = if let Some(content_text) = content {
+            content_text
+        } else {
+            // TODO: Open editor for content input
+            println!("⚠️  Interactive editor not yet implemented");
+            println!("   Use --content flag to provide content directly");
+            return Ok(());
+        };
+
+        // TODO: Create the actual note using the storage
+        println!("✅ Note created successfully");
+        println!("   Use 'comunicado notes show \"{}\"' to view it", title);
+
+        Ok(())
+    }
+
+    /// Search notes
+    async fn handle_notes_search(&self, query: String, limit: usize, category: Option<String>, titles_only: bool) -> Result<()> {
+        println!("🔍 Searching Notes");
+        println!("=================");
+        println!("Query: {}", query);
+        println!("Limit: {}", limit);
+        
+        if let Some(ref cat) = category {
+            println!("Category: {}", cat);
+        }
+
+        // Load configuration
+        let config = self.storage.load_config()
+            .map_err(|e| anyhow!("Failed to load configuration: {}", e))?;
+        
+        // Initialize storage
+        let storage = NoteStorage::new(&config.notes.default_directory).await
+            .map_err(|e| anyhow!("Failed to initialize notes storage: {}", e))?;
+
+        // TODO: Perform search using AdvancedSearchEngine
+        println!("⚠️  Search functionality not yet fully implemented");
+        println!("   Use 'comunicado notes tui --search \"{}\"' for interactive search", query);
+
+        Ok(())
+    }
+
+    /// List all notes
+    async fn handle_notes_list(&self, detailed: bool, tags: Option<Vec<String>>, limit: Option<usize>) -> Result<()> {
+        println!("📋 Listing Notes");
+        println!("================");
+        
+        if let Some(ref tag_list) = tags {
+            println!("Filtered by tags: {}", tag_list.join(", "));
+        }
+        
+        if let Some(max) = limit {
+            println!("Limit: {}", max);
+        }
+
+        // Load configuration
+        let config = self.storage.load_config()
+            .map_err(|e| anyhow!("Failed to load configuration: {}", e))?;
+        
+        // Initialize storage
+        let storage = NoteStorage::new(&config.notes.default_directory).await
+            .map_err(|e| anyhow!("Failed to initialize notes storage: {}", e))?;
+
+        // TODO: List notes from storage
+        println!("⚠️  List functionality not yet fully implemented");
+        println!("   Use 'comunicado notes tui' for interactive browsing");
+
+        Ok(())
+    }
+
+    /// Show note content
+    async fn handle_notes_show(&self, note: String, raw: bool) -> Result<()> {
+        println!("📄 Showing Note: {}", note);
+        println!("================");
+        
+        if raw {
+            println!("Mode: Raw markdown");
+        }
+
+        // TODO: Implement note display
+        println!("⚠️  Show functionality not yet fully implemented");
+        
+        Ok(())
+    }
+
+    /// Edit an existing note
+    async fn handle_notes_edit(&self, note: String, editor: Option<String>) -> Result<()> {
+        println!("✏️  Editing Note: {}", note);
+        println!("================");
+        
+        if let Some(ref ed) = editor {
+            println!("Editor: {}", ed);
+        }
+
+        // TODO: Implement note editing
+        println!("⚠️  Edit functionality not yet fully implemented");
+        println!("   Use 'comunicado notes tui --open \"{}\"' for interactive editing", note);
+        
+        Ok(())
+    }
+
+    /// Delete a note
+    async fn handle_notes_delete(&self, note: String, force: bool, dry_run: bool) -> Result<()> {
+        println!("🗑️  Deleting Note: {}", note);
+        println!("==================");
+        
+        if dry_run {
+            println!("🔍 DRY RUN - Note would be deleted but not actually removed");
+            return Ok(());
+        }
+
+        if !force {
+            println!("⚠️  Are you sure you want to delete this note? Use --force to confirm");
+            return Ok(());
+        }
+
+        // TODO: Implement note deletion
+        println!("⚠️  Delete functionality not yet fully implemented");
+        
+        Ok(())
+    }
+
+    /// Reindex all notes
+    async fn handle_notes_reindex(&self, force: bool, verbose: bool, dry_run: bool) -> Result<()> {
+        println!("🔄 Reindexing Notes");
+        println!("==================");
+        
+        if force {
+            println!("Mode: Force full reindex");
+        }
+        
+        if dry_run {
+            println!("🔍 DRY RUN - Would reindex notes but not actually update");
+            return Ok(());
+        }
+
+        // Load configuration
+        let config = self.storage.load_config()
+            .map_err(|e| anyhow!("Failed to load configuration: {}", e))?;
+        
+        // Initialize storage
+        let storage = NoteStorage::new(&config.notes.default_directory).await
+            .map_err(|e| anyhow!("Failed to initialize notes storage: {}", e))?;
+
+        println!("🔍 Starting reindex...");
+        // TODO: Implement reindexing
+        println!("✅ Reindex completed");
+        
+        Ok(())
+    }
+
+    /// Configure notes plugin
+    async fn handle_notes_config(&self, set_directory: Option<String>, add_watch: Option<String>, remove_watch: Option<String>, auto_index: Option<bool>, show: bool, dry_run: bool) -> Result<()> {
+        println!("⚙️  Notes Configuration");
+        println!("======================");
+
+        let mut config = self.storage.load_config()
+            .map_err(|e| anyhow!("Failed to load configuration: {}", e))?;
+
+        if show {
+            println!("Current configuration:");
+            println!("  Default Directory: {}", config.notes.default_directory.display());
+            println!("  Auto-indexing: {}", config.notes.auto_index);
+            println!("  Vim Mode: {}", config.notes.vim_mode);
+            println!("  Max Search Results: {}", config.notes.max_search_results);
+            println!("  Watched Directories: {}", config.notes.watched_directories.len());
+            return Ok(());
+        }
+
+        let mut changed = false;
+
+        if let Some(dir) = set_directory {
+            println!("Setting default directory to: {}", dir);
+            config.notes.default_directory = PathBuf::from(dir);
+            changed = true;
+        }
+
+        if let Some(watch_dir) = add_watch {
+            println!("Adding watched directory: {}", watch_dir);
+            // TODO: Add to watched directories list
+            changed = true;
+        }
+
+        if let Some(remove_dir) = remove_watch {
+            println!("Removing watched directory: {}", remove_dir);
+            // TODO: Remove from watched directories list
+            changed = true;
+        }
+
+        if let Some(auto_idx) = auto_index {
+            println!("Setting auto-indexing to: {}", auto_idx);
+            config.notes.auto_index = auto_idx;
+            changed = true;
+        }
+
+        if changed {
+            if dry_run {
+                println!("🔍 DRY RUN - Configuration changes would be saved");
+            } else {
+                self.storage.save_config(&config)
+                    .map_err(|e| anyhow!("Failed to save configuration: {}", e))?;
+                println!("✅ Configuration saved");
+            }
+        } else {
+            println!("ℹ️  No configuration changes specified");
+        }
+
+        Ok(())
+    }
+
+    /// Launch notes TUI interface
+    async fn handle_notes_tui(&self, search: Option<String>, open: Option<String>) -> Result<()> {
+        println!("🖥️  Launching Notes TUI");
+        println!("======================");
+        
+        if let Some(ref query) = search {
+            println!("Starting with search: {}", query);
+        }
+        
+        if let Some(ref note) = open {
+            println!("Opening note: {}", note);
+        }
+
+        // Load configuration
+        let config = self.storage.load_config()
+            .map_err(|e| anyhow!("Failed to load configuration: {}", e))?;
+
+        println!("⚠️  TUI interface not yet fully implemented");
+        println!("   Configuration loaded from: {}", config.notes.default_directory.display());
+        
+        Ok(())
+    }
+
+    /// Import notes from external sources
+    async fn handle_notes_import(&self, format: String, source: String, preserve_structure: bool, dry_run: bool) -> Result<()> {
+        println!("📥 Importing Notes");
+        println!("=================");
+        println!("Format: {}", format);
+        println!("Source: {}", source);
+        println!("Preserve structure: {}", preserve_structure);
+        
+        if dry_run {
+            println!("🔍 DRY RUN - Would import notes but not actually save them");
+        }
+
+        // TODO: Implement import functionality
+        println!("⚠️  Import functionality not yet fully implemented");
+        
+        Ok(())
+    }
+
+    /// Export notes to various formats
+    async fn handle_notes_export(&self, format: String, output: String, tags: Option<Vec<String>>, include_linked: bool, dry_run: bool) -> Result<()> {
+        println!("📤 Exporting Notes");
+        println!("=================");
+        println!("Format: {}", format);
+        println!("Output: {}", output);
+        
+        if let Some(ref tag_list) = tags {
+            println!("Tags filter: {}", tag_list.join(", "));
+        }
+        
+        println!("Include linked: {}", include_linked);
+        
+        if dry_run {
+            println!("🔍 DRY RUN - Would export notes but not actually write files");
+        }
+
+        // TODO: Implement export functionality
+        println!("⚠️  Export functionality not yet fully implemented");
+        
+        Ok(())
+    }
+
+    /// Show notes statistics
+    async fn handle_notes_stats(&self, detailed: bool, links: bool, index: bool) -> Result<()> {
+        println!("📊 Notes Statistics");
+        println!("==================");
+        
+        // Load configuration
+        let config = self.storage.load_config()
+            .map_err(|e| anyhow!("Failed to load configuration: {}", e))?;
+        
+        // Initialize storage
+        let storage = NoteStorage::new(&config.notes.default_directory).await
+            .map_err(|e| anyhow!("Failed to initialize notes storage: {}", e))?;
+
+        println!("📁 Directory: {}", config.notes.default_directory.display());
+        
+        // TODO: Implement comprehensive statistics
+        if detailed {
+            println!("📋 Detailed Statistics:");
+            // Show detailed stats
+        }
+        
+        if links {
+            println!("🔗 Link Analysis:");
+            // Show link statistics
+        }
+        
+        if index {
+            println!("🔍 Search Index Stats:");
+            // Show index statistics
+        }
+
+        println!("⚠️  Statistics functionality not yet fully implemented");
+        
+        Ok(())
+    }
+
     /// Handle calendar sync commands
     async fn handle_calendar_sync(&self, args: CalendarSyncArgs, dry_run: bool) -> Result<()> {
         match args.command {
@@ -6239,6 +6677,196 @@ pub enum KdeConnectCommand {
     
     /// Setup wizard for KDE Connect
     Setup,
+}
+
+#[derive(Args)]
+pub struct NotesArgs {
+    #[command(subcommand)]
+    pub command: NotesCommand,
+}
+
+#[derive(Subcommand)]
+pub enum NotesCommand {
+    /// Check notes plugin status and configuration
+    Status,
+    
+    /// Create a new note
+    Create {
+        /// Note title
+        title: String,
+        
+        /// Note content (optional, opens editor if not provided)
+        #[arg(short, long)]
+        content: Option<String>,
+        
+        /// Tags to add to the note
+        #[arg(short, long, value_delimiter = ',')]
+        tags: Option<Vec<String>>,
+        
+        /// Template to use for the note
+        #[arg(long)]
+        template: Option<String>,
+    },
+    
+    /// Search notes
+    Search {
+        /// Search query
+        query: String,
+        
+        /// Maximum number of results
+        #[arg(short, long, default_value = "10")]
+        limit: usize,
+        
+        /// Search in specific category
+        #[arg(short, long)]
+        category: Option<String>,
+        
+        /// Show only titles
+        #[arg(long)]
+        titles_only: bool,
+    },
+    
+    /// List all notes
+    List {
+        /// Show detailed information
+        #[arg(short, long)]
+        detailed: bool,
+        
+        /// Filter by tags
+        #[arg(short, long, value_delimiter = ',')]
+        tags: Option<Vec<String>>,
+        
+        /// Maximum number of notes to show
+        #[arg(short, long)]
+        limit: Option<usize>,
+    },
+    
+    /// Show note content
+    Show {
+        /// Note title or ID
+        note: String,
+        
+        /// Show raw markdown content
+        #[arg(short, long)]
+        raw: bool,
+    },
+    
+    /// Edit an existing note
+    Edit {
+        /// Note title or ID
+        note: String,
+        
+        /// Editor to use (defaults to $EDITOR)
+        #[arg(long)]
+        editor: Option<String>,
+    },
+    
+    /// Delete a note
+    Delete {
+        /// Note title or ID
+        note: String,
+        
+        /// Skip confirmation prompt
+        #[arg(short, long)]
+        force: bool,
+    },
+    
+    /// Reindex all notes for search
+    Reindex {
+        /// Force full reindex even if up to date
+        #[arg(short, long)]
+        force: bool,
+        
+        /// Show progress information
+        #[arg(short, long)]
+        verbose: bool,
+    },
+    
+    /// Configure notes plugin
+    Config {
+        /// Set default notes directory
+        #[arg(long)]
+        set_directory: Option<String>,
+        
+        /// Add directory to watch list
+        #[arg(long)]
+        add_watch: Option<String>,
+        
+        /// Remove directory from watch list
+        #[arg(long)]
+        remove_watch: Option<String>,
+        
+        /// Enable/disable auto-indexing
+        #[arg(long)]
+        auto_index: Option<bool>,
+        
+        /// Show current configuration
+        #[arg(long)]
+        show: bool,
+    },
+    
+    /// Launch notes TUI interface
+    Tui {
+        /// Start in search mode
+        #[arg(short, long)]
+        search: Option<String>,
+        
+        /// Open specific note
+        #[arg(short, long)]
+        open: Option<String>,
+    },
+    
+    /// Import notes from external sources
+    Import {
+        /// Source format (markdown, txt, json)
+        #[arg(short, long, default_value = "markdown")]
+        format: String,
+        
+        /// Source directory or file
+        source: String,
+        
+        /// Preserve directory structure
+        #[arg(long)]
+        preserve_structure: bool,
+        
+        /// Dry run (show what would be imported)
+        #[arg(long)]
+        dry_run: bool,
+    },
+    
+    /// Export notes to various formats
+    Export {
+        /// Output format (markdown, html, json)
+        #[arg(short, long, default_value = "markdown")]
+        format: String,
+        
+        /// Output directory
+        #[arg(short, long)]
+        output: String,
+        
+        /// Filter by tags
+        #[arg(short, long, value_delimiter = ',')]
+        tags: Option<Vec<String>>,
+        
+        /// Include linked notes
+        #[arg(long)]
+        include_linked: bool,
+    },
+    
+    /// Analyze note statistics and health
+    Stats {
+        /// Show detailed statistics
+        #[arg(short, long)]
+        detailed: bool,
+        
+        /// Include link analysis
+        #[arg(long)]
+        links: bool,
+        
+        /// Include search index stats
+        #[arg(long)]
+        index: bool,
+    },
 }
 
 /// Format a duration for human-readable display

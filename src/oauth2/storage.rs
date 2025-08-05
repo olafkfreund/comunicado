@@ -1,5 +1,6 @@
 use crate::oauth2::{AccountConfig, OAuth2Error, OAuth2Result};
 use crate::integrations::KdeConnectConfig;
+use crate::plugins::notes::NotesConfig;
 use base64::prelude::*;
 use keyring::Entry;
 use serde::{Deserialize, Serialize};
@@ -10,7 +11,12 @@ use std::path::{Path, PathBuf};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
     /// KDE Connect integration configuration
+    #[serde(default)]
     pub kde_connect: KdeConnectConfig,
+    
+    /// Notes plugin configuration
+    #[serde(default)]
+    pub notes: NotesConfig,
     
     /// Application version (for migration purposes)
     #[serde(default = "default_version")]
@@ -21,6 +27,7 @@ impl Default for AppConfig {
     fn default() -> Self {
         Self {
             kde_connect: KdeConnectConfig::default(),
+            notes: NotesConfig::default(),
             version: default_version(),
         }
     }
@@ -871,25 +878,33 @@ impl SecureStorage {
 
     /// Load main application configuration
     pub fn load_config(&self) -> OAuth2Result<AppConfig> {
-        let config_path = self.config_dir.join("config.toml");
+        let new_config_path = self.config_dir.join("app-config.toml");
+        let old_config_path = self.config_dir.join("config.toml");
         
-        if !config_path.exists() {
-            // Return default config if file doesn't exist
+        // Try to load new format first
+        if new_config_path.exists() {
+            let content = fs::read_to_string(&new_config_path)
+                .map_err(|e| OAuth2Error::StorageError(format!("Failed to read app config file: {}", e)))?;
+            
+            let config: AppConfig = toml::from_str(&content)
+                .map_err(|e| OAuth2Error::StorageError(format!("Failed to parse app config file: {}", e)))?;
+            
+            return Ok(config);
+        }
+        
+        // If old config exists, return default for new features
+        if old_config_path.exists() {
+            tracing::debug!("Using legacy config file, new features will use defaults");
             return Ok(AppConfig::default());
         }
-
-        let content = fs::read_to_string(&config_path)
-            .map_err(|e| OAuth2Error::StorageError(format!("Failed to read config file: {}", e)))?;
         
-        let config: AppConfig = toml::from_str(&content)
-            .map_err(|e| OAuth2Error::StorageError(format!("Failed to parse config file: {}", e)))?;
-        
-        Ok(config)
+        // No config file exists, return defaults
+        Ok(AppConfig::default())
     }
 
     /// Save main application configuration
     pub fn save_config(&self, config: &AppConfig) -> OAuth2Result<()> {
-        let config_path = self.config_dir.join("config.toml");
+        let config_path = self.config_dir.join("app-config.toml");
         
         let content = toml::to_string_pretty(config)
             .map_err(|e| OAuth2Error::StorageError(format!("Failed to serialize config: {}", e)))?;

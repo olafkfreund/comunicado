@@ -385,6 +385,12 @@ impl NotesConfig {
     }
 }
 
+impl Default for NotesConfig {
+    fn default() -> Self {
+        NotesConfig::default()
+    }
+}
+
 /// A directory being watched for notes
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct WatchedDirectory {
