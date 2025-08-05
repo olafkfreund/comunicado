@@ -7,6 +7,7 @@ use crate::cli::StartupMode;
 use crate::oauth2::AccountConfig;
 use crate::contacts::Contact;
 use crate::calendar::Event;
+use crate::plugins::notes::types::{Note, NoteId};
 use crossterm::event::{KeyEvent, MouseEvent};
 
 /// Main application message type
@@ -26,6 +27,9 @@ pub enum Message {
     
     /// Contacts-related messages
     Contacts(ContactsMessage),
+    
+    /// Notes-related messages
+    Notes(NotesMessage),
     
     /// Account management messages
     Account(AccountMessage),
@@ -216,6 +220,67 @@ pub enum ContactsMessage {
     SyncContacts,
 }
 
+/// Notes-specific messages
+#[derive(Debug, Clone)]
+pub enum NotesMessage {
+    /// Load all notes
+    LoadNotes,
+    
+    /// Notes loaded successfully
+    NotesLoaded(Vec<Note>),
+    
+    /// Note loading failed
+    LoadingFailed(String),
+    
+    /// Select note
+    SelectNote(NoteId),
+    
+    /// Open note for viewing
+    OpenNote(NoteId),
+    
+    /// Create new note
+    CreateNote,
+    
+    /// Create note with content
+    CreateNoteWithContent(String, String), // title, content
+    
+    /// Edit note
+    EditNote(NoteId),
+    
+    /// Delete note
+    DeleteNote(NoteId),
+    
+    /// Save note changes
+    SaveNote(NoteId, String), // note_id, content
+    
+    /// Search notes
+    Search(String),
+    
+    /// Convert email to note
+    ConvertEmailToNote(String), // email_id
+    
+    /// Convert calendar event to note
+    ConvertEventToNote(String), // event_id
+    
+    /// Convert KDE Connect message to note
+    ConvertKdeMessageToNote(String, String), // title, content
+    
+    /// Switch to note creation mode
+    SwitchToCreateMode,
+    
+    /// Switch to browse mode
+    SwitchToBrowseMode,
+    
+    /// Switch to edit mode
+    SwitchToEditMode(NoteId),
+    
+    /// Switch to search mode
+    SwitchToSearchMode,
+    
+    /// Sync notes with external sources
+    SyncNotes,
+}
+
 /// Account management messages
 #[derive(Debug, Clone)]
 pub enum AccountMessage {
@@ -279,6 +344,7 @@ pub enum ViewMode {
     Email,
     Calendar,
     Contacts,
+    Notes,
     Settings,
 }
 
@@ -364,6 +430,12 @@ impl From<CalendarMessage> for Message {
 impl From<ContactsMessage> for Message {
     fn from(msg: ContactsMessage) -> Self {
         Message::Contacts(msg)
+    }
+}
+
+impl From<NotesMessage> for Message {
+    fn from(msg: NotesMessage) -> Self {
+        Message::Notes(msg)
     }
 }
 

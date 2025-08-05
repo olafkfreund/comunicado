@@ -12,7 +12,7 @@ use crate::keyboard::{KeyboardAction, KeyboardConfig, KeyboardManager, KeyboardS
 use crate::maildir::{Maildir, MaildirUtils};
 use crate::oauth2::{AccountConfig, AppConfig, SecureStorage, TokenManager};
 use crate::integrations::{KdeConnectIntegration, KdeConnectDevice};
-use crate::plugins::notes::{NoteStorage};
+use crate::plugins::notes::{NoteStorage, NoteConversionService};
 
 /// Comunicado - Modern terminal email and calendar client
 #[derive(Parser)]
@@ -5528,6 +5528,18 @@ impl CliHandler {
             NotesCommand::Stats { detailed, links, index } => {
                 self.handle_notes_stats(detailed, links, index).await
             }
+            NotesCommand::Quick { content, title, tags } => {
+                self.handle_notes_quick(content, title, tags, dry_run).await
+            }
+            NotesCommand::Clipboard { title, tags } => {
+                self.handle_notes_clipboard(title, tags, dry_run).await
+            }
+            NotesCommand::EmailToNote { email_id } => {
+                self.handle_notes_email_to_note(email_id, dry_run).await
+            }
+            NotesCommand::EventToNote { event_id } => {
+                self.handle_notes_event_to_note(event_id, dry_run).await
+            }
         }
     }
 
@@ -5915,6 +5927,121 @@ impl CliHandler {
         }
 
         println!("⚠️  Statistics functionality not yet fully implemented");
+        
+        Ok(())
+    }
+
+    /// Handle quick note creation
+    async fn handle_notes_quick(&self, content: String, title: Option<String>, tags: Option<Vec<String>>, dry_run: bool) -> Result<()> {
+        if dry_run {
+            println!("🔍 Dry run: Would create quick note");
+            println!("   • Content: {}", content);
+            if let Some(ref t) = title {
+                println!("   • Title: {}", t);
+            }
+            if let Some(ref tags) = tags {
+                println!("   • Tags: {}", tags.join(", "));
+            }
+            return Ok(());
+        }
+
+        // Load configuration
+        let config = self.storage.load_config()
+            .map_err(|e| anyhow!("Failed to load configuration: {}", e))?;
+
+        // Initialize storage and conversion service
+        let storage = Arc::new(NoteStorage::new(&config.notes.default_directory).await
+            .map_err(|e| anyhow!("Failed to initialize notes storage: {}", e))?);
+        
+        let conversion_service = NoteConversionService::new(storage.clone());
+        
+        // Get default directory
+        let directory_id = conversion_service.get_default_directory().await
+            .map_err(|e| anyhow!("Failed to get default directory: {}", e))?;
+
+        // Create the note
+        let note_title = title.unwrap_or_else(|| "Quick Note".to_string());
+        let note_tags = tags.unwrap_or_else(|| vec!["quick".to_string()]);
+        
+        let note = conversion_service.create_quick_note(&note_title, &content, note_tags, directory_id).await
+            .map_err(|e| anyhow!("Failed to create quick note: {}", e))?;
+
+        println!("✅ Created quick note: {}", note.title);
+        println!("   📝 ID: {}", note.id);
+        println!("   📁 Path: {}", note.path.display());
+        
+        Ok(())
+    }
+
+    /// Handle clipboard note creation
+    async fn handle_notes_clipboard(&self, title: Option<String>, tags: Option<Vec<String>>, dry_run: bool) -> Result<()> {
+        if dry_run {
+            println!("🔍 Dry run: Would create note from clipboard");
+            if let Some(ref t) = title {
+                println!("   • Title: {}", t);
+            }
+            if let Some(ref tags) = tags {
+                println!("   • Tags: {}", tags.join(", "));
+            }
+            return Ok(());
+        }
+
+        // Load configuration
+        let config = self.storage.load_config()
+            .map_err(|e| anyhow!("Failed to load configuration: {}", e))?;
+
+        // Initialize storage and conversion service
+        let storage = Arc::new(NoteStorage::new(&config.notes.default_directory).await
+            .map_err(|e| anyhow!("Failed to initialize notes storage: {}", e))?);
+        
+        let conversion_service = NoteConversionService::new(storage.clone());
+        
+        // Get default directory
+        let directory_id = conversion_service.get_default_directory().await
+            .map_err(|e| anyhow!("Failed to get default directory: {}", e))?;
+
+        // For now, create a placeholder note (clipboard integration would require platform-specific code)
+        let note_title = title.unwrap_or_else(|| format!("Clipboard Note - {}", chrono::Utc::now().format("%Y-%m-%d %H:%M")));
+        let note_tags = tags.unwrap_or_else(|| vec!["clipboard".to_string()]);
+        let content = "# Clipboard Content\n\n*Paste your clipboard content here...*";
+        
+        let note = conversion_service.create_quick_note(&note_title, content, note_tags, directory_id).await
+            .map_err(|e| anyhow!("Failed to create clipboard note: {}", e))?;
+
+        println!("✅ Created clipboard note: {}", note.title);
+        println!("   📝 ID: {}", note.id);
+        println!("   📁 Path: {}", note.path.display());
+        println!("   ℹ️  Clipboard integration is placeholder - paste your content into the created note");
+        
+        Ok(())
+    }
+
+    /// Handle email to note conversion
+    async fn handle_notes_email_to_note(&self, email_id: String, dry_run: bool) -> Result<()> {
+        if dry_run {
+            println!("🔍 Dry run: Would convert email to note");
+            println!("   • Email ID: {}", email_id);
+            return Ok(());
+        }
+
+        println!("⚠️  Email to note conversion requires TUI context");
+        println!("   This command is intended to be used within the Comunicado TUI application");
+        println!("   Use Ctrl+N while viewing an email to convert it to a note");
+        
+        Ok(())
+    }
+
+    /// Handle event to note conversion  
+    async fn handle_notes_event_to_note(&self, event_id: String, dry_run: bool) -> Result<()> {
+        if dry_run {
+            println!("🔍 Dry run: Would convert event to note");
+            println!("   • Event ID: {}", event_id);
+            return Ok(());
+        }
+
+        println!("⚠️  Event to note conversion requires TUI context");
+        println!("   This command is intended to be used within the Comunicado TUI application");
+        println!("   Use Ctrl+N while viewing a calendar event to convert it to a note");
         
         Ok(())
     }
@@ -6866,6 +6993,40 @@ pub enum NotesCommand {
         /// Include search index stats
         #[arg(long)]
         index: bool,
+    },
+    
+    /// Create a quick note from command line
+    Quick {
+        /// Note content (title will be auto-generated if not provided)
+        content: String,
+        /// Optional title for the note
+        #[arg(short, long)]
+        title: Option<String>,
+        /// Tags to add to the note
+        #[arg(long, value_delimiter = ',')]
+        tags: Option<Vec<String>>,
+    },
+    
+    /// Create a note from clipboard content
+    Clipboard {
+        /// Optional title for the note (auto-generated if not provided)
+        #[arg(short, long)]
+        title: Option<String>,
+        /// Tags to add to the note
+        #[arg(long, value_delimiter = ',')]
+        tags: Option<Vec<String>>,
+    },
+    
+    /// Convert current email to note (when used within TUI)
+    EmailToNote {
+        /// Email message ID
+        email_id: String,
+    },
+    
+    /// Convert current event to note (when used within TUI)
+    EventToNote {
+        /// Event ID
+        event_id: String,
     },
 }
 

@@ -36,6 +36,9 @@ pub enum Command {
     
     /// System operations
     System(SystemCommand),
+    
+    /// Notes operations
+    Notes(NotesCommand),
 }
 
 /// Async task command
@@ -235,6 +238,37 @@ pub enum SystemCommand {
     Exit(i32),
 }
 
+/// Notes plugin commands
+#[derive(Debug, Clone)]
+pub enum NotesCommand {
+    /// Load all notes
+    LoadNotes,
+    
+    /// Create note with content
+    CreateNoteWithContent(String, String), // title, content
+    
+    /// Delete note
+    DeleteNote(String), // note_id
+    
+    /// Save note
+    SaveNote(String, String), // note_id, content
+    
+    /// Search notes
+    Search(String),
+    
+    /// Convert email to note
+    ConvertEmailToNote(String), // email_id
+    
+    /// Convert event to note
+    ConvertEventToNote(String), // event_id
+    
+    /// Convert KDE Connect message to note
+    ConvertKdeMessageToNote(String, String), // title, content
+    
+    /// Sync notes
+    SyncNotes,
+}
+
 /// Command executor that processes commands asynchronously
 pub struct CommandExecutor {
     message_sender: mpsc::UnboundedSender<Message>,
@@ -280,6 +314,9 @@ impl CommandExecutor {
             Command::System(sys_command) => {
                 self.execute_system_command(sys_command).await;
             }
+            Command::Notes(notes_command) => {
+                self.execute_notes_command(notes_command).await;
+            }
         }
     }
     
@@ -324,6 +361,48 @@ impl CommandExecutor {
     async fn execute_system_command(&self, _command: SystemCommand) {
         // TODO: Implement system command execution
         tracing::debug!("System command execution not yet implemented");
+    }
+    
+    /// Execute a notes command
+    async fn execute_notes_command(&self, command: NotesCommand) {
+        match command {
+            NotesCommand::LoadNotes => {
+                // TODO: Load notes from storage and send NotesLoaded message
+                tracing::debug!("Loading notes...");
+            }
+            NotesCommand::CreateNoteWithContent(title, content) => {
+                // TODO: Create note with conversion service
+                tracing::debug!("Creating note: {} with content: {}", title, &content[..content.len().min(50)]);
+            }
+            NotesCommand::DeleteNote(note_id) => {
+                // TODO: Delete note by ID
+                tracing::debug!("Deleting note: {}", note_id);
+            }
+            NotesCommand::SaveNote(note_id, content) => {
+                // TODO: Save note content
+                tracing::debug!("Saving note: {} with content: {}", note_id, &content[..content.len().min(50)]);
+            }
+            NotesCommand::Search(query) => {
+                // TODO: Search notes and send results
+                tracing::debug!("Searching notes for: {}", query);
+            }
+            NotesCommand::ConvertEmailToNote(email_id) => {
+                // TODO: Convert email to note using conversion service
+                tracing::debug!("Converting email to note: {}", email_id);
+            }
+            NotesCommand::ConvertEventToNote(event_id) => {
+                // TODO: Convert event to note using conversion service
+                tracing::debug!("Converting event to note: {}", event_id);
+            }
+            NotesCommand::ConvertKdeMessageToNote(title, content) => {
+                // TODO: Convert KDE Connect message to note
+                tracing::debug!("Converting KDE message to note: {} - {}", title, &content[..content.len().min(50)]);
+            }
+            NotesCommand::SyncNotes => {
+                // TODO: Sync notes with external sources
+                tracing::debug!("Syncing notes...");
+            }
+        }
     }
 }
 
@@ -379,5 +458,10 @@ impl Command {
     /// Create a system command
     pub fn system(command: SystemCommand) -> Self {
         Command::System(command)
+    }
+    
+    /// Create a notes command
+    pub fn notes(command: NotesCommand) -> Self {
+        Command::Notes(command)
     }
 }

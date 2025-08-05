@@ -5,7 +5,7 @@
 
 use crate::tea::{Message, Model, Command, UpdateResult};
 use crate::tea::message::{
-    SystemMessage, UIMessage, EmailMessage, CalendarMessage, ContactsMessage, 
+    SystemMessage, UIMessage, EmailMessage, CalendarMessage, ContactsMessage, NotesMessage,
     AccountMessage, BackgroundMessage, NotificationMessage, ViewMode, ToastLevel,
     ToggleTarget, CalendarView
 };
@@ -22,6 +22,7 @@ pub fn update(model: Model, message: Message) -> UpdateResult<Model> {
         Message::Email(msg) => update_email(model, msg),
         Message::Calendar(msg) => update_calendar(model, msg),
         Message::Contacts(msg) => update_contacts(model, msg),
+        Message::Notes(msg) => update_notes(model, msg),
         Message::Account(msg) => update_account(model, msg),
         Message::Background(msg) => update_background(model, msg),
         Message::Notification(msg) => update_notification(model, msg),
@@ -79,6 +80,9 @@ fn update_system(mut model: Model, message: SystemMessage) -> UpdateResult<Model
                 ],
                 ViewMode::Contacts => vec![
                     Command::message(Message::Contacts(ContactsMessage::LoadContacts)),
+                ],
+                ViewMode::Notes => vec![
+                    Command::message(Message::Notes(NotesMessage::LoadNotes)),
                 ],
                 ViewMode::Settings => vec![],
             };
@@ -252,6 +256,9 @@ fn update_ui(mut model: Model, message: UIMessage) -> UpdateResult<Model> {
                 ViewMode::Contacts => vec![
                     Command::message(Message::Contacts(ContactsMessage::Search(model.ui_state.search.query.clone())))
                 ],
+                ViewMode::Notes => vec![
+                    Command::message(Message::Notes(NotesMessage::Search(model.ui_state.search.query.clone())))
+                ],
                 _ => vec![],
             };
             
@@ -277,6 +284,9 @@ fn update_ui(mut model: Model, message: UIMessage) -> UpdateResult<Model> {
                 ],
                 ViewMode::Contacts => vec![
                     Command::message(Message::Contacts(ContactsMessage::LoadContacts))
+                ],
+                ViewMode::Notes => vec![
+                    Command::message(Message::Notes(NotesMessage::LoadNotes))
                 ],
                 _ => vec![],
             };
@@ -757,6 +767,137 @@ fn update_notification(model: Model, message: NotificationMessage) -> UpdateResu
                 Command::ui(crate::tea::command::UICommand::ShowToast(message, ToastLevel::Success)),
             ];
             
+            UpdateResult::new(model, commands)
+        }
+    }
+}
+
+/// Handle notes messages
+fn update_notes(mut model: Model, message: NotesMessage) -> UpdateResult<Model> {
+    use crate::plugins::notes::tui::TUIMode as NotesTUIMode;
+    
+    match message {
+        NotesMessage::LoadNotes => {
+            model.notes_state.loading = true;
+            model.notes_state.error_message = None;
+            let commands = vec![
+                Command::notes(crate::tea::command::NotesCommand::LoadNotes),
+            ];
+            UpdateResult::new(model, commands)
+        }
+        
+        NotesMessage::NotesLoaded(notes) => {
+            model.notes_state.notes = notes;
+            model.notes_state.loading = false;
+            model.notes_state.status_message = Some("Notes loaded successfully".to_string());
+            UpdateResult::just_model(model)
+        }
+        
+        NotesMessage::LoadingFailed(error) => {
+            model.notes_state.loading = false;
+            model.notes_state.error_message = Some(error);
+            UpdateResult::just_model(model)
+        }
+        
+        NotesMessage::SelectNote(note_id) => {
+            model.notes_state.selected_note = Some(note_id);
+            UpdateResult::just_model(model)
+        }
+        
+        NotesMessage::OpenNote(note_id) => {
+            model.notes_state.viewing_note = Some(note_id);
+            model.notes_state.tui_mode = NotesTUIMode::View;
+            UpdateResult::just_model(model)
+        }
+        
+        NotesMessage::CreateNote => {
+            model.notes_state.tui_mode = NotesTUIMode::Create;
+            UpdateResult::just_model(model)
+        }
+        
+        NotesMessage::CreateNoteWithContent(title, content) => {
+            let commands = vec![
+                Command::notes(crate::tea::command::NotesCommand::CreateNoteWithContent(title, content)),
+            ];
+            UpdateResult::new(model, commands)
+        }
+        
+        NotesMessage::EditNote(note_id) => {
+            model.notes_state.tui_mode = NotesTUIMode::Edit;
+            model.notes_state.viewing_note = Some(note_id);
+            UpdateResult::just_model(model)
+        }
+        
+        NotesMessage::DeleteNote(note_id) => {
+            let commands = vec![
+                Command::notes(crate::tea::command::NotesCommand::DeleteNote(note_id)),
+            ];
+            UpdateResult::new(model, commands)
+        }
+        
+        NotesMessage::SaveNote(note_id, content) => {
+            let commands = vec![
+                Command::notes(crate::tea::command::NotesCommand::SaveNote(note_id, content)),
+            ];
+            UpdateResult::new(model, commands)
+        }
+        
+        NotesMessage::Search(query) => {
+            model.notes_state.search_query = query.clone();
+            model.notes_state.tui_mode = NotesTUIMode::Search;
+            let commands = vec![
+                Command::notes(crate::tea::command::NotesCommand::Search(query)),
+            ];
+            UpdateResult::new(model, commands)
+        }
+        
+        NotesMessage::ConvertEmailToNote(email_id) => {
+            let commands = vec![
+                Command::notes(crate::tea::command::NotesCommand::ConvertEmailToNote(email_id)),
+            ];
+            UpdateResult::new(model, commands)
+        }
+        
+        NotesMessage::ConvertEventToNote(event_id) => {
+            let commands = vec![
+                Command::notes(crate::tea::command::NotesCommand::ConvertEventToNote(event_id)),
+            ];
+            UpdateResult::new(model, commands)
+        }
+        
+        NotesMessage::ConvertKdeMessageToNote(title, content) => {
+            let commands = vec![
+                Command::notes(crate::tea::command::NotesCommand::ConvertKdeMessageToNote(title, content)),
+            ];
+            UpdateResult::new(model, commands)
+        }
+        
+        NotesMessage::SwitchToCreateMode => {
+            model.notes_state.tui_mode = NotesTUIMode::Create;
+            UpdateResult::just_model(model)
+        }
+        
+        NotesMessage::SwitchToBrowseMode => {
+            model.notes_state.tui_mode = NotesTUIMode::Browse;
+            UpdateResult::just_model(model)
+        }
+        
+        NotesMessage::SwitchToEditMode(note_id) => {
+            model.notes_state.tui_mode = NotesTUIMode::Edit;
+            model.notes_state.viewing_note = Some(note_id);
+            UpdateResult::just_model(model)
+        }
+        
+        NotesMessage::SwitchToSearchMode => {
+            model.notes_state.tui_mode = NotesTUIMode::Search;
+            UpdateResult::just_model(model)
+        }
+        
+        NotesMessage::SyncNotes => {
+            model.notes_state.loading = true;
+            let commands = vec![
+                Command::notes(crate::tea::command::NotesCommand::SyncNotes),
+            ];
             UpdateResult::new(model, commands)
         }
     }

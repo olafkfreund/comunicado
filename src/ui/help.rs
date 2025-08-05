@@ -290,6 +290,7 @@ impl HelpOverlay {
             ViewMode::Email => Self::create_email_help(),
             ViewMode::Calendar => Self::create_calendar_help(),
             ViewMode::Contacts => Self::create_contacts_help(),
+            ViewMode::Notes => Self::create_notes_help(),
             ViewMode::Settings => Self::create_settings_help(),
         }
     }
@@ -680,6 +681,111 @@ impl HelpOverlay {
                         KeyBinding {
                             keys: "x".to_string(),
                             description: "Export contacts".to_string(),
+                            category: KeyBindingCategory::Actions,
+                        },
+                    ],
+                },
+            ],
+            global_shortcuts: Self::get_global_shortcuts(),
+        }
+    }
+
+    /// Create notes view help content
+    fn create_notes_help() -> HelpContent {
+        HelpContent {
+            title: "Notes".to_string(),
+            description: "Manage notes and convert content from emails, calendar events, and KDE Connect messages. Use keyboard shortcuts for efficient note management.".to_string(),
+            sections: vec![
+                HelpSection {
+                    title: "Navigation".to_string(),
+                    description: Some("Move around the notes interface".to_string()),
+                    shortcuts: vec![
+                        KeyBinding {
+                            keys: "j/↓".to_string(),
+                            description: "Move down in notes list [Focus: NotesList]".to_string(),
+                            category: KeyBindingCategory::Navigation,
+                        },
+                        KeyBinding {
+                            keys: "k/↑".to_string(),
+                            description: "Move up in notes list [Focus: NotesList]".to_string(),
+                            category: KeyBindingCategory::Navigation,
+                        },
+                        KeyBinding {
+                            keys: "Enter".to_string(),
+                            description: "Open selected note [Focus: NotesList]".to_string(),
+                            category: KeyBindingCategory::Navigation,
+                        },
+                        KeyBinding {
+                            keys: "Esc".to_string(),
+                            description: "Return to notes list [Focus: NoteViewer/Editor]".to_string(),
+                            category: KeyBindingCategory::Navigation,
+                        },
+                    ],
+                },
+                HelpSection {
+                    title: "Note Management".to_string(),
+                    description: Some("Create, edit, and manage notes".to_string()),
+                    shortcuts: vec![
+                        KeyBinding {
+                            keys: "n".to_string(),
+                            description: "Create new note [Focus: NotesList]".to_string(),
+                            category: KeyBindingCategory::Actions,
+                        },
+                        KeyBinding {
+                            keys: "e".to_string(),
+                            description: "Edit selected note [Focus: NotesList/NoteViewer]".to_string(),
+                            category: KeyBindingCategory::Actions,
+                        },
+                        KeyBinding {
+                            keys: "d".to_string(),
+                            description: "Delete selected note [Focus: NotesList]".to_string(),
+                            category: KeyBindingCategory::Actions,
+                        },
+                        KeyBinding {
+                            keys: "s".to_string(),
+                            description: "Save current note [Focus: NoteEditor]".to_string(),
+                            category: KeyBindingCategory::Actions,
+                        },
+                    ],
+                },
+                HelpSection {
+                    title: "Content Conversion".to_string(),
+                    description: Some("Convert content from other views to notes".to_string()),
+                    shortcuts: vec![
+                        KeyBinding {
+                            keys: "Ctrl+N".to_string(),
+                            description: "Convert email to note [Focus: Email view]".to_string(),
+                            category: KeyBindingCategory::Actions,
+                        },
+                        KeyBinding {
+                            keys: "Ctrl+N".to_string(),
+                            description: "Convert event to note [Focus: Calendar view]".to_string(),
+                            category: KeyBindingCategory::Actions,
+                        },
+                        KeyBinding {
+                            keys: "Ctrl+N".to_string(),
+                            description: "Convert KDE message to note [Focus: KDE Connect notification]".to_string(),
+                            category: KeyBindingCategory::Actions,
+                        },
+                    ],
+                },
+                HelpSection {
+                    title: "Search & Filter".to_string(),
+                    description: Some("Find and organize notes".to_string()),
+                    shortcuts: vec![
+                        KeyBinding {
+                            keys: "/".to_string(),
+                            description: "Start search [Focus: NotesList]".to_string(),
+                            category: KeyBindingCategory::Actions,
+                        },
+                        KeyBinding {
+                            keys: "t".to_string(),
+                            description: "Filter by tags [Focus: NotesList]".to_string(),
+                            category: KeyBindingCategory::Actions,
+                        },
+                        KeyBinding {
+                            keys: "Esc".to_string(),
+                            description: "Clear search/filter [Context: Search]".to_string(),
                             category: KeyBindingCategory::Actions,
                         },
                     ],

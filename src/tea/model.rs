@@ -7,6 +7,8 @@ use crate::tea::message::{ViewMode, ToastLevel, CalendarView, SyncStatus};
 use crate::oauth2::AccountConfig;
 use crate::contacts::Contact;
 use crate::calendar::Event;
+use crate::plugins::notes::types::{Note, NoteId};
+use crate::plugins::notes::tui::{TUIMode as NotesTUIMode};
 use crate::theme::Theme;
 use std::collections::HashMap;
 use chrono::{DateTime, Local, NaiveDate};
@@ -32,6 +34,9 @@ pub struct Model {
     
     /// Contacts state
     pub contacts_state: ContactsState,
+    
+    /// Notes state
+    pub notes_state: NotesState,
     
     /// Account management state
     pub account_state: AccountState,
@@ -389,6 +394,65 @@ pub enum ContactField {
     Notes,
 }
 
+/// Notes-specific state
+#[derive(Debug, Clone)]
+pub struct NotesState {
+    /// Loaded notes
+    pub notes: Vec<Note>,
+    
+    /// Selected note ID
+    pub selected_note: Option<NoteId>,
+    
+    /// Currently viewing note ID
+    pub viewing_note: Option<NoteId>,
+    
+    /// Note editing state
+    pub editing_note: Option<NoteEditState>,
+    
+    /// Current TUI mode
+    pub tui_mode: NotesTUIMode,
+    
+    /// Search query
+    pub search_query: String,
+    
+    /// Search results
+    pub search_results: Vec<Note>,
+    
+    /// Loading state
+    pub loading: bool,
+    
+    /// Last sync time
+    pub last_sync: Option<DateTime<Local>>,
+    
+    /// Sync status
+    pub sync_status: SyncStatus,
+    
+    /// Status message
+    pub status_message: Option<String>,
+    
+    /// Error message
+    pub error_message: Option<String>,
+}
+
+/// Note editing state
+#[derive(Debug, Clone)]
+pub struct NoteEditState {
+    pub note_id: Option<NoteId>, // None for new note
+    pub original_note: Option<Note>, // Backup for cancel operations
+    pub title: String,
+    pub content: String,
+    pub tags: Vec<String>,
+    pub current_field: NoteField,
+}
+
+/// Note editing fields
+#[derive(Debug, Clone)]
+pub enum NoteField {
+    Title,
+    Content,
+    Tags,
+}
+
 /// Account management state
 #[derive(Debug, Clone)]
 pub struct AccountState {
@@ -599,6 +663,20 @@ impl Model {
                 loading: false,
                 last_sync: None,
                 sync_status: SyncStatus::Idle,
+            },
+            notes_state: NotesState {
+                notes: Vec::new(),
+                selected_note: None,
+                viewing_note: None,
+                editing_note: None,
+                tui_mode: NotesTUIMode::Browse,
+                search_query: String::new(),
+                search_results: Vec::new(),
+                loading: false,
+                last_sync: None,
+                sync_status: SyncStatus::Idle,
+                status_message: None,
+                error_message: None,
             },
             account_state: AccountState {
                 accounts: Vec::new(),

@@ -18,6 +18,7 @@ pub mod advanced_search;
 pub mod email_integration;
 pub mod mobile_integration;
 pub mod calendar_integration;
+pub mod conversions;
 pub mod tui;
 pub mod tui_render;
 
@@ -47,4 +48,5 @@ pub use advanced_search::{AdvancedSearchEngine, AdvancedSearchOptions, SearchFil
 pub use email_integration::{EmailIntegrationService, EmailNote, EmailLinkType, EmailContact, EmailThread, EmailNotesStats};
 pub use mobile_integration::{MobileNotesIntegration, MobileNotesConfig, MobileNoteEvent, SmsConversionCandidate, MobileNotesStats};
 pub use calendar_integration::{CalendarNotesIntegration, CalendarNotesConfig, CalendarNoteEvent, EventLinkType, MeetingNote, MeetingAttendee, ActionItem, CalendarNotesStats};
+pub use conversions::NoteConversionService;
 pub use tui::{NoteTUI, TUIMode, TUIConfig, TUITheme, TUIStats, PopupState};
