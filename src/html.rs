@@ -4,6 +4,7 @@ use ratatui::{
     text::{Line, Span, Text},
 };
 use scraper::{ElementRef, Html, Selector};
+use regex::Regex;
 
 /// HTML to terminal text converter for email content
 pub struct HtmlRenderer {
@@ -93,24 +94,57 @@ impl HtmlRenderer {
         // Use ammonia to clean HTML and remove dangerous/unnecessary elements
         let clean_html = clean(&content_without_headers);
 
-        // Additional cleaning for email-specific issues
+        // Additional aggressive cleaning for email-specific issues
         let mut cleaned = clean_html
-            // Remove script and style content completely
+            // Remove script and style content completely (with regex for nested content)
             .replace(r#"<script[^>]*>.*?</script>"#, "")
             .replace(r#"<style[^>]*>.*?</style>"#, "")
+            // Remove inline style attributes completely
+            .replace(r#"style="[^"]*""#, "")
+            .replace(r#"style='[^']*'"#, "")
+            // Remove class attributes that often contain styling
+            .replace(r#"class="[^"]*""#, "")
+            .replace(r#"class='[^']*'"#, "")
             // Remove email-specific metadata that might be in HTML
             .replace(r#"<meta[^>]*>"#, "")
             .replace(r#"<!DOCTYPE[^>]*>"#, "")
-            // Remove empty HTML structure tags
+            // Remove HTML structure tags that aren't needed for content
             .replace("<html>", "")
             .replace("</html>", "")
             .replace("<head>", "")
             .replace("</head>", "")
             .replace("<body>", "")
             .replace("</body>", "")
+            // Remove font tags that often contain styling
+            .replace(r#"<font[^>]*>"#, "<span>")
+            .replace("</font>", "</span>")
+            // Remove span tags with styling attributes
+            .replace(r#"<span[^>]*style="[^"]*"[^>]*>"#, "<span>")
+            // Remove div tags with styling attributes but keep the content structure
+            .replace(r#"<div[^>]*style="[^"]*"[^>]*>"#, "<div>")
+            // Remove width, height, and other display attributes
+            .replace(r#"width="[^"]*""#, "")
+            .replace(r#"height="[^"]*""#, "")
+            .replace(r#"cellspacing="[^"]*""#, "")
+            .replace(r#"cellpadding="[^"]*""#, "")
+            .replace(r#"border="[^"]*""#, "")
+            .replace(r#"align="[^"]*""#, "")
+            .replace(r#"valign="[^"]*""#, "")
             // Normalize whitespace
             .trim()
             .to_string();
+
+        // Use regex to remove any remaining style attributes that might have been missed
+        let style_regex = Regex::new(r#"\s*style\s*=\s*["'][^"']*["']"#).unwrap();
+        cleaned = style_regex.replace_all(&cleaned, "").to_string();
+
+        // Remove class attributes with regex for better coverage  
+        let class_regex = Regex::new(r#"\s*class\s*=\s*["'][^"']*["']"#).unwrap();
+        cleaned = class_regex.replace_all(&cleaned, "").to_string();
+
+        // Remove any font attributes
+        let font_attrs_regex = Regex::new(r#"\s*(face|size|color)\s*=\s*["'][^"']*["']"#).unwrap();
+        cleaned = font_attrs_regex.replace_all(&cleaned, "").to_string();
 
         // If the content doesn't look like proper HTML, wrap it
         if !cleaned.starts_with('<')
@@ -520,13 +554,35 @@ impl HtmlRenderer {
 
     /// Convert HTML to plain text using html2text (most reliable method) - optimized version
     pub fn html_to_plain_text_optimized(&self, html_content: &str) -> String {
+        // First clean the HTML content to remove styling and unnecessary elements
+        let cleaned_html = self.clean_and_sanitize_html(html_content);
+        
         // Use html2text for conversion with proper width (industry best practice)
-        let result = html2text::from_read(html_content.as_bytes(), self.max_width);
+        let result = html2text::from_read(cleaned_html.as_bytes(), self.max_width);
 
         // Clean up the result - remove excessive whitespace but preserve formatting
         let cleaned = result
             .lines()
-            .map(|line| line.trim_end()) // Remove trailing whitespace but keep leading
+            .map(|line| {
+                let trimmed = line.trim_end();
+                // Remove lines that contain only styling remnants or HTML artifacts
+                if trimmed.contains("font-family:") || 
+                   trimmed.contains("font-size:") ||
+                   trimmed.contains("color:") ||
+                   trimmed.contains("margin:") ||
+                   trimmed.contains("padding:") ||
+                   trimmed.contains("border:") ||
+                   trimmed.contains("width:") ||
+                   trimmed.contains("height:") ||
+                   trimmed.starts_with("style=") ||
+                   trimmed.starts_with("class=") ||
+                   (trimmed.starts_with("<") && trimmed.ends_with(">") && trimmed.len() < 100) {
+                    ""
+                } else {
+                    trimmed
+                }
+            })
+            .filter(|line| !line.is_empty() || line.len() == 0) // Keep empty lines but filter out styling lines
             .collect::<Vec<_>>()
             .join("\n");
 

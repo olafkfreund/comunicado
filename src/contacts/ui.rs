@@ -1,4 +1,4 @@
-use crate::contacts::{AddressBookStats, Contact, ContactSearchCriteria, ContactsManager};
+use crate::contacts::{AddressBookStats, Contact, ContactSearchCriteria, ContactSource, ContactsManager};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
@@ -288,8 +288,17 @@ impl AddressBookUI {
     /// Check if we need to load contacts and do it asynchronously
     pub async fn ensure_contacts_loaded(&mut self) {
         if self.contacts.is_empty() && !self.is_searching {
-            tracing::debug!("📱 AddressBookUI: Loading initial contacts");
+            tracing::debug!("📱 AddressBookUI: Loading initial contacts (current tab: {:?})", self.selected_tab);
             self.refresh_contacts().await;
+            tracing::debug!("📱 AddressBookUI: After refresh_contacts, loaded {} contacts", self.contacts.len());
+            
+            // Additional debugging: Check if database has contacts but UI doesn't
+            if self.contacts.is_empty() {
+                tracing::warn!("📱 AddressBookUI: Still no contacts after refresh for tab {:?} - this may indicate a filtering or database issue", self.selected_tab);
+            }
+        } else {
+            tracing::debug!("📱 AddressBookUI: Skipping contact load - already have {} contacts, is_searching: {}", 
+                self.contacts.len(), self.is_searching);
         }
     }
 
@@ -1350,16 +1359,25 @@ impl AddressBookUI {
         let criteria = match self.selected_tab {
             AddressBookTab::AllContacts => ContactSearchCriteria::new(),
             AddressBookTab::GoogleContacts => {
-                // TODO: Add Google source filter
-                ContactSearchCriteria::new()
+                // Filter to show only Google contacts
+                let mut criteria = ContactSearchCriteria::new();
+                criteria.source = Some(ContactSource::Google { 
+                    account_id: "olaf_loken_gmail_com".to_string() // TODO: Get from account list
+                });
+                criteria
             }
             AddressBookTab::OutlookContacts => {
-                // TODO: Add Outlook source filter
-                ContactSearchCriteria::new()
+                // Filter to show only Outlook contacts
+                let mut criteria = ContactSearchCriteria::new();
+                criteria.source = Some(ContactSource::Outlook { 
+                    account_id: "".to_string() // TODO: Get from account list when Outlook is supported
+                });
+                criteria
             }
             AddressBookTab::LocalContacts => {
-                // TODO: Add Local source filter
-                ContactSearchCriteria::new()
+                let mut criteria = ContactSearchCriteria::new();
+                criteria.source = Some(ContactSource::Local);
+                criteria
             }
             AddressBookTab::Statistics => {
                 // Load stats instead
@@ -1371,17 +1389,25 @@ impl AddressBookUI {
             }
         };
 
+        tracing::debug!("📱 AddressBookUI: Executing search with criteria: {:?}", criteria);
+        
         match self.manager.search_contacts(&criteria).await {
             Ok(contacts) => {
+                tracing::debug!("📱 AddressBookUI: Search successful, got {} contacts", contacts.len());
                 self.contacts = contacts;
                 self.contact_list_state.select(if self.contacts.is_empty() {
+                    tracing::warn!("📱 AddressBookUI: No contacts found for tab {:?}", self.selected_tab);
                     None
                 } else {
+                    tracing::debug!("📱 AddressBookUI: Setting selection to first contact");
                     Some(0)
                 });
             }
             Err(e) => {
-                tracing::error!("Failed to load contacts: {}", e);
+                tracing::error!("📱 AddressBookUI: Failed to load contacts for tab {:?}: {}", self.selected_tab, e);
+                // Clear contacts on error to ensure UI shows empty state
+                self.contacts.clear();
+                self.contact_list_state.select(None);
             }
         }
     }

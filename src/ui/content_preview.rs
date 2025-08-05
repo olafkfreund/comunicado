@@ -343,9 +343,10 @@ This is a sample email showcasing the modern email display format."
             let mut all_lines = Vec::new();
 
             // Do all mutable operations first to avoid borrowing conflicts
-            let html_lines = if email.content_type == ContentType::Html {
+            let html_lines = if email.content_type == ContentType::Html || crate::html::is_html_content(&email.body) {
                 tracing::debug!(
-                    "Content Preview: Processing HTML content of length {}",
+                    "Content Preview: Processing HTML content (type: {:?}, length: {})",
+                    email.content_type,
                     email.body.len()
                 );
 
@@ -354,7 +355,7 @@ This is a sample email showcasing the modern email display format."
                 let rendered_text = self.html_renderer.render_html(&email_body);
 
                 tracing::debug!(
-                    "Content Preview: HTML renderer generated {} lines",
+                    "Content Preview: HTML renderer generated {} lines from HTML content",
                     rendered_text.lines.len()
                 );
 
