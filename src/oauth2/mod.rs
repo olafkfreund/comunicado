@@ -6,7 +6,7 @@ pub mod wizard;
 
 pub use client::OAuth2Client;
 pub use providers::{OAuth2Provider, ProviderConfig, ProviderDetector};
-pub use storage::SecureStorage;
+pub use storage::{AppConfig, SecureStorage};
 pub use token::{
     AccessToken, RefreshStats, RefreshToken, TokenDiagnosis, TokenManager, TokenRefreshScheduler,
     TokenStats,

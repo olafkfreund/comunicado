@@ -1,9 +1,34 @@
 use crate::oauth2::{AccountConfig, OAuth2Error, OAuth2Result};
+use crate::integrations::KdeConnectConfig;
 use base64::prelude::*;
 use keyring::Entry;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
+
+/// Main application configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AppConfig {
+    /// KDE Connect integration configuration
+    pub kde_connect: KdeConnectConfig,
+    
+    /// Application version (for migration purposes)
+    #[serde(default = "default_version")]
+    pub version: String,
+}
+
+impl Default for AppConfig {
+    fn default() -> Self {
+        Self {
+            kde_connect: KdeConnectConfig::default(),
+            version: default_version(),
+        }
+    }
+}
+
+fn default_version() -> String {
+    env!("CARGO_PKG_VERSION").to_string()
+}
 
 /// Secure storage for OAuth2 tokens and account configurations
 #[derive(Clone)]
@@ -841,6 +866,38 @@ impl SecureStorage {
             .map_err(|e| OAuth2Error::StorageError(format!("Failed to serialize scopes: {}", e)))?;
         self.store_credential_to_file(&provider_config, "scopes", &scopes_json)?;
 
+        Ok(())
+    }
+
+    /// Load main application configuration
+    pub fn load_config(&self) -> OAuth2Result<AppConfig> {
+        let config_path = self.config_dir.join("config.toml");
+        
+        if !config_path.exists() {
+            // Return default config if file doesn't exist
+            return Ok(AppConfig::default());
+        }
+
+        let content = fs::read_to_string(&config_path)
+            .map_err(|e| OAuth2Error::StorageError(format!("Failed to read config file: {}", e)))?;
+        
+        let config: AppConfig = toml::from_str(&content)
+            .map_err(|e| OAuth2Error::StorageError(format!("Failed to parse config file: {}", e)))?;
+        
+        Ok(config)
+    }
+
+    /// Save main application configuration
+    pub fn save_config(&self, config: &AppConfig) -> OAuth2Result<()> {
+        let config_path = self.config_dir.join("config.toml");
+        
+        let content = toml::to_string_pretty(config)
+            .map_err(|e| OAuth2Error::StorageError(format!("Failed to serialize config: {}", e)))?;
+        
+        fs::write(&config_path, content)
+            .map_err(|e| OAuth2Error::StorageError(format!("Failed to write config file: {}", e)))?;
+        
+        tracing::debug!("Saved application config to: {:?}", config_path);
         Ok(())
     }
 }

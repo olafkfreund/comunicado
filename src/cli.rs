@@ -10,7 +10,8 @@ use crate::email::{DatabaseStats, EmailDatabase};
 use crate::imap::ImapAccountManager;
 use crate::keyboard::{KeyboardAction, KeyboardConfig, KeyboardManager, KeyboardShortcut};
 use crate::maildir::{Maildir, MaildirUtils};
-use crate::oauth2::{AccountConfig, SecureStorage, TokenManager};
+use crate::oauth2::{AccountConfig, AppConfig, SecureStorage, TokenManager};
+use crate::integrations::{KdeConnectIntegration, KdeConnectDevice};
 
 /// Comunicado - Modern terminal email and calendar client
 #[derive(Parser)]
@@ -155,6 +156,9 @@ pub enum Commands {
 
     /// OAuth2 token management and refresh operations
     OAuth2(OAuth2Args),
+
+    /// KDE Connect integration setup and management
+    KdeConnect(KdeConnectArgs),
 }
 
 #[derive(Args)]
@@ -968,6 +972,7 @@ impl CliHandler {
             Commands::ContactsSync(args) => self.handle_contacts_sync(args, dry_run).await,
             Commands::Folders(args) => self.handle_folders(args, dry_run).await,
             Commands::OAuth2(args) => self.handle_oauth2(args, dry_run).await,
+            Commands::KdeConnect(args) => self.handle_kde_connect(args, dry_run).await,
         }
     }
 
@@ -5052,6 +5057,430 @@ impl CliHandler {
         Ok(())
     }
 
+    /// Handle KDE Connect commands
+    async fn handle_kde_connect(&self, args: KdeConnectArgs, dry_run: bool) -> Result<()> {
+        match args.command {
+            KdeConnectCommand::Status => {
+                self.handle_kde_connect_status().await
+            }
+            KdeConnectCommand::List => {
+                self.handle_kde_connect_list().await
+            }
+            KdeConnectCommand::Enable { device_id, notifications, auto_pair } => {
+                self.handle_kde_connect_enable(device_id, notifications, auto_pair, dry_run).await
+            }
+            KdeConnectCommand::Disable => {
+                self.handle_kde_connect_disable(dry_run).await
+            }
+            KdeConnectCommand::Test { notification, find_phone } => {
+                self.handle_kde_connect_test(notification, find_phone).await
+            }
+            KdeConnectCommand::Pair { device_id } => {
+                self.handle_kde_connect_pair(device_id).await
+            }
+            KdeConnectCommand::Unpair { device_id } => {
+                self.handle_kde_connect_unpair(device_id).await
+            }
+            KdeConnectCommand::Setup => {
+                self.handle_kde_connect_setup().await
+            }
+        }
+    }
+
+    /// Show KDE Connect status and availability
+    async fn handle_kde_connect_status(&self) -> Result<()> {
+        println!("🔗 KDE Connect Status");
+        println!("====================");
+
+        // Check if KDE Connect CLI is available
+        let available = KdeConnectIntegration::is_available().await;
+        if available {
+            println!("✅ KDE Connect CLI is available");
+        } else {
+            println!("❌ KDE Connect CLI not found");
+            println!("   Please install kde-connect package:");
+            println!("   - Ubuntu/Debian: sudo apt install kde-connect");
+            println!("   - Arch Linux: sudo pacman -S kdeconnect");
+            println!("   - Fedora: sudo dnf install kde-connect");
+            return Ok(());
+        }
+
+        // Load current configuration
+        let config = self.storage.load_config()
+            .map_err(|e| anyhow!("Failed to load configuration: {}", e))?;
+        
+        let kde_config = &config.kde_connect;
+        
+        println!("\n📱 Integration Status:");
+        if kde_config.enabled {
+            println!("✅ KDE Connect integration is ENABLED");
+            
+            if let Some(ref device_id) = kde_config.device_id {
+                println!("   Device ID: {}", device_id);
+                if let Some(ref device_name) = kde_config.device_name {
+                    println!("   Device Name: {}", device_name);
+                }
+                
+                // Check if device is currently available
+                let _integration = KdeConnectIntegration::new(kde_config.clone());
+                let devices = KdeConnectIntegration::list_devices().await?;
+                let current_device = devices.iter().find(|d| d.id == *device_id);
+                
+                if let Some(device) = current_device {
+                    println!("   Status: {} {}",
+                        if device.paired { "✅ Paired" } else { "❌ Not Paired" },
+                        if device.reachable { "✅ Reachable" } else { "❌ Not Reachable" }
+                    );
+                } else {
+                    println!("   Status: ❌ Device not found");
+                }
+            } else {
+                println!("   ⚠️  No device configured");
+            }
+            
+            println!("   Auto-pair: {}", if kde_config.auto_pair { "✅ Enabled" } else { "❌ Disabled" });
+            println!("   Sound: {}", if kde_config.sound_enabled { "✅ Enabled" } else { "❌ Disabled" });
+            println!("   Notification Types: {}", kde_config.notification_types.join(", "));
+        } else {
+            println!("❌ KDE Connect integration is DISABLED");
+            println!("   Run: comunicado kde-connect enable --help");
+        }
+
+        Ok(())
+    }
+
+    /// List available KDE Connect devices
+    async fn handle_kde_connect_list(&self) -> Result<()> {
+        println!("📱 Available KDE Connect Devices");
+        println!("================================");
+
+        if !KdeConnectIntegration::is_available().await {
+            println!("❌ KDE Connect CLI not found. Please install kde-connect package.");
+            return Ok(());
+        }
+
+        let devices = KdeConnectIntegration::list_devices().await?;
+        
+        if devices.is_empty() {
+            println!("❌ No devices found");
+            println!("   Make sure your device has KDE Connect installed and is on the same network");
+            return Ok(());
+        }
+
+        for (i, device) in devices.iter().enumerate() {
+            println!("\n{}. {}", i + 1, device.name);
+            println!("   ID: {}", device.id);
+            println!("   Status: {} {}",
+                if device.paired { "✅ Paired" } else { "❌ Not Paired" },
+                if device.reachable { "✅ Reachable" } else { "❌ Not Reachable" }
+            );
+            
+            if !device.paired {
+                println!("   To pair: comunicado kde-connect pair {}", device.id);
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Enable KDE Connect integration
+    async fn handle_kde_connect_enable(&self, device_id: Option<String>, notifications: Option<Vec<String>>, auto_pair: bool, dry_run: bool) -> Result<()> {
+        println!("🔗 Enabling KDE Connect Integration");
+        println!("===================================");
+
+        if !KdeConnectIntegration::is_available().await {
+            println!("❌ KDE Connect CLI not found. Please install kde-connect package first.");
+            return Ok(());
+        }
+
+        // Load current configuration
+        let mut config = self.storage.load_config()
+            .map_err(|e| anyhow!("Failed to load configuration: {}", e))?;
+
+        // Determine device to use
+        let selected_device_id = if let Some(id) = device_id {
+            id
+        } else {
+            // List devices and prompt user to select
+            let devices = KdeConnectIntegration::list_devices().await?;
+            
+            if devices.is_empty() {
+                println!("❌ No devices found. Make sure your device is on the same network.");
+                return Ok(());
+            }
+
+            println!("\nAvailable devices:");
+            for (i, device) in devices.iter().enumerate() {
+                println!("{}. {} ({}) - {} {}",
+                    i + 1,
+                    device.name,
+                    device.id,
+                    if device.paired { "Paired" } else { "Not Paired" },
+                    if device.reachable { "Reachable" } else { "Not Reachable" }
+                );
+            }
+
+            // For now, just use the first paired and reachable device
+            // In a real CLI, you'd prompt the user to select
+            let suitable_device = devices.iter()
+                .find(|d| d.paired && d.reachable)
+                .or_else(|| devices.first());
+
+            if let Some(device) = suitable_device {
+                println!("\nUsing device: {} ({})", device.name, device.id);
+                device.id.clone()
+            } else {
+                println!("❌ No suitable device found");
+                return Ok(());
+            }
+        };
+
+        // Verify device exists and get its info
+        let devices = KdeConnectIntegration::list_devices().await?;
+        let selected_device = devices.iter().find(|d| d.id == selected_device_id);
+        
+        let device_name = if let Some(device) = selected_device {
+            if !device.paired {
+                println!("⚠️  Device {} is not paired. Attempting to pair...", device.name);
+                if !dry_run {
+                    KdeConnectIntegration::pair_device(&device.id).await?;
+                    println!("📱 Pairing request sent. Please accept on your device.");
+                }
+            }
+            device.name.clone()
+        } else {
+            println!("⚠️  Device ID {} not found in available devices", selected_device_id);
+            "Unknown Device".to_string()
+        };
+
+        // Update configuration
+        config.kde_connect.enabled = true;
+        config.kde_connect.device_id = Some(selected_device_id.clone());
+        config.kde_connect.device_name = Some(device_name);
+        config.kde_connect.auto_pair = auto_pair;
+
+        if let Some(notif_types) = notifications {
+            config.kde_connect.notification_types = notif_types;
+        }
+
+        if dry_run {
+            println!("🔍 DRY RUN - Configuration changes that would be made:");
+            println!("   kde_connect.enabled = true");
+            println!("   kde_connect.device_id = {}", selected_device_id);
+            println!("   kde_connect.auto_pair = {}", auto_pair);
+            println!("   kde_connect.notification_types = {:?}", config.kde_connect.notification_types);
+        } else {
+            // Save configuration
+            self.storage.save_config(&config)
+                .map_err(|e| anyhow!("Failed to save configuration: {}", e))?;
+
+            println!("✅ KDE Connect integration enabled");
+            println!("   Device: {}", selected_device_id);
+            println!("   Auto-pair: {}", auto_pair);
+            println!("   Notification types: {}", config.kde_connect.notification_types.join(", "));
+            println!("\n🔄 Restart the application to activate KDE Connect integration");
+        }
+
+        Ok(())
+    }
+
+    /// Disable KDE Connect integration
+    async fn handle_kde_connect_disable(&self, dry_run: bool) -> Result<()> {
+        println!("🔗 Disabling KDE Connect Integration");
+        println!("====================================");
+
+        let mut config = self.storage.load_config()
+            .map_err(|e| anyhow!("Failed to load configuration: {}", e))?;
+
+        if !config.kde_connect.enabled {
+            println!("ℹ️  KDE Connect integration is already disabled");
+            return Ok(());
+        }
+
+        if dry_run {
+            println!("🔍 DRY RUN - Would disable KDE Connect integration");
+        } else {
+            config.kde_connect.enabled = false;
+            
+            self.storage.save_config(&config)
+                .map_err(|e| anyhow!("Failed to save configuration: {}", e))?;
+
+            println!("✅ KDE Connect integration disabled");
+            println!("🔄 Restart the application to deactivate KDE Connect features");
+        }
+
+        Ok(())
+    }
+
+    /// Test KDE Connect functionality
+    async fn handle_kde_connect_test(&self, notification: bool, find_phone: bool) -> Result<()> {
+        println!("🧪 Testing KDE Connect Functionality");
+        println!("====================================");
+
+        if !KdeConnectIntegration::is_available().await {
+            println!("❌ KDE Connect CLI not found");
+            return Ok(());
+        }
+
+        let config = self.storage.load_config()
+            .map_err(|e| anyhow!("Failed to load configuration: {}", e))?;
+
+        if !config.kde_connect.enabled {
+            println!("❌ KDE Connect integration is disabled");
+            println!("   Enable it first: comunicado kde-connect enable");
+            return Ok(());
+        }
+
+        let integration = KdeConnectIntegration::new(config.kde_connect);
+
+        if notification {
+            println!("\n📱 Testing notification...");
+            match integration.send_notification("Test from Comunicado", "If you see this, KDE Connect is working! 🎉").await {
+                Ok(()) => println!("✅ Test notification sent successfully"),
+                Err(e) => println!("❌ Failed to send notification: {}", e),
+            }
+        }
+
+        if find_phone {
+            println!("\n🔍 Testing find phone...");
+            match integration.find_phone().await {
+                Ok(()) => println!("✅ Find phone command sent successfully"),
+                Err(e) => println!("❌ Failed to find phone: {}", e),
+            }
+        }
+
+        if !notification && !find_phone {
+            // Default test - send a notification
+            println!("\n📱 Sending test notification...");
+            match integration.send_notification("Test from Comunicado", "KDE Connect integration is working! 🎉").await {
+                Ok(()) => println!("✅ Test notification sent successfully"),
+                Err(e) => println!("❌ Failed to send notification: {}", e),
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Pair with a KDE Connect device
+    async fn handle_kde_connect_pair(&self, device_id: String) -> Result<()> {
+        println!("🔗 Pairing with KDE Connect Device");
+        println!("==================================");
+
+        if !KdeConnectIntegration::is_available().await {
+            println!("❌ KDE Connect CLI not found");
+            return Ok(());
+        }
+
+        println!("📱 Sending pairing request to device: {}", device_id);
+        
+        match KdeConnectIntegration::pair_device(&device_id).await {
+            Ok(()) => {
+                println!("✅ Pairing request sent successfully");
+                println!("📱 Please accept the pairing request on your device");
+            }
+            Err(e) => {
+                println!("❌ Failed to send pairing request: {}", e);
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Unpair from a KDE Connect device
+    async fn handle_kde_connect_unpair(&self, device_id: String) -> Result<()> {
+        println!("🔗 Unpairing from KDE Connect Device");
+        println!("====================================");
+
+        if !KdeConnectIntegration::is_available().await {
+            println!("❌ KDE Connect CLI not found");
+            return Ok(());
+        }
+
+        println!("📱 Unpairing from device: {}", device_id);
+        
+        match KdeConnectIntegration::unpair_device(&device_id).await {
+            Ok(()) => {
+                println!("✅ Successfully unpaired from device");
+            }
+            Err(e) => {
+                println!("❌ Failed to unpair from device: {}", e);
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Run KDE Connect setup wizard
+    async fn handle_kde_connect_setup(&self) -> Result<()> {
+        println!("🔗 KDE Connect Setup Wizard");
+        println!("============================");
+
+        if !KdeConnectIntegration::is_available().await {
+            println!("❌ KDE Connect CLI not found. Please install kde-connect package first:");
+            println!("   - Ubuntu/Debian: sudo apt install kde-connect");
+            println!("   - Arch Linux: sudo pacman -S kdeconnect");
+            println!("   - Fedora: sudo dnf install kde-connect");
+            return Ok(());
+        }
+
+        println!("✅ KDE Connect CLI found");
+        println!("\n📱 Setting up KDE Connect integration...");
+
+        // List available devices
+        println!("\n🔍 Scanning for devices...");
+        let devices = KdeConnectIntegration::list_devices().await?;
+
+        if devices.is_empty() {
+            println!("❌ No devices found.");
+            println!("   Make sure your device:");
+            println!("   1. Has KDE Connect installed");
+            println!("   2. Is on the same network");
+            println!("   3. Has discovery enabled");
+            return Ok(());
+        }
+
+        println!("\n📱 Found {} device(s):", devices.len());
+        for (i, device) in devices.iter().enumerate() {
+            println!("{}. {} ({})", i + 1, device.name, device.id);
+            println!("   Status: {} {}",
+                if device.paired { "✅ Paired" } else { "❌ Not Paired" },
+                if device.reachable { "✅ Reachable" } else { "❌ Not Reachable" }
+            );
+        }
+
+        // Find best device to use
+        let selected_device = devices.iter()
+            .find(|d| d.paired && d.reachable)
+            .or_else(|| devices.iter().find(|d| d.reachable))
+            .or_else(|| devices.first());
+
+        if let Some(device) = selected_device {
+            println!("\n🎯 Recommended device: {} ({})", device.name, device.id);
+            
+            if !device.paired {
+                println!("📱 Device is not paired. Attempting to pair...");
+                KdeConnectIntegration::pair_device(&device.id).await?;
+                println!("✅ Pairing request sent. Please accept on your device.");
+                println!("   Wait a moment, then run: comunicado kde-connect enable --device-id {}", device.id);
+            } else {
+                println!("✅ Device is already paired!");
+                println!("\n🔧 Enabling KDE Connect integration...");
+                
+                // Enable integration with this device
+                self.handle_kde_connect_enable(
+                    Some(device.id.clone()),
+                    Some(vec!["new_email".to_string(), "calendar_reminder".to_string()]),
+                    false, // auto_pair
+                    false  // dry_run
+                ).await?;
+            }
+        } else {
+            println!("❌ No suitable device found for setup");
+        }
+
+        Ok(())
+    }
+
     /// Handle calendar sync commands
     async fn handle_calendar_sync(&self, args: CalendarSyncArgs, dry_run: bool) -> Result<()> {
         match args.command {
@@ -5751,6 +6180,65 @@ impl CliHandler {
         
         Ok(contacts_manager)
     }
+}
+
+#[derive(Args)]
+pub struct KdeConnectArgs {
+    #[command(subcommand)]
+    pub command: KdeConnectCommand,
+}
+
+#[derive(Subcommand)]
+pub enum KdeConnectCommand {
+    /// Check KDE Connect availability and status
+    Status,
+    
+    /// List available devices
+    List,
+    
+    /// Enable KDE Connect integration
+    Enable {
+        /// Device ID to connect to
+        #[arg(short, long)]
+        device_id: Option<String>,
+        
+        /// Enable specific notification types
+        #[arg(long, value_delimiter = ',')]
+        notifications: Option<Vec<String>>,
+        
+        /// Enable auto-pairing with new devices
+        #[arg(long)]
+        auto_pair: bool,
+    },
+    
+    /// Disable KDE Connect integration
+    Disable,
+    
+    /// Test KDE Connect functionality
+    Test {
+        /// Send test notification
+        #[arg(long)]
+        notification: bool,
+        
+        /// Test find phone functionality
+        #[arg(long)]
+        find_phone: bool,
+    },
+    
+    /// Pair with a device
+    Pair {
+        /// Device ID to pair with
+        device_id: String,
+    },
+    
+    /// Unpair from a device
+    Unpair {
+        /// Device ID to unpair from
+        device_id: String,
+    },
+    
+    /// Setup wizard for KDE Connect
+    Setup,
 }
 
 /// Format a duration for human-readable display

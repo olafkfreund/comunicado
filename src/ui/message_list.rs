@@ -298,7 +298,7 @@ impl MessageList {
     }
 
     pub fn render(
-        &self,
+        &mut self,
         frame: &mut Frame,
         area: Rect,
         block: Block,

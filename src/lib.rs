@@ -12,6 +12,7 @@ pub mod encryption;
 pub mod events;
 pub mod html;
 pub mod images;
+pub mod integrations;
 pub mod imap;
 pub mod keyboard;
 pub mod maildir;

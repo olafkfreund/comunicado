@@ -1488,9 +1488,9 @@ impl EventHandler {
             }
             KeyboardAction::RefreshAccount => {
                 tracing::info!("🔄 Account refresh action triggered");
-                if let Some(account_id) = ui.account_switcher().selected_account() {
+                if let Some(account_id) = ui.account_switcher().get_current_account_id() {
                     tracing::info!("🔄 Refreshing account: {}", account_id);
-                    EventResult::RefreshAccount(account_id)
+                    EventResult::RefreshAccount(account_id.clone())
                 } else {
                     tracing::warn!("No account selected for refresh");
                     EventResult::Continue

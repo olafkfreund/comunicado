@@ -620,15 +620,13 @@ impl UI {
 
         // Render components that need mutable access first
         self.render_context_aware_details(frame, layout.details_panel);
+        self.render_context_aware_email_list(frame, layout.primary_content);
 
         // Now get theme and render components that need immutable access
         let theme = self.theme_manager.current_theme();
 
         // Render unified sidebar
         self.unified_sidebar.render(frame, layout.sidebar, theme);
-
-        // Render primary content (email list)
-        self.render_context_aware_email_list(frame, layout.primary_content);
 
         // Render context-aware calendar sidebar (only if relevant)
         if let Some(secondary_area) = layout.secondary_content {
@@ -647,7 +645,7 @@ impl UI {
     }
 
     /// Render email list with context-aware highlighting
-    fn render_context_aware_email_list(&self, frame: &mut Frame, area: Rect) {
+    fn render_context_aware_email_list(&mut self, frame: &mut Frame, area: Rect) {
         let is_focused = matches!(self.focused_pane, FocusedPane::MessageList);
         let theme = self.theme_manager.current_theme();
 
@@ -747,7 +745,7 @@ impl UI {
             .render(frame, area, block, is_focused, theme);
     }
 
-    fn render_message_list(&self, frame: &mut Frame, area: Rect) {
+    fn render_message_list(&mut self, frame: &mut Frame, area: Rect) {
         let is_focused = matches!(self.focused_pane, FocusedPane::MessageList);
         let theme = self.theme_manager.current_theme();
 
