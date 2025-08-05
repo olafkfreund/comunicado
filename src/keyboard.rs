@@ -366,6 +366,9 @@ pub enum KeyboardAction {
     
     // Settings and configuration
     OpenSettings,          // Open application settings
+    
+    // Context-aware menu system
+    ShowContextMenu,       // Show context-aware menu (replaces F-key shortcuts)
 }
 
 /// Configuration for keyboard shortcuts
@@ -481,7 +484,7 @@ impl KeyboardConfig {
         );
         self.shortcuts.insert(
             KeyboardShortcut::ctrl(KeyCode::Char('d')),
-            KeyboardAction::ShowDraftList,
+            KeyboardAction::ShowContextMenu,
         );
         
         // Message actions - using context-aware shortcuts
@@ -647,6 +650,10 @@ impl KeyboardConfig {
         );
 
         // Function keys
+        self.shortcuts.insert(
+            KeyboardShortcut::simple(KeyCode::F(5)),
+            KeyboardAction::RefreshFolder,
+        );
         self.shortcuts.insert(
             KeyboardShortcut::alt(KeyCode::Char('r')),
             KeyboardAction::FolderRefresh,
@@ -1220,6 +1227,12 @@ impl KeyboardConfig {
             KeyboardAction::AIContentGeneration,
             "Generate email content with AI".to_string(),
         );
+        
+        // Context-aware menu system
+        self.action_descriptions.insert(
+            KeyboardAction::ShowContextMenu,
+            "Show context-aware actions menu".to_string(),
+        );
     }
 
     /// Get the action for a given keyboard shortcut
@@ -1281,7 +1294,8 @@ impl KeyboardConfig {
             KeyboardAction::Quit
             | KeyboardAction::ForceQuit
             | KeyboardAction::ShowKeyboardShortcuts
-            | KeyboardAction::OpenSettings => "Global".to_string(),
+            | KeyboardAction::OpenSettings
+            | KeyboardAction::ShowContextMenu => "Global".to_string(),
             KeyboardAction::NextPane
             | KeyboardAction::PreviousPane
             | KeyboardAction::VimMoveLeft

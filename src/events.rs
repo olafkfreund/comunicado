@@ -2,7 +2,7 @@ use crate::keyboard::{KeyboardAction, KeyboardManager};
 use crate::tea::message::ViewMode;
 use crate::ui::{ComposeAction, DraftAction, FocusedPane, UIMode, UI};
 use crate::ui::command_palette::CommandAction;
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{KeyCode, KeyEvent};
 use chrono::Datelike;
 
 pub struct EventHandler {
@@ -90,10 +90,39 @@ impl EventHandler {
             return self.handle_command_palette_keys(key, ui);
         }
         
-        // Check for global Ctrl+D to show command palette
-        if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('d') {
-            ui.show_command_palette();
-            return EventResult::Continue;
+        // Handle context-aware menu navigation if visible
+        if ui.context_aware_menu().is_visible() {
+            tracing::debug!("Context menu is visible, handling key: {:?}", key.code);
+            use crossterm::event::KeyCode;
+            match key.code {
+                KeyCode::Up | KeyCode::Char('k') => {
+                    tracing::debug!("Context menu: navigating up");
+                    ui.context_aware_menu_mut().navigate_up();
+                    return EventResult::Continue;
+                }
+                KeyCode::Down | KeyCode::Char('j') => {
+                    tracing::debug!("Context menu: navigating down");
+                    ui.context_aware_menu_mut().navigate_down();
+                    return EventResult::Continue;
+                }
+                KeyCode::Left | KeyCode::Char('h') | KeyCode::Esc => {
+                    tracing::debug!("Context menu: handling Esc/Left/h key");
+                    if !ui.context_aware_menu_mut().navigate_back() {
+                        tracing::debug!("Context menu: no parent menu, hiding menu");
+                        ui.context_aware_menu_mut().hide();
+                    } else {
+                        tracing::debug!("Context menu: navigated back to parent menu");
+                    }
+                    return EventResult::Continue;
+                }
+                KeyCode::Right | KeyCode::Char('l') | KeyCode::Enter => {
+                    if let Some(action) = ui.context_aware_menu_mut().select_current() {
+                        return self.execute_context_action(action, ui).await;
+                    }
+                    return EventResult::Continue;
+                }
+                _ => {}
+            }
         }
         
         // Handle AI popup first if it's visible and interactive
@@ -236,6 +265,8 @@ impl EventHandler {
             UIMode::KeyboardShortcuts => self.handle_keyboard_shortcuts_keys(key, ui).await,
             UIMode::Settings => self.handle_settings_keys(key, ui).await,
             UIMode::ContactsPopup => self.handle_contacts_popup_keys(key, ui).await,
+            UIMode::Contacts => self.handle_contacts_keys(key, ui).await,
+            UIMode::Calendar => self.handle_calendar_keys(key, ui).await,
             _ => EventResult::Continue,
         };
         
@@ -341,6 +372,10 @@ impl EventHandler {
             }
             KeyboardAction::OpenSettings => {
                 ui.show_settings();
+                EventResult::Continue
+            }
+            KeyboardAction::ShowContextMenu => {
+                ui.show_context_aware_menu();
                 EventResult::Continue
             }
 
@@ -1419,6 +1454,49 @@ impl EventHandler {
                 EventResult::Continue
             }
 
+            // Folder refresh actions
+            KeyboardAction::RefreshFolder => {
+                tracing::info!("🔄 Refresh folder action triggered");
+                if let FocusedPane::FolderTree = ui.focused_pane() {
+                    let folder_path = ui.folder_tree().selected_folder().map(|f| f.path.clone());
+                    if let Some(path) = folder_path {
+                        tracing::info!("🔄 Refreshing folder: {}", path);
+                        EventResult::FolderForceRefresh(path)
+                    } else {
+                        tracing::warn!("No folder selected for refresh");
+                        EventResult::Continue
+                    }
+                } else {
+                    tracing::info!("🔄 Triggering global email sync");
+                    EventResult::TriggerEmailSync
+                }
+            }
+            KeyboardAction::FolderRefresh => {
+                tracing::info!("🔄 Folder refresh action (Alt+R) triggered");
+                if let FocusedPane::FolderTree = ui.focused_pane() {
+                    let folder_path = ui.folder_tree().selected_folder().map(|f| f.path.clone());
+                    if let Some(path) = folder_path {
+                        tracing::info!("🔄 Force refreshing folder: {}", path);
+                        EventResult::FolderForceRefresh(path)
+                    } else {
+                        tracing::warn!("No folder selected for force refresh");
+                        EventResult::Continue
+                    }
+                } else {
+                    EventResult::Continue
+                }
+            }
+            KeyboardAction::RefreshAccount => {
+                tracing::info!("🔄 Account refresh action triggered");
+                if let Some(account_id) = ui.account_switcher().selected_account() {
+                    tracing::info!("🔄 Refreshing account: {}", account_id);
+                    EventResult::RefreshAccount(account_id)
+                } else {
+                    tracing::warn!("No account selected for refresh");
+                    EventResult::Continue
+                }
+            }
+
         }
     }
 
@@ -1966,6 +2044,63 @@ impl EventHandler {
         }
     }
 
+    /// Handle contacts key events  
+    async fn handle_contacts_keys(&mut self, key: KeyEvent, ui: &mut UI) -> EventResult {
+        use crossterm::event::KeyCode;
+        
+        // Handle Esc key to exit contacts mode
+        if key.code == KeyCode::Esc {
+            ui.hide_contacts();
+            return EventResult::Continue;
+        }
+        
+        // Delegate other keys to contacts UI
+        if let Some(action) = ui.handle_contacts_key(key.code).await {
+            use crate::contacts::ui::AddressBookAction;
+            match action {
+                AddressBookAction::ComposeEmail { to: _, name: _ } => {
+                    // Start composing email to this contact
+                    ui.hide_contacts();
+                    // TODO: Implement compose to specific contact
+                    EventResult::Continue
+                }
+                _ => {
+                    // Handle other contacts actions
+                    EventResult::Continue
+                }
+            }
+        } else {
+            EventResult::Continue
+        }
+    }
+
+    /// Handle calendar key events
+    async fn handle_calendar_keys(&mut self, key: KeyEvent, ui: &mut UI) -> EventResult {
+        use crossterm::event::KeyCode;
+        
+        // Handle Esc key to exit calendar mode
+        if key.code == KeyCode::Esc {
+            ui.show_email();
+            return EventResult::Continue;
+        }
+        
+        // Delegate other keys to calendar UI
+        if let Some(action) = ui.handle_calendar_key(key.code).await {
+            match action {
+                crate::calendar::ui::CalendarAction::ExitCalendar => {
+                    ui.show_email();
+                    EventResult::Continue
+                }
+                _ => {
+                    // Handle other calendar actions
+                    EventResult::Continue
+                }
+            }
+        } else {
+            EventResult::Continue
+        }
+    }
+
     /// Handle AI popup keyboard input
     fn handle_ai_popup_keys(&mut self, key: KeyEvent, ui: &mut UI) -> EventResult {
         use crossterm::event::{KeyCode, KeyModifiers};
@@ -2060,6 +2195,124 @@ impl EventHandler {
             Err(err) => {
                 // Decryption failed - error is already stored in the viewer
                 tracing::error!("Failed to decrypt email: {}", err);
+                EventResult::Continue
+            }
+        }
+    }
+
+    /// Execute a context-aware menu action
+    async fn execute_context_action(
+        &mut self,
+        action: crate::ui::context_aware_menu::ContextAction,
+        ui: &mut UI,
+    ) -> EventResult {
+        use crate::ui::context_aware_menu::ContextAction;
+        
+        match action {
+            // Email actions
+            ContextAction::ComposeNew => {
+                // TODO: Pass actual contacts manager when available
+                EventResult::ComposeAction(crate::ui::ComposeAction::StartCompose)
+            }
+            ContextAction::ReplyToMessage => {
+                if let Some(message_id) = ui.get_selected_message_id() {
+                    EventResult::ReplyToMessage(message_id)
+                } else {
+                    EventResult::Continue
+                }
+            }
+            ContextAction::ReplyAllToMessage => {
+                if let Some(message_id) = ui.get_selected_message_id() {
+                    EventResult::ReplyAllToMessage(message_id)
+                } else {
+                    EventResult::Continue
+                }
+            }
+            ContextAction::ForwardMessage => {
+                if let Some(message_id) = ui.get_selected_message_id() {
+                    EventResult::ForwardMessage(message_id)
+                } else {
+                    EventResult::Continue
+                }
+            }
+            ContextAction::ShowDrafts => {
+                ui.show_draft_list();
+                EventResult::Continue
+            }
+            
+            // Calendar actions
+            ContextAction::ShowCalendar => {
+                ui.show_calendar();
+                EventResult::Continue
+            }
+            ContextAction::CreateEvent => {
+                if let Some(calendar_id) = ui.get_default_calendar_id() {
+                    EventResult::CreateEvent(calendar_id)
+                } else {
+                    ui.show_toast_error("No calendar available for creating events".to_string());
+                    EventResult::Continue
+                }
+            }
+            
+            // Contact actions
+            ContextAction::ShowContacts => {
+                ui.show_contacts();
+                EventResult::Continue
+            }
+            ContextAction::CreateContact => {
+                // TODO: Implement contact creation
+                ui.show_toast_info("Contact creation not yet implemented".to_string());
+                EventResult::Continue
+            }
+            
+            // View actions
+            ContextAction::ShowSearch => {
+                ui.start_search();
+                EventResult::Continue
+            }
+            ContextAction::ShowSettings => {
+                ui.show_settings();
+                EventResult::Continue
+            }
+            ContextAction::ShowKeyboardShortcuts => {
+                ui.show_keyboard_shortcuts();
+                EventResult::Continue
+            }
+            
+            // Folder actions
+            ContextAction::RefreshFolder => {
+                if let Some(folder_path) = ui.get_selected_folder_path() {
+                    EventResult::FolderForceRefresh(folder_path)
+                } else {
+                    EventResult::Continue
+                }
+            }
+            
+            // Account actions
+            ContextAction::AddAccount => {
+                EventResult::AddAccount
+            }
+            ContextAction::RefreshAccount => {
+                if let Some(account_id) = ui.get_current_account_id_string() {
+                    EventResult::RefreshAccount(account_id)
+                } else {
+                    EventResult::Continue
+                }
+            }
+            
+            // AI actions
+            ContextAction::AISummarizeEmail => {
+                if let Some(message_id) = ui.get_selected_message_id() {
+                    EventResult::AISummarizeEmail(message_id)
+                } else {
+                    ui.show_toast_error("No message selected for AI summarization".to_string());
+                    EventResult::Continue
+                }
+            }
+            
+            // Default: show not implemented message for other actions
+            _ => {
+                ui.show_toast_info(format!("Action {:?} not yet implemented", action));
                 EventResult::Continue
             }
         }

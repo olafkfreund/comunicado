@@ -148,9 +148,35 @@ pub struct MessageList {
     sender_recognition: Option<Arc<SenderRecognitionService>>,
     // Encryption manager for security analysis
     encryption_manager: Option<Arc<EncryptionManager>>,
+    // Logging optimization fields
+    last_logged_count: Option<usize>,
+    last_logged_folder: Option<String>,
 }
 
 impl MessageList {
+    /// Safe Unicode-aware string truncation that respects character boundaries
+    fn safe_truncate(text: &str, max_chars: usize) -> String {
+        if text.chars().count() <= max_chars {
+            text.to_string()
+        } else {
+            text.chars().take(max_chars).collect()
+        }
+    }
+
+    /// Safe Unicode-aware string truncation with ellipsis
+    fn safe_truncate_with_ellipsis(text: &str, max_chars: usize) -> String {
+        if max_chars <= 3 {
+            return Self::safe_truncate(text, max_chars);
+        }
+        
+        if text.chars().count() <= max_chars {
+            text.to_string()
+        } else {
+            let truncated = text.chars().take(max_chars - 3).collect::<String>();
+            format!("{}...", truncated)
+        }
+    }
+
     pub fn new() -> Self {
         let mut list = Self {
             messages: Vec::new(),
@@ -170,6 +196,8 @@ impl MessageList {
             threading_cache_key: None,
             sender_recognition: None,
             encryption_manager: None,
+            last_logged_count: None,
+            last_logged_folder: None,
         };
 
         // Don't initialize with sample messages initially - they will be loaded from database
@@ -291,8 +319,14 @@ impl MessageList {
 
         // Render table header
         self.render_table_header(frame, header_area, theme);
-        tracing::debug!("MessageList::render called with {} messages, current_account: {:?}, current_folder: {:?}", 
-                       self.messages.len(), self.current_account, self.current_folder);
+        // Reduced verbosity: only log when message count changes or folder changes
+        if self.messages.len() != self.last_logged_count.unwrap_or(usize::MAX) || 
+           self.current_folder != self.last_logged_folder {
+            tracing::debug!("MessageList::render - {} messages in {:?}/{:?}", 
+                           self.messages.len(), self.current_account, self.current_folder);
+            self.last_logged_count = Some(self.messages.len());
+            self.last_logged_folder = self.current_folder.clone();
+        }
 
         // Use filtered messages if search is active, otherwise use all messages
         let messages_to_display = if self.search_active {
@@ -306,24 +340,49 @@ impl MessageList {
         let (subject_width, correspondents_width, date_width, between_width) = 
             self.calculate_column_widths(available_width);
 
-        let items: Vec<ListItem> = messages_to_display
-            .iter()
-            .enumerate()
-            .map(|(i, message)| {
-                let is_selected = self.state.selected() == Some(i);
-                
-                self.render_message_row(
-                    message, 
-                    is_selected, 
-                    is_focused, 
-                    theme, 
-                    subject_width, 
-                    correspondents_width, 
-                    date_width, 
-                    between_width
-                )
-            })
-            .collect();
+        let items: Vec<ListItem> = if messages_to_display.is_empty() {
+            // Show helpful empty state message
+            let folder_name = self.current_folder.as_deref().unwrap_or("folder");
+            vec![
+                ListItem::new(Line::from(vec![
+                    Span::styled(
+                        format!("📭 No messages in {}", folder_name),
+                        Style::default().fg(theme.colors.palette.text_secondary)
+                    )
+                ])),
+                ListItem::new(Line::from(vec![
+                    Span::styled(
+                        "Press 'R' to refresh and sync messages from server",
+                        Style::default().fg(theme.colors.palette.text_muted)
+                    )
+                ])),
+                ListItem::new(Line::from(vec![
+                    Span::styled(
+                        "Press 'F5' to trigger manual sync for all accounts",
+                        Style::default().fg(theme.colors.palette.text_muted)
+                    )
+                ])),
+            ]
+        } else {
+            messages_to_display
+                .iter()
+                .enumerate()
+                .map(|(i, message)| {
+                    let is_selected = self.state.selected() == Some(i);
+                    
+                    self.render_message_row(
+                        message, 
+                        is_selected, 
+                        is_focused, 
+                        theme, 
+                        subject_width, 
+                        correspondents_width, 
+                        date_width, 
+                        between_width
+                    )
+                })
+                .collect()
+        };
 
         let list = List::new(items)
             .block(block)
@@ -470,50 +529,28 @@ impl MessageList {
             }
         }
         
-        // Format subject with threading and truncation
+        // Format subject with threading and truncation (Unicode-safe)
         let subject_available = subject_width.saturating_sub(threading_prefix.len() + status_icons.len() + 2);
-        let subject_text = if message.subject.len() > subject_available {
-            format!("{}...", &message.subject[..subject_available.saturating_sub(3)])
-        } else {
-            message.subject.clone()
-        };
+        let subject_text = Self::safe_truncate_with_ellipsis(&message.subject, subject_available);
         
-        // Format correspondents (sender with contact info)
+        // Format correspondents (sender with contact info) - Unicode-safe
         let (sender_display, sender_indicators) = self.format_sender_with_contact_info(message);
-        let correspondents_text = if sender_display.len() > correspondents_width.saturating_sub(2) {
-            format!("{}...", &sender_display[..correspondents_width.saturating_sub(5)])
-        } else {
-            sender_display
-        };
+        let correspondents_text = Self::safe_truncate_with_ellipsis(&sender_display, correspondents_width.saturating_sub(2));
         
-        // Format date to fit column
-        let date_text = if message.date.len() > date_width {
-            if message.date.len() > 8 {
-                message.date[..8].to_string()
-            } else {
-                message.date.clone()
-            }
+        // Format date to fit column - Unicode-safe
+        let date_text = if message.date.chars().count() > date_width {
+            Self::safe_truncate(&message.date, 8.min(date_width))
         } else {
             message.date.clone()
         };
         
-        // Create "Between" column (showing sender and current user)
+        // Create "Between" column (showing sender and current user) - Unicode-safe
         let current_user = self.current_account.as_ref()
             .and_then(|account| account.split('@').next())
             .unwrap_or("Me");
-        let between_text = format!("{} and {}", 
-            if correspondents_text.len() > 10 {
-                &correspondents_text[..10]
-            } else {
-                &correspondents_text
-            }, 
-            current_user
-        );
-        let between_truncated = if between_text.len() > between_width {
-            format!("{}...", &between_text[..between_width.saturating_sub(3)])
-        } else {
-            between_text
-        };
+        let correspondents_short = Self::safe_truncate(&correspondents_text, 10);
+        let between_text = format!("{} and {}", correspondents_short, current_user);
+        let between_truncated = Self::safe_truncate_with_ellipsis(&between_text, between_width);
         
         // Determine styles based on message state and selection
         let base_style = if is_selected && is_focused {
@@ -816,11 +853,10 @@ impl MessageList {
     }
 
     fn build_flat_view(&mut self) {
-        // Initialize sample messages if we don't have any real messages loaded from database
-        // This happens when database is empty or not populated yet
+        // Don't show sample messages - show empty state instead
         if self.messages.is_empty() {
-            tracing::info!("No messages available, using sample messages for demonstration");
-            self.initialize_sample_messages();
+            tracing::info!("No messages available, showing empty state (user can press 'R' to sync)");
+            // UI will show empty state with sync instructions
         } else {
             tracing::info!(
                 "Using real messages for flat view, {} messages available",
@@ -833,14 +869,10 @@ impl MessageList {
     }
 
     fn build_threaded_view(&mut self) {
-        // Use sample threaded messages if we don't have any real messages loaded from database
-        // This happens when database is empty or not populated yet
+        // Don't show sample messages - show empty state instead
         if self.messages.is_empty() {
-            tracing::info!("No messages available, using sample threaded messages for demonstration");
-            // Clear current view
-            self.messages.clear();
-            // Generate sample threaded messages for demonstration
-            self.initialize_sample_threaded_messages();
+            tracing::info!("No messages available, showing empty state (user can press 'R' to sync)");
+            // UI will show empty state with sync instructions
         } else {
             tracing::info!(
                 "Using real messages for threaded view, {} messages available",
@@ -849,97 +881,6 @@ impl MessageList {
             // Apply threading algorithm to real messages
             self.apply_threading_to_real_messages();
         }
-    }
-
-    fn initialize_sample_threaded_messages(&mut self) {
-        self.messages = vec![
-            // Thread 1: Project Planning (expanded)
-            MessageItem::new_threaded(
-                "Project Update: Q1 Planning".to_string(),
-                "Alice Johnson".to_string(),
-                "Today 09:15".to_string(),
-                0,
-                "thread1".to_string(),
-            )
-            .with_attachments()
-            .with_thread_count(3)
-            .expanded()
-            .as_thread_root(),
-            MessageItem::new_threaded(
-                "Re: Project Update: Q1 Planning".to_string(),
-                "Bob Smith".to_string(),
-                "Today 10:30".to_string(),
-                1,
-                "thread1".to_string(),
-            ),
-            MessageItem::new_threaded(
-                "Re: Project Update: Q1 Planning".to_string(),
-                "Carol Davis".to_string(),
-                "Today 11:45".to_string(),
-                1,
-                "thread1".to_string(),
-            )
-            .unread(),
-            // Thread 2: Meeting Notes (collapsed)
-            MessageItem::new_threaded(
-                "Meeting Notes from Yesterday".to_string(),
-                "David Wilson".to_string(),
-                "Yesterday 16:45".to_string(),
-                0,
-                "thread2".to_string(),
-            )
-            .with_thread_count(2)
-            .as_thread_root(),
-            // Thread 3: Security Alert (expanded)
-            MessageItem::new_threaded(
-                "Security Alert: Password Change Required".to_string(),
-                "IT Security".to_string(),
-                "Mon 09:00".to_string(),
-                0,
-                "thread3".to_string(),
-            )
-            .unread()
-            .important()
-            .with_thread_count(4)
-            .expanded()
-            .as_thread_root(),
-            MessageItem::new_threaded(
-                "Re: Security Alert: Action Required".to_string(),
-                "System Admin".to_string(),
-                "Mon 09:15".to_string(),
-                1,
-                "thread3".to_string(),
-            )
-            .important(),
-            MessageItem::new_threaded(
-                "Re: Security Alert: Completed".to_string(),
-                "Alice Johnson".to_string(),
-                "Mon 09:30".to_string(),
-                1,
-                "thread3".to_string(),
-            ),
-            MessageItem::new_threaded(
-                "Re: Security Alert: All Clear".to_string(),
-                "IT Security".to_string(),
-                "Mon 10:00".to_string(),
-                1,
-                "thread3".to_string(),
-            ),
-            // Standalone messages
-            MessageItem::new(
-                "Welcome to Comunicado!".to_string(),
-                "Comunicado Team".to_string(),
-                "Today 10:30".to_string(),
-            )
-            .unread()
-            .important(),
-            MessageItem::new(
-                "Monthly Newsletter - Tech Updates".to_string(),
-                "TechNews Daily".to_string(),
-                "Yesterday 14:20".to_string(),
-            )
-            .unread(),
-        ];
     }
 
     fn get_threading_prefix(&self, message: &MessageItem) -> String {
@@ -1062,10 +1003,11 @@ impl MessageList {
             if sender_info.is_known_contact {
                 indicators.push('👤'); // Person emoji for known contact
                 
-                // Add company info if available (abbreviated)
+                // Add company info if available (abbreviated) - Unicode-safe
                 if let Some(company) = sender_info.company_info() {
-                    if company.len() > 10 {
-                        display_name = format!("{} ({}...)", display_name, &company[..7]);
+                    if company.chars().count() > 10 {
+                        let company_short = Self::safe_truncate(company, 7);
+                        display_name = format!("{} ({}...)", display_name, company_short);
                     } else {
                         display_name = format!("{} ({})", display_name, company);
                     }
@@ -1152,10 +1094,11 @@ impl MessageList {
 
             tracing::info!("Converted to {} MessageItems", self.messages.len());
             
-            // If database returned no messages, show appropriate sample messages for this folder
+            // If database returned no messages, don't show sample messages
+            // Let the UI display an empty state with instructions to sync
             if self.messages.is_empty() {
-                tracing::info!("Database returned no messages for folder '{}', showing sample messages", folder_name);
-                self.initialize_sample_messages();
+                tracing::info!("Database returned no messages for folder '{}', showing empty state", folder_name);
+                // Note: UI will show instructions to press 'R' to refresh/sync the folder
             }
 
             // Enrich messages with sender recognition
