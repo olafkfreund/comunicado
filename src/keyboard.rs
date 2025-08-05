@@ -364,6 +364,11 @@ pub enum KeyboardAction {
     AIScheduleRequest,     // Parse schedule request with AI
     AIContentGeneration,   // Generate email content
     
+    // Notes actions  
+    ConvertToNote,         // Convert current content to note (Ctrl+N)
+    ShowNotes,             // Switch to notes view
+    CreateNote,            // Create new note
+    
     // Settings and configuration
     OpenSettings,          // Open application settings
     
@@ -843,6 +848,20 @@ impl KeyboardConfig {
             KeyboardShortcut::new(KeyCode::Char('e'), KeyModifiers::CONTROL | KeyModifiers::ALT),
             KeyboardAction::AIContentGeneration,
         );
+
+        // Notes shortcuts
+        self.shortcuts.insert(
+            KeyboardShortcut::ctrl(KeyCode::Char('n')),
+            KeyboardAction::ConvertToNote,
+        );
+        self.shortcuts.insert(
+            KeyboardShortcut::new(KeyCode::Char('n'), KeyModifiers::CONTROL | KeyModifiers::SHIFT),
+            KeyboardAction::ShowNotes,
+        );
+        self.shortcuts.insert(
+            KeyboardShortcut::new(KeyCode::Char('n'), KeyModifiers::CONTROL | KeyModifiers::ALT),
+            KeyboardAction::CreateNote,
+        );
     }
 
     /// Set up descriptions for each action
@@ -1228,6 +1247,20 @@ impl KeyboardConfig {
             "Generate email content with AI".to_string(),
         );
         
+        // Notes actions
+        self.action_descriptions.insert(
+            KeyboardAction::ConvertToNote,
+            "Convert current content to note".to_string(),
+        );
+        self.action_descriptions.insert(
+            KeyboardAction::ShowNotes,
+            "Switch to notes view".to_string(),
+        );
+        self.action_descriptions.insert(
+            KeyboardAction::CreateNote,
+            "Create new note".to_string(),
+        );
+        
         // Context-aware menu system
         self.action_descriptions.insert(
             KeyboardAction::ShowContextMenu,
@@ -1395,6 +1428,10 @@ impl KeyboardConfig {
             | KeyboardAction::AIEmailAnalysis
             | KeyboardAction::AIScheduleRequest
             | KeyboardAction::AIContentGeneration => "AI Assistant".to_string(),
+            
+            KeyboardAction::ConvertToNote
+            | KeyboardAction::ShowNotes
+            | KeyboardAction::CreateNote => "Notes".to_string(),
         }
     }
 

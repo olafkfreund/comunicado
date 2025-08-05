@@ -31,6 +31,9 @@ pub enum Message {
     /// Notes-related messages
     Notes(NotesMessage),
     
+    /// KDE Connect integration messages
+    KdeConnect(KdeConnectMessage),
+    
     /// Account management messages
     Account(AccountMessage),
     
@@ -279,6 +282,116 @@ pub enum NotesMessage {
     
     /// Sync notes with external sources
     SyncNotes,
+}
+
+/// KDE Connect integration messages
+#[derive(Debug, Clone)]
+pub enum KdeConnectMessage {
+    /// Initialize KDE Connect integration
+    Initialize,
+    
+    /// Initialization completed successfully
+    InitializationComplete,
+    
+    /// Initialization failed
+    InitializationFailed(String),
+    
+    /// Enable KDE Connect integration
+    Enable,
+    
+    /// Disable KDE Connect integration
+    Disable,
+    
+    /// Refresh available devices
+    RefreshDevices,
+    
+    /// Devices refreshed
+    DevicesRefreshed(Vec<crate::integrations::KdeConnectDevice>),
+    
+    /// Connect to device
+    ConnectDevice(String), // device_id
+    
+    /// Device connected successfully
+    DeviceConnected(String), // device_id
+    
+    /// Device connection failed
+    DeviceConnectionFailed(String, String), // device_id, error
+    
+    /// Pair with device
+    PairDevice(String), // device_id
+    
+    /// Device paired successfully
+    DevicePaired(String), // device_id
+    
+    /// Device pairing failed
+    DevicePairingFailed(String, String), // device_id, error
+    
+    /// Unpair from device
+    UnpairDevice(String), // device_id
+    
+    /// Device unpaired successfully
+    DeviceUnpaired(String), // device_id
+    
+    /// Send email notification
+    SendEmailNotification {
+        sender: String,
+        subject: String,
+        preview: String,
+    },
+    
+    /// Send calendar reminder
+    SendCalendarReminder {
+        event_title: String,
+        start_time: String,
+    },
+    
+    /// Send sync complete notification
+    SendSyncCompleteNotification {
+        account: String,
+        new_emails: usize,
+    },
+    
+    /// Send custom notification
+    SendNotification {
+        title: String,
+        message: String,
+    },
+    
+    /// Notification sent successfully
+    NotificationSent(String), // notification_id
+    
+    /// Notification failed to send
+    NotificationFailed(String, String), // notification_id, error
+    
+    /// Find phone (ring device)
+    FindPhone,
+    
+    /// Phone finding triggered
+    PhoneFindTriggered,
+    
+    /// Share file with device
+    ShareFile(String), // file_path
+    
+    /// File shared successfully
+    FileShared(String), // file_path
+    
+    /// File sharing failed
+    FileSharingFailed(String, String), // file_path, error
+    
+    /// Update configuration
+    UpdateConfig(crate::integrations::KdeConnectConfig),
+    
+    /// Configuration updated
+    ConfigurationUpdated,
+    
+    /// Check connection status
+    CheckConnectionStatus,
+    
+    /// Connection status updated
+    ConnectionStatusUpdated(crate::tea::model::KdeConnectConnectionStatus),
+    
+    /// Clear error
+    ClearError,
 }
 
 /// Account management messages

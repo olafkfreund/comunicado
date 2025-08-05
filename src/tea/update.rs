@@ -5,7 +5,7 @@
 
 use crate::tea::{Message, Model, Command, UpdateResult};
 use crate::tea::message::{
-    SystemMessage, UIMessage, EmailMessage, CalendarMessage, ContactsMessage, NotesMessage,
+    SystemMessage, UIMessage, EmailMessage, CalendarMessage, ContactsMessage, NotesMessage, KdeConnectMessage,
     AccountMessage, BackgroundMessage, NotificationMessage, ViewMode, ToastLevel,
     ToggleTarget, CalendarView
 };
@@ -23,6 +23,7 @@ pub fn update(model: Model, message: Message) -> UpdateResult<Model> {
         Message::Calendar(msg) => update_calendar(model, msg),
         Message::Contacts(msg) => update_contacts(model, msg),
         Message::Notes(msg) => update_notes(model, msg),
+        Message::KdeConnect(msg) => update_kde_connect(model, msg),
         Message::Account(msg) => update_account(model, msg),
         Message::Background(msg) => update_background(model, msg),
         Message::Notification(msg) => update_notification(model, msg),
@@ -899,6 +900,310 @@ fn update_notes(mut model: Model, message: NotesMessage) -> UpdateResult<Model> 
                 Command::notes(crate::tea::command::NotesCommand::SyncNotes),
             ];
             UpdateResult::new(model, commands)
+        }
+    }
+}
+
+/// Handle KDE Connect messages
+fn update_kde_connect(mut model: Model, message: KdeConnectMessage) -> UpdateResult<Model> {
+    use crate::tea::model::{KdeConnectConnectionStatus, KdeConnectNotification, KdeConnectNotificationType};
+    
+    match message {
+        KdeConnectMessage::Initialize => {
+            model.kde_connect_state.connection_status = KdeConnectConnectionStatus::Checking;
+            model.kde_connect_state.error_message = None;
+            let commands = vec![
+                Command::kde_connect(crate::tea::command::KdeConnectCommand::Initialize),
+            ];
+            UpdateResult::new(model, commands)
+        }
+        
+        KdeConnectMessage::InitializationComplete => {
+            model.kde_connect_state.connection_status = KdeConnectConnectionStatus::Connected;
+            model.kde_connect_state.enabled = true;
+            UpdateResult::just_model(model)
+        }
+        
+        KdeConnectMessage::InitializationFailed(error) => {
+            model.kde_connect_state.connection_status = KdeConnectConnectionStatus::Error(error.clone());
+            model.kde_connect_state.error_message = Some(error);
+            model.kde_connect_state.enabled = false;
+            UpdateResult::just_model(model)
+        }
+        
+        KdeConnectMessage::Enable => {
+            model.kde_connect_state.enabled = true;
+            model.kde_connect_state.connection_status = KdeConnectConnectionStatus::Checking;
+            let commands = vec![
+                Command::kde_connect(crate::tea::command::KdeConnectCommand::Enable),
+            ];
+            UpdateResult::new(model, commands)
+        }
+        
+        KdeConnectMessage::Disable => {
+            model.kde_connect_state.enabled = false;
+            model.kde_connect_state.connection_status = KdeConnectConnectionStatus::Disabled;
+            model.kde_connect_state.active_device = None;
+            UpdateResult::just_model(model)
+        }
+        
+        KdeConnectMessage::RefreshDevices => {
+            model.kde_connect_state.connection_status = KdeConnectConnectionStatus::Checking;
+            let commands = vec![
+                Command::kde_connect(crate::tea::command::KdeConnectCommand::RefreshDevices),
+            ];
+            UpdateResult::new(model, commands)
+        }
+        
+        KdeConnectMessage::DevicesRefreshed(devices) => {
+            model.kde_connect_state.available_devices = devices;
+            model.kde_connect_state.connection_status = KdeConnectConnectionStatus::Available;
+            UpdateResult::just_model(model)
+        }
+        
+        KdeConnectMessage::ConnectDevice(device_id) => {
+            model.kde_connect_state.connection_status = KdeConnectConnectionStatus::Checking;
+            let commands = vec![
+                Command::kde_connect(crate::tea::command::KdeConnectCommand::ConnectDevice(device_id)),
+            ];
+            UpdateResult::new(model, commands)
+        }
+        
+        KdeConnectMessage::DeviceConnected(device_id) => {
+            model.kde_connect_state.active_device = Some(device_id);
+            model.kde_connect_state.connection_status = KdeConnectConnectionStatus::Connected;
+            model.kde_connect_state.error_message = None;
+            UpdateResult::just_model(model)
+        }
+        
+        KdeConnectMessage::DeviceConnectionFailed(device_id, error) => {
+            model.kde_connect_state.connection_status = KdeConnectConnectionStatus::Error(error.clone());
+            model.kde_connect_state.error_message = Some(format!("Failed to connect to {}: {}", device_id, error));
+            UpdateResult::just_model(model)
+        }
+        
+        KdeConnectMessage::PairDevice(device_id) => {
+            let commands = vec![
+                Command::kde_connect(crate::tea::command::KdeConnectCommand::PairDevice(device_id)),
+            ];
+            UpdateResult::new(model, commands)
+        }
+        
+        KdeConnectMessage::DevicePaired(device_id) => {
+            // Update the device in the available devices list
+            if let Some(device) = model.kde_connect_state.available_devices.iter_mut()
+                .find(|d| d.id == device_id) {
+                device.paired = true;
+            }
+            UpdateResult::just_model(model)
+        }
+        
+        KdeConnectMessage::DevicePairingFailed(device_id, error) => {
+            model.kde_connect_state.error_message = Some(format!("Failed to pair with {}: {}", device_id, error));
+            UpdateResult::just_model(model)
+        }
+        
+        KdeConnectMessage::UnpairDevice(device_id) => {
+            let commands = vec![
+                Command::kde_connect(crate::tea::command::KdeConnectCommand::UnpairDevice(device_id)),
+            ];
+            UpdateResult::new(model, commands)
+        }
+        
+        KdeConnectMessage::DeviceUnpaired(device_id) => {
+            // Update the device in the available devices list
+            if let Some(device) = model.kde_connect_state.available_devices.iter_mut()
+                .find(|d| d.id == device_id) {
+                device.paired = false;
+            }
+            // If this was the active device, clear it
+            if model.kde_connect_state.active_device.as_ref() == Some(&device_id) {
+                model.kde_connect_state.active_device = None;
+            }
+            UpdateResult::just_model(model)
+        }
+        
+        KdeConnectMessage::SendEmailNotification { sender, subject, preview } => {
+            let notification_id = uuid::Uuid::new_v4().to_string();
+            let notification = KdeConnectNotification {
+                id: notification_id.clone(),
+                notification_type: KdeConnectNotificationType::EmailReceived,
+                title: format!("📧 New Email from {}", sender),
+                message: format!("Subject: {}\n\n{}", subject, preview),
+                timestamp: chrono::Local::now(),
+                retry_count: 0,
+                max_retries: 3,
+            };
+            model.kde_connect_state.notification_queue.push(notification);
+            
+            let commands = vec![
+                Command::kde_connect(crate::tea::command::KdeConnectCommand::SendNotification {
+                    notification_id,
+                    title: format!("📧 New Email from {}", sender),
+                    message: format!("Subject: {}\n\n{}", subject, preview),
+                }),
+            ];
+            UpdateResult::new(model, commands)
+        }
+        
+        KdeConnectMessage::SendCalendarReminder { event_title, start_time } => {
+            let notification_id = uuid::Uuid::new_v4().to_string();
+            let notification = KdeConnectNotification {
+                id: notification_id.clone(),
+                notification_type: KdeConnectNotificationType::CalendarReminder,
+                title: "📅 Calendar Reminder".to_string(),
+                message: format!("Event: {}\nTime: {}", event_title, start_time),
+                timestamp: chrono::Local::now(),
+                retry_count: 0,
+                max_retries: 3,
+            };
+            model.kde_connect_state.notification_queue.push(notification);
+            
+            let commands = vec![
+                Command::kde_connect(crate::tea::command::KdeConnectCommand::SendNotification {
+                    notification_id,
+                    title: "📅 Calendar Reminder".to_string(),
+                    message: format!("Event: {}\nTime: {}", event_title, start_time),
+                }),
+            ];
+            UpdateResult::new(model, commands)
+        }
+        
+        KdeConnectMessage::SendSyncCompleteNotification { account, new_emails } => {
+            let notification_id = uuid::Uuid::new_v4().to_string();
+            let title = "🔄 Sync Complete".to_string();
+            let message = if new_emails > 0 {
+                format!("Account: {}\n{} new emails received", account, new_emails)
+            } else {
+                format!("Account: {}\nNo new emails", account)
+            };
+            
+            let notification = KdeConnectNotification {
+                id: notification_id.clone(),
+                notification_type: KdeConnectNotificationType::SyncComplete,
+                title: title.clone(),
+                message: message.clone(),
+                timestamp: chrono::Local::now(),
+                retry_count: 0,
+                max_retries: 3,
+            };
+            model.kde_connect_state.notification_queue.push(notification);
+            
+            let commands = vec![
+                Command::kde_connect(crate::tea::command::KdeConnectCommand::SendNotification {
+                    notification_id,
+                    title,
+                    message,
+                }),
+            ];
+            UpdateResult::new(model, commands)
+        }
+        
+        KdeConnectMessage::SendNotification { title, message } => {
+            let notification_id = uuid::Uuid::new_v4().to_string();
+            let notification = KdeConnectNotification {
+                id: notification_id.clone(),
+                notification_type: KdeConnectNotificationType::Custom,
+                title: title.clone(),
+                message: message.clone(),
+                timestamp: chrono::Local::now(),
+                retry_count: 0,
+                max_retries: 3,
+            };
+            model.kde_connect_state.notification_queue.push(notification);
+            
+            let commands = vec![
+                Command::kde_connect(crate::tea::command::KdeConnectCommand::SendNotification {
+                    notification_id,
+                    title,
+                    message,
+                }),
+            ];
+            UpdateResult::new(model, commands)
+        }
+        
+        KdeConnectMessage::NotificationSent(notification_id) => {
+            // Remove from queue and update stats
+            model.kde_connect_state.notification_queue.retain(|n| n.id != notification_id);
+            model.kde_connect_state.stats.notifications_sent += 1;
+            model.kde_connect_state.stats.last_activity = Some(chrono::Local::now());
+            UpdateResult::just_model(model)
+        }
+        
+        KdeConnectMessage::NotificationFailed(notification_id, error) => {
+            // Find notification and increment retry count or remove if max retries reached
+            if let Some(notification) = model.kde_connect_state.notification_queue.iter_mut()
+                .find(|n| n.id == notification_id) {
+                notification.retry_count += 1;
+                if notification.retry_count >= notification.max_retries {
+                    model.kde_connect_state.stats.notifications_failed += 1;
+                    model.kde_connect_state.error_message = Some(format!("Notification failed: {}", error));
+                }
+            }
+            model.kde_connect_state.notification_queue.retain(|n| 
+                n.id != notification_id || n.retry_count < n.max_retries
+            );
+            UpdateResult::just_model(model)
+        }
+        
+        KdeConnectMessage::FindPhone => {
+            let commands = vec![
+                Command::kde_connect(crate::tea::command::KdeConnectCommand::FindPhone),
+            ];
+            UpdateResult::new(model, commands)
+        }
+        
+        KdeConnectMessage::PhoneFindTriggered => {
+            model.kde_connect_state.stats.last_activity = Some(chrono::Local::now());
+            UpdateResult::just_model(model)
+        }
+        
+        KdeConnectMessage::ShareFile(file_path) => {
+            let commands = vec![
+                Command::kde_connect(crate::tea::command::KdeConnectCommand::ShareFile(file_path)),
+            ];
+            UpdateResult::new(model, commands)
+        }
+        
+        KdeConnectMessage::FileShared(file_path) => {
+            model.kde_connect_state.stats.files_shared += 1;
+            model.kde_connect_state.stats.last_activity = Some(chrono::Local::now());
+            UpdateResult::just_model(model)
+        }
+        
+        KdeConnectMessage::FileSharingFailed(file_path, error) => {
+            model.kde_connect_state.error_message = Some(format!("Failed to share {}: {}", file_path, error));
+            UpdateResult::just_model(model)
+        }
+        
+        KdeConnectMessage::UpdateConfig(config) => {
+            model.kde_connect_state.config = Some(config.clone());
+            model.kde_connect_state.enabled = config.enabled;
+            let commands = vec![
+                Command::kde_connect(crate::tea::command::KdeConnectCommand::UpdateConfig(config)),
+            ];
+            UpdateResult::new(model, commands)
+        }
+        
+        KdeConnectMessage::ConfigurationUpdated => {
+            UpdateResult::just_model(model)
+        }
+        
+        KdeConnectMessage::CheckConnectionStatus => {
+            let commands = vec![
+                Command::kde_connect(crate::tea::command::KdeConnectCommand::CheckStatus),
+            ];
+            UpdateResult::new(model, commands)
+        }
+        
+        KdeConnectMessage::ConnectionStatusUpdated(status) => {
+            model.kde_connect_state.connection_status = status;
+            UpdateResult::just_model(model)
+        }
+        
+        KdeConnectMessage::ClearError => {
+            model.kde_connect_state.error_message = None;
+            UpdateResult::just_model(model)
         }
     }
 }

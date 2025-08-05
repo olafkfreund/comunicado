@@ -52,6 +52,11 @@ pub enum EventResult {
     RetryInitialization, // Retry failed initialization
     CancelBackgroundTask, // Cancel selected background task
     AISummarizeEmail(uuid::Uuid), // Message ID to summarize with AI
+    ConvertEmailToNote(uuid::Uuid), // Message ID to convert to note
+    ConvertEventToNote(String), // Event ID to convert to note
+    ConvertKdeMessageToNote(String, String), // Title and content to convert to note
+    ShowNotes, // Switch to Notes view
+    CreateNote, // Create new note
 }
 
 impl EventHandler {
@@ -1452,6 +1457,56 @@ impl EventHandler {
                     ui.account_switcher_mut().next_account();
                 }
                 EventResult::Continue
+            }
+
+            // Notes actions
+            KeyboardAction::ConvertToNote => {
+                tracing::info!("📝 Convert to note action triggered");
+                // Context-aware conversion based on current view/focus
+                match ui.mode() {
+                    crate::ui::UIMode::Calendar => {
+                        // Convert current calendar event to note
+                        if let Some(event_id) = ui.calendar_ui().get_selected_event_id() {
+                            tracing::info!("📅 Converting calendar event {} to note", event_id);
+                            ui.show_toast_info("Converting event to note...".to_string());
+                            EventResult::ConvertEventToNote(event_id)
+                        } else {
+                            ui.show_toast_info("No event selected for conversion".to_string());
+                            EventResult::Continue
+                        }
+                    }
+                    _ => {
+                        // Convert current email to note
+                        if matches!(ui.focused_pane(), FocusedPane::MessageList | FocusedPane::ContentPreview) {
+                            if let Some(message) = ui.message_list().selected_message() {
+                                if let Some(message_id) = message.message_id {
+                                    tracing::info!("📧 Converting email {} to note", message.subject);
+                                    ui.show_toast_info("Converting email to note...".to_string());
+                                    EventResult::ConvertEmailToNote(message_id)
+                                } else {
+                                    ui.show_toast_info("No message ID available for conversion".to_string());
+                                    EventResult::Continue
+                                }
+                            } else {
+                                ui.show_toast_info("No email selected for conversion".to_string());
+                                EventResult::Continue
+                            }
+                        } else {
+                            ui.show_toast_info("Select an email or event to convert to note".to_string());
+                            EventResult::Continue
+                        }
+                    }
+                }
+            }
+            KeyboardAction::ShowNotes => {
+                tracing::info!("📝 Show notes action triggered");
+                ui.show_toast_info("Switching to Notes view...".to_string());
+                EventResult::ShowNotes
+            }
+            KeyboardAction::CreateNote => {
+                tracing::info!("📝 Create note action triggered");
+                ui.show_toast_info("Creating new note...".to_string());
+                EventResult::CreateNote
             }
 
             // Folder refresh actions

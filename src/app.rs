@@ -1850,6 +1850,22 @@ impl App {
                         EventResult::TriggerEmailSync => {
                             self.trigger_manual_sync().await?;
                         }
+                        // Notes operations
+                        EventResult::ConvertEmailToNote(message_id) => {
+                            self.handle_convert_email_to_note(message_id).await?;
+                        }
+                        EventResult::ConvertEventToNote(event_id) => {
+                            self.handle_convert_event_to_note(&event_id).await?;
+                        }
+                        EventResult::ConvertKdeMessageToNote(title, content) => {
+                            self.handle_convert_kde_message_to_note(&title, &content).await?;
+                        }
+                        EventResult::ShowNotes => {
+                            self.handle_show_notes().await?;
+                        }
+                        EventResult::CreateNote => {
+                            self.handle_create_note().await?;
+                        }
                     }
 
                     // Check for quit command
@@ -5360,6 +5376,46 @@ impl App {
         } else {
             self.ui.show_toast_error("Calendar manager not available");
         }
+        Ok(())
+    }
+
+    /// Handle converting email to note
+    async fn handle_convert_email_to_note(&mut self, message_id: uuid::Uuid) -> Result<()> {
+        // TODO: Implement email-to-note conversion
+        tracing::info!("Converting email {} to note", message_id);
+        self.ui.show_toast_info("Email converted to note (feature coming soon)");
+        Ok(())
+    }
+
+    /// Handle converting event to note  
+    async fn handle_convert_event_to_note(&mut self, event_id: &str) -> Result<()> {
+        // TODO: Implement event-to-note conversion
+        tracing::info!("Converting event {} to note", event_id);
+        self.ui.show_toast_info("Event converted to note (feature coming soon)");
+        Ok(())
+    }
+
+    /// Handle converting KDE Connect message to note
+    async fn handle_convert_kde_message_to_note(&mut self, title: &str, content: &str) -> Result<()> {
+        // TODO: Implement KDE Connect message-to-note conversion
+        tracing::info!("Converting KDE Connect message '{}' to note", title);
+        self.ui.show_toast_info("KDE Connect message converted to note (feature coming soon)");
+        Ok(())
+    }
+
+    /// Handle showing notes view
+    async fn handle_show_notes(&mut self) -> Result<()> {
+        // TODO: Switch to notes view when implemented
+        tracing::info!("Switching to Notes view");
+        self.ui.show_toast_info("Switching to Notes view (feature coming soon)");
+        Ok(())
+    }
+
+    /// Handle creating new note
+    async fn handle_create_note(&mut self) -> Result<()> {
+        // TODO: Implement note creation
+        tracing::info!("Creating new note");
+        self.ui.show_toast_info("Creating new note (feature coming soon)");
         Ok(())
     }
 

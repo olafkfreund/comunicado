@@ -39,6 +39,9 @@ pub enum Command {
     
     /// Notes operations
     Notes(NotesCommand),
+    
+    /// KDE Connect operations
+    KdeConnect(KdeConnectCommand),
 }
 
 /// Async task command
@@ -269,6 +272,50 @@ pub enum NotesCommand {
     SyncNotes,
 }
 
+/// KDE Connect integration commands
+#[derive(Debug)]
+pub enum KdeConnectCommand {
+    /// Initialize KDE Connect integration
+    Initialize,
+    
+    /// Enable KDE Connect integration
+    Enable,
+    
+    /// Disable KDE Connect integration
+    Disable,
+    
+    /// Refresh available devices
+    RefreshDevices,
+    
+    /// Connect to device
+    ConnectDevice(String), // device_id
+    
+    /// Pair with device
+    PairDevice(String), // device_id
+    
+    /// Unpair from device
+    UnpairDevice(String), // device_id
+    
+    /// Send notification to device
+    SendNotification {
+        notification_id: String,
+        title: String,
+        message: String,
+    },
+    
+    /// Find phone (ring device)
+    FindPhone,
+    
+    /// Share file with device
+    ShareFile(String), // file_path
+    
+    /// Update configuration
+    UpdateConfig(crate::integrations::KdeConnectConfig),
+    
+    /// Check connection status
+    CheckStatus,
+}
+
 /// Command executor that processes commands asynchronously
 pub struct CommandExecutor {
     message_sender: mpsc::UnboundedSender<Message>,
@@ -316,6 +363,9 @@ impl CommandExecutor {
             }
             Command::Notes(notes_command) => {
                 self.execute_notes_command(notes_command).await;
+            }
+            Command::KdeConnect(kde_command) => {
+                self.execute_kde_connect_command(kde_command).await;
             }
         }
     }
@@ -404,6 +454,60 @@ impl CommandExecutor {
             }
         }
     }
+
+    /// Execute a KDE Connect command
+    async fn execute_kde_connect_command(&self, command: KdeConnectCommand) {
+        match command {
+            KdeConnectCommand::Initialize => {
+                // TODO: Initialize KDE Connect integration
+                tracing::debug!("Initializing KDE Connect integration...");
+            }
+            KdeConnectCommand::Enable => {
+                // TODO: Enable KDE Connect integration
+                tracing::debug!("Enabling KDE Connect integration...");
+            }
+            KdeConnectCommand::Disable => {
+                // TODO: Disable KDE Connect integration
+                tracing::debug!("Disabling KDE Connect integration...");
+            }
+            KdeConnectCommand::RefreshDevices => {
+                // TODO: Refresh available devices
+                tracing::debug!("Refreshing KDE Connect devices...");
+            }
+            KdeConnectCommand::ConnectDevice(device_id) => {
+                // TODO: Connect to device
+                tracing::debug!("Connecting to KDE Connect device: {}", device_id);
+            }
+            KdeConnectCommand::PairDevice(device_id) => {
+                // TODO: Pair with device
+                tracing::debug!("Pairing with KDE Connect device: {}", device_id);
+            }
+            KdeConnectCommand::UnpairDevice(device_id) => {
+                // TODO: Unpair from device
+                tracing::debug!("Unpairing from KDE Connect device: {}", device_id);
+            }
+            KdeConnectCommand::SendNotification { notification_id, title, message } => {
+                // TODO: Send notification to device
+                tracing::debug!("Sending KDE Connect notification {}: {} - {}", notification_id, title, &message[..message.len().min(50)]);
+            }
+            KdeConnectCommand::FindPhone => {
+                // TODO: Find phone (ring device)
+                tracing::debug!("Finding phone via KDE Connect...");
+            }
+            KdeConnectCommand::ShareFile(file_path) => {
+                // TODO: Share file with device
+                tracing::debug!("Sharing file via KDE Connect: {}", file_path);
+            }
+            KdeConnectCommand::UpdateConfig(config) => {
+                // TODO: Update KDE Connect configuration
+                tracing::debug!("Updating KDE Connect configuration: enabled={}", config.enabled);
+            }
+            KdeConnectCommand::CheckStatus => {
+                // TODO: Check KDE Connect connection status
+                tracing::debug!("Checking KDE Connect status...");
+            }
+        }
+    }
 }
 
 /// Helper functions for creating common commands
@@ -463,5 +567,10 @@ impl Command {
     /// Create a notes command
     pub fn notes(command: NotesCommand) -> Self {
         Command::Notes(command)
+    }
+    
+    /// Create a KDE Connect command
+    pub fn kde_connect(command: KdeConnectCommand) -> Self {
+        Command::KdeConnect(command)
     }
 }

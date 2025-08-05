@@ -38,6 +38,9 @@ pub struct Model {
     /// Notes state
     pub notes_state: NotesState,
     
+    /// KDE Connect integration state
+    pub kde_connect_state: KdeConnectState,
+    
     /// Account management state
     pub account_state: AccountState,
     
@@ -453,6 +456,78 @@ pub enum NoteField {
     Tags,
 }
 
+/// KDE Connect integration state
+#[derive(Debug, Clone)]
+pub struct KdeConnectState {
+    /// Whether KDE Connect integration is enabled
+    pub enabled: bool,
+    
+    /// Current configuration
+    pub config: Option<crate::integrations::KdeConnectConfig>,
+    
+    /// Available devices
+    pub available_devices: Vec<crate::integrations::KdeConnectDevice>,
+    
+    /// Currently configured device
+    pub active_device: Option<String>, // device_id
+    
+    /// Connection status
+    pub connection_status: KdeConnectConnectionStatus,
+    
+    /// Last notification sent
+    pub last_notification: Option<KdeConnectNotification>,
+    
+    /// Notification queue
+    pub notification_queue: Vec<KdeConnectNotification>,
+    
+    /// Statistics
+    pub stats: KdeConnectStats,
+    
+    /// Error state
+    pub error_message: Option<String>,
+}
+
+/// KDE Connect connection status
+#[derive(Debug, Clone)]
+pub enum KdeConnectConnectionStatus {
+    Disabled,
+    Checking,
+    Available,
+    Connected,
+    Disconnected,
+    Error(String),
+}
+
+/// KDE Connect notification for queuing
+#[derive(Debug, Clone)]
+pub struct KdeConnectNotification {
+    pub id: String,
+    pub notification_type: KdeConnectNotificationType,
+    pub title: String,
+    pub message: String,
+    pub timestamp: DateTime<Local>,
+    pub retry_count: usize,
+    pub max_retries: usize,
+}
+
+/// Types of KDE Connect notifications
+#[derive(Debug, Clone)]
+pub enum KdeConnectNotificationType {
+    EmailReceived,
+    CalendarReminder,
+    SyncComplete,
+    Custom,
+}
+
+/// KDE Connect usage statistics
+#[derive(Debug, Clone)]
+pub struct KdeConnectStats {
+    pub notifications_sent: usize,
+    pub notifications_failed: usize,
+    pub files_shared: usize,
+    pub last_activity: Option<DateTime<Local>>,
+}
+
 /// Account management state
 #[derive(Debug, Clone)]
 pub struct AccountState {
@@ -676,6 +751,22 @@ impl Model {
                 last_sync: None,
                 sync_status: SyncStatus::Idle,
                 status_message: None,
+                error_message: None,
+            },
+            kde_connect_state: KdeConnectState {
+                enabled: false,
+                config: None,
+                available_devices: Vec::new(),
+                active_device: None,
+                connection_status: KdeConnectConnectionStatus::Disabled,
+                last_notification: None,
+                notification_queue: Vec::new(),
+                stats: KdeConnectStats {
+                    notifications_sent: 0,
+                    notifications_failed: 0,
+                    files_shared: 0,
+                    last_activity: None,
+                },
                 error_message: None,
             },
             account_state: AccountState {
