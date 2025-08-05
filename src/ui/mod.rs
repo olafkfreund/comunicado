@@ -17,6 +17,7 @@ pub mod content_preview;
 pub mod external_editor;
 pub mod context_calendar;
 pub mod context_menu;
+pub mod context_aware_menu;
 pub mod context_shortcuts;
 pub mod dynamic_shortcuts;
 pub mod progressive_disclosure;
@@ -54,7 +55,7 @@ use crate::theme::{Theme, ThemeManager};
 use chrono::Duration as ChronoDuration;
 use ratatui::{
     layout::Rect,
-    widgets::{Block, Borders},
+    widgets::{Block, Borders, Paragraph},
     Frame,
 };
 use std::sync::Arc;
@@ -116,6 +117,9 @@ pub use fuzzy_search::{FuzzySearchEngine, FuzzySearchConfig};
 // Re-export context menu types
 pub use context_menu::{ContextMenu, ContextMenuAction, ContextMenuItem, ContextType};
 
+// Re-export context-aware menu types
+pub use context_aware_menu::{ContextAwareMenu, ContextAction, MenuContext};
+
 // Re-export dynamic shortcuts types
 // (Types already imported above in use self::dynamic_shortcuts::...)
 
@@ -162,6 +166,7 @@ pub enum UIMode {
     KeyboardShortcuts,
     Settings,
     ContactsPopup, // Quick contacts popup overlay
+    Contacts, // Full-screen contacts/address book interface
 }
 
 /// AI operation results for async communication
@@ -218,6 +223,8 @@ pub struct UI {
     help_overlay: HelpOverlay,
     // Context menu system
     context_menu: ContextMenu,
+    // Context-aware menu system (Ctrl+D)
+    context_aware_menu: ContextAwareMenu,
     // Progressive disclosure system
     progressive_disclosure_manager: ProgressiveDisclosureManager,
     // Dynamic shortcuts system
@@ -227,6 +234,8 @@ pub struct UI {
     notification_expires_at: Option<tokio::time::Instant>,
     // Contacts popup
     contacts_popup: Option<crate::contacts::ContactPopup>,
+    // Full-screen address book UI
+    address_book_ui: Option<crate::contacts::ui::AddressBookUI>,
     
     // AI Assistant components
     ai_assistant: crate::ui::ai_assistant_ui::AIAssistantUI,
@@ -282,6 +291,8 @@ impl UI {
             help_overlay: HelpOverlay::new(),
             // Initialize context menu system
             context_menu: ContextMenu::new(),
+            // Initialize context-aware menu system
+            context_aware_menu: ContextAwareMenu::new(),
             // Initialize progressive disclosure system
             progressive_disclosure_manager: ProgressiveDisclosureManager::new(),
             // Initialize dynamic shortcuts system
@@ -291,6 +302,8 @@ impl UI {
             notification_expires_at: None,
             // Initialize contacts popup
             contacts_popup: None,
+            // Initialize address book UI (will be set when contacts manager is available)
+            address_book_ui: None,
             
             // Initialize AI components - will be properly initialized when AI service is set
             ai_assistant: {
@@ -531,6 +544,24 @@ impl UI {
                     contacts_popup.render(frame, size, theme);
                 }
             }
+            UIMode::Contacts => {
+                // Render full-screen address book interface
+                if let Some(ref mut address_book_ui) = self.address_book_ui {
+                    address_book_ui.render(frame, size);
+                } else {
+                    // Show placeholder if address book UI is not initialized
+                    let theme = self.theme_manager.current_theme();
+                    let block = Block::default()
+                        .title("Contacts")
+                        .borders(Borders::ALL)
+                        .border_style(theme.colors.palette.border);
+                    let paragraph = Paragraph::new("Contacts manager not available. Initializing...")
+                        .block(block)
+                        .style(theme.colors.palette.text_primary)
+                        .alignment(ratatui::layout::Alignment::Center);
+                    frame.render_widget(paragraph, size);
+                }
+            }
         }
 
         // Render toast notifications on top of everything
@@ -550,6 +581,11 @@ impl UI {
         // Render context menu on top of everything if visible
         if self.context_menu.is_visible() {
             self.context_menu.render(frame, size, theme, &self.typography);
+        }
+
+        // Render context-aware menu on top of everything if visible
+        if self.context_aware_menu.is_visible() {
+            self.context_aware_menu.render(frame, size, theme);
         }
 
         // Render AI popup on top of everything if visible
@@ -919,6 +955,7 @@ impl UI {
             UIMode::KeyboardShortcuts => "Keyboard Shortcuts",
             UIMode::Settings => "Settings",
             UIMode::ContactsPopup => "Contacts",
+            UIMode::Contacts => "Address Book",
         };
 
         let nav_segment = NavigationHintsSegment {
@@ -1081,6 +1118,15 @@ impl UI {
                 ("/".to_string(), "Search".to_string()),
                 ("Tab".to_string(), "Change Mode".to_string()),
                 ("Esc".to_string(), "Close".to_string()),
+            ],
+            UIMode::Contacts => vec![
+                ("↑↓/j/k".to_string(), "Navigate".to_string()),
+                ("Enter".to_string(), "View/Edit Contact".to_string()),
+                ("n".to_string(), "New Contact".to_string()),
+                ("d".to_string(), "Delete Contact".to_string()),
+                ("/".to_string(), "Search".to_string()),
+                ("s".to_string(), "Sync Contacts".to_string()),
+                ("Esc".to_string(), "Back to Email".to_string()),
             ],
         }
     }
@@ -2062,10 +2108,7 @@ impl UI {
                 self.show_calendar();
             }
             StartupMode::Contacts => {
-                // TODO: Implement contacts mode when available
-                // For now, fall back to email mode
-                self.mode = UIMode::Normal;
-                self.focused_pane = FocusedPane::AccountSwitcher;
+                self.show_contacts();
             }
         }
     }
@@ -2091,6 +2134,14 @@ impl UI {
         self.update_navigation_hints();
     }
 
+    /// Show contacts interface
+    pub fn show_contacts(&mut self) {
+        self.mode = UIMode::Contacts;
+        self.update_navigation_hints();
+    }
+
+
+
     /// Hide calendar interface and return to normal mode
     pub fn hide_calendar(&mut self) {
         self.mode = UIMode::Normal;
@@ -2099,9 +2150,34 @@ impl UI {
         self.update_navigation_hints();
     }
 
+    /// Hide contacts interface and return to normal mode  
+    pub fn hide_contacts(&mut self) {
+        self.mode = UIMode::Normal;
+        self.focused_pane = FocusedPane::FolderTree;
+        self.update_navigation_hints();
+    }
+
     /// Check if currently in calendar mode
     pub fn is_calendar_visible(&self) -> bool {
         matches!(self.mode, UIMode::Calendar)
+    }
+
+    /// Check if currently in contacts mode
+    pub fn is_contacts_visible(&self) -> bool {
+        matches!(self.mode, UIMode::Contacts)
+    }
+
+    /// Set contacts manager for address book UI
+    pub fn set_address_book_contacts_manager(&mut self, contacts_manager: Arc<crate::contacts::ContactsManager>) {
+        // Initialize the address book UI with the real contacts manager
+        self.address_book_ui = Some(crate::contacts::ui::AddressBookUI::new(contacts_manager));
+    }
+    
+    /// Ensure contacts are loaded in the address book
+    pub async fn ensure_address_book_contacts_loaded(&mut self) {
+        if let Some(ref mut address_book_ui) = self.address_book_ui {
+            address_book_ui.ensure_contacts_loaded().await;
+        }
     }
 
     /// Handle calendar key input
@@ -2111,6 +2187,23 @@ impl UI {
     ) -> Option<CalendarAction> {
         if self.mode == UIMode::Calendar {
             self.calendar_ui.handle_key(key).await
+        } else {
+            None
+        }
+    }
+
+    /// Handle contacts key input
+    pub async fn handle_contacts_key(
+        &mut self,
+        key: crossterm::event::KeyCode,
+    ) -> Option<crate::contacts::ui::AddressBookAction> {
+        if self.mode == UIMode::Contacts {
+            if let Some(ref mut address_book_ui) = self.address_book_ui {
+                let (_handled, action) = address_book_ui.handle_key(key).await;
+                action
+            } else {
+                None  
+            }
         } else {
             None
         }
@@ -2198,7 +2291,12 @@ impl UI {
 
     /// Set calendar events to display
     pub fn set_calendar_events(&mut self, events: Vec<crate::calendar::Event>) {
+        tracing::info!("🎯 UI: Received {} events to display in calendar", events.len());
+        for event in &events {
+            tracing::info!("📅 UI:   Event: {} (Start: {})", event.title, event.start_time);
+        }
         self.calendar_ui.set_events(events);
+        tracing::info!("✅ UI: Events passed to calendar_ui.set_events()");
     }
 
     /// Set available calendars
@@ -2522,6 +2620,56 @@ impl UI {
     /// Get mutable context menu for direct access
     pub fn context_menu_mut(&mut self) -> &mut ContextMenu {
         &mut self.context_menu
+    }
+
+    /// Show context-aware menu
+    pub fn show_context_aware_menu(&mut self) {
+        let context = MenuContext {
+            ui_mode: self.mode.clone(),
+            focused_pane: self.focused_pane,
+            has_selected_message: self.message_list.selected_message().is_some(),
+            has_selected_folder: self.folder_tree.selected_folder().is_some(),
+            has_selected_event: false, // TODO: Implement calendar event selection
+            has_selected_contact: false, // TODO: Implement contact selection
+            is_composing: matches!(self.mode, UIMode::Compose),
+        };
+        self.context_aware_menu.show(context);
+    }
+
+    /// Hide context-aware menu
+    pub fn hide_context_aware_menu(&mut self) {
+        self.context_aware_menu.hide();
+    }
+
+    /// Get context-aware menu for direct access
+    pub fn context_aware_menu(&self) -> &ContextAwareMenu {
+        &self.context_aware_menu
+    }
+
+    /// Get mutable context-aware menu for direct access
+    pub fn context_aware_menu_mut(&mut self) -> &mut ContextAwareMenu {
+        &mut self.context_aware_menu
+    }
+
+    /// Get selected message ID (helper for context actions)
+    pub fn get_selected_message_id(&self) -> Option<uuid::Uuid> {
+        self.message_list.selected_message().and_then(|m| m.message_id)
+    }
+
+    /// Get default calendar ID (helper for context actions)
+    pub fn get_default_calendar_id(&self) -> Option<String> {
+        // TODO: Implement calendar ID retrieval
+        Some("default".to_string())
+    }
+
+    /// Get selected folder path (helper for context actions)
+    pub fn get_selected_folder_path(&self) -> Option<String> {
+        self.folder_tree.selected_folder().map(|f| f.path.clone())
+    }
+
+    /// Get current account ID (helper for context actions)
+    pub fn get_current_account_id_string(&self) -> Option<String> {
+        self.account_switcher.get_current_account().map(|a| a.account_id.clone())
     }
 
     /// Get current context type based on UI state
@@ -3762,6 +3910,7 @@ impl UI {
             UIMode::EmailViewer => CommandContext::EmailViewer,
             UIMode::Calendar => CommandContext::Calendar,
             UIMode::ContactsPopup => CommandContext::Contacts,
+            UIMode::Contacts => CommandContext::Contacts,
             UIMode::Compose => CommandContext::Compose,
             UIMode::Settings => CommandContext::Settings,
             _ => {
@@ -3850,7 +3999,8 @@ impl UI {
             
             // New command actions - placeholder implementations
             CommandAction::ToggleContacts => {
-                self.show_contacts_mode();
+                // Return event to be handled by app.rs like the keyboard shortcut
+                return Some(crate::events::EventResult::ContactsPopup);
             },
             CommandAction::ReplyAllEmail => {
                 self.show_toast_info("Reply All started");
@@ -3963,12 +4113,6 @@ impl UI {
     fn show_calendar_mode(&mut self) {
         self.mode = UIMode::Calendar;
         self.show_toast_info("Switched to calendar mode");
-    }
-    
-    /// Show contacts mode (simplified version for command palette)
-    fn show_contacts_mode(&mut self) {
-        self.mode = UIMode::ContactsPopup;
-        self.show_toast_info("Switched to contacts mode");
     }
     
     /// Get area for AI assistant (right sidebar)

@@ -219,19 +219,29 @@ impl App {
             }
         };
         
+        tracing::info!("🔧 Initializing contacts database at: {}", contacts_db_path_str);
         let contacts_database = crate::contacts::database::ContactsDatabase::new(contacts_db_path_str)
             .await
-            .map_err(|e| anyhow::anyhow!("Failed to initialize contacts database: {}", e))?;
+            .map_err(|e| {
+                tracing::error!("❌ Failed to initialize contacts database: {}", e);
+                anyhow::anyhow!("Failed to initialize contacts database: {}", e)
+            })?;
+        tracing::info!("✅ Contacts database initialized successfully");
         
         // Create contacts manager (ContactsManager expects non-Arc values)
         let token_manager_for_contacts = match &*token_manager {
             tm => tm.clone()
         };
+        tracing::info!("🔧 Creating contacts manager...");
         let contacts_manager = Arc::new(
             ContactsManager::new(contacts_database, token_manager_for_contacts)
                 .await
-                .map_err(|e| anyhow::anyhow!("Failed to create contacts manager: {}", e))?
+                .map_err(|e| {
+                    tracing::error!("❌ Failed to create contacts manager: {}", e);
+                    anyhow::anyhow!("Failed to create contacts manager: {}", e)
+                })?
         );
+        tracing::info!("✅ Contacts manager created successfully");
         
         self.contacts_manager = Some(contacts_manager.clone());
         tracing::info!("✅ Contacts system initialized successfully");
@@ -422,9 +432,15 @@ impl App {
             
             // Get all calendars
             let calendars = calendar_manager.get_calendars().await;
-            tracing::info!("📅 Found {} calendars in manager", calendars.len());
+            tracing::info!("📅 CALENDAR DEBUG: Found {} calendars in manager", calendars.len());
             for calendar in &calendars {
-                tracing::info!("   - Calendar: {} (ID: {})", calendar.name, calendar.id);
+                tracing::info!("📅   - Calendar: {} (ID: {})", calendar.name, calendar.id);
+            }
+            
+            if calendars.is_empty() {
+                tracing::error!("❌ CALENDAR ISSUE: No calendars found in calendar manager!");
+                tracing::error!("❌ This means calendar sync hasn't run or failed to store calendars");
+                return Ok(());
             }
             
             // Get all events for the next 6 months (to show in calendar views)
@@ -435,9 +451,14 @@ impl App {
             let events = calendar_manager.get_all_events(Some(now - chrono::Duration::days(30)), Some(six_months_later)).await
                 .map_err(|e| anyhow::anyhow!("Failed to load calendar events: {}", e))?;
             
-            tracing::info!("🎯 Retrieved {} events from calendar manager", events.len());
+            tracing::info!("🎯 CALENDAR DEBUG: Retrieved {} events from calendar manager", events.len());
             for event in &events {
-                tracing::info!("   - Event: {} (Start: {}, Calendar: {})", event.title, event.start_time, event.calendar_id);
+                tracing::info!("📅   Event: {} (Start: {}, Calendar: {})", event.title, event.start_time, event.calendar_id);
+            }
+            
+            if events.is_empty() {
+                tracing::error!("❌ CALENDAR ISSUE: No events retrieved from calendar manager!");
+                tracing::error!("❌ This could mean: 1) No events in database, 2) Date range issue, 3) Calendar manager issue");
             }
             
             // Update UI with calendar data
@@ -448,7 +469,8 @@ impl App {
             
             tracing::info!("✅ Loaded {} calendars and {} events into UI", calendars_count, events_count);
         } else {
-            tracing::warn!("⚠️  Calendar manager not initialized, cannot refresh calendar data");
+            tracing::error!("❌ CALENDAR CRITICAL: Calendar manager not initialized, cannot refresh calendar data");
+            tracing::error!("❌ This means calendar initialization failed during app startup");
         }
         Ok(())
     }
@@ -456,16 +478,26 @@ impl App {
     /// Refresh contacts data from database and update UI  
     pub async fn refresh_contacts_data(&mut self) -> Result<()> {
         if let Some(contacts_manager) = &self.contacts_manager {
-            tracing::debug!("Refreshing contacts data from database...");
+            tracing::info!("🔄 Refreshing contacts data from database...");
             
             // Get all contacts using empty search criteria
             let criteria = crate::contacts::ContactSearchCriteria::new();
             let contacts = contacts_manager.search_contacts(&criteria).await
                 .map_err(|e| anyhow::anyhow!("Failed to load contacts: {}", e))?;
             
-            // Update UI with contacts data (if UI has contacts support)
-            // For now, just log the count
-            tracing::info!("👥 Loaded {} contacts from database", contacts.len());
+            tracing::info!("👥 CONTACTS DEBUG: Loaded {} contacts from database", contacts.len());
+            for contact in &contacts {
+                tracing::info!("👤   Contact: {} ({})", contact.display_name, 
+                    contact.primary_email().map(|e| e.address.as_str()).unwrap_or("no email"));
+            }
+            
+            if contacts.is_empty() {
+                tracing::error!("❌ CONTACTS ISSUE: No contacts found in database!");
+                tracing::error!("❌ This means contacts sync hasn't run or failed to store contacts");
+            }
+        } else {
+            tracing::error!("❌ CONTACTS CRITICAL: Contacts manager not initialized, cannot refresh contacts data");
+            tracing::error!("❌ This means contacts initialization failed during app startup");
         }
         Ok(())
     }
@@ -1736,6 +1768,7 @@ impl App {
                             self.handle_folder_operation(operation).await?;
                         }
                         EventResult::ContactsPopup => {
+                            tracing::info!("🎯 EventResult::ContactsPopup received in app.rs");
                             self.handle_contacts_popup().await?;
                         }
                         EventResult::ContactsAction(action) => {
@@ -1868,6 +1901,9 @@ impl App {
             self.token_manager = Some(token_manager);
         }
 
+        // Initialize calendar and contacts managers with existing database
+        self.initialize_managers().await?;
+
         // Initialize SMTP service with timeout
         if let (Some(ref token_manager), Some(ref database)) = (&self.token_manager, &self.database)
         {
@@ -1910,23 +1946,22 @@ impl App {
                 std::time::Duration::from_secs(20), // 20 second timeout for contacts init
                 async {
                     // Create contacts database from email database path
-                    let data_dir = dirs::data_dir()
-                        .ok_or_else(|| anyhow::anyhow!("Failed to get data directory"))?
+                    let config_dir = dirs::config_dir()
+                        .ok_or_else(|| anyhow::anyhow!("Failed to get config directory"))?
                         .join("comunicado");
 
                     // Ensure the directory exists
-                    if let Err(e) = std::fs::create_dir_all(&data_dir) {
+                    if let Err(e) = std::fs::create_dir_all(&config_dir) {
                         tracing::warn!("Failed to create contacts directory: {}", e);
                         return Ok::<Option<Arc<ContactsManager>>, anyhow::Error>(None);
                     }
 
-                    let contacts_db_path = data_dir.join("contacts.db");
+                    let contacts_db_path = config_dir.join("contacts.db");
 
                     // Try to initialize contacts database
-                    match crate::contacts::ContactsDatabase::new(&format!(
-                        "sqlite:{}",
-                        contacts_db_path.display()
-                    ))
+                    let contacts_db_url = format!("sqlite:{}?mode=rwc", contacts_db_path.display());
+                    tracing::info!("🔧 Initializing contacts database with URL: {}", contacts_db_url);
+                    match crate::contacts::ContactsDatabase::new(&contacts_db_url)
                     .await
                     {
                         Ok(contacts_database) => {
@@ -1935,13 +1970,15 @@ impl App {
                             {
                                 Ok(contacts_manager) => Ok(Some(Arc::new(contacts_manager))),
                                 Err(e) => {
-                                    tracing::warn!("Failed to initialize contacts manager: {}", e);
+                                    tracing::error!("❌ CONTACTS INIT ERROR: Failed to initialize contacts manager: {}", e);
+                                    tracing::error!("❌ CONTACTS DEBUG: This error will cause contacts to be unavailable");
                                     Ok(None)
                                 }
                             }
                         }
                         Err(e) => {
-                            tracing::warn!("Failed to initialize contacts database: {}", e);
+                            tracing::error!("❌ CONTACTS DB ERROR: Failed to initialize contacts database: {}", e);
+                            tracing::error!("❌ CONTACTS DEBUG: Database path issue will cause contacts to be unavailable");
                             Ok(None)
                         }
                     }
@@ -1954,18 +1991,26 @@ impl App {
                     self.contacts_manager = Some(contacts_manager.clone());
                     
                     // Set up sender recognition in UI
-                    self.ui.set_contacts_manager(contacts_manager);
+                    self.ui.set_contacts_manager(contacts_manager.clone());
                     
-                    tracing::info!("Contacts manager initialized successfully with sender recognition");
+                    // Set up address book UI
+                    self.ui.set_address_book_contacts_manager(contacts_manager);
+                    
+                    // Load initial contacts
+                    self.ui.ensure_address_book_contacts_loaded().await;
+                    
+                    tracing::info!("Contacts manager initialized successfully with sender recognition and contacts loaded");
                 }
                 Ok(Ok(None)) => {
-                    tracing::warn!("Contacts manager initialization skipped due to errors");
+                    tracing::error!("❌ CONTACTS FINAL: Contacts manager initialization skipped due to errors (see above)");
+                    tracing::error!("❌ CONTACTS RESULT: contacts_manager will remain None");
                 }
                 Ok(Err(e)) => {
-                    tracing::warn!("Contacts manager initialization failed: {}", e);
+                    tracing::error!("❌ CONTACTS FINAL: Contacts manager initialization failed: {}", e);
                 }
                 Err(_) => {
-                    tracing::error!("Contacts manager initialization timed out after 20 seconds");
+                    tracing::error!("❌ CONTACTS TIMEOUT: Contacts manager initialization timed out after 20 seconds");
+                    tracing::error!("❌ CONTACTS RESULT: contacts_manager will remain None");
                     // Don't fail overall initialization - contacts are optional
                 }
             }
@@ -1990,6 +2035,61 @@ impl App {
 
         // Report success or failure to progress manager
         result
+    }
+
+    /// Initialize calendar and contacts managers with existing database
+    async fn initialize_managers(&mut self) -> Result<()> {
+        tracing::info!("🔄 Initializing calendar and contacts managers...");
+        
+        if let (Some(ref token_manager), Some(ref _database)) = (&self.token_manager, &self.database) {
+            // Initialize calendar manager if not already done
+            if self.calendar_manager.is_none() {
+                tracing::info!("📅 Creating calendar manager...");
+                
+                // Create calendar database with proper path (same as CLI)
+                let config_dir = dirs::config_dir()
+                    .ok_or_else(|| anyhow::anyhow!("Failed to get config directory"))?
+                    .join("comunicado");
+                
+                // Create the directory if it doesn't exist
+                if let Err(e) = std::fs::create_dir_all(&config_dir) {
+                    tracing::warn!("Failed to create calendar directory: {}", e);
+                }
+                
+                let calendar_db_path = config_dir.join("calendar.db");
+                let calendar_db_url = format!("sqlite:{}?mode=rwc", calendar_db_path.display());
+                
+                tracing::info!("📅 Creating calendar database: {}", calendar_db_url);
+                match crate::calendar::CalendarDatabase::new(&calendar_db_url).await {
+                    Ok(calendar_database) => {
+                        match crate::calendar::CalendarManager::new(Arc::new(calendar_database), Arc::new(token_manager.clone())).await {
+                            Ok(calendar_manager) => {
+                                self.calendar_manager = Some(Arc::new(calendar_manager));
+                                tracing::info!("✅ Calendar manager initialized successfully");
+                            }
+                            Err(e) => {
+                                tracing::error!("❌ Failed to create calendar manager: {}", e);
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        tracing::error!("❌ Failed to create calendar database: {}", e);
+                    }
+                }
+            }
+            
+            // Contacts manager should already be initialized in initialize_services
+            // But let's check if it exists
+            if self.contacts_manager.is_none() {
+                tracing::warn!("⚠️  Contacts manager not initialized - this should have been done in initialize_services");
+            } else {
+                tracing::info!("✅ Contacts manager already initialized");
+            }
+        } else {
+            tracing::error!("❌ Cannot initialize managers: token_manager or database not available");
+        }
+        
+        Ok(())
     }
 
     /// Handle compose actions (send, save draft, cancel)
@@ -2246,6 +2346,9 @@ impl App {
             match app_event {
                 crate::events::EventResult::TriggerEmailSync => {
                     self.trigger_manual_sync().await?;
+                },
+                crate::events::EventResult::ContactsPopup => {
+                    self.handle_contacts_popup().await?;
                 },
                 _ => {
                     // Other events would be handled here if needed
@@ -3342,7 +3445,7 @@ impl App {
 
     /// Handle account refresh (Ctrl+R) - reconnect and update status
     async fn handle_refresh_account(&mut self, account_id: &str) -> Result<()> {
-        tracing::info!("Refreshing account connection: {}", account_id);
+        tracing::info!("🔄 Refreshing account connection (non-blocking): {}", account_id);
 
         // Update status to show we're refreshing
         self.ui
@@ -3356,34 +3459,42 @@ impl App {
             tracing::debug!("Skipping forced disconnection due to Arc limitation - connections will timeout naturally");
         }
 
-        // Try to sync account to test connection
-        match self.sync_account_from_imap(account_id).await {
-            Ok(()) => {
-                tracing::info!("Successfully refreshed account: {}", account_id);
-                self.ui.update_account_status(
-                    account_id,
-                    crate::ui::AccountSyncStatus::Online,
-                    None,
-                );
+        // ✅ FIX: Use background task instead of blocking sync operation
+        use crate::performance::background_processor::{BackgroundTask, BackgroundTaskType, TaskPriority};
+        
+        let refresh_task = BackgroundTask {
+            id: uuid::Uuid::new_v4(),
+            name: format!("Refresh account connection: {}", account_id),
+            priority: TaskPriority::High,  // High priority for user-initiated refresh
+            account_id: account_id.to_string(),
+            folder_name: None, // Refresh all folders
+            task_type: BackgroundTaskType::AccountSync {
+                strategy: crate::email::sync_engine::SyncStrategy::Incremental,
+            },
+            created_at: std::time::Instant::now(),
+            estimated_duration: Some(std::time::Duration::from_secs(30)),
+        };
 
-                // Reload messages for current folder if this is the active account
-                if let Some(current_id) = self.ui.get_current_account_id() {
-                    if current_id == account_id {
-                        let _ = self
-                            .ui
-                            .load_messages(account_id.to_string(), "INBOX".to_string())
-                            .await;
-                    }
-                }
+        // Queue the background task (non-blocking)
+        match self.queue_background_task(refresh_task).await {
+            Ok(task_id) => {
+                tracing::info!("✅ Account refresh task queued successfully: {} (task: {})", account_id, task_id);
+                
+                // Log immediate feedback that the operation started
+                tracing::info!("🔄 Account refresh queued - UI remains responsive while sync runs in background");
+                
+                // The background processor will handle the actual sync and update the UI status
+                // via the process_background_updates() method in the main loop
             }
             Err(e) => {
-                tracing::error!("Failed to refresh account {}: {}", account_id, e);
+                tracing::error!("❌ Failed to queue account refresh task for {}: {}", account_id, e);
                 self.ui.update_account_status(
                     account_id,
                     crate::ui::AccountSyncStatus::Error,
                     None,
                 );
-                return Err(anyhow::anyhow!("Failed to refresh account: {}", e));
+                // Error is already logged and UI status updated above
+                return Err(anyhow::anyhow!("Failed to queue account refresh: {}", e));
             }
         }
 
@@ -4507,7 +4618,7 @@ impl App {
             }
         }
 
-        // Provide immediate user feedback
+        // Provide immediate user feedback and handle fallback for failed queues
         if queued_tasks > 0 {
             self.ui.show_toast_success(&format!(
                 "✓ Email sync started for {} accounts (background processing)",
@@ -4518,13 +4629,34 @@ impl App {
 
         if failed_queues > 0 {
             self.ui.show_toast_warning(&format!(
-                "⚠ Failed to queue sync for {} accounts",
+                "⚠ {} accounts failed to queue - trying direct sync",
                 failed_queues
             ));
+            tracing::warn!("Failed to queue {} background sync tasks, attempting direct sync fallback", failed_queues);
+            
+            // Fallback: Trigger direct IMAP sync for the current folder as immediate feedback
+            if let (Some(current_account), Some(current_folder)) = self.ui.message_list().get_current_context() {
+                let account_id = current_account.clone();
+                let folder_name = current_folder.clone();
+                tracing::info!("Attempting direct sync fallback for {}/{}", account_id, folder_name);
+                
+                match self.fetch_messages_from_imap(&account_id, &folder_name).await {
+                    Ok(()) => {
+                        self.ui.show_toast_success("✓ Direct sync completed for current folder");
+                        tracing::info!("Direct sync fallback succeeded for {}/{}", account_id, folder_name);
+                    }
+                    Err(e) => {
+                        self.ui.show_toast_error(&format!("❌ Direct sync failed: {}", e));
+                        tracing::error!("Direct sync fallback failed for {}/{}: {}", account_id, folder_name, e);
+                    }
+                }
+            }
         }
 
         // Show progress overlay to track background tasks
-        self.ui.show_enhanced_progress_overlay();
+        if queued_tasks > 0 {
+            self.ui.show_enhanced_progress_overlay();
+        }
 
         Ok(())
     }
@@ -4597,11 +4729,23 @@ impl App {
     /// Handle contacts popup request
     async fn handle_contacts_popup(&mut self) -> Result<()> {
         tracing::info!("🎯 handle_contacts_popup() called!");
+        tracing::debug!("🔍 Checking contacts_manager state: {:?}", self.contacts_manager.is_some());
+        
+        // Extra diagnostic info
+        if self.contacts_manager.is_none() {
+            tracing::error!("🚨 CONTACTS DEBUG: contacts_manager is None!");
+            tracing::error!("🚨 This means contacts initialization failed or was skipped");
+        } else {
+            tracing::info!("✅ Contacts manager exists in memory");
+        }
+        
         if let Some(ref contacts_manager) = self.contacts_manager {
             tracing::info!("✅ Contacts manager found, showing popup");
             self.ui.show_contacts_popup(contacts_manager.clone());
+            tracing::info!("📱 Contacts popup should now be visible");
         } else {
-            tracing::warn!("Contacts manager not initialized, cannot show contacts popup");
+            tracing::warn!("❌ Contacts manager not initialized, cannot show contacts popup");
+            self.ui.show_toast_error("Contacts manager not available");
         }
         Ok(())
     }

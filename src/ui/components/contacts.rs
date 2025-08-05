@@ -3,7 +3,7 @@
 //! Implements a modular contacts component with search, management, and integration features.
 
 use super::{
-    ComponentId, ComponentState, UIComponent, ComponentResult,
+    ComponentId, ComponentState, UIComponent, ComponentResult, ComponentError,
     RenderContext, UIEvent, EventResult, ComponentMetrics,
 };
 use crate::{
@@ -444,6 +444,37 @@ impl ContactsComponent {
         self.contacts = contacts;
         self.update_statistics();
         self.apply_current_filters();
+    }
+    
+    /// Load contacts from the contacts manager
+    pub async fn load_contacts(&mut self) -> ComponentResult<()> {
+        if let Some(ref contacts_manager) = self.contacts_manager {
+            tracing::debug!("🔄 Loading contacts from contacts manager");
+            
+            // Create a search criteria to get all contacts
+            let criteria = crate::contacts::ContactSearchCriteria::new();
+            
+            match contacts_manager.search_contacts(&criteria).await {
+                Ok(contacts) => {
+                    tracing::info!("📱 Loaded {} contacts successfully", contacts.len());
+                    self.set_contacts(contacts);
+                    
+                    // Select first contact if available
+                    if !self.filtered_contacts.is_empty() {
+                        self.contact_list_state.select(Some(0));
+                        self.selected_contact = self.filtered_contacts.first().cloned();
+                    }
+                }
+                Err(e) => {
+                    tracing::error!("❌ Failed to load contacts: {}", e);
+                    return Err(ComponentError::InitializationFailed(format!("Failed to load contacts: {}", e)));
+                }
+            }
+        } else {
+            tracing::warn!("⚠️ No contacts manager available to load contacts");
+        }
+        
+        Ok(())
     }
     
     /// Get selected contact

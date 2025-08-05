@@ -260,7 +260,7 @@ impl ContactPhoneInput {
 impl AddressBookUI {
     /// Create a new address book UI
     pub fn new(manager: Arc<ContactsManager>) -> Self {
-        Self {
+        let mut ui = Self {
             manager,
             selected_tab: AddressBookTab::AllContacts,
             contact_list_state: ListState::default(),
@@ -272,6 +272,24 @@ impl AddressBookUI {
             ui_mode: AddressBookMode::Browse,
             is_searching: false,
             contact_editor: ContactEditor::new(),
+        };
+        
+        // Trigger initial contact loading
+        ui.trigger_initial_load();
+        ui
+    }
+    
+    /// Trigger initial contact loading (sets up for async loading on next render)
+    fn trigger_initial_load(&mut self) {
+        // We'll load contacts on the first render cycle
+        tracing::debug!("📱 AddressBookUI: Initial contact loading will be triggered on first render");
+    }
+    
+    /// Check if we need to load contacts and do it asynchronously
+    pub async fn ensure_contacts_loaded(&mut self) {
+        if self.contacts.is_empty() && !self.is_searching {
+            tracing::debug!("📱 AddressBookUI: Loading initial contacts");
+            self.refresh_contacts().await;
         }
     }
 
