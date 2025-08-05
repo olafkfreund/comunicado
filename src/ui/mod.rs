@@ -44,6 +44,7 @@ pub mod toast;
 pub mod toast_integration_simple;
 pub mod typography;
 pub mod unified_sidebar;
+pub mod notes;
 
 
 use crate::email::{
