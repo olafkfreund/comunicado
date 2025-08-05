@@ -42,17 +42,33 @@ async fn main() -> Result<()> {
         }
     };
 
-    // Set log level based on debug flag
-    let log_level = if debug_mode {
-        tracing::Level::DEBUG
+    // Configure granular logging to prevent performance issues from noisy dependencies
+    use tracing_subscriber::{fmt, EnvFilter, prelude::*};
+    
+    // Create a filter that allows our app's debug logs but filters out noisy third-party logs
+    let env_filter = if debug_mode {
+        EnvFilter::new("comunicado=debug,info")
+            // Allow our application's debug logs
+            .add_directive("comunicado=debug".parse().unwrap())
+            // Set noisy HTML parsing crates to ERROR level to filter out WARN spam
+            .add_directive("html5ever=error".parse().unwrap())
+            .add_directive("scraper=error".parse().unwrap())
+            .add_directive("ammonia=error".parse().unwrap())
+            .add_directive("selectors=error".parse().unwrap())
+            .add_directive("markup5ever=error".parse().unwrap())
+            .add_directive("cssparser=error".parse().unwrap())
+            // Allow other crates at INFO level
+            .add_directive("info".parse().unwrap())
     } else {
-        tracing::Level::INFO
+        EnvFilter::new("comunicado=info,error")
     };
 
-    tracing_subscriber::fmt()
-        .with_writer(log_file)
-        .with_ansi(false) // Disable ANSI colors in log file
-        .with_max_level(log_level)
+    tracing_subscriber::registry()
+        .with(fmt::layer()
+            .with_writer(log_file)
+            .with_ansi(false) // Disable ANSI colors in log file
+        )
+        .with(env_filter)
         .init();
 
     if debug_mode {
@@ -71,6 +87,11 @@ async fn main() -> Result<()> {
     // Set initial UI mode based on CLI arguments
     app.set_initial_mode(startup_mode);
     println!("🔧 Initial mode set");
+    
+    // Initialize background services (SMTP, contacts manager, etc.)
+    println!("🔄 Initializing background services...");
+    app.initialize_services().await?;
+    println!("✅ Background services initialized");
 
     // Run the application
     tracing::info!("Starting application main loop...");

@@ -705,17 +705,12 @@ impl ContactsDatabase {
             .try_get("etag")
             .map_err(|e| ContactsError::DatabaseError(e.to_string()))?;
 
-        let created_at = DateTime::parse_from_rfc3339(&created_at_str)
-            .map_err(|e| ContactsError::DatabaseError(e.to_string()))?
-            .with_timezone(&Utc);
-        let updated_at = DateTime::parse_from_rfc3339(&updated_at_str)
-            .map_err(|e| ContactsError::DatabaseError(e.to_string()))?
-            .with_timezone(&Utc);
+        // Parse dates - handle both SQLite datetime format and RFC3339 format
+        let created_at = self.parse_datetime(&created_at_str)?;
+        let updated_at = self.parse_datetime(&updated_at_str)?;
         let synced_at = synced_at_str
-            .map(|s| DateTime::parse_from_rfc3339(&s))
-            .transpose()
-            .map_err(|e| ContactsError::DatabaseError(e.to_string()))?
-            .map(|dt| dt.with_timezone(&Utc));
+            .map(|s| self.parse_datetime(&s))
+            .transpose()?;
 
         // Parse emails
         let emails_str: Option<String> = row.try_get("emails").ok();
@@ -768,5 +763,28 @@ impl ContactsDatabase {
             synced_at,
             etag,
         })
+    }
+
+    /// Parse datetime from either SQLite format or RFC3339 format
+    fn parse_datetime(&self, datetime_str: &str) -> ContactsResult<DateTime<Utc>> {
+        // First try RFC3339 format (ISO 8601 with timezone)
+        if let Ok(dt) = DateTime::parse_from_rfc3339(datetime_str) {
+            return Ok(dt.with_timezone(&Utc));
+        }
+
+        // Try SQLite datetime format (YYYY-MM-DD HH:MM:SS)
+        if let Ok(naive_dt) = chrono::NaiveDateTime::parse_from_str(datetime_str, "%Y-%m-%d %H:%M:%S") {
+            return Ok(naive_dt.and_utc());
+        }
+
+        // Try ISO 8601 format without timezone (assume UTC)
+        if let Ok(naive_dt) = chrono::NaiveDateTime::parse_from_str(datetime_str, "%Y-%m-%dT%H:%M:%S") {
+            return Ok(naive_dt.and_utc());
+        }
+
+        Err(ContactsError::DatabaseError(format!(
+            "Unable to parse datetime: '{}'. Expected RFC3339 or SQLite datetime format.",
+            datetime_str
+        )))
     }
 }

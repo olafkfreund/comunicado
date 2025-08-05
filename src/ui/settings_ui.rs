@@ -190,7 +190,7 @@ impl SettingsUIState {
     }
 
     /// Get the maximum number of items for the current tab
-    fn get_max_items_for_tab(&self) -> usize {
+    pub fn get_max_items_for_tab(&self) -> usize {
         match self.current_tab {
             SettingsTab::General => 10, // Updated to include sync settings
             SettingsTab::Accounts => 6,

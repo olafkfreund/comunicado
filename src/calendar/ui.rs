@@ -59,6 +59,7 @@ pub enum CalendarAction {
     Search(String),
     ExportCalendar,
     ImportCalendar,
+    ExitCalendar, // Exit calendar mode and return to main interface
 }
 
 /// Calendar UI state
@@ -857,19 +858,23 @@ impl CalendarUI {
     fn render_upcoming_events(&mut self, frame: &mut Frame, area: Rect, theme: &Theme) {
         let is_focused = self.focused_pane == CalendarPane::EventList;
 
-        // Get upcoming events (next 30 days)
+        // Get recent and upcoming events (past 7 days and next 30 days)
         let now = Utc::now();
+        let seven_days_ago = now - Duration::days(7);
         let thirty_days_from_now = now + Duration::days(30);
 
-        let upcoming_events: Vec<&Event> = self
+        let mut upcoming_events: Vec<&Event> = self
             .events
             .iter()
             .filter(|event| {
                 self.enabled_calendars.contains(&event.calendar_id)
-                    && event.start_time >= now
+                    && event.start_time >= seven_days_ago
                     && event.start_time <= thirty_days_from_now
             })
             .collect();
+        
+        // Sort events by start time
+        upcoming_events.sort_by(|a, b| a.start_time.cmp(&b.start_time));
 
         // Create list items
         let list_items: Vec<ListItem> = upcoming_events
@@ -882,17 +887,23 @@ impl CalendarUI {
                     event.start_time.format("%H:%M").to_string()
                 };
 
+                // Add indicator for past vs future events
+                let is_past = event.start_time < now;
+                let indicator = if is_past { "📅" } else { "⏰" };
+                let title_color = if is_past { Color::Gray } else { Color::White };
+
                 let spans = vec![
+                    Span::styled(format!("{} ", indicator), Style::default().fg(Color::Blue)),
                     Span::styled(format!("{} ", date_str), Style::default().fg(Color::Cyan)),
                     Span::styled(format!("{} ", time_str), Style::default().fg(Color::Yellow)),
-                    Span::styled(event.title.clone(), Style::default().fg(Color::White)),
+                    Span::styled(event.title.clone(), Style::default().fg(title_color)),
                 ];
 
                 ListItem::new(Line::from(spans))
             })
             .collect();
 
-        let title = format!("Upcoming Events ({})", upcoming_events.len());
+        let title = format!("Recent & Upcoming Events ({})", upcoming_events.len());
         let events_list = List::new(list_items)
             .block(
                 Block::default()
@@ -1183,7 +1194,12 @@ impl CalendarUI {
 
     /// Set events to display
     pub fn set_events(&mut self, events: Vec<Event>) {
+        tracing::info!("🎯 CalendarUI: Received {} events to store", events.len());
+        for event in &events {
+            tracing::info!("📅 CalendarUI:   Event: {} (Start: {})", event.title, event.start_time);
+        }
         self.events = events;
+        tracing::info!("✅ CalendarUI: {} events stored in self.events", self.events.len());
     }
 
     /// Get current events
@@ -1339,10 +1355,14 @@ impl CalendarUI {
             KeyCode::Esc => {
                 if self.show_event_details {
                     self.hide_event_details();
+                    None
                 } else if self.show_calendar_list {
                     self.hide_calendar_list();
+                    None
+                } else {
+                    // Exit calendar mode and return to main interface
+                    Some(CalendarAction::ExitCalendar)
                 }
-                None
             }
 
             _ => None,

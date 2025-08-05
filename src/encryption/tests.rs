@@ -1,7 +1,9 @@
 //! Tests for the encryption module
 
 use super::*;
-use tokio_test;
+use crate::encryption::types::{
+    KeyCapabilities, MessageSecurityStatus, SignatureValidity, TrustLevel
+};
 
 #[tokio::test]
 async fn test_encryption_manager_creation() {

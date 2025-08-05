@@ -914,12 +914,11 @@ impl CliHandler {
 
         // Initialize database
         let db_path = if let Some(ref dir) = config_dir {
-            dir.join("databases").join("email.db")
+            dir.join("email.db")
         } else {
             dirs::config_dir()
                 .ok_or_else(|| anyhow!("Cannot find config directory"))?
                 .join("comunicado")
-                .join("databases")
                 .join("email.db")
         };
 
@@ -4959,8 +4958,26 @@ impl CliHandler {
                     // Refresh specific account
                     println!("\n🔄 Refreshing token for account: {}", account_id);
                     
+                    // First, ensure the token is loaded from storage into the TokenManager cache
+                    // This is necessary because refresh_access_token() expects tokens to be in memory
                     match token_manager.get_valid_access_token(&account_id).await {
-                        Ok(Some(token)) => {
+                        Ok(Some(_)) => {
+                            tracing::debug!("Token loaded from storage for account: {}", account_id);
+                        }
+                        Ok(None) => {
+                            println!("❌ No valid token found for account {} - re-authentication required", account_id);
+                            println!("   Run: comunicado oauth2 reauth {}", account_id);
+                            return Ok(());
+                        }
+                        Err(e) => {
+                            println!("❌ Failed to load token for account {}: {}", account_id, e);
+                            return Ok(());
+                        }
+                    }
+                    
+                    // Now perform the actual refresh using the loaded token
+                    match token_manager.refresh_access_token(&account_id).await {
+                        Ok(token) => {
                             println!("✅ Token refreshed successfully for account: {}", account_id);
                             if verbose {
                                 println!("   New token expires: {}", 
@@ -4968,13 +4985,10 @@ impl CliHandler {
                                         .unwrap_or_else(|| "No expiration".to_string()));
                             }
                         }
-                        Ok(None) => {
-                            println!("❌ Token refresh failed for account: {}", account_id);
-                            println!("   This account needs re-authentication.");
-                            println!("   Run: comunicado oauth2 reauth {}", account_id);
-                        }
                         Err(e) => {
                             println!("❌ Token refresh error for account {}: {}", account_id, e);
+                            println!("   This account may need re-authentication.");
+                            println!("   Run: comunicado oauth2 reauth {}", account_id);
                         }
                     }
                 }
@@ -4988,12 +5002,25 @@ impl CliHandler {
                     for account in &accounts {
                         println!("\n🔄 Refreshing: {} ({})", account.display_name, account.email_address);
                         
+                        // First, ensure the token is loaded from storage into the TokenManager cache
                         match token_manager.get_valid_access_token(&account.account_id).await {
                             Ok(Some(_)) => {
-                                println!("   ✅ Success");
+                                tracing::debug!("Token loaded from storage for account: {}", account.account_id);
                             }
                             Ok(None) => {
-                                println!("   ❌ Failed - needs re-authentication");
+                                println!("   ❌ No valid token - re-authentication required");
+                                continue;
+                            }
+                            Err(e) => {
+                                println!("   ❌ Failed to load token: {}", e);
+                                continue;
+                            }
+                        }
+                        
+                        // Now perform the actual refresh using the loaded token
+                        match token_manager.refresh_access_token(&account.account_id).await {
+                            Ok(_) => {
+                                println!("   ✅ Success");
                             }
                             Err(e) => {
                                 println!("   ❌ Error: {}", e);
@@ -5384,7 +5411,6 @@ impl CliHandler {
         let calendar_db_path = dirs::config_dir()
             .ok_or_else(|| anyhow!("Cannot find config directory"))?
             .join("comunicado")
-            .join("databases")
             .join("calendar.db");
         
         // Ensure parent directory exists
@@ -5698,7 +5724,6 @@ impl CliHandler {
         let contacts_db_path = dirs::config_dir()
             .ok_or_else(|| anyhow!("Cannot find config directory"))?
             .join("comunicado")
-            .join("databases")
             .join("contacts.db");
         
         // Ensure parent directory exists

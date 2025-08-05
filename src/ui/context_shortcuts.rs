@@ -178,6 +178,7 @@ impl ContextShortcutsPopup {
             UIMode::KeyboardShortcuts => "Help",
             UIMode::Settings => "Settings",
             UIMode::ContactsPopup => "Contacts",
+            UIMode::Contacts => "Address Book",
         }
     }
 
@@ -198,6 +199,7 @@ impl ContextShortcutsPopup {
             UIMode::KeyboardShortcuts => "View all available keyboard shortcuts",
             UIMode::Settings => "Configure application settings and preferences",
             UIMode::ContactsPopup => "Browse and manage contacts",
+            UIMode::Contacts => "Full-screen address book with contact management",
         }
     }
 
