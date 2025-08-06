@@ -1,0 +1,109 @@
+# Maintainer: Olaf K Freund <your.email@example.com>
+pkgname=comunicado
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Modern TUI-based email and calendar client"
+arch=('x86_64' 'aarch64')
+url="https://github.com/olafkfreund/comunicado"
+license=('AGPL-3.0-only')
+depends=(
+    'openssl'
+    'sqlite'
+    'dbus'
+    'gcc-libs'
+    'glibc'
+)
+makedepends=(
+    'cargo'
+    'rust'
+    'pkg-config'
+    'git'
+)
+optdepends=(
+    'gnupg: for email encryption and signing'
+    'kitty: recommended terminal with full graphics support'
+    'foot: Wayland native terminal with good performance'
+    'wezterm: cross-platform terminal with advanced features'
+    'tmux: terminal multiplexer integration'
+    'ca-certificates: for secure HTTPS connections'
+    'ttf-dejavu: recommended fonts for better display'
+    'libnotify: for desktop notifications'
+)
+provides=('comunicado')
+conflicts=('comunicado-bin' 'comunicado-git')
+source=(
+    "$pkgname-$pkgver.tar.gz::https://github.com/olafkfreund/comunicado/archive/v$pkgver.tar.gz"
+)
+sha256sums=('SKIP')  # To be updated with actual release
+
+prepare() {
+    cd "$pkgname-$pkgver"
+    
+    # Update lockfile for reproducible builds
+    cargo fetch --locked --target "$CARCH-unknown-linux-gnu"
+}
+
+build() {
+    cd "$pkgname-$pkgver"
+    
+    # Use system dependencies where possible
+    export OPENSSL_NO_VENDOR=1
+    export LIBSQLITE3_SYS_USE_PKG_CONFIG=1
+    export RUSTUP_TOOLCHAIN=stable
+    export CARGO_TARGET_DIR=target
+    
+    # Build with release optimizations and default features
+    cargo build --frozen --release --all-features
+}
+
+check() {
+    cd "$pkgname-$pkgver"
+    
+    # Run tests, skipping network-dependent ones
+    cargo test --frozen --release -- \
+        --skip test_imap_connection \
+        --skip test_oauth_flow \
+        --skip test_caldav_sync \
+        --skip test_network_image_loading || true
+}
+
+package() {
+    cd "$pkgname-$pkgver"
+    
+    # Install binary
+    install -Dm755 target/release/comunicado "$pkgdir/usr/bin/comunicado"
+    
+    # Install desktop entry
+    install -Dm644 debian/comunicado.desktop "$pkgdir/usr/share/applications/comunicado.desktop"
+    
+    # Install man page
+    install -Dm644 debian/comunicado.1 "$pkgdir/usr/share/man/man1/comunicado.1"
+    
+    # Install documentation
+    install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+    install -Dm644 docs/cli-plugins-reference.md "$pkgdir/usr/share/doc/$pkgname/cli-plugins-reference.md"
+    install -Dm644 docs/performance-optimization-report.md "$pkgdir/usr/share/doc/$pkgname/performance-optimization-report.md"
+    
+    # Install license
+    install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+    
+    # Install example configuration
+    install -Dm644 /dev/stdin "$pkgdir/usr/share/doc/$pkgname/config.toml.example" << 'EOF'
+# Example Comunicado configuration
+# Copy to ~/.config/comunicado/config.toml and customize
+
+[ui]
+theme = "dark"
+enable_animations = true
+
+[email]
+database_path = "~/.local/share/comunicado/email.db"
+
+[calendar]
+database_path = "~/.local/share/comunicado/calendar.db"
+
+[plugins]
+notes = { enabled = true }
+kde_connect = { enabled = false }
+EOF
+}

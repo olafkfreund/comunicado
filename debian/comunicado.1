@@ -1,0 +1,118 @@
+.TH COMUNICADO 1 "August 2025" "comunicado 0.1.0" "User Commands"
+.SH NAME
+comunicado \- Modern TUI-based email and calendar client
+.SH SYNOPSIS
+.B comunicado
+[\fIOPTION\fR]... [\fICOMMAND\fR]...
+.SH DESCRIPTION
+Comunicado is a modern terminal-based email and calendar client built for
+terminal power users, privacy-conscious developers, and system administrators.
+
+It provides native HTML email rendering, OAuth2 authentication, CalDAV calendar
+integration, and a plugin architecture, all within a modern terminal user
+interface.
+
+.SH OPTIONS
+.TP
+\fB\-c\fR, \fB\-\-config\-dir\fR \fIDIR\fR
+Use custom configuration directory
+.TP
+\fB\-v\fR, \fB\-\-verbose\fR
+Enable verbose logging
+.TP
+\fB\-q\fR, \fB\-\-quiet\fR
+Suppress non-essential output
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Show help information
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Show version information
+
+.SH COMMANDS
+.TP
+\fBsetup\fR
+Run the interactive setup wizard to configure email accounts and calendar
+.TP
+\fBconfig\fR
+Manage configuration settings
+.TP
+\fBnotes\fR
+Manage notes using the Notes plugin
+.TP
+\fBkde\-connect\fR
+Interact with KDE Connect devices
+
+.SH FEATURES
+.IP \[bu] 2
+Modern TUI interface with ratatui framework
+.IP \[bu] 2
+HTML email rendering with images and animations
+.IP \[bu] 2
+OAuth2 support for Gmail, Outlook, and other providers
+.IP \[bu] 2
+CalDAV calendar integration with bidirectional sync
+.IP \[bu] 2
+Plugin architecture with Notes and KDE Connect plugins
+.IP \[bu] 2
+Maildir support for local email storage
+.IP \[bu] 2
+Advanced search and email threading
+.IP \[bu] 2
+Desktop notifications and customizable keyboard shortcuts
+
+.SH FILES
+.TP
+\fB~/.config/comunicado/config.toml\fR
+Main configuration file
+.TP
+\fB~/.local/share/comunicado/\fR
+Local data directory for emails and calendar
+.TP
+\fB~/.cache/comunicado/\fR
+Cache directory for images and temporary data
+
+.SH EXAMPLES
+.TP
+\fBcomunicado\fR
+Start the main TUI interface
+.TP
+\fBcomunicado setup\fR
+Run the setup wizard for first-time configuration
+.TP
+\fBcomunicado notes create "Meeting Notes"\fR
+Create a new note using the Notes plugin
+.TP
+\fBcomunicado kde-connect devices\fR
+List available KDE Connect devices
+
+.SH SUPPORTED TERMINALS
+Comunicado works best with modern terminals that support graphics protocols:
+.IP \[bu] 2
+Kitty (recommended for full graphics support)
+.IP \[bu] 2
+Foot (Wayland native with good performance)
+.IP \[bu] 2
+WezTerm (cross-platform with advanced features)
+.IP \[bu] 2
+Most xterm-compatible terminals (limited graphics)
+
+.SH SEE ALSO
+.BR mutt (1),
+.BR neomutt (1),
+.BR aerc (1),
+.BR khal (1),
+.BR vdirsyncer (1)
+
+.SH AUTHOR
+Written by Olaf K Freund.
+
+.SH REPORTING BUGS
+Report bugs to: https://github.com/olafkfreund/comunicado/issues
+
+.SH COPYRIGHT
+Copyright \(co 2025 Olaf K Freund.
+License AGPLv3: GNU AGPL version 3 <https://gnu.org/licenses/agpl.html>
+.br
+This is free software: you are free to change and redistribute it.
+There is NO WARRANTY, to the extent permitted by law.

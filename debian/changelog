@@ -1,0 +1,18 @@
+comunicado (0.1.0-1) unstable; urgency=medium
+
+  * Initial release of Comunicado
+  * Modern TUI-based email and calendar client
+  * Features:
+    - Native HTML email rendering with terminal graphics support
+    - OAuth2 authentication for Gmail, Outlook, and other providers
+    - CalDAV calendar integration with bidirectional synchronization
+    - Plugin architecture with Notes and KDE Connect plugins
+    - Maildir support for local email storage
+    - Advanced search and email threading capabilities
+    - Desktop notifications and customizable keyboard shortcuts
+    - Performance optimizations with modular feature system
+  * Comprehensive error handling with user-friendly recovery suggestions
+  * Complete CLI documentation and plugin reference
+  * Production-ready with optimized build configurations
+
+ -- Olaf K Freund <your.email@example.com>  Tue, 06 Aug 2025 12:00:00 +0000

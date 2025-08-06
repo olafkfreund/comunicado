@@ -1,0 +1,28 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Comunicado
+Comment=Modern TUI-based email and calendar client
+Comment[es]=Cliente moderno de correo y calendario basado en TUI
+Comment[fr]=Client de messagerie et calendrier TUI moderne
+Comment[de]=Moderner TUI-basierter E-Mail- und Kalender-Client
+GenericName=Email and Calendar Client
+GenericName[es]=Cliente de Correo y Calendario
+GenericName[fr]=Client de Messagerie et Calendrier
+GenericName[de]=E-Mail- und Kalender-Client
+Keywords=email;mail;calendar;terminal;tui;imap;caldav;oauth;
+Exec=comunicado
+Icon=comunicado
+Terminal=true
+StartupNotify=false
+Categories=Network;Email;Office;Calendar;ConsoleOnly;
+MimeType=x-scheme-handler/mailto;
+Actions=Setup;CLI;
+
+[Desktop Action Setup]
+Name=Setup Wizard
+Exec=comunicado setup
+
+[Desktop Action CLI]
+Name=CLI Help
+Exec=comunicado --help

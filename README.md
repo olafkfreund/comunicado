@@ -11,29 +11,72 @@ A modern TUI-based email and calendar client for terminal power users and privac
 - **Integrated Calendar** - CalDAV synchronization and meeting management
 - **High Performance** - Built with Rust for speed and reliability
 
-## Quick Start
+## Installation
 
-### Using Nix Flakes
+Choose your preferred installation method:
+
+### 🐧 NixOS / Nix Package Manager (Recommended)
 
 ```bash
-# Development environment
-nix develop
+# Try immediately (no installation required)
+nix run github:olafkfreund/comunicado
 
-# Build and run
-just run
+# Install to profile
+nix profile install github:olafkfreund/comunicado
 
-# Install
-nix profile install .
+# Add to NixOS configuration
+programs.comunicado.enable = true;
 ```
 
-### Using Cargo
+### 📦 Arch Linux (AUR)
 
 ```bash
-# Build
-cargo build --release
+# Using AUR helper
+paru -S comunicado
+yay -S comunicado
+```
 
-# Run
-cargo run
+### 🟦 Debian / Ubuntu
+
+```bash
+# Download .deb from GitHub releases, then:
+sudo apt install ./comunicado_0.1.0-1_amd64.deb
+```
+
+### 🔴 Fedora / RHEL
+
+```bash
+# Download .rpm from GitHub releases, then:
+sudo dnf install comunicado-0.1.0-1.fc39.x86_64.rpm
+```
+
+### 🦀 Universal (Cargo)
+
+```bash
+# Install from source
+cargo install --git https://github.com/olafkfreund/comunicado
+
+# Or build locally
+git clone https://github.com/olafkfreund/comunicado
+cd comunicado
+cargo build --release
+```
+
+**📖 Complete installation guide:** [INSTALL.md](INSTALL.md)
+
+## Quick Start
+
+After installation:
+
+```bash
+# Run setup wizard (first time)
+comunicado setup
+
+# Start the application
+comunicado
+
+# Get help
+comunicado --help
 ```
 
 ## Keyboard Shortcuts
@@ -101,7 +144,9 @@ just check         # Run all checks
 ## Documentation
 
 ### User Guides
-- [Installation Guide](docs/installation.md) - Setup and installation instructions
+- [📦 Installation Guide](INSTALL.md) - Complete installation instructions for all distributions
+- [🚀 Release Notes](docs/release-v0.1.0.md) - v0.1.0 release highlights and features
+- [📋 Changelog](CHANGELOG.md) - Complete development history and changes
 - [Quick Start Guide](docs/quick-start.md) - Get started with Comunicado
 - [Account Management](docs/account-management.md) - Adding, switching, and removing email accounts
 - [Calendar Features](docs/calendar-features.md) - Using the integrated calendar
@@ -128,11 +173,11 @@ just check         # Run all checks
 
 ## Project Status
 
-**Advanced Development** - Feature-complete email and calendar client with comprehensive functionality.
+🚀 **v0.1.0 PRODUCTION RELEASE** - Ready for daily use across all major Linux distributions!
 
-### Phase 6 Complete: Advanced Enterprise GPG Features
+### ✅ Phase 5 Complete: Polish & Production Ready
 
-**Latest Achievement:** Complete GPG encryption system with real cryptographic operations
+**Latest Achievement:** Complete production release with packaging for NixOS, Debian, Fedora, and Arch Linux
 
 ### Current Capabilities
 

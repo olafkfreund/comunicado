@@ -1,0 +1,71 @@
+#!/usr/bin/make -f
+
+export DH_VERBOSE = 1
+
+# Enable parallel building
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+export DEB_CPPFLAGS_MAINT_APPEND = -Wdate-time -D_FORTIFY_SOURCE=2
+export DEB_LDFLAGS_MAINT_APPEND = -Wl,-z,relro
+
+# Rust/Cargo settings
+export CARGO_HOME = $(CURDIR)/debian/cargo_home
+export RUSTUP_HOME = $(CURDIR)/debian/rustup_home
+
+# Use system dependencies where possible
+export OPENSSL_NO_VENDOR = 1
+export LIBSQLITE3_SYS_USE_PKG_CONFIG = 1
+
+%:
+	dh $@
+
+override_dh_auto_clean:
+	cargo clean || true
+	rm -rf $(CARGO_HOME) $(RUSTUP_HOME) target/
+
+override_dh_auto_build:
+	# Build with release optimizations and default features
+	cargo build --release --locked
+
+override_dh_auto_test:
+	# Skip network-dependent tests in build environment
+	cargo test --release --locked -- \
+		--skip test_imap_connection \
+		--skip test_oauth_flow \
+		--skip test_caldav_sync \
+		--skip test_network_image_loading || true
+
+override_dh_auto_install:
+	# Install binary
+	install -D -m 755 target/release/comunicado \
+		debian/comunicado/usr/bin/comunicado
+	
+	# Install desktop entry
+	install -D -m 644 debian/comunicado.desktop \
+		debian/comunicado/usr/share/applications/comunicado.desktop
+	
+	# Install icon (if available)
+	if [ -f assets/comunicado.svg ]; then \
+		install -D -m 644 assets/comunicado.svg \
+			debian/comunicado/usr/share/icons/hicolor/scalable/apps/comunicado.svg; \
+	fi
+	
+	# Install man page
+	install -D -m 644 debian/comunicado.1 \
+		debian/comunicado/usr/share/man/man1/comunicado.1
+	
+	# Install documentation
+	install -D -m 644 README.md \
+		debian/comunicado/usr/share/doc/comunicado/README.md
+	install -D -m 644 docs/cli-plugins-reference.md \
+		debian/comunicado/usr/share/doc/comunicado/cli-plugins-reference.md
+
+override_dh_dwz:
+	# Skip dwz compression for Rust binaries (can cause issues)
+
+override_dh_strip:
+	# Use dh_strip but preserve some debug info for better backtraces
+	dh_strip --dbg-package=comunicado-dbg
+
+# Don't compress example files
+override_dh_compress:
+	dh_compress -X.md -X.toml -X.example

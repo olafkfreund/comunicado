@@ -1,0 +1,47 @@
+Source: comunicado
+Section: mail
+Priority: optional
+Maintainer: Olaf K Freund <your.email@example.com>
+Build-Depends: debhelper-compat (= 13),
+               cargo (>= 1.70),
+               rustc (>= 1.70),
+               libssl-dev,
+               libsqlite3-dev,
+               pkg-config,
+               libdbus-1-dev
+Standards-Version: 4.6.0
+Homepage: https://github.com/olafkfreund/comunicado
+Vcs-Git: https://github.com/olafkfreund/comunicado.git
+Vcs-Browser: https://github.com/olafkfreund/comunicado
+Rules-Requires-Root: no
+
+Package: comunicado
+Architecture: any
+Depends: ${shlibs:Depends},
+         ${misc:Depends},
+         libssl3,
+         libsqlite3-0,
+         libdbus-1-3
+Recommends: gpg,
+            ca-certificates,
+            fonts-dejavu-core
+Suggests: kitty | foot | wezterm,
+          tmux,
+          notmuch | mu
+Description: Modern TUI-based email and calendar client
+ Comunicado is a modern terminal-based email and calendar client built for
+ terminal power users, privacy-conscious developers, and system administrators.
+ .
+ Key features:
+  * Modern TUI interface with ratatui
+  * HTML email rendering with images and animations
+  * OAuth2 support for Gmail, Outlook, and other providers
+  * CalDAV calendar integration with bidirectional sync
+  * Plugin architecture with Notes and KDE Connect plugins
+  * Maildir support for local email storage
+  * Advanced search and email threading capabilities
+  * Desktop notifications and customizable keyboard shortcuts
+ .
+ The application provides rich email content viewing directly in the terminal
+ using modern terminal graphics protocols, eliminating the need to switch
+ between terminal and GUI applications for email management.
