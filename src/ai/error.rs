@@ -186,6 +186,101 @@ impl AIError {
                 | AIError::FeatureNotSupported { .. }
         )
     }
+
+    /// Get user-friendly recovery suggestions
+    pub fn recovery_suggestions(&self) -> Vec<String> {
+        match self {
+            AIError::ProviderUnavailable { .. } => vec![
+                "Check your internet connection".to_string(),
+                "Try switching to a different AI provider".to_string(),
+                "Wait a few minutes and retry".to_string(),
+                "Check provider status page for outages".to_string(),
+            ],
+            AIError::AuthenticationFailure { provider } => vec![
+                format!("Check your API key for {}", provider),
+                "Verify API key is correctly configured".to_string(),
+                "Generate a new API key from provider's dashboard".to_string(),
+                "Run: comunicado config --show to check current settings".to_string(),
+            ],
+            AIError::RateLimitExceeded { provider, retry_after } => {
+                let mut suggestions = vec![
+                    format!("Rate limit reached for {}", provider),
+                    "Wait before making more requests".to_string(),
+                ];
+                if let Some(delay) = retry_after {
+                    suggestions.push(format!("Retry after {} seconds", delay.as_secs()));
+                }
+                suggestions.push("Consider upgrading your API plan".to_string());
+                suggestions
+            },
+            AIError::ContentFiltered { .. } => vec![
+                "Try rephrasing your request".to_string(),
+                "Use less sensitive or controversial terms".to_string(),
+                "Check provider's content policy".to_string(),
+                "Try a different AI provider".to_string(),
+            ],
+            AIError::InvalidResponse { .. } => vec![
+                "Check your internet connection".to_string(),
+                "Retry the request".to_string(),
+                "Try a different AI provider".to_string(),
+                "Report the issue if it persists".to_string(),
+            ],
+            AIError::ConfigurationError { .. } => vec![
+                "Check your AI configuration: comunicado config --show".to_string(),
+                "Verify API keys and endpoints are correct".to_string(),
+                "Reset AI config: comunicado config --reset".to_string(),
+                "See documentation for configuration help".to_string(),
+            ],
+            AIError::NetworkError { .. } => vec![
+                "Check your internet connection".to_string(),
+                "Try again in a moment".to_string(),
+                "Check firewall/proxy settings".to_string(),
+                "Switch to a different network if possible".to_string(),
+            ],
+            AIError::Timeout { .. } => vec![
+                "Request took too long to complete".to_string(),
+                "Try with a shorter prompt".to_string(),
+                "Check your network connection".to_string(),
+                "Retry with increased timeout settings".to_string(),
+            ],
+            AIError::InsufficientQuota { provider } => vec![
+                format!("API quota exhausted for {}", provider),
+                "Check your billing/usage dashboard".to_string(),
+                "Upgrade your API plan".to_string(),
+                "Try a different AI provider".to_string(),
+            ],
+            AIError::ModelNotFound { model, provider } => vec![
+                format!("Model '{}' not available on {}", model, provider),
+                "Check available models for your provider".to_string(),
+                "Try a different model name".to_string(),
+                "Update to a supported model in configuration".to_string(),
+            ],
+            AIError::RequestTooLarge { size } => vec![
+                format!("Request size ({} bytes) exceeds limits", size),
+                "Try with shorter text or smaller inputs".to_string(),
+                "Break large requests into smaller chunks".to_string(),
+                "Check provider's request size limits".to_string(),
+            ],
+            AIError::InternalError { .. } => vec![
+                "Temporary issue with AI provider".to_string(),
+                "Try again in a few minutes".to_string(),
+                "Switch to a different provider".to_string(),
+                "Report persistent issues to support".to_string(),
+            ],
+            AIError::FeatureNotSupported { feature, provider } => vec![
+                format!("Feature '{}' not supported by {}", feature, provider),
+                "Try a different AI provider".to_string(),
+                "Check provider documentation for alternatives".to_string(),
+                "Disable this feature in configuration".to_string(),
+            ],
+            AIError::CacheError { .. } => vec![
+                "Clear AI response cache".to_string(),
+                "Check disk space and permissions".to_string(),
+                "Disable response caching temporarily".to_string(),
+                "Restart the application".to_string(),
+            ],
+        }
+    }
 }
 
 /// Convert common error types to AIError

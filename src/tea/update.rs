@@ -1165,7 +1165,7 @@ fn update_kde_connect(mut model: Model, message: KdeConnectMessage) -> UpdateRes
             UpdateResult::new(model, commands)
         }
         
-        KdeConnectMessage::FileShared(file_path) => {
+        KdeConnectMessage::FileShared(_file_path) => {
             model.kde_connect_state.stats.files_shared += 1;
             model.kde_connect_state.stats.last_activity = Some(chrono::Local::now());
             UpdateResult::just_model(model)

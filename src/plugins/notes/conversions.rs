@@ -268,6 +268,7 @@ impl NoteConversionService {
 }
 
 /// Format file size in human-readable format
+#[allow(dead_code)]
 fn format_file_size(size: usize) -> String {
     const UNITS: &[&str] = &["B", "KB", "MB", "GB"];
     let mut size = size as f64;

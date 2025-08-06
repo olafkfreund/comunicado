@@ -106,6 +106,7 @@ just check         # Run all checks
 - [Account Management](docs/account-management.md) - Adding, switching, and removing email accounts
 - [Calendar Features](docs/calendar-features.md) - Using the integrated calendar
 - [Terminal Compatibility](docs/terminal-compatibility.md) - Image display support across terminal emulators
+- [CLI Plugin Commands](docs/cli-plugins-reference.md) - Complete command-line interface reference for Notes and KDE Connect plugins
 
 ### Method Documentation
 - [Method Documentation Overview](docs/method-documentation.md) - Complete codebase analysis
@@ -114,6 +115,11 @@ just check         # Run all checks
 - [Calendar Methods](docs/calendar-methods.md) - Calendar integration
 - [Encryption Methods](docs/encryption-methods.md) - GPG encryption system
 - [UI Methods](docs/ui-methods.md) - User interface components
+
+### Plugin System
+- [Plugin Architecture](docs/plugin-architecture.md) - Technical plugin system documentation
+- [Notes Plugin Guide](docs/notes-plugin.md) - Comprehensive notes plugin documentation
+- [KDE Connect Integration](docs/kde-connect-plugin-guide.md) - Mobile device integration guide
 
 ### Development
 - [Product Roadmap](.agent-os/product/roadmap.md) - Current development progress and planned features

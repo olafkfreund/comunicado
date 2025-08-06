@@ -53,6 +53,14 @@ When things don't work as expected:
 - [Performance Tuning](performance.md) - Optimizing Comunicado for your system
 - [Debug and Logging](debugging.md) - Getting help when you need it
 
+## Plugin System
+
+Comprehensive documentation for Comunicado's plugin architecture:
+
+- [Plugin Architecture](plugin-architecture.md) - Technical plugin system overview
+- [Notes Plugin Guide](notes-plugin.md) - Complete notes functionality documentation
+- [CLI Plugin Commands](cli-plugins-reference.md) - Command-line interface reference 🆕
+
 ## Reference
 
 Quick reference materials:

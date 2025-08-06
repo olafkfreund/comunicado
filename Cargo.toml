@@ -17,8 +17,8 @@ crossterm = "0.27"
 tui-textarea = "0.4"
 arboard = "3.4"
 
-# Async Runtime
-tokio = { version = "1.35", features = ["full"] }
+# Async Runtime - optimized for performance
+tokio = { version = "1.35", features = ["rt-multi-thread", "net", "fs", "time", "macros", "sync", "io-util", "process", "signal"] }
 futures = "0.3"
 
 # Error Handling
@@ -50,9 +50,8 @@ html2text = "0.6"  # Industry standard for terminal HTML-to-text conversion
 ammonia = "3.3"   # Security-first HTML sanitization using html5ever
 pulldown-cmark = "0.9"  # Enhanced markdown support for better text formatting
 
-# Image processing and terminal graphics
-image = { version = "0.24", features = ["jpeg", "png", "gif", "webp"] }
-imageproc = "0.23"
+# Image processing and terminal graphics - optimized
+image = { version = "0.24", default-features = false, features = ["png", "gif"] }
 gif = "0.13"
 
 # Email and networking
@@ -75,8 +74,8 @@ async-trait = "0.1"
 # vCard/iCalendar parsing with RFC compliance
 calcard = "0.1"
 
-# Desktop notifications
-notify-rust = "4.10"
+# Desktop notifications - optional dependency for feature flag
+notify-rust = { version = "4.10", optional = true }
 percent-encoding = "2.3"
 
 # File system watching
@@ -89,13 +88,12 @@ lettre = { version = "0.11", features = ["tokio1-rustls-tls", "smtp-transport", 
 keyring = "2.3"
 
 # GPG encryption and signing (pure Rust implementation)
-# Use Rust crypto backend to avoid system dependencies like nettle
-# Note: This uses experimental crypto for development - production should use nettle
-sequoia-openpgp = { version = "1.19", default-features = false, features = ["compression", "crypto-rust", "allow-experimental-crypto", "allow-variable-time-crypto"] }
+# Optimized for faster compilation - experimental crypto features removed for performance
+sequoia-openpgp = { version = "1.19", default-features = false, features = ["compression", "crypto-rust"] }
 
-# Database and caching
-sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "sqlite", "chrono", "uuid"] }
-uuid = { version = "1.6", features = ["v4", "v5", "serde"] }
+# Database and caching - optimized features
+sqlx = { version = "0.7", default-features = false, features = ["runtime-tokio-rustls", "sqlite", "chrono", "uuid", "macros", "migrate"] }
+uuid = { version = "1.6", default-features = false, features = ["v4", "v5", "serde"] }
 
 # System directories
 dirs = "5.0"
@@ -104,8 +102,7 @@ tempfile = "3.8"
 webbrowser = "0.8"
 urlencoding = "2.1"
 
-# System monitoring
-sysinfo = "0.30"
+# System monitoring - removed unused sysinfo dependency
 
 # Hostname for Maildir unique IDs
 hostname = "0.3"
@@ -124,18 +121,21 @@ filetime = "0.2"
 # Spell checking dependencies removed - implementing custom solution
 
 [dev-dependencies]
-# Testing
+# Testing - optimized for faster development builds
 tokio-test = "0.4"
-assert_cmd = "2.0"      # Command line testing
-predicates = "3.0"      # Assertions for command testing
 tempfile = "3.8"        # Temporary files for testing
-serial_test = "3.0"     # Sequential test execution
-proptest = "1.4"        # Property-based testing
+# Removed unused dev dependencies: assert_cmd, predicates, serial_test, proptest
 
 [features]
-default = []
+default = ["notifications", "experimental-crypto"]
+# Performance-optimized feature flags
+notifications = ["notify-rust"]
 kde-connect = ["dbus", "dbus-tokio"]
 modular-ui = []
+# Optional heavy features for reduced compile time
+webp-images = ["image/webp"]
+jpeg-images = ["image/jpeg"]
+experimental-crypto = ["sequoia-openpgp/allow-experimental-crypto", "sequoia-openpgp/allow-variable-time-crypto"]
 
 [[bin]]
 name = "comunicado"
@@ -144,6 +144,28 @@ path = "src/main.rs"
 
 [profile.release]
 strip = true
-lto = true
+lto = "fat"              # More aggressive LTO
+codegen-units = 1        # Better optimization
+panic = "abort"
+opt-level = 3            # Maximum optimization
+overflow-checks = false  # Disable runtime checks
+
+[profile.release-small]
+inherits = "release"
+opt-level = "z"          # Optimize for size over speed
+lto = "fat"
 codegen-units = 1
 panic = "abort"
+strip = true
+
+# Optimized development profile
+[profile.dev]
+opt-level = 1            # Basic optimization for faster debug builds
+debug = 1                # Reduced debug info
+incremental = true       # Enable incremental compilation
+
+# Profile for faster incremental builds during development
+[profile.dev-fast]
+inherits = "dev"
+debug = false            # No debug info for faster builds
+opt-level = 0            # No optimization for fastest builds

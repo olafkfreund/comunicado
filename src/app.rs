@@ -5396,7 +5396,7 @@ impl App {
     }
 
     /// Handle converting KDE Connect message to note
-    async fn handle_convert_kde_message_to_note(&mut self, title: &str, content: &str) -> Result<()> {
+    async fn handle_convert_kde_message_to_note(&mut self, title: &str, _content: &str) -> Result<()> {
         // TODO: Implement KDE Connect message-to-note conversion
         tracing::info!("Converting KDE Connect message '{}' to note", title);
         self.ui.show_toast_info("KDE Connect message converted to note (feature coming soon)");

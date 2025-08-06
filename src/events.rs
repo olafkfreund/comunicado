@@ -8,6 +8,7 @@ use chrono::Datelike;
 pub struct EventHandler {
     should_quit: bool,
     keyboard_manager: KeyboardManager,
+    plugin_config: Option<crate::config::PluginsConfig>,
 }
 
 /// Result of handling a key event
@@ -65,6 +66,7 @@ impl EventHandler {
         Self {
             should_quit: false,
             keyboard_manager: KeyboardManager::default(),
+            plugin_config: None,
         }
     }
 
@@ -78,9 +80,24 @@ impl EventHandler {
         &mut self.keyboard_manager
     }
 
+    /// Set plugin configuration for conditional shortcuts
+    pub fn set_plugin_config(&mut self, config: crate::config::PluginsConfig) {
+        self.plugin_config = Some(config);
+    }
+
     /// Get help text for keyboard shortcuts
     pub fn get_keyboard_help(&self) -> String {
         self.keyboard_manager.get_help_text()
+    }
+
+    /// Get help text for keyboard shortcuts filtered by plugin configuration
+    pub fn get_filtered_keyboard_help(&self) -> String {
+        if let Some(ref config) = self.plugin_config {
+            let categories = self.keyboard_manager.get_shortcuts_by_category_filtered(Some(config));
+            self.keyboard_manager.format_shortcuts_help(&categories)
+        } else {
+            self.get_keyboard_help()
+        }
     }
 
     /// Handle a key event using the configurable keyboard system
@@ -1461,6 +1478,15 @@ impl EventHandler {
 
             // Notes actions
             KeyboardAction::ConvertToNote => {
+                // Check if Notes plugin is enabled
+                if let Some(ref config) = self.plugin_config {
+                    if !config.notes.enabled {
+                        tracing::warn!("📝 Convert to note action blocked - Notes plugin disabled");
+                        ui.show_toast_warning("Notes plugin is disabled. Enable it in settings to use this feature.".to_string());
+                        return EventResult::Continue;
+                    }
+                }
+                
                 tracing::info!("📝 Convert to note action triggered");
                 // Context-aware conversion based on current view/focus
                 match ui.mode() {
@@ -1499,58 +1525,37 @@ impl EventHandler {
                 }
             }
             KeyboardAction::ShowNotes => {
+                // Check if Notes plugin is enabled
+                if let Some(ref config) = self.plugin_config {
+                    if !config.notes.enabled {
+                        tracing::warn!("📝 Show notes action blocked - Notes plugin disabled");
+                        ui.show_toast_warning("Notes plugin is disabled. Enable it in settings to use this feature.".to_string());
+                        return EventResult::Continue;
+                    }
+                }
+                
                 tracing::info!("📝 Show notes action triggered");
                 ui.show_toast_info("Switching to Notes view...".to_string());
                 EventResult::ShowNotes
             }
             KeyboardAction::CreateNote => {
+                // Check if Notes plugin is enabled
+                if let Some(ref config) = self.plugin_config {
+                    if !config.notes.enabled {
+                        tracing::warn!("📝 Create note action blocked - Notes plugin disabled");
+                        ui.show_toast_warning("Notes plugin is disabled. Enable it in settings to use this feature.".to_string());
+                        return EventResult::Continue;
+                    }
+                }
+                
                 tracing::info!("📝 Create note action triggered");
                 ui.show_toast_info("Creating new note...".to_string());
                 EventResult::CreateNote
             }
 
-            // Folder refresh actions
-            KeyboardAction::RefreshFolder => {
-                tracing::info!("🔄 Refresh folder action triggered");
-                if let FocusedPane::FolderTree = ui.focused_pane() {
-                    let folder_path = ui.folder_tree().selected_folder().map(|f| f.path.clone());
-                    if let Some(path) = folder_path {
-                        tracing::info!("🔄 Refreshing folder: {}", path);
-                        EventResult::FolderForceRefresh(path)
-                    } else {
-                        tracing::warn!("No folder selected for refresh");
-                        EventResult::Continue
-                    }
-                } else {
-                    tracing::info!("🔄 Triggering global email sync");
-                    EventResult::TriggerEmailSync
-                }
-            }
-            KeyboardAction::FolderRefresh => {
-                tracing::info!("🔄 Folder refresh action (Alt+R) triggered");
-                if let FocusedPane::FolderTree = ui.focused_pane() {
-                    let folder_path = ui.folder_tree().selected_folder().map(|f| f.path.clone());
-                    if let Some(path) = folder_path {
-                        tracing::info!("🔄 Force refreshing folder: {}", path);
-                        EventResult::FolderForceRefresh(path)
-                    } else {
-                        tracing::warn!("No folder selected for force refresh");
-                        EventResult::Continue
-                    }
-                } else {
-                    EventResult::Continue
-                }
-            }
-            KeyboardAction::RefreshAccount => {
-                tracing::info!("🔄 Account refresh action triggered");
-                if let Some(account_id) = ui.account_switcher().get_current_account_id() {
-                    tracing::info!("🔄 Refreshing account: {}", account_id);
-                    EventResult::RefreshAccount(account_id.clone())
-                } else {
-                    tracing::warn!("No account selected for refresh");
-                    EventResult::Continue
-                }
-            }
+            // NOTE: Unreachable pattern handlers removed to fix compilation warnings.
+            // The primary handlers for RefreshFolder, FolderRefresh, and RefreshAccount 
+            // are located earlier in this match statement around lines 653-889.
 
         }
     }

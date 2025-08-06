@@ -45,46 +45,56 @@ The notes plugin is built into Comunicado and can be enabled through the plugin 
 
 1. **Enable the Plugin**:
    ```bash
-   # Through the TUI settings
-   Ctrl+, -> Plugins -> Notes -> Enable
+   # Through CLI configuration
+   comunicado config --set plugins.notes.enabled true
    
    # Or via configuration file
-   echo '{"notes": {"enabled": true}}' > ~/.config/comunicado/plugins.json
+   [plugins.notes]
+   enabled = true
+   default_directory = "~/Documents/Notes"
    ```
 
-2. **Configure Note Directory**:
-   ```toml
-   # ~/.config/comunicado/config.toml
-   [plugins.notes]
-   default_directory = "~/Documents/Notes"
-   auto_index = true
-   vim_mode = true
+2. **Verify Installation**:
+   ```bash
+   # Check plugin status
+   comunicado notes status
+   
+   # Configure note directory
+   comunicado notes config --set-directory ~/Documents/Notes
    ```
 
 ## Quick Start
 
 ### Creating Your First Note
 
-1. **Launch TUI Interface**:
-   ```
-   # In Comunicado, press Ctrl+N to open notes TUI
+1. **Command-Line Creation**:
+   ```bash
+   # Create a simple note
+   comunicado notes create "My First Note" --content "This is my first note!"
+   
+   # Create note with tags
+   comunicado notes create "Project Ideas" --content "Feature concepts" --tags work,ideas
    ```
 
-2. **Create a Note**:
-   ```
-   # In notes TUI:
-   - Press 'n' to create new note
-   - Enter title: "My First Note"
-   - Start writing in markdown
+2. **Interactive TUI Interface**:
+   ```bash
+   # Launch interactive notes interface
+   comunicado notes tui
+   
+   # Open with search
+   comunicado notes tui --search "meeting"
    ```
 
-3. **Wiki Linking**:
-   ```markdown
-   # My First Note
+3. **View and Manage Notes**:
+   ```bash
+   # List all notes
+   comunicado notes list
    
-   This links to [[Another Note]] which will be created automatically.
+   # Search notes
+   comunicado notes search "project"
    
-   See also: [[Project Ideas]] and [[Meeting Notes/2025-01-15]]
+   # Show specific note
+   comunicado notes show "My First Note"
    ```
 
 ### Basic Navigation

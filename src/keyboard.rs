@@ -1296,10 +1296,25 @@ impl KeyboardConfig {
     pub fn get_shortcuts_by_category(
         &self,
     ) -> HashMap<String, Vec<(&KeyboardShortcut, &KeyboardAction, &str)>> {
+        self.get_shortcuts_by_category_filtered(None)
+    }
+
+    /// Get shortcuts by category, optionally filtered by plugin configuration
+    pub fn get_shortcuts_by_category_filtered(
+        &self,
+        plugin_config: Option<&crate::config::PluginsConfig>,
+    ) -> HashMap<String, Vec<(&KeyboardShortcut, &KeyboardAction, &str)>> {
         let mut categories: HashMap<String, Vec<(&KeyboardShortcut, &KeyboardAction, &str)>> =
             HashMap::new();
 
         for (shortcut, action) in &self.shortcuts {
+            // Check if this action should be filtered based on plugin configuration
+            if let Some(config) = plugin_config {
+                if self.should_filter_action(action, config) {
+                    continue; // Skip this shortcut if plugin is disabled
+                }
+            }
+            
             let category = self.get_action_category(action);
             let description = self
                 .action_descriptions
@@ -1433,6 +1448,88 @@ impl KeyboardConfig {
             | KeyboardAction::ShowNotes
             | KeyboardAction::CreateNote => "Notes".to_string(),
         }
+    }
+
+    /// Determine if an action should be filtered out based on plugin configuration
+    fn should_filter_action(&self, action: &KeyboardAction, config: &crate::config::PluginsConfig) -> bool {
+        match action {
+            // Notes plugin actions - filter if Notes plugin is disabled
+            KeyboardAction::ConvertToNote
+            | KeyboardAction::ShowNotes  
+            | KeyboardAction::CreateNote => {
+                !config.notes.enabled
+            }
+            
+            // KDE Connect plugin actions would go here when added
+            // KeyboardAction::KdeConnectNotify | ... => !config.kde_connect.enabled,
+            
+            // All other actions are always shown
+            _ => false,
+        }
+    }
+
+    /// Check if an action is available (not filtered) based on plugin configuration
+    pub fn is_action_available(&self, action: &KeyboardAction, config: &crate::config::PluginsConfig) -> bool {
+        !self.should_filter_action(action, config)
+    }
+
+    /// Get enabled categories based on plugin configuration
+    pub fn get_enabled_categories(&self, config: &crate::config::PluginsConfig) -> Vec<String> {
+        let mut categories = vec![
+            "Global".to_string(),
+            "Navigation".to_string(), 
+            "Selection".to_string(),
+            "Email".to_string(),
+            "Account Management".to_string(),
+            "Search".to_string(),
+            "View Controls".to_string(),
+            "Sorting".to_string(),
+            "Content Preview".to_string(),
+            "Folder Operations".to_string(),
+            "Copy Operations".to_string(),
+            "Email Viewer".to_string(),
+            "Calendar".to_string(),
+            "Contacts".to_string(),
+            "AI Assistant".to_string(),
+        ];
+        
+        // Add plugin-specific categories only if enabled
+        if config.notes.enabled {
+            categories.push("Notes".to_string());
+        }
+        
+        // Future: Add KDE Connect categories when implemented
+        // if config.kde_connect.enabled {
+        //     categories.push("KDE Connect".to_string());
+        // }
+        
+        categories
+    }
+
+    /// Format shortcuts help from a categories map
+    pub fn format_shortcuts_help(&self, categories: &HashMap<String, Vec<(&KeyboardShortcut, &KeyboardAction, &str)>>) -> String {
+        let mut help_text = String::new();
+        
+        // Define order for categories to ensure consistent display
+        let category_order = vec![
+            "Global", "Navigation", "Selection", "Email", "Account Management",
+            "Search", "View Controls", "Sorting", "Content Preview", 
+            "Folder Operations", "Copy Operations", "Email Viewer", 
+            "Calendar", "Contacts", "AI Assistant", "Notes", "KDE Connect"
+        ];
+        
+        for category_name in &category_order {
+            if let Some(shortcuts) = categories.get(*category_name) {
+                if !shortcuts.is_empty() {
+                    help_text.push_str(&format!("\n{}:\n", category_name));
+                    for (shortcut, _action, description) in shortcuts {
+                        help_text.push_str(&format!("  {}: {}\n", shortcut, description));
+                    }
+                }
+            }
+        }
+        
+        help_text
     }
 
     /// Load keyboard configuration from file
@@ -1646,6 +1743,121 @@ impl KeyboardManager {
             .iter()
             .map(|(shortcut, action)| (shortcut.clone(), action.clone()))
             .collect()
+    }
+
+    /// Get shortcuts by category, optionally filtered by plugin configuration
+    pub fn get_shortcuts_by_category_filtered(
+        &self,
+        plugin_config: Option<&crate::config::PluginsConfig>,
+    ) -> HashMap<String, Vec<(&KeyboardShortcut, &KeyboardAction, &str)>> {
+        let categories = self.config.get_shortcuts_by_category();
+        let mut filtered_categories: HashMap<String, Vec<(&KeyboardShortcut, &KeyboardAction, &str)>> = HashMap::new();
+
+        for (category, shortcuts) in categories {
+            let mut filtered_shortcuts = Vec::new();
+            
+            for (shortcut, action, description) in shortcuts {
+                // Check if this action should be filtered based on plugin configuration
+                if let Some(config) = plugin_config {
+                    if self.should_filter_action(action, config) {
+                        continue; // Skip this shortcut if plugin is disabled
+                    }
+                }
+                filtered_shortcuts.push((shortcut, action, description));
+            }
+            
+            // Only include category if it has shortcuts
+            if !filtered_shortcuts.is_empty() {
+                filtered_categories.insert(category, filtered_shortcuts);
+            }
+        }
+
+        filtered_categories
+    }
+
+    /// Determine if an action should be filtered out based on plugin configuration
+    fn should_filter_action(&self, action: &KeyboardAction, config: &crate::config::PluginsConfig) -> bool {
+        match action {
+            // Notes plugin actions - filter if Notes plugin is disabled
+            KeyboardAction::ConvertToNote
+            | KeyboardAction::ShowNotes  
+            | KeyboardAction::CreateNote => {
+                !config.notes.enabled
+            }
+            
+            // KDE Connect plugin actions would go here when added
+            // KeyboardAction::KdeConnectNotify | ... => !config.kde_connect.enabled,
+            
+            // All other actions are always shown
+            _ => false,
+        }
+    }
+
+    /// Format shortcuts help text from filtered categories
+    pub fn format_shortcuts_help(&self, categories: &HashMap<String, Vec<(&KeyboardShortcut, &KeyboardAction, &str)>>) -> String {
+        let mut help = String::new();
+        help.push_str("Keyboard Shortcuts\n");
+        help.push_str("==================\n\n");
+
+        // Define category ordering for consistent display
+        let category_order = vec![
+            "Global",
+            "Navigation", 
+            "Email",
+            "Accounts",
+            "Calendar",
+            "Notes",
+            "Contacts",
+            "AI Assistant",
+            "Settings",
+            "Context Menu"
+        ];
+
+        // Process categories in order, then any remaining categories
+        let mut processed_categories = std::collections::HashSet::new();
+        
+        for preferred_category in category_order {
+            if let Some(shortcuts) = categories.get(preferred_category) {
+                help.push_str(&format!("{}:\n", preferred_category));
+                help.push_str(&"-".repeat(preferred_category.len() + 1));
+                help.push('\n');
+
+                for (shortcut, _action, description) in shortcuts {
+                    help.push_str(&format!(
+                        "  {:15} - {}\n",
+                        shortcut.to_string(),
+                        description
+                    ));
+                }
+                help.push('\n');
+                processed_categories.insert(preferred_category.to_string());
+            }
+        }
+
+        // Add any remaining categories that weren't in the preferred order
+        let mut remaining_categories: Vec<_> = categories.keys()
+            .filter(|&cat| !processed_categories.contains(cat))
+            .collect();
+        remaining_categories.sort();
+
+        for category in remaining_categories {
+            if let Some(shortcuts) = categories.get(category) {
+                help.push_str(&format!("{}:\n", category));
+                help.push_str(&"-".repeat(category.len() + 1));
+                help.push('\n');
+
+                for (shortcut, _action, description) in shortcuts {
+                    help.push_str(&format!(
+                        "  {:15} - {}\n",
+                        shortcut.to_string(),
+                        description
+                    ));
+                }
+                help.push('\n');
+            }
+        }
+
+        help
     }
 }
 

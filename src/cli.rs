@@ -10,8 +10,8 @@ use crate::email::{DatabaseStats, EmailDatabase};
 use crate::imap::ImapAccountManager;
 use crate::keyboard::{KeyboardAction, KeyboardConfig, KeyboardManager, KeyboardShortcut};
 use crate::maildir::{Maildir, MaildirUtils};
-use crate::oauth2::{AccountConfig, AppConfig, SecureStorage, TokenManager};
-use crate::integrations::{KdeConnectIntegration, KdeConnectDevice};
+use crate::oauth2::{AccountConfig, SecureStorage, TokenManager};
+use crate::integrations::KdeConnectIntegration;
 use crate::plugins::notes::{NoteStorage, NoteConversionService};
 
 /// Comunicado - Modern terminal email and calendar client
@@ -5110,9 +5110,16 @@ impl CliHandler {
             return Ok(());
         }
 
-        // Load current configuration
-        let config = self.storage.load_config()
-            .map_err(|e| anyhow!("Failed to load configuration: {}", e))?;
+        // Load current configuration with helpful error messages
+        let config = match self.storage.load_config() {
+            Ok(config) => config,
+            Err(e) => {
+                return Err(anyhow!(
+                    "❌ Configuration Error: {}\n\n💡 KDE Connect configuration may be missing or corrupted.\n\n🔧 Try these solutions:\n  • Check configuration: comunicado config --validate\n  • Reset KDE Connect: comunicado kde-connect disable && comunicado kde-connect setup\n  • Reset all config: comunicado config --reset",
+                    e
+                ));
+            }
+        };
         
         let kde_config = &config.kde_connect;
         
@@ -5198,16 +5205,31 @@ impl CliHandler {
             return Ok(());
         }
 
-        // Load current configuration
-        let mut config = self.storage.load_config()
-            .map_err(|e| anyhow!("Failed to load configuration: {}", e))?;
+        // Load current configuration with helpful error messages
+        let mut config = match self.storage.load_config() {
+            Ok(config) => config,
+            Err(e) => {
+                return Err(anyhow!(
+                    "❌ Configuration Error: {}\n\n💡 Try these solutions:\n  • Check your configuration: comunicado config --validate\n  • Reset configuration: comunicado config --reset\n  • View configuration: comunicado config --show",
+                    e
+                ));
+            }
+        };
 
         // Determine device to use
         let selected_device_id = if let Some(id) = device_id {
             id
         } else {
             // List devices and prompt user to select
-            let devices = KdeConnectIntegration::list_devices().await?;
+            let devices = match KdeConnectIntegration::list_devices().await {
+                Ok(devices) => devices,
+                Err(e) => {
+                    return Err(anyhow!(
+                        "❌ Failed to list KDE Connect devices: {}\n\n💡 Troubleshooting steps:\n  • Ensure KDE Connect is running: systemctl --user start kdeconnectd\n  • Check network connectivity between devices\n  • Try: kdeconnect-cli --refresh\n  • Verify device pairing: kdeconnect-cli --list-devices",
+                        e
+                    ));
+                }
+            };
             
             if devices.is_empty() {
                 println!("❌ No devices found. Make sure your device is on the same network.");
@@ -5248,8 +5270,17 @@ impl CliHandler {
             if !device.paired {
                 println!("⚠️  Device {} is not paired. Attempting to pair...", device.name);
                 if !dry_run {
-                    KdeConnectIntegration::pair_device(&device.id).await?;
-                    println!("📱 Pairing request sent. Please accept on your device.");
+                    match KdeConnectIntegration::pair_device(&device.id).await {
+                        Ok(_) => {
+                            println!("📱 Pairing request sent. Please accept on your device.");
+                        }
+                        Err(e) => {
+                            return Err(anyhow!(
+                                "❌ Failed to pair with device: {}\n\n💡 Troubleshooting:\n  • Ensure both devices are on the same network\n  • Check that KDE Connect is running on both devices\n  • Try manual pairing: kdeconnect-cli --pair --device {}\n  • Restart KDE Connect: systemctl --user restart kdeconnectd",
+                                e, device.id
+                            ));
+                        }
+                    }
                 }
             }
             device.name.clone()
@@ -5593,7 +5624,7 @@ impl CliHandler {
     }
 
     /// Create a new note
-    async fn handle_notes_create(&self, title: String, content: Option<String>, tags: Option<Vec<String>>, template: Option<String>, dry_run: bool) -> Result<()> {
+    async fn handle_notes_create(&self, title: String, content: Option<String>, tags: Option<Vec<String>>, _template: Option<String>, dry_run: bool) -> Result<()> {
         println!("📝 Creating New Note");
         println!("===================");
         println!("Title: {}", title);
@@ -5612,22 +5643,39 @@ impl CliHandler {
             return Ok(());
         }
 
-        // Load configuration
-        let config = self.storage.load_config()
-            .map_err(|e| anyhow!("Failed to load configuration: {}", e))?;
+        // Load configuration with helpful error messages
+        let config = match self.storage.load_config() {
+            Ok(config) => config,
+            Err(e) => {
+                return Err(anyhow!(
+                    "❌ Configuration Error: {}\n\n💡 Try these solutions:\n  • Check your configuration: comunicado config --validate\n  • Reset configuration: comunicado config --reset\n  • View configuration: comunicado config --show",
+                    e
+                ));
+            }
+        };
         
-        // Initialize storage
-        let storage = NoteStorage::new(&config.notes.default_directory).await
-            .map_err(|e| anyhow!("Failed to initialize notes storage: {}", e))?;
+        // Initialize storage with helpful error messages
+        let _storage = match NoteStorage::new(&config.notes.default_directory).await {
+            Ok(storage) => storage,
+            Err(e) => {
+                return Err(anyhow!(
+                    "❌ Notes Storage Error: {}\n\n💡 Try these solutions:\n  • Check if notes directory exists: {}\n  • Create directory: mkdir -p '{}'\n  • Check permissions: ls -la '{}'\n  • Reset notes config: comunicado notes config --reset",
+                    e,
+                    config.notes.default_directory.display(),
+                    config.notes.default_directory.display(),
+                    config.notes.default_directory.parent().unwrap_or(std::path::Path::new(".")).display()
+                ));
+            }
+        };
 
         // Create note content
-        let note_content = if let Some(content_text) = content {
+        let _note_content = if let Some(content_text) = content {
             content_text
         } else {
-            // TODO: Open editor for content input
-            println!("⚠️  Interactive editor not yet implemented");
-            println!("   Use --content flag to provide content directly");
-            return Ok(());
+            // Provide helpful guidance for missing content
+            return Err(anyhow!(
+                "❌ Missing Note Content\n\n💡 Provide content in one of these ways:\n  • Command line: --content \"Your note text here\"\n  • From file: --content \"$(cat your-file.txt)\"\n  • From clipboard: comunicado notes clipboard\n  • Interactive editor: comunicado notes tui\n\n📝 Example:\n  comunicado notes create \"My Note\" --content \"This is my note content\""
+            ));
         };
 
         // TODO: Create the actual note using the storage
@@ -5638,7 +5686,7 @@ impl CliHandler {
     }
 
     /// Search notes
-    async fn handle_notes_search(&self, query: String, limit: usize, category: Option<String>, titles_only: bool) -> Result<()> {
+    async fn handle_notes_search(&self, query: String, limit: usize, category: Option<String>, _titles_only: bool) -> Result<()> {
         println!("🔍 Searching Notes");
         println!("=================");
         println!("Query: {}", query);
@@ -5648,13 +5696,30 @@ impl CliHandler {
             println!("Category: {}", cat);
         }
 
-        // Load configuration
-        let config = self.storage.load_config()
-            .map_err(|e| anyhow!("Failed to load configuration: {}", e))?;
+        // Load configuration with helpful error messages
+        let config = match self.storage.load_config() {
+            Ok(config) => config,
+            Err(e) => {
+                return Err(anyhow!(
+                    "❌ Configuration Error: {}\n\n💡 Try these solutions:\n  • Check your configuration: comunicado config --validate\n  • Reset configuration: comunicado config --reset\n  • View configuration: comunicado config --show",
+                    e
+                ));
+            }
+        };
         
-        // Initialize storage
-        let storage = NoteStorage::new(&config.notes.default_directory).await
-            .map_err(|e| anyhow!("Failed to initialize notes storage: {}", e))?;
+        // Initialize storage with error guidance
+        let _storage = match NoteStorage::new(&config.notes.default_directory).await {
+            Ok(storage) => storage,
+            Err(e) => {
+                return Err(anyhow!(
+                    "❌ Notes Storage Error: {}\n\n💡 Troubleshooting steps:\n  • Check directory exists: {}\n  • Verify permissions: ls -la {}\n  • Create directory: mkdir -p {}\n  • Reset notes config: comunicado notes config --reset",
+                    e,
+                    config.notes.default_directory.display(),
+                    config.notes.default_directory.parent().unwrap_or(std::path::Path::new(".")).display(),
+                    config.notes.default_directory.display()
+                ));
+            }
+        };
 
         // TODO: Perform search using AdvancedSearchEngine
         println!("⚠️  Search functionality not yet fully implemented");
@@ -5664,7 +5729,7 @@ impl CliHandler {
     }
 
     /// List all notes
-    async fn handle_notes_list(&self, detailed: bool, tags: Option<Vec<String>>, limit: Option<usize>) -> Result<()> {
+    async fn handle_notes_list(&self, _detailed: bool, tags: Option<Vec<String>>, limit: Option<usize>) -> Result<()> {
         println!("📋 Listing Notes");
         println!("================");
         
@@ -5676,13 +5741,30 @@ impl CliHandler {
             println!("Limit: {}", max);
         }
 
-        // Load configuration
-        let config = self.storage.load_config()
-            .map_err(|e| anyhow!("Failed to load configuration: {}", e))?;
+        // Load configuration with helpful error messages
+        let config = match self.storage.load_config() {
+            Ok(config) => config,
+            Err(e) => {
+                return Err(anyhow!(
+                    "❌ Configuration Error: {}\n\n💡 Try these solutions:\n  • Check your configuration: comunicado config --validate\n  • Reset configuration: comunicado config --reset\n  • View configuration: comunicado config --show",
+                    e
+                ));
+            }
+        };
         
-        // Initialize storage
-        let storage = NoteStorage::new(&config.notes.default_directory).await
-            .map_err(|e| anyhow!("Failed to initialize notes storage: {}", e))?;
+        // Initialize storage with error guidance
+        let _storage = match NoteStorage::new(&config.notes.default_directory).await {
+            Ok(storage) => storage,
+            Err(e) => {
+                return Err(anyhow!(
+                    "❌ Notes Storage Error: {}\n\n💡 Troubleshooting steps:\n  • Check directory exists: {}\n  • Verify permissions: ls -la {}\n  • Create directory: mkdir -p {}\n  • Reset notes config: comunicado notes config --reset",
+                    e,
+                    config.notes.default_directory.display(),
+                    config.notes.default_directory.parent().unwrap_or(std::path::Path::new(".")).display(),
+                    config.notes.default_directory.display()
+                ));
+            }
+        };
 
         // TODO: List notes from storage
         println!("⚠️  List functionality not yet fully implemented");
@@ -5744,7 +5826,7 @@ impl CliHandler {
     }
 
     /// Reindex all notes
-    async fn handle_notes_reindex(&self, force: bool, verbose: bool, dry_run: bool) -> Result<()> {
+    async fn handle_notes_reindex(&self, force: bool, _verbose: bool, dry_run: bool) -> Result<()> {
         println!("🔄 Reindexing Notes");
         println!("==================");
         
@@ -5762,7 +5844,7 @@ impl CliHandler {
             .map_err(|e| anyhow!("Failed to load configuration: {}", e))?;
         
         // Initialize storage
-        let storage = NoteStorage::new(&config.notes.default_directory).await
+        let _storage = NoteStorage::new(&config.notes.default_directory).await
             .map_err(|e| anyhow!("Failed to initialize notes storage: {}", e))?;
 
         println!("🔍 Starting reindex...");
@@ -5905,7 +5987,7 @@ impl CliHandler {
             .map_err(|e| anyhow!("Failed to load configuration: {}", e))?;
         
         // Initialize storage
-        let storage = NoteStorage::new(&config.notes.default_directory).await
+        let _storage = NoteStorage::new(&config.notes.default_directory).await
             .map_err(|e| anyhow!("Failed to initialize notes storage: {}", e))?;
 
         println!("📁 Directory: {}", config.notes.default_directory.display());

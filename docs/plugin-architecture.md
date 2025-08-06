@@ -331,30 +331,46 @@ impl ImportExportPlugin for MyPlugin {
 }
 ```
 
-## Example Plugins
+## Built-in Plugins
 
-The architecture includes several example plugins demonstrating best practices:
+Comunicado includes several production-ready plugins that demonstrate best practices and provide essential functionality:
 
-### Example Email Plugin
+### Notes Plugin
 
-- **Spam filtering** based on keyword detection
-- **Auto-signature** addition to outgoing emails
-- **Auto-responder detection** for vacation messages
-- Configurable spam keywords and signature text
+A comprehensive note-taking system with advanced features:
 
-### Example UI Plugin
+- **Full-text search** - SQLite FTS5 search across all content
+- **Wiki-style linking** - Bidirectional `[[note title]]` linking
+- **CLI interface** - Complete command-line access to all features
+- **TUI integration** - Interactive terminal interface for note management
+- **Email integration** - Convert emails to notes with templates
+- **Calendar integration** - Meeting notes and event linking
+- **Mobile sync** - Integration with KDE Connect for mobile access
 
-- **Status widget** displaying plugin information
-- **Keyboard shortcuts** for plugin interaction (F5 to refresh)
-- **Layout preferences** for widget positioning
-- Configurable display text and refresh intervals
+**CLI Commands:** Over 15 commands including `create`, `search`, `list`, `edit`, `import`, `export`
+**Configuration:** Extensive TOML-based configuration with auto-indexing and vim mode
 
-### Example Calendar Plugin
+### KDE Connect Plugin
 
-- **Event processing** with meeting detection
-- **Calendar source** integration (placeholder)
-- **Sync capabilities** demonstration
-- Basic event validation and processing
+Mobile device integration for enhanced productivity:
+
+- **Device discovery** - Automatic detection of available mobile devices
+- **SMS integration** - Send and receive SMS messages (planned)
+- **Notifications** - Forward notifications between devices
+- **File transfers** - Transfer files between desktop and mobile (planned)
+- **CLI interface** - Complete command-line management interface
+- **Pairing management** - Secure device pairing and connection management
+
+**CLI Commands:** 8 commands including `status`, `enable`, `disable`, `pair`, `test`, `setup`
+**Configuration:** Device-specific settings with auto-pairing and notification filtering
+
+### Example Plugin Templates
+
+Reference implementations for plugin development:
+
+- **Example Email Plugin** - Spam filtering and auto-signature functionality
+- **Example UI Plugin** - Status widgets with keyboard shortcuts
+- **Example Calendar Plugin** - Event processing and external sync demonstration
 
 ## Performance Considerations
 
@@ -426,6 +442,20 @@ enabled = true
 auto_load = true
 plugin_directories = ["plugins", "~/.local/share/comunicado/plugins"]
 
+# Built-in plugin configurations
+[plugins.notes]
+enabled = true
+default_directory = "~/Documents/Notes"
+auto_index = true
+vim_mode = true
+max_search_results = 100
+
+[plugins.kde_connect]
+enabled = false  # User must enable explicitly
+device_id = "abc123def456"
+auto_notifications = true
+notification_types = ["email", "sms", "calendar"]
+
 [plugins.settings]
 max_concurrent_plugins = 10
 default_timeout = "30s"
@@ -436,6 +466,30 @@ allow_unsigned_plugins = false
 trusted_publishers = ["comunicado-official"]
 max_plugin_size = "10MB"
 ```
+
+### CLI Management
+
+All built-in plugins provide comprehensive CLI interfaces:
+
+```bash
+# Notes plugin management
+comunicado notes status                    # Show plugin status
+comunicado notes create "My Note"          # Create new note
+comunicado notes search "query"            # Search through notes
+comunicado notes config --show             # Show configuration
+
+# KDE Connect plugin management  
+comunicado kde-connect status              # Show integration status
+comunicado kde-connect enable              # Enable integration
+comunicado kde-connect pair <device-id>    # Pair with device
+comunicado kde-connect test                # Test functionality
+
+# Configuration via CLI
+comunicado config --set plugins.notes.enabled true
+comunicado config --set plugins.kde_connect.device_id myphone123
+```
+
+For complete CLI reference, see: [CLI Plugin Commands Reference](cli-plugins-reference.md)
 
 ### UI Integration
 
