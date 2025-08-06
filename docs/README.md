@@ -6,7 +6,8 @@ Welcome to the comprehensive documentation for Comunicado, a modern terminal-bas
 
 If you're new to Comunicado, start here:
 
-- [Installation Guide](installation.md) - How to install and set up Comunicado
+- [📦 Installation Guide](../INSTALL.md) - Complete installation instructions for all Linux distributions
+- [🚀 Release Notes v0.1.0](release-v0.1.0.md) - Production release highlights and features
 - [Quick Start](quick-start.md) - Get up and running in minutes
 - [Mobile Quick Start](mobile-quick-start.md) - Set up SMS/MMS in 5 minutes 📱 **NEW**
 - [Configuration](configuration.md) - Basic configuration options
@@ -65,15 +66,16 @@ Comprehensive documentation for Comunicado's plugin architecture:
 
 Quick reference materials:
 
-- [Command Line Options](cli-reference.md) - All command line flags and options
-- [Configuration File Format](config-reference.md) - Complete configuration reference
-- [API Documentation](api-reference.md) - For developers and integrations
+- [📋 Complete Changelog](../CHANGELOG.md) - Development history and all version changes
+- [🎯 Release Status](release-status-final.md) - Current v0.1.0 production readiness status
+- [📊 Performance Report](performance-optimization-report.md) - Optimization achievements and metrics
+- [📦 Packaging Results](packaging-test-results.md) - Multi-distribution packaging validation
 
 ## About
 
-- [Release Notes](release-notes.md) - What's new in each version
-- [Contributing](contributing.md) - How to contribute to Comunicado
-- [License](license.md) - Legal information
+- [🏠 Project Homepage](https://github.com/olafkfreund/comunicado) - Source code and issue tracking
+- [📜 License](../LICENSE) - AGPL-3.0 open source license
+- [🤝 Contributing](.agent-os/product/) - Development standards and Agent OS workflow
 
 ---
 
