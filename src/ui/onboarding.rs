@@ -8,13 +8,11 @@
 //! - Theme and UI preference setup
 //! - Plugin introduction
 
-use crate::config::AppConfig;
 use crate::theme::Theme;
-use crate::oauth2::SetupWizard;
+use super::account_setup::AccountSetupManager;
+use super::config_manager::{ConfigurationManager, AppConfigAdapter};
 use crossterm::{
     event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
-    execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use ratatui::{
     backend::CrosstermBackend,
@@ -26,6 +24,7 @@ use ratatui::{
 };
 use std::io;
 use anyhow::Result;
+use super::terminal_manager::ManagedTerminal;
 
 /// Onboarding flow states
 #[derive(Debug, Clone, PartialEq)]
@@ -45,7 +44,8 @@ pub struct OnboardingFlow {
     current_step: usize,
     total_steps: usize,
     theme: Theme,
-    config: AppConfig,
+    config_manager: Box<dyn ConfigurationManager>,
+    account_setup: AccountSetupManager,
     selected_theme: String,
     show_shortcuts: bool,
     shortcuts_page: usize,
@@ -53,41 +53,39 @@ pub struct OnboardingFlow {
 }
 
 impl OnboardingFlow {
-    /// Create a new onboarding flow
-    pub fn new() -> Result<Self> {
-        let config = AppConfig::load().unwrap_or_default();
-        let theme = Theme::default();
-        
+    /// Create a new onboarding flow with dependency injection
+    pub fn new_with_dependencies(
+        config_manager: Box<dyn ConfigurationManager>,
+        account_setup: AccountSetupManager,
+        theme: Theme,
+    ) -> Result<Self> {
         Ok(Self {
             state: OnboardingState::Welcome,
             current_step: 1,
             total_steps: 6,
             theme,
-            config,
+            config_manager,
+            account_setup,
             selected_theme: "Dark".to_string(),
             show_shortcuts: false,
             shortcuts_page: 0,
             max_shortcuts_pages: 3,
         })
     }
+    
+    /// Create a new onboarding flow with default dependencies
+    pub fn new() -> Result<Self> {
+        let config_manager = Box::new(AppConfigAdapter::load_default()?);
+        let account_setup = AccountSetupManager::with_defaults()?;
+        let theme = Theme::default();
+        
+        Self::new_with_dependencies(config_manager, account_setup, theme)
+    }
 
     /// Run the complete onboarding flow
     pub async fn run(&mut self) -> Result<bool> {
-        // Setup terminal
-        enable_raw_mode()?;
-        let mut stdout = io::stdout();
-        execute!(stdout, EnterAlternateScreen)?;
-        let backend = CrosstermBackend::new(stdout);
-        let mut terminal = Terminal::new(backend)?;
-
-        let result = self.run_onboarding_loop(&mut terminal).await;
-
-        // Cleanup terminal
-        disable_raw_mode()?;
-        execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
-        terminal.show_cursor()?;
-
-        result
+        let mut managed_terminal = ManagedTerminal::new()?;
+        self.run_onboarding_loop(managed_terminal.terminal()).await
     }
 
     async fn run_onboarding_loop(
@@ -156,9 +154,8 @@ impl OnboardingFlow {
             
             OnboardingState::AccountSetup => match key.code {
                 KeyCode::Enter | KeyCode::Char(' ') => {
-                    // Launch OAuth2 setup wizard
-                    let mut wizard = SetupWizard::new().unwrap();
-                    match wizard.run().await {
+                    // Launch account setup through abstraction
+                    match self.account_setup.setup_with_fallback().await {
                         Ok(Some(_)) => {
                             // Account setup successful, continue onboarding
                             self.next_step();
@@ -203,7 +200,7 @@ impl OnboardingFlow {
                 }
                 KeyCode::Enter | KeyCode::Char(' ') => {
                     // Apply selected theme and continue
-                    self.config.ui.theme = self.selected_theme.clone();
+                    let _ = self.config_manager.set_value_json("ui_theme", serde_json::Value::String(self.selected_theme.clone()));
                     self.next_step();
                 }
                 KeyCode::Esc => self.previous_step(),
@@ -286,11 +283,10 @@ impl OnboardingFlow {
 
     fn complete_onboarding(&mut self) {
         // Mark onboarding as completed in config
-        self.config.general.first_run = false;
-        self.config.general.onboarding_completed = true;
+        let _ = self.config_manager.mark_onboarding_completed();
         
         // Save the updated configuration
-        let _ = self.config.save();
+        let _ = self.config_manager.save();
     }
 
     fn draw(&mut self, f: &mut Frame) {
@@ -690,8 +686,8 @@ impl Default for OnboardingFlow {
 
 /// Check if the user needs onboarding
 pub fn should_show_onboarding() -> bool {
-    match AppConfig::load() {
-        Ok(config) => config.general.first_run || !config.general.onboarding_completed,
+    match AppConfigAdapter::load_default() {
+        Ok(config) => config.is_first_run() || !config.is_onboarding_completed(),
         Err(_) => true, // If config can't be loaded, assume first run
     }
 }

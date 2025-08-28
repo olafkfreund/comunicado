@@ -50,6 +50,10 @@ pub mod mode_indicator;
 pub mod threading_display;
 pub mod thread_hierarchy_view;
 pub mod form_validation;
+pub mod modal_system;
+pub mod terminal_manager;
+pub mod account_setup;
+pub mod config_manager;
 
 
 use crate::email::{
