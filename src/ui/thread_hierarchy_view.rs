@@ -79,6 +79,28 @@ impl ThreadHierarchyView {
         self.hierarchy_mode = mode;
         self
     }
+    
+    /// Configure focus behavior for unread messages
+    pub fn with_focus_on_unread(mut self, focus: bool) -> Self {
+        self.focus_on_unread = focus;
+        self
+    }
+    
+    /// Set maximum number of preview lines for messages
+    pub fn with_max_preview_lines(mut self, lines: usize) -> Self {
+        self.max_preview_lines = lines;
+        self
+    }
+    
+    /// Check if focus on unread is enabled
+    pub fn focus_on_unread_enabled(&self) -> bool {
+        self.focus_on_unread
+    }
+    
+    /// Get the maximum preview lines setting
+    pub fn max_preview_lines(&self) -> usize {
+        self.max_preview_lines
+    }
 
     /// Enable/disable participants panel
     pub fn with_participants_panel(mut self, show: bool) -> Self {

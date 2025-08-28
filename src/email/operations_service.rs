@@ -4,6 +4,8 @@
 //! and handles the coordination between IMAP client, local database, and UI updates.
 
 use crate::email::EmailDatabase;
+use crate::email::retry::{RetryableError, ErrorCategory, RetryConfig, retry_async, CircuitBreaker, CircuitBreakerConfig};
+use crate::email::service_health::{ServiceHealthMonitor, GracefulDegradation, ServiceType, ServiceHealth, DegradationDecision};
 use crate::imap::{ImapAccountManager, MessageFlag};
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -37,12 +39,61 @@ pub enum EmailOperationError {
     InvalidState { reason: String },
 }
 
+impl RetryableError for EmailOperationError {
+    fn is_retryable(&self) -> bool {
+        match self {
+            // IMAP errors - mostly retryable (network, server issues)
+            EmailOperationError::Imap(_) => true,
+            
+            // Database errors - usually retryable (temporary locks, etc.)
+            EmailOperationError::Database(_) => true,
+            
+            // Account not found - not retryable (configuration issue)
+            EmailOperationError::AccountNotFound { .. } => false,
+            
+            // Message not found - not retryable (permanent state)
+            EmailOperationError::MessageNotFound { .. } => false,
+            
+            // Folder not found - not retryable (configuration issue)
+            EmailOperationError::FolderNotFound { .. } => false,
+            
+            // Operation not supported - not retryable (server capability)
+            EmailOperationError::NotSupported => false,
+            
+            // Invalid state - not retryable (logic error)
+            EmailOperationError::InvalidState { .. } => false,
+        }
+    }
+}
+
+impl EmailOperationError {
+    /// Categorize the error for more sophisticated retry logic
+    pub fn category(&self) -> ErrorCategory {
+        match self {
+            EmailOperationError::Imap(_) => ErrorCategory::Network,
+            EmailOperationError::Database(_) => ErrorCategory::ResourceLimit,
+            EmailOperationError::AccountNotFound { .. } => ErrorCategory::ClientError,
+            EmailOperationError::MessageNotFound { .. } => ErrorCategory::ClientError,
+            EmailOperationError::FolderNotFound { .. } => ErrorCategory::ClientError,
+            EmailOperationError::NotSupported => ErrorCategory::Protocol,
+            EmailOperationError::InvalidState { .. } => ErrorCategory::ClientError,
+        }
+    }
+}
+
 /// Email operations service
 pub struct EmailOperationsService {
     imap_manager: Arc<ImapAccountManager>,
     database: Arc<EmailDatabase>,
     /// Cache of folder names by type for each account
     folder_cache: Arc<RwLock<std::collections::HashMap<String, FolderCache>>>,
+    /// Retry configuration for email operations
+    retry_config: RetryConfig,
+    /// Circuit breaker for IMAP operations per account
+    circuit_breakers: Arc<RwLock<std::collections::HashMap<String, Arc<CircuitBreaker>>>>,
+    /// Health monitoring and graceful degradation
+    health_monitor: Arc<ServiceHealthMonitor>,
+    graceful_degradation: Arc<GracefulDegradation>,
 }
 
 /// Cached folder information for an account
@@ -62,11 +113,149 @@ impl EmailOperationsService {
         imap_manager: Arc<ImapAccountManager>,
         database: Arc<EmailDatabase>,
     ) -> Self {
+        let health_monitor = Arc::new(ServiceHealthMonitor::new());
+        let graceful_degradation = Arc::new(GracefulDegradation::new(Arc::clone(&health_monitor)));
+
         Self {
             imap_manager,
             database,
             folder_cache: Arc::new(RwLock::new(std::collections::HashMap::new())),
+            retry_config: RetryConfig {
+                max_attempts: 3,
+                initial_delay: std::time::Duration::from_millis(200),
+                max_delay: std::time::Duration::from_secs(10),
+                backoff_multiplier: 2.0,
+                jitter: true,
+            },
+            circuit_breakers: Arc::new(RwLock::new(std::collections::HashMap::new())),
+            health_monitor,
+            graceful_degradation,
         }
+    }
+
+    /// Create a new email operations service with custom retry configuration
+    pub fn with_retry_config(
+        imap_manager: Arc<ImapAccountManager>,
+        database: Arc<EmailDatabase>,
+        retry_config: RetryConfig,
+    ) -> Self {
+        let health_monitor = Arc::new(ServiceHealthMonitor::new());
+        let graceful_degradation = Arc::new(GracefulDegradation::new(Arc::clone(&health_monitor)));
+
+        Self {
+            imap_manager,
+            database,
+            folder_cache: Arc::new(RwLock::new(std::collections::HashMap::new())),
+            retry_config,
+            circuit_breakers: Arc::new(RwLock::new(std::collections::HashMap::new())),
+            health_monitor,
+            graceful_degradation,
+        }
+    }
+
+    /// Create a new email operations service with full configuration
+    pub fn with_full_config(
+        imap_manager: Arc<ImapAccountManager>,
+        database: Arc<EmailDatabase>,
+        retry_config: RetryConfig,
+        health_monitor: Arc<ServiceHealthMonitor>,
+    ) -> Self {
+        let graceful_degradation = Arc::new(GracefulDegradation::new(Arc::clone(&health_monitor)));
+
+        Self {
+            imap_manager,
+            database,
+            folder_cache: Arc::new(RwLock::new(std::collections::HashMap::new())),
+            retry_config,
+            circuit_breakers: Arc::new(RwLock::new(std::collections::HashMap::new())),
+            health_monitor,
+            graceful_degradation,
+        }
+    }
+
+    /// Start health monitoring for services
+    pub async fn start_health_monitoring(&self) {
+        // Register core services
+        self.health_monitor.register_service(ServiceType::Database).await;
+        self.health_monitor.register_service(ServiceType::EventBus).await;
+        self.health_monitor.register_service(ServiceType::Notifications).await;
+        self.health_monitor.register_service(ServiceType::Search).await;
+
+        // Start monitoring
+        self.health_monitor.start_monitoring().await;
+        
+        info!("Health monitoring started for email operations service");
+    }
+
+    /// Register an IMAP account for health monitoring
+    pub async fn register_account_for_monitoring(&self, account_id: &str) {
+        let service = ServiceType::Imap(account_id.to_string());
+        self.health_monitor.register_service(service).await;
+        info!("Registered IMAP account {} for health monitoring", account_id);
+    }
+
+    /// Update service health based on operation outcomes
+    async fn update_service_health_from_result<T>(
+        &self,
+        service_type: ServiceType,
+        result: &Result<T, EmailOperationError>,
+        operation_duration: std::time::Duration,
+    ) {
+        let (health, details) = match result {
+            Ok(_) => (ServiceHealth::Healthy, Some("Operation successful".to_string())),
+            Err(EmailOperationError::Imap(_)) => {
+                if operation_duration > std::time::Duration::from_secs(5) {
+                    (
+                        ServiceHealth::Degraded { reason: "Slow IMAP response".to_string() },
+                        Some(format!("Response took {:?}", operation_duration))
+                    )
+                } else {
+                    (
+                        ServiceHealth::Unhealthy { 
+                            reason: "IMAP operation failed".to_string(),
+                            since: std::time::Instant::now()
+                        },
+                        Some("IMAP communication error".to_string())
+                    )
+                }
+            },
+            Err(EmailOperationError::Database(_)) => {
+                (
+                    ServiceHealth::Unhealthy { 
+                        reason: "Database operation failed".to_string(),
+                        since: std::time::Instant::now()
+                    },
+                    Some("Database error".to_string())
+                )
+            },
+            Err(_) => (
+                ServiceHealth::Degraded { reason: "Operation failed".to_string() },
+                Some("General operation error".to_string())
+            ),
+        };
+
+        self.health_monitor.update_service_health(
+            service_type,
+            health,
+            operation_duration,
+            details,
+        ).await;
+    }
+
+    /// Get or create circuit breaker for an account
+    async fn get_circuit_breaker(&self, account_id: &str) -> Arc<CircuitBreaker> {
+        let mut breakers = self.circuit_breakers.write().await;
+        breakers
+            .entry(account_id.to_string())
+            .or_insert_with(|| {
+                Arc::new(CircuitBreaker::new(CircuitBreakerConfig {
+                    failure_threshold: 5,
+                    recovery_timeout: std::time::Duration::from_secs(30),
+                    success_threshold: 3,
+                    rolling_window: std::time::Duration::from_secs(300),
+                }))
+            })
+            .clone()
     }
 
     /// Delete an email by message ID
@@ -93,22 +282,99 @@ impl EmailOperationsService {
     ) -> EmailOperationResult<()> {
         info!("Deleting email UID {} from folder {} in account {}", message_uid, folder_name, account_id);
 
-        // Get IMAP client for the account
-        let client_arc = self.get_imap_client(account_id).await?;
-        let mut client = client_arc.lock().await;
+        // Check if we should proceed with email operation based on service health
+        let degradation_decision = self.graceful_degradation.should_attempt_email_operation(account_id).await;
+        
+        match degradation_decision {
+            DegradationDecision::Proceed => {
+                // Continue with normal operation
+            }
+            DegradationDecision::ProceedWithCaution { reason, fallback_strategy } => {
+                warn!("Proceeding with email deletion with caution: {}", reason);
+                if let Some(strategy) = fallback_strategy {
+                    debug!("Fallback strategy: {}", strategy);
+                }
+            }
+            DegradationDecision::Fallback { reason, strategy } => {
+                error!("Cannot perform email deletion: {} (fallback: {:?})", reason, strategy);
+                return Err(EmailOperationError::InvalidState { 
+                    reason: format!("Service unavailable: {}", reason) 
+                });
+            }
+        }
 
-        // Select the folder
-        client.select_folder(folder_name).await?;
+        // Get circuit breaker for this account
+        let circuit_breaker = self.get_circuit_breaker(account_id).await;
+        
+        // Create retry operation
+        let operation_name = format!("delete_email_{}_{}_{}", account_id, folder_name, message_uid);
+        
+        // Clone values for the closure
+        let account_id = account_id.to_string();
+        let folder_name = folder_name.to_string();
 
-        // Mark message as deleted
-        let uid_set = message_uid.to_string();
-        client.uid_store_flags(&uid_set, &[MessageFlag::Deleted], false).await?;
+        // Use a closure that captures self to access helper methods
+        let operation_start = std::time::Instant::now();
+        let result = {
+            let self_ref = self;
+            retry_async(&operation_name, || {
+                let account_id = account_id.clone();
+                let folder_name = folder_name.clone();
+                let circuit_breaker = Arc::clone(&circuit_breaker);
+                
+                async move {
+                    circuit_breaker.call(|| async {
+                        // Get IMAP client for the account  
+                        let client_arc = self_ref.imap_manager.get_client(&account_id).await
+                            .map_err(|e| EmailOperationError::Imap(e))?;
+                        let mut client = client_arc.lock().await;
 
-        // Expunge to permanently delete
-        client.expunge().await?;
+                        // Select the folder
+                        client.select_folder(&folder_name).await
+                            .map_err(|e| EmailOperationError::Imap(e))?;
 
-        // Update local database  
-        self.database.delete_messages_by_uids(account_id, folder_name, &[message_uid]).await?;
+                        // Mark message as deleted
+                        let uid_set = message_uid.to_string();
+                        client.uid_store_flags(&uid_set, &[MessageFlag::Deleted], false).await
+                            .map_err(|e| EmailOperationError::Imap(e))?;
+
+                        // Expunge to permanently delete
+                        client.expunge().await
+                            .map_err(|e| EmailOperationError::Imap(e))?;
+
+                        // Update local database  
+                        self_ref.database.delete_messages_by_uids(&account_id, &folder_name, &[message_uid]).await
+                            .map_err(|e| EmailOperationError::Database(e))?;
+
+                        Ok(())
+                    }).await.map_err(|e| match e {
+                        crate::email::retry::CircuitBreakerError::Open => {
+                            EmailOperationError::InvalidState { 
+                                reason: "Circuit breaker is open - too many recent failures".to_string() 
+                            }
+                        },
+                        crate::email::retry::CircuitBreakerError::Operation(op_err) => op_err,
+                    })
+                }
+            }, &self.retry_config).await
+        };
+        
+        let operation_duration = operation_start.elapsed();
+        
+        // Update service health based on the operation result
+        self.update_service_health_from_result(
+            ServiceType::Imap(account_id.clone()),
+            &result,
+            operation_duration,
+        ).await;
+        
+        self.update_service_health_from_result(
+            ServiceType::Database,
+            &result,
+            operation_duration,
+        ).await;
+        
+        result?;
 
         info!("Successfully deleted email UID {} from {}/{}", message_uid, account_id, folder_name);
         Ok(())

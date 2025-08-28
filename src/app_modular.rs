@@ -20,7 +20,6 @@ use crate::ai::config_manager::AIConfigManager;
 use crate::calendar::CalendarManager;
 use crate::contacts::ContactsManager;
 use crate::email::{EmailDatabase, EmailNotificationManager};
-use crate::events::EventHandler;
 use crate::imap::ImapAccountManager;
 use crate::notifications::UnifiedNotificationManager;
 use crate::oauth2::{SecureStorage, TokenManager};
@@ -43,10 +42,6 @@ pub struct ModularApp {
     theme: Theme,
     #[allow(dead_code)]
     theme_manager: ThemeManager,
-    
-    // Legacy event handler for compatibility
-    #[allow(dead_code)]
-    event_handler: EventHandler,
     
     // Service managers
     database: Option<Arc<EmailDatabase>>,
@@ -111,7 +106,6 @@ impl ModularApp {
             ui: ModularUI::new().map_err(|e| anyhow::anyhow!("Failed to create ModularUI: {}", e))?,
             theme,
             theme_manager,
-            event_handler: EventHandler::new(),
             database: None,
             notification_manager: None,
             storage: SecureStorage::new("comunicado".to_string())

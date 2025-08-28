@@ -6,13 +6,55 @@ Comunicado is designed for keyboard-driven efficiency. This guide covers all ava
 
 ## Philosophy
 
-Comunicado's keyboard shortcuts follow these principles:
+Comunicado's input system follows these principles:
 - **Terminal compatibility first**: No function keys (F1-F12) to ensure universal compatibility
-- Familiar patterns from popular terminal applications
-- Vim-style navigation where appropriate
-- Consistent modifiers across similar actions
-- Context-aware design to prevent conflicts
-- Discoverable through help screens and status bars
+- **Keyboard-driven efficiency**: All features accessible via keyboard shortcuts
+- **Mouse support**: Complementary mouse interactions that don't replace keyboard efficiency
+- **Consistent patterns**: Familiar shortcuts from popular terminal applications
+- **Context-aware design**: Shortcuts adapt to current component and mode
+- **Discoverability**: Help screens, status bars, and context menus guide users
+
+## 🖱️ Mouse Support (**NEW - August 2025**)
+
+Mouse support seamlessly complements keyboard shortcuts without replacing efficiency:
+
+### Universal Mouse Actions
+- **Left Click**: Select messages, folders, calendar dates, focus components
+- **Right Click**: Open context menus with keyboard shortcut equivalents shown
+- **Scroll Wheel**: Navigate through lists and content (same as ↑/↓ arrow keys)
+- **Middle Click**: Placeholder for future tab/window management
+
+### Component-Specific Mouse Features
+
+#### Message List
+- **Click**: Select message (same as Enter)
+- **Right-click**: Context menu with Reply, Forward, Delete options
+- **Scroll**: Navigate messages (same as j/k or ↑/↓)
+
+#### Folder Tree  
+- **Click**: Select folder (same as Enter)
+- **Right-click**: Folder context menu with sync and management options
+- **Scroll**: Navigate folders (same as j/k or ↑/↓)
+
+#### Email Viewer
+- **Click**: Focus viewer for keyboard navigation
+- **Right-click**: Content context menu with copy, save, reply options
+- **Scroll**: Scroll through email content (same as j/k or Page Up/Down)
+
+#### Calendar View
+- **Click**: Select dates/events
+- **Scroll**: Navigate calendar periods (same as h/j/k/l navigation)
+
+#### Context Menus
+- **Right-click**: Open context-appropriate menus
+- **Click items**: Execute actions (same as keyboard shortcuts)
+- **Hover**: Highlight options (same as arrow key navigation)
+
+### Mouse + Keyboard Integration
+- **Context menus show keyboard shortcuts**: Learn shortcuts while using mouse
+- **Keyboard navigation in menus**: Arrow keys work in mouse-opened menus
+- **Consistent actions**: Mouse clicks execute same code as keyboard shortcuts
+- **Accessibility maintained**: All mouse features remain fully keyboard accessible
 
 ## ✅ AI Assistant Shortcuts (**NEW - Recently Added**)
 

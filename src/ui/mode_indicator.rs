@@ -313,6 +313,11 @@ impl ModeIndicator {
     fn get_mode_info(&self) -> ModeInfo {
         self.get_mode_info_for_mode(&self.current_mode)
     }
+    
+    /// Get the description of the current mode
+    pub fn get_mode_description(&self) -> &'static str {
+        self.get_mode_info().description
+    }
 
     /// Get mode information for any mode
     fn get_mode_info_for_mode(&self, mode: &UIMode) -> ModeInfo {

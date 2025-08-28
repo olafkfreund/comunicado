@@ -21,6 +21,8 @@ pub mod maildir_ui;
 pub mod message;
 pub mod notifications;
 pub mod operations_service;
+pub mod retry;
+pub mod service_health;
 pub mod sorting;
 pub mod sync_engine;
 pub mod imap_service;

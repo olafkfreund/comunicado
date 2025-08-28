@@ -51,15 +51,22 @@ pub mod threading_display;
 pub mod thread_hierarchy_view;
 pub mod form_validation;
 pub mod modal_system;
+pub mod modal_builder;
 pub mod terminal_manager;
 pub mod account_setup;
 pub mod config_manager;
+pub mod event_driven_email;
+pub mod event_driven_calendar;
+pub mod event_driven_account;
+pub mod event_driven_ui_integration;
+pub mod mouse_handler;
 
 
 use crate::email::{
     sync_engine::SyncProgress, EmailDatabase, EmailNotification, EmailNotificationManager,
     UIEmailUpdater,
 };
+use crate::events::legacy::EventResult;
 use crate::keyboard::KeyboardManager;
 use crate::theme::{Theme, ThemeManager};
 use chrono::Duration as ChronoDuration;
@@ -259,6 +266,18 @@ pub struct UI {
     
     // AI operation result channel
     ai_result_rx: Option<tokio::sync::mpsc::UnboundedReceiver<AIOperationResult>>,
+    
+    // Event-driven handlers for decoupled operations
+    event_driven_email: event_driven_email::EventDrivenEmailHandler,
+    event_driven_ui_state: event_driven_email::EventDrivenUIState,
+    event_driven_calendar: event_driven_calendar::EventDrivenCalendarHandler,
+    event_driven_calendar_state: event_driven_calendar::EventDrivenCalendarState,
+    event_driven_account: event_driven_account::EventDrivenAccountHandler,
+    event_driven_account_state: event_driven_account::EventDrivenAccountState,
+    // Real-time UI integration system
+    ui_integration: event_driven_ui_integration::EventDrivenUIIntegration,
+    // Mouse event handling system
+    pub mouse_processor: mouse_handler::MouseEventProcessor,
 }
 
 impl UI {
@@ -343,6 +362,16 @@ impl UI {
             ai_popup: crate::ui::ai_popup::AIPopup::new(),
             command_palette: CommandPalette::new(),
             ai_result_rx: None, // Will be set when AI operations are started
+            
+            // Initialize event-driven handlers
+            event_driven_email: event_driven_email::EventDrivenEmailHandler::new(),
+            event_driven_ui_state: event_driven_email::EventDrivenUIState::new(),
+            event_driven_calendar: event_driven_calendar::EventDrivenCalendarHandler::new(),
+            event_driven_calendar_state: event_driven_calendar::EventDrivenCalendarState::new(),
+            event_driven_account: event_driven_account::EventDrivenAccountHandler::new(),
+            event_driven_account_state: event_driven_account::EventDrivenAccountState::new(),
+            ui_integration: event_driven_ui_integration::EventDrivenUIIntegration::new(),
+            mouse_processor: mouse_handler::MouseEventProcessor::new(),
         };
 
         // Initialize status bar with default segments
@@ -351,7 +380,20 @@ impl UI {
         // Ensure sample messages are shown when no database is available
         ui.message_list.ensure_sample_messages_if_no_database();
         
+        // NOTE: Event bus initialization is deferred to app.rs after tokio runtime is started
+        // to avoid spawning async tasks during synchronous UI construction
+        
         ui
+    }
+    
+    /// Get mutable access to the UI integration system
+    pub fn ui_integration_mut(&mut self) -> &mut event_driven_ui_integration::EventDrivenUIIntegration {
+        &mut self.ui_integration
+    }
+    
+    /// Get access to the UI integration system
+    pub fn ui_integration(&self) -> &event_driven_ui_integration::EventDrivenUIIntegration {
+        &self.ui_integration
     }
 
     fn initialize_status_bar(&mut self) {
@@ -3933,7 +3975,19 @@ impl UI {
     }
     
     /// Execute a command action - returns Some(EventResult) if the action needs app-level handling
-    pub fn execute_command_action(&mut self, action: CommandAction) -> Option<crate::events::EventResult> {
+    pub fn execute_command_action(&mut self, action: CommandAction) -> Option<EventResult> {
+        // Try to handle with event-driven system first
+        if let Ok(()) = event_driven_email::EventMigrationHelper::handle_command_action(
+            &action, 
+            &self.event_driven_email, 
+            &mut self.event_driven_ui_state
+        ) {
+            // Event-driven handling succeeded, sync UI state
+            self.sync_ui_state_from_events();
+            return None; // No legacy event result needed
+        }
+        
+        // Fallback to legacy handling for actions not yet migrated
         match action {
             CommandAction::ToggleAIAssistant => {
                 self.toggle_ai_assistant();
@@ -3953,7 +4007,7 @@ impl UI {
             CommandAction::SyncEmails => {
                 // This needs to be handled by the App layer - return sync event
                 self.show_toast_info("Email sync initiated - refreshing all accounts");
-                return Some(crate::events::EventResult::TriggerEmailSync);
+                return Some(EventResult::TriggerEmailSync);
             },
             CommandAction::ShowHelp => {
                 self.mode = UIMode::KeyboardShortcuts;
@@ -4008,7 +4062,7 @@ impl UI {
             // New command actions - placeholder implementations
             CommandAction::ToggleContacts => {
                 // Return event to be handled by app.rs like the keyboard shortcut
-                return Some(crate::events::EventResult::ContactsPopup);
+                return Some(EventResult::ContactsPopup);
             },
             CommandAction::ReplyAllEmail => {
                 self.show_toast_info("Reply All started");
@@ -4084,6 +4138,145 @@ impl UI {
             },
         }
         None // Default return - no app-level action needed
+    }
+    
+    /// Synchronize UI state with event-driven state changes
+    fn sync_ui_state_from_events(&mut self) {
+        // Sync pane changes
+        let current_pane = self.event_driven_ui_state.current_pane().clone();
+        if current_pane != self.focused_pane {
+            self.focused_pane = current_pane;
+        }
+        
+        // Sync mode changes
+        let current_mode = self.event_driven_ui_state.current_mode().clone();
+        if current_mode != self.mode {
+            self.mode = current_mode;
+        }
+    }
+    
+    /// Update the event-driven email handler context with current UI state
+    pub fn update_email_context(&mut self, account_id: Option<String>, email_id: Option<uuid::Uuid>, folder: Option<String>) {
+        self.event_driven_email.update_context(account_id, email_id, folder);
+    }
+    
+    /// Update the calendar state through the event-driven system
+    pub fn update_calendar_state(&mut self, view_type: String, selected_date: Option<chrono::NaiveDate>) {
+        self.event_driven_calendar.update_view(view_type);
+        if let Some(date) = selected_date {
+            self.event_driven_calendar_state.set_selected_date(date);
+        }
+    }
+    
+    /// Update the account state through the event-driven system
+    pub fn update_account_state(&mut self, account_id: String, status: String) {
+        self.event_driven_account.update_status(account_id.clone(), status);
+        self.event_driven_account_state.set_active_account(account_id);
+    }
+    
+    // Mouse Support Methods
+    
+    /// Scroll the message list up (mouse wheel support)
+    pub fn scroll_message_list_up(&mut self) {
+        self.message_list.handle_up();
+        tracing::debug!("Scrolled message list up");
+    }
+    
+    /// Scroll the message list down (mouse wheel support)
+    pub fn scroll_message_list_down(&mut self) {
+        self.message_list.handle_down();
+        tracing::debug!("Scrolled message list down");
+    }
+    
+    /// Scroll the folder tree up (mouse wheel support)
+    pub fn scroll_folder_tree_up(&mut self) {
+        self.folder_tree.handle_up();
+        tracing::debug!("Scrolled folder tree up");
+    }
+    
+    /// Scroll the folder tree down (mouse wheel support)
+    pub fn scroll_folder_tree_down(&mut self) {
+        self.folder_tree.handle_down();
+        tracing::debug!("Scrolled folder tree down");
+    }
+    
+    /// Scroll the email viewer up (mouse wheel support)
+    pub fn scroll_email_viewer_up(&mut self) {
+        self.email_viewer.scroll_up(1);
+        tracing::debug!("Scrolled email viewer up");
+    }
+    
+    /// Scroll the email viewer down (mouse wheel support)
+    pub fn scroll_email_viewer_down(&mut self) {
+        self.email_viewer.scroll_down(1);
+        tracing::debug!("Scrolled email viewer down");
+    }
+    
+    /// Scroll the calendar up (mouse wheel support)
+    pub fn scroll_calendar_up(&mut self) {
+        // Calendar UI doesn't have scroll methods, use generic navigation
+        // TODO: Add proper calendar navigation methods to CalendarUI
+        tracing::debug!("Calendar scroll up requested (not yet implemented)");
+    }
+    
+    /// Scroll the calendar down (mouse wheel support) 
+    pub fn scroll_calendar_down(&mut self) {
+        // Calendar UI doesn't have scroll methods, use generic navigation
+        // TODO: Add proper calendar navigation methods to CalendarUI  
+        tracing::debug!("Calendar scroll down requested (not yet implemented)");
+    }
+    
+    /// Scroll the currently focused component up
+    pub fn scroll_focused_component_up(&mut self) {
+        match self.focused_pane {
+            FocusedPane::MessageList => self.scroll_message_list_up(),
+            FocusedPane::FolderTree => self.scroll_folder_tree_up(),
+            FocusedPane::ContentPreview => self.scroll_email_viewer_up(),
+            FocusedPane::Calendar => self.scroll_calendar_up(),
+            _ => {
+                tracing::debug!("No scroll support for focused pane: {:?}", self.focused_pane);
+            }
+        }
+    }
+    
+    /// Scroll the currently focused component down
+    pub fn scroll_focused_component_down(&mut self) {
+        match self.focused_pane {
+            FocusedPane::MessageList => self.scroll_message_list_down(),
+            FocusedPane::FolderTree => self.scroll_folder_tree_down(),
+            FocusedPane::ContentPreview => self.scroll_email_viewer_down(),
+            FocusedPane::Calendar => self.scroll_calendar_down(),
+            _ => {
+                tracing::debug!("No scroll support for focused pane: {:?}", self.focused_pane);
+            }
+        }
+    }
+    
+    /// Set selected message index (mouse click support)
+    pub fn set_selected_message_index(&mut self, index: usize) {
+        self.message_list.set_selected_index(index);
+        tracing::debug!("Set selected message index to: {}", index);
+    }
+    
+    /// Get folder at specific row (mouse click support)
+    pub fn get_folder_at_row(&self, row: usize) -> Option<String> {
+        // TODO: Implement get_folder_at_row in folder_tree
+        // self.folder_tree.get_folder_at_row(row)
+        tracing::debug!("Get folder at row {} (not yet implemented)", row);
+        None
+    }
+    
+    /// Handle folder click (mouse click support)
+    pub async fn handle_folder_click(&mut self, folder_path: &str) {
+        // TODO: Implement folder selection in folder_tree
+        // self.folder_tree.select_folder(folder_path);
+        tracing::debug!("Clicked folder: {} (selection not yet implemented)", folder_path);
+    }
+    
+    /// Set focused pane (mouse click support)
+    pub fn set_focused_pane(&mut self, pane: FocusedPane) {
+        self.focused_pane = pane;
+        tracing::debug!("Set focused pane to: {:?}", pane);
     }
     
     /// Render command palette if visible

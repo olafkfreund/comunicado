@@ -77,6 +77,17 @@ impl ThreadingDisplay {
         self.max_depth = depth;
         self
     }
+    
+    /// Enable/disable unicode symbols for threading display
+    pub fn with_unicode_symbols(mut self, use_unicode: bool) -> Self {
+        self.use_unicode_symbols = use_unicode;
+        self
+    }
+    
+    /// Check if unicode symbols are enabled
+    pub fn unicode_symbols_enabled(&self) -> bool {
+        self.use_unicode_symbols
+    }
 
     /// Enable/disable color coding by depth
     pub fn with_color_by_depth(mut self, enabled: bool) -> Self {

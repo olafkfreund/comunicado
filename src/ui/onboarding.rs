@@ -81,6 +81,16 @@ impl OnboardingFlow {
         
         Self::new_with_dependencies(config_manager, account_setup, theme)
     }
+    
+    /// Toggle the display of keyboard shortcuts
+    pub fn toggle_shortcuts(&mut self) {
+        self.show_shortcuts = !self.show_shortcuts;
+    }
+    
+    /// Check if shortcuts are currently being shown
+    pub fn shortcuts_visible(&self) -> bool {
+        self.show_shortcuts
+    }
 
     /// Run the complete onboarding flow
     pub async fn run(&mut self) -> Result<bool> {

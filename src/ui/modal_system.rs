@@ -8,8 +8,8 @@ use crate::theme::Theme;
 use crate::ui::form_validation::{FormValidationSystem, ValidationRule};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect, Margin},
-    style::{Color, Modifier, Style},
-    text::{Line, Span},
+    style::{Modifier, Style},
+    text::Line,
     widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Wrap, Gauge},
     Frame,
 };
@@ -136,6 +136,26 @@ impl ModalSystem {
             global_shortcuts_enabled: true,
         }
     }
+    
+    /// Set a theme override for all modals
+    pub fn set_theme_override(&mut self, theme: Option<Theme>) {
+        self.theme_override = theme;
+    }
+    
+    /// Get the current theme override
+    pub fn theme_override(&self) -> Option<&Theme> {
+        self.theme_override.as_ref()
+    }
+    
+    /// Enable or disable global shortcuts while modals are open
+    pub fn set_global_shortcuts_enabled(&mut self, enabled: bool) {
+        self.global_shortcuts_enabled = enabled;
+    }
+    
+    /// Check if global shortcuts are enabled
+    pub fn global_shortcuts_enabled(&self) -> bool {
+        self.global_shortcuts_enabled
+    }
 
     /// Show a confirmation dialog
     pub fn show_confirmation(
@@ -146,94 +166,57 @@ impl ModalSystem {
         confirm_label: Option<String>,
         cancel_label: Option<String>,
     ) -> &mut Modal {
-        let modal = Modal::new(
-            id,
-            ModalType::Confirmation,
-            ModalSize::Medium,
-            title,
-            ModalContent::Text(message),
-        )
-        .with_buttons(vec![
-            ModalButton {
-                label: cancel_label.unwrap_or_else(|| "Cancel".to_string()),
-                action: "cancel".to_string(),
-                style: ButtonStyle::Secondary,
-                is_default: false,
-                shortcut: Some('c'),
-            },
-            ModalButton {
-                label: confirm_label.unwrap_or_else(|| "Confirm".to_string()),
-                action: "confirm".to_string(),
-                style: ButtonStyle::Primary,
-                is_default: true,
-                shortcut: Some('y'),
-            },
-        ])
-        .closable(true);
-
+        use crate::ui::modal_builder::{ModalBuilder, ButtonBuilder};
+        
+        let mut builder = ModalBuilder::confirmation(id, title, message);
+        
+        // Customize button labels if provided
+        if confirm_label.is_some() || cancel_label.is_some() {
+            let cancel_btn = ButtonBuilder::new(
+                cancel_label.unwrap_or_else(|| "Cancel".to_string()), 
+                "cancel"
+            )
+            .secondary()
+            .shortcut('c')
+            .build();
+            
+            let confirm_btn = ButtonBuilder::new(
+                confirm_label.unwrap_or_else(|| "Confirm".to_string()),
+                "confirm"
+            )
+            .primary()
+            .default()
+            .shortcut('y')
+            .build();
+            
+            builder = builder.buttons(vec![cancel_btn, confirm_btn]);
+        }
+        
+        let modal = builder.build();
         self.add_modal(modal)
     }
 
     /// Show an information dialog
     pub fn show_info(&mut self, id: String, title: String, message: String) -> &mut Modal {
-        let modal = Modal::new(
-            id,
-            ModalType::Information,
-            ModalSize::Medium,
-            title,
-            ModalContent::Text(message),
-        )
-        .with_buttons(vec![ModalButton {
-            label: "OK".to_string(),
-            action: "ok".to_string(),
-            style: ButtonStyle::Primary,
-            is_default: true,
-            shortcut: Some('o'),
-        }])
-        .closable(true);
-
+        use crate::ui::modal_builder::ModalBuilder;
+        
+        let modal = ModalBuilder::info(id, title, message).build();
         self.add_modal(modal)
     }
 
     /// Show a warning dialog
     pub fn show_warning(&mut self, id: String, title: String, message: String) -> &mut Modal {
-        let modal = Modal::new(
-            id,
-            ModalType::Warning,
-            ModalSize::Medium,
-            title,
-            ModalContent::Text(message),
-        )
-        .with_buttons(vec![ModalButton {
-            label: "Understood".to_string(),
-            action: "acknowledge".to_string(),
-            style: ButtonStyle::Primary,
-            is_default: true,
-            shortcut: Some('u'),
-        }])
-        .closable(true);
-
+        use crate::ui::modal_builder::ModalBuilder;
+        
+        let modal = ModalBuilder::warning(id, title, message).build();
         self.add_modal(modal)
     }
 
     /// Show an error dialog
     pub fn show_error(&mut self, id: String, title: String, message: String) -> &mut Modal {
-        let modal = Modal::new(
-            id,
-            ModalType::Error,
-            ModalSize::Medium,
-            title,
-            ModalContent::Text(message),
-        )
-        .with_buttons(vec![ModalButton {
-            label: "OK".to_string(),
-            action: "ok".to_string(),
-            style: ButtonStyle::Danger,
-            is_default: true,
-            shortcut: Some('o'),
-        }])
-        .closable(true);
-
+        use crate::ui::modal_builder::ModalBuilder;
+        
+        let modal = ModalBuilder::error(id, title, message).build();
         self.add_modal(modal)
     }
 
@@ -244,31 +227,9 @@ impl ModalSystem {
         title: String,
         fields: Vec<FormField>,
     ) -> &mut Modal {
-        let modal = Modal::new(
-            id,
-            ModalType::Input,
-            ModalSize::Large,
-            title,
-            ModalContent::Form(fields),
-        )
-        .with_buttons(vec![
-            ModalButton {
-                label: "Cancel".to_string(),
-                action: "cancel".to_string(),
-                style: ButtonStyle::Secondary,
-                is_default: false,
-                shortcut: Some('c'),
-            },
-            ModalButton {
-                label: "Submit".to_string(),
-                action: "submit".to_string(),
-                style: ButtonStyle::Primary,
-                is_default: true,
-                shortcut: Some('s'),
-            },
-        ])
-        .closable(true);
-
+        use crate::ui::modal_builder::ModalBuilder;
+        
+        let modal = ModalBuilder::input_form(id, title, fields).build();
         self.add_modal(modal)
     }
 
@@ -280,31 +241,9 @@ impl ModalSystem {
         message: String,
         choices: Vec<String>,
     ) -> &mut Modal {
-        let modal = Modal::new(
-            id,
-            ModalType::Choice,
-            ModalSize::Medium,
-            title,
-            ModalContent::List(choices),
-        )
-        .with_buttons(vec![
-            ModalButton {
-                label: "Cancel".to_string(),
-                action: "cancel".to_string(),
-                style: ButtonStyle::Secondary,
-                is_default: false,
-                shortcut: Some('c'),
-            },
-            ModalButton {
-                label: "Select".to_string(),
-                action: "select".to_string(),
-                style: ButtonStyle::Primary,
-                is_default: true,
-                shortcut: Some('s'),
-            },
-        ])
-        .closable(true);
-
+        use crate::ui::modal_builder::ModalBuilder;
+        
+        let modal = ModalBuilder::choice(id, title, message, choices).build();
         self.add_modal(modal)
     }
 
@@ -317,15 +256,9 @@ impl ModalSystem {
         current: u64,
         total: u64,
     ) -> &mut Modal {
-        let modal = Modal::new(
-            id,
-            ModalType::Progress,
-            ModalSize::Medium,
-            title,
-            ModalContent::Progress { current, total, message },
-        )
-        .closable(false); // Progress dialogs are not typically closable
-
+        use crate::ui::modal_builder::ModalBuilder;
+        
+        let modal = ModalBuilder::progress(id, title, message, current, total).build();
         self.add_modal(modal)
     }
 
@@ -375,14 +308,14 @@ impl ModalSystem {
     pub fn render(&mut self, frame: &mut Frame, area: Rect, theme: &Theme) {
         for modal in &mut self.modals {
             if modal.is_visible {
-                self.render_modal(frame, area, modal, theme);
+                Self::render_modal(frame, area, modal, theme);
             }
         }
     }
 
     /// Render a single modal
-    fn render_modal(&self, frame: &mut Frame, area: Rect, modal: &mut Modal, theme: &Theme) {
-        let modal_area = self.calculate_modal_area(area, &modal.size);
+    fn render_modal(frame: &mut Frame, area: Rect, modal: &mut Modal, theme: &Theme) {
+        let modal_area = Self::calculate_modal_area(area, &modal.size);
         
         // Clear the modal area
         frame.render_widget(Clear, modal_area);
@@ -398,17 +331,17 @@ impl ModalSystem {
             .split(modal_area);
 
         // Render modal background and title
-        self.render_modal_title(frame, layout[0], modal, theme);
+        Self::render_modal_title(frame, layout[0], modal, theme);
         
         // Render content based on modal type
-        self.render_modal_content(frame, layout[1], modal, theme);
+        Self::render_modal_content(frame, layout[1], modal, theme);
         
         // Render buttons
-        self.render_modal_buttons(frame, layout[2], modal, theme);
+        Self::render_modal_buttons(frame, layout[2], modal, theme);
     }
 
     /// Calculate modal area based on size
-    fn calculate_modal_area(&self, area: Rect, size: &ModalSize) -> Rect {
+    fn calculate_modal_area(area: Rect, size: &ModalSize) -> Rect {
         let (width, height) = match size {
             ModalSize::Small => (40, 8),
             ModalSize::Medium => (60, 12),
@@ -432,7 +365,7 @@ impl ModalSystem {
     }
 
     /// Render modal title bar
-    fn render_modal_title(&self, frame: &mut Frame, area: Rect, modal: &Modal, theme: &Theme) {
+    fn render_modal_title(frame: &mut Frame, area: Rect, modal: &Modal, theme: &Theme) {
         let title_style = match modal.modal_type {
             ModalType::Error => Style::default().fg(theme.colors.palette.error),
             ModalType::Warning => Style::default().fg(theme.colors.palette.warning),
@@ -467,8 +400,10 @@ impl ModalSystem {
     }
 
     /// Render modal content
-    fn render_modal_content(&self, frame: &mut Frame, area: Rect, modal: &mut Modal, theme: &Theme) {
-        match &modal.content {
+    fn render_modal_content(frame: &mut Frame, area: Rect, modal: &mut Modal, theme: &Theme) {
+        // Extract content data to avoid borrow conflicts
+        let content = modal.content.clone();
+        match &content {
             ModalContent::Text(text) => {
                 let paragraph = Paragraph::new(text.clone())
                     .block(Block::default().borders(Borders::ALL))
@@ -508,7 +443,7 @@ impl ModalSystem {
             }
 
             ModalContent::Form(fields) => {
-                self.render_form_content(frame, area, modal, fields, theme);
+                Self::render_form_content(frame, area, modal, fields, theme);
             }
 
             ModalContent::Progress { current, total, message } => {
@@ -554,7 +489,7 @@ impl ModalSystem {
     }
 
     /// Render form content for input modals
-    fn render_form_content(&self, frame: &mut Frame, area: Rect, modal: &mut Modal, fields: &[FormField], theme: &Theme) {
+    fn render_form_content(frame: &mut Frame, area: Rect, modal: &mut Modal, fields: &[FormField], theme: &Theme) {
         if fields.is_empty() {
             return;
         }
@@ -574,7 +509,7 @@ impl ModalSystem {
                 .split(area);
 
             for (i, field) in fields.iter().enumerate() {
-                self.render_form_field(frame, field_areas[i], modal, field, i, theme);
+                Self::render_form_field(frame, field_areas[i], modal, field, i, theme);
             }
         } else {
             // Need scrolling - simplified implementation
@@ -593,13 +528,13 @@ impl ModalSystem {
 
             for (i, field) in fields.iter().enumerate().skip(start_index).take(end_index - start_index) {
                 let area_index = i - start_index;
-                self.render_form_field(frame, field_areas[area_index], modal, field, i, theme);
+                Self::render_form_field(frame, field_areas[area_index], modal, field, i, theme);
             }
         }
     }
 
     /// Render a single form field
-    fn render_form_field(&self, frame: &mut Frame, area: Rect, modal: &mut Modal, field: &FormField, field_index: usize, theme: &Theme) {
+    fn render_form_field(frame: &mut Frame, area: Rect, modal: &mut Modal, field: &FormField, _field_index: usize, theme: &Theme) {
         let is_focused = modal.focused_field.as_ref().map_or(false, |f| f == &field.name);
         let value = modal.input_values.get(&field.name).cloned().unwrap_or_default();
 
@@ -626,7 +561,7 @@ impl ModalSystem {
     }
 
     /// Render modal buttons
-    fn render_modal_buttons(&self, frame: &mut Frame, area: Rect, modal: &Modal, theme: &Theme) {
+    fn render_modal_buttons(frame: &mut Frame, area: Rect, modal: &Modal, theme: &Theme) {
         if modal.buttons.is_empty() {
             return;
         }
@@ -644,7 +579,7 @@ impl ModalSystem {
 
         for (i, button) in modal.buttons.iter().enumerate() {
             let is_selected = i == modal.selected_button;
-            let button_style = self.get_button_style(button, is_selected, theme);
+            let button_style = Self::get_button_style(button, is_selected, theme);
             
             let button_text = if let Some(shortcut) = button.shortcut {
                 format!("[{}] {}", shortcut.to_uppercase(), button.label)
@@ -662,7 +597,7 @@ impl ModalSystem {
     }
 
     /// Get button styling based on type and state
-    fn get_button_style(&self, button: &ModalButton, is_selected: bool, theme: &Theme) -> Style {
+    fn get_button_style(button: &ModalButton, is_selected: bool, theme: &Theme) -> Style {
         let base_color = match button.style {
             ButtonStyle::Primary => theme.colors.palette.accent,
             ButtonStyle::Secondary => theme.colors.palette.text_muted,
@@ -821,4 +756,9 @@ mod tests {
         modal.next_button();
         assert_eq!(modal.selected_button, 0); // Wraps around
     }
+}
+
+// Re-export builder for convenience
+pub mod builder {
+    pub use crate::ui::modal_builder::*;
 }

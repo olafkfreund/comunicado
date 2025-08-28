@@ -15,8 +15,9 @@ use crate::ai::config_manager::AIConfigManager;
 use crate::calendar::CalendarManager;
 use crate::contacts::ContactsManager;
 use crate::email::{EmailDatabase, EmailNotificationManager};
-use crate::events::{EventHandler, EventResult};
+use crate::events::legacy::EventResult;
 use crate::imap::ImapAccountManager;
+use crate::ui::mouse_handler::MouseAction;
 use crate::notifications::{NotificationConfig, UnifiedNotificationManager};
 use crate::oauth2::{AccountConfig, SecureStorage, TokenManager};
 use crate::smtp::{SmtpService, SmtpServiceBuilder};
@@ -31,7 +32,6 @@ use uuid::Uuid;
 pub struct App {
     should_quit: bool,
     ui: UI,
-    event_handler: EventHandler,
     database: Option<Arc<EmailDatabase>>,
     notification_manager: Option<Arc<EmailNotificationManager>>,
     storage: SecureStorage,
@@ -71,7 +71,6 @@ impl App {
         Ok(Self {
             should_quit: false,
             ui: UI::new(),
-            event_handler: EventHandler::new(),
             database: None,
             notification_manager: None,
             storage: SecureStorage::new("comunicado".to_string())
@@ -1720,14 +1719,67 @@ impl App {
                 return Err(e.into());
             }
 
-            // Handle events
+            // Process event bus updates first (new event-driven system with optimized batching)
+            if let Some(bus) = crate::events::get_event_bus() {
+                // Use optimized batch processing for better performance
+                if let Ok(mut bus_lock) = bus.lock() {
+                    // Check if memory optimization is needed (every ~100 cycles)
+                    if self.should_optimize_event_bus_memory() {
+                        if bus_lock.should_optimize_memory() {
+                            if let Ok(cleaned_count) = bus_lock.optimize_memory() {
+                                if cleaned_count > 0 {
+                                    tracing::debug!("Event bus memory optimization cleaned {} events", cleaned_count);
+                                }
+                            }
+                        }
+                    }
+
+                    // Process events with optimized batching
+                    match bus_lock.process_batch_optimized() {
+                        Ok(event_count) => {
+                            if event_count > 0 {
+                                tracing::debug!("Processed {} events in optimized batch", event_count);
+                            }
+                        }
+                        Err(e) => {
+                            tracing::debug!("Event bus batch processing error (non-critical): {}", e);
+                            // Use error recovery mechanism
+                            let _ = bus_lock.handle_processing_error(&e, "batch_processing");
+                            
+                            // Fallback to basic processing if batch processing fails
+                            if let Err(fallback_err) = bus_lock.process_pending() {
+                                tracing::warn!("Both batch and fallback processing failed: {}", fallback_err);
+                                let _ = bus_lock.handle_processing_error(&fallback_err, "fallback_processing");
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Handle terminal events
             let timeout = tick_rate
                 .checked_sub(last_tick.elapsed())
                 .unwrap_or_else(|| Duration::from_secs(0));
 
             if event::poll(timeout)? {
-                if let Event::Key(key) = event::read()? {
-                    let event_result = self.event_handler.handle_key_event_with_config(key, &mut self.ui).await;
+                match event::read()? {
+                    Event::Key(key) => {
+                        // Process key events through the new event-driven UI integration system
+                        let event_handled = match self.process_key_event_through_integration(key).await {
+                            Ok(handled) => handled,
+                            Err(e) => {
+                                tracing::warn!("Event-driven key processing failed: {}", e);
+                                false
+                            }
+                        };
+                    
+                    // If the event was handled by the new system, we can skip legacy processing
+                    let event_result = if event_handled {
+                        EventResult::Handled
+                    } else {
+                        // Fall back to legacy processing for unhandled events
+                        EventResult::Continue
+                    };
 
                     // Handle the event result
                     match event_result {
@@ -1869,8 +1921,17 @@ impl App {
                     }
 
                     // Check for quit command
-                    if self.event_handler.should_quit() {
-                        self.should_quit = true;
+                    // TODO: Integrate quit handling with event-driven system
+                    // self.should_quit is managed elsewhere now
+                    }
+                    Event::Mouse(mouse_event) => {
+                        // Process mouse events through the new mouse handling system
+                        if let Err(e) = self.process_mouse_event(mouse_event).await {
+                            tracing::warn!("Mouse event processing failed: {}", e);
+                        }
+                    }
+                    _ => {
+                        // Handle other events (resize, etc.)
                     }
                 }
             }
@@ -1905,6 +1966,11 @@ impl App {
     /// Initialize SMTP service and contacts manager
     pub async fn initialize_services(&mut self) -> Result<()> {
         tracing::info!("🔄 Initializing background services...");
+        
+        // Note: Event bus initialization is deferred to avoid blocking startup
+        // The event bus will be initialized when first used to prevent async task 
+        // spawning issues during application initialization
+        tracing::debug!("Event bus initialization deferred");
         
         // Perform services initialization with error handling
         let result: Result<()> = async {
@@ -2360,10 +2426,10 @@ impl App {
         if let Some(app_event) = self.ui.execute_command_action(action) {
             // Handle app-level events that the UI can't handle directly
             match app_event {
-                crate::events::EventResult::TriggerEmailSync => {
+                EventResult::TriggerEmailSync => {
                     self.trigger_manual_sync().await?;
                 },
-                crate::events::EventResult::ContactsPopup => {
+                EventResult::ContactsPopup => {
                     self.handle_contacts_popup().await?;
                 },
                 _ => {
@@ -5429,6 +5495,248 @@ impl App {
         } else {
             self.ui.show_toast_error("Calendar manager not available");
         }
+        Ok(())
+    }
+
+    /// Process key events through the event-driven UI integration system
+    async fn process_key_event_through_integration(&mut self, key: crossterm::event::KeyEvent) -> Result<bool> {
+        use crate::events::types::KeyEventData;
+
+        // Convert crossterm KeyEvent to our event system format
+        let key_data = KeyEventData {
+            code: format!("{:?}", key.code),
+            modifiers: key.modifiers.iter().map(|m| format!("{:?}", m)).collect(),
+            char: match key.code {
+                crossterm::event::KeyCode::Char(c) => Some(c),
+                _ => None,
+            },
+        };
+
+        // Process through the UI integration system
+        match self.ui.ui_integration_mut().handle_key_event(key_data).await {
+            Ok(handled) => {
+                if handled {
+                    tracing::debug!("Key event processed through UI integration system");
+                } else {
+                    tracing::debug!("Key event not handled by UI integration system");
+                }
+                Ok(handled)
+            }
+            Err(e) => {
+                tracing::warn!("UI integration key processing failed: {}", e);
+                // Still publish to event bus as fallback
+                self.publish_key_event_to_bus_fallback(key).await?;
+                Ok(false)
+            }
+        }
+    }
+
+    /// Fallback: Publish key events to the event bus for event-driven processing
+    async fn publish_key_event_to_bus_fallback(&mut self, key: crossterm::event::KeyEvent) -> Result<()> {
+        use crate::events::types::{UIEvent, UIEventData, KeyEventData};
+        use crate::events::publish;
+
+        // Convert crossterm KeyEvent to our event system
+        let key_data = KeyEventData {
+            code: format!("{:?}", key.code),
+            modifiers: key.modifiers.iter().map(|m| format!("{:?}", m)).collect(),
+            char: match key.code {
+                crossterm::event::KeyCode::Char(c) => Some(c),
+                _ => None,
+            },
+        };
+
+        let ui_event = UIEventData::new(UIEvent::KeyPressed { key: key_data });
+        
+        // Publish the event to the event bus
+        if let Err(e) = publish(ui_event) {
+            tracing::warn!("Failed to publish key event to event bus: {}", e);
+            return Err(anyhow::anyhow!("Event bus publishing failed: {}", e));
+        }
+
+        Ok(())
+    }
+
+    /// Check if event bus memory optimization should be performed (periodically)
+    /// This is called from the main loop to avoid excessive optimization checks
+    fn should_optimize_event_bus_memory(&self) -> bool {
+        // Run memory optimization check every ~100 main loop cycles (about every 5 seconds)
+        static mut OPTIMIZATION_COUNTER: u64 = 0;
+        unsafe {
+            OPTIMIZATION_COUNTER += 1;
+            OPTIMIZATION_COUNTER % 100 == 0
+        }
+    }
+
+    /// Process mouse events through the new mouse handling system
+    async fn process_mouse_event(&mut self, mouse_event: crossterm::event::MouseEvent) -> Result<()> {
+        
+        tracing::debug!("Processing mouse event: {:?} at ({}, {})", 
+                        mouse_event.kind, mouse_event.column, mouse_event.row);
+        
+        // Update terminal size in the mouse processor
+        if let Ok(terminal_size) = crossterm::terminal::size() {
+            self.ui.mouse_processor.update_terminal_size(terminal_size.0, terminal_size.1);
+        }
+        
+        // Process the mouse event and get the action
+        let action = self.ui.mouse_processor.process_mouse_event(mouse_event).await?;
+        
+        // Execute the mouse action
+        self.handle_mouse_action(action).await?;
+        
+        Ok(())
+    }
+
+    /// Handle mouse actions returned by the mouse processor
+    async fn handle_mouse_action(&mut self, action: MouseAction) -> Result<()> {
+        match action {
+            MouseAction::None => {
+                // No action needed
+            }
+            
+            // Message List Actions
+            MouseAction::SelectMessage { row, column: _ } => {
+                self.ui.set_selected_message_index(row as usize);
+                tracing::debug!("Selected message at row: {}", row);
+            }
+            MouseAction::ScrollMessageListUp => {
+                self.ui.scroll_message_list_up();
+            }
+            MouseAction::ScrollMessageListDown => {
+                self.ui.scroll_message_list_down();
+            }
+            MouseAction::HoverMessage { row, column: _ } => {
+                // Future: Show message preview on hover
+                tracing::trace!("Hovering over message at row: {}", row);
+            }
+            
+            // Folder Tree Actions
+            MouseAction::SelectFolder { row, column: _ } => {
+                // Get folder at the row and select it
+                if let Some(folder_path) = self.ui.get_folder_at_row(row as usize) {
+                    let _ = self.ui.handle_folder_click(&folder_path).await;
+                    tracing::debug!("Selected folder: {}", folder_path);
+                }
+            }
+            MouseAction::ScrollFolderTreeUp => {
+                self.ui.scroll_folder_tree_up();
+            }
+            MouseAction::ScrollFolderTreeDown => {
+                self.ui.scroll_folder_tree_down();
+            }
+            
+            // Email Viewer Actions
+            MouseAction::FocusEmailViewer => {
+                self.ui.set_focused_pane(crate::ui::FocusedPane::ContentPreview);
+            }
+            MouseAction::ScrollEmailViewerUp => {
+                self.ui.scroll_email_viewer_up();
+            }
+            MouseAction::ScrollEmailViewerDown => {
+                self.ui.scroll_email_viewer_down();
+            }
+            
+            // Calendar Actions
+            MouseAction::SelectCalendarDate { row, column } => {
+                // Future: Handle calendar date selection
+                tracing::debug!("Selected calendar date at ({}, {})", column, row);
+            }
+            MouseAction::ScrollCalendarUp => {
+                self.ui.scroll_calendar_up();
+            }
+            MouseAction::ScrollCalendarDown => {
+                self.ui.scroll_calendar_down();
+            }
+            
+            // Context Menu Actions
+            MouseAction::ShowEmailContextMenu { x, y, row, column: _ } => {
+                // Select the message first
+                self.ui.set_selected_message_index(row as usize);
+                // Show context menu at position
+                self.show_email_context_menu(x, y).await?;
+            }
+            MouseAction::ShowFolderContextMenu { x, y, row, column: _ } => {
+                if let Some(folder_path) = self.ui.get_folder_at_row(row as usize) {
+                    self.show_folder_context_menu(&folder_path, x, y).await?;
+                }
+            }
+            MouseAction::ShowEmailContentContextMenu { x, y } => {
+                self.show_email_content_context_menu(x, y).await?;
+            }
+            MouseAction::ShowGeneralContextMenu { x, y } => {
+                self.show_general_context_menu(x, y).await?;
+            }
+            
+            // General Actions
+            MouseAction::ClearSelection => {
+                // Clear current selections
+                tracing::debug!("Clearing selections");
+            }
+            
+            // Status Bar Actions
+            MouseAction::ClickStatusBar { row: _, column } => {
+                // Future: Handle status bar clicks (mode switching, etc.)
+                tracing::debug!("Clicked status bar at column: {}", column);
+            }
+            
+            // Middle Click Actions (future features)
+            MouseAction::MiddleClickMessage => {
+                tracing::debug!("Middle click on message - future: open in new tab");
+            }
+            MouseAction::MiddleClickFolder => {
+                tracing::debug!("Middle click on folder - future: open in new view");
+            }
+            
+            // Drag Actions (future features)
+            MouseAction::DragText { start_x, start_y } => {
+                tracing::debug!("Start text drag at ({}, {}) - future: text selection", start_x, start_y);
+            }
+            
+            // Hover Actions
+            MouseAction::HoverFolder { row, column: _ } => {
+                tracing::trace!("Hovering over folder at row: {}", row);
+            }
+        }
+        
+        Ok(())
+    }
+
+    // Context Menu Methods (Mouse Support)
+
+    /// Show email context menu at the given coordinates
+    async fn show_email_context_menu(&mut self, x: u16, y: u16) -> Result<()> {
+        tracing::debug!("Show email context menu at ({}, {})", x, y);
+        // Future implementation: Show context menu with email actions
+        // (Reply, Forward, Delete, Archive, Mark as Read/Unread, etc.)
+        self.ui.show_toast_info("Email context menu - feature coming soon");
+        Ok(())
+    }
+
+    /// Show folder context menu at the given coordinates
+    async fn show_folder_context_menu(&mut self, folder_path: &str, x: u16, y: u16) -> Result<()> {
+        tracing::debug!("Show folder context menu for '{}' at ({}, {})", folder_path, x, y);
+        // Future implementation: Show context menu with folder actions
+        // (Refresh, Mark All as Read, Create Subfolder, Properties, etc.)
+        self.ui.show_toast_info("Folder context menu - feature coming soon");
+        Ok(())
+    }
+
+    /// Show email content context menu at the given coordinates
+    async fn show_email_content_context_menu(&mut self, x: u16, y: u16) -> Result<()> {
+        tracing::debug!("Show email content context menu at ({}, {})", x, y);
+        // Future implementation: Show context menu with content actions
+        // (Copy, Select All, Save As, View Source, etc.)
+        self.ui.show_toast_info("Email content context menu - feature coming soon");
+        Ok(())
+    }
+
+    /// Show general context menu at the given coordinates
+    async fn show_general_context_menu(&mut self, x: u16, y: u16) -> Result<()> {
+        tracing::debug!("Show general context menu at ({}, {})", x, y);
+        // Future implementation: Show context menu with general actions
+        // (Preferences, Help, About, Quit, etc.)
+        self.ui.show_toast_info("General context menu - feature coming soon");
         Ok(())
     }
 }
