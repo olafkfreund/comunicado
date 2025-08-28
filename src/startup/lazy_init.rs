@@ -97,7 +97,7 @@ pub struct LazyInit<T> {
 
 impl<T> LazyInit<T>
 where
-    T: Send + Sync + 'static,
+    T: Send + Sync + Clone + 'static,
 {
     /// Create a new lazy initialization wrapper
     pub fn new(name: String) -> Self {
@@ -142,11 +142,7 @@ where
     /// Get the resource if it's ready, otherwise return None
     pub async fn try_get(&self) -> Option<Arc<T>> {
         let inner = self.inner.read().await;
-        inner.as_ref().map(|t| Arc::new(unsafe { 
-            // SAFETY: This is safe because we're using Arc<RwLock<T>>
-            // and we know T is Send + Sync
-            std::ptr::read(t as *const T)
-        }))
+        inner.as_ref().map(|t| Arc::new(t.clone()))
     }
     
     /// Get the resource, initializing if necessary
@@ -155,9 +151,7 @@ where
         {
             let inner = self.inner.read().await;
             if let Some(ref value) = *inner {
-                return Ok(Arc::new(unsafe { 
-                    std::ptr::read(value as *const T)
-                }));
+                return Ok(Arc::new(value.clone()));
             }
         }
         
@@ -174,9 +168,7 @@ where
         {
             let inner = self.inner.read().await;
             if let Some(ref value) = *inner {
-                return Ok(Arc::new(unsafe { 
-                    std::ptr::read(value as *const T)
-                }));
+                return Ok(Arc::new(value.clone()));
             }
         }
         
@@ -237,9 +229,10 @@ where
                     
                     // Return the initialized value
                     let inner = self.inner.read().await;
-                    return Ok(Arc::new(unsafe { 
-                        std::ptr::read(inner.as_ref().unwrap() as *const T)
-                    }));
+                    return match inner.as_ref() {
+                        Some(value) => Ok(Arc::new(value.clone())),
+                        None => Err("Value was lost after initialization".to_string()),
+                    };
                 }
                 Err(error) => {
                     last_error = error;
