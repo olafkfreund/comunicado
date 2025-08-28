@@ -80,6 +80,22 @@ pub struct SearchStatusSegment {
     pub is_active: bool,
 }
 
+/// Mode indicator segment showing current application mode with visual emphasis
+#[derive(Debug, Clone)]
+pub struct ModeIndicatorSegment {
+    pub current_mode: crate::ui::UIMode,
+    pub sub_mode: Option<String>, // For additional context like edit/view
+    pub mode_stack: Vec<crate::ui::UIMode>, // History of modes for breadcrumb
+}
+
+/// Interactive mode hints segment showing mode-specific shortcuts
+#[derive(Debug, Clone)]
+pub struct ModeHintsSegment {
+    pub current_mode: crate::ui::UIMode,
+    pub key_hints: Vec<(String, String)>, // (key combination, description)
+    pub is_vim_mode: bool,
+}
+
 impl StatusSegment for EmailStatusSegment {
     fn content(&self) -> String {
         let sync_indicator = match &self.sync_status {
@@ -243,6 +259,159 @@ impl StatusSegment for SearchStatusSegment {
         } else {
             None
         }
+    }
+}
+
+impl StatusSegment for ModeIndicatorSegment {
+    fn content(&self) -> String {
+        let mode_icon = self.get_mode_icon();
+        let mode_name = self.get_mode_display_name();
+        
+        let mut content = format!("{} {}", mode_icon, mode_name);
+        
+        if let Some(sub_mode) = &self.sub_mode {
+            content.push_str(&format!(" ({})", sub_mode));
+        }
+        
+        // Add breadcrumb if there's a mode stack
+        if self.mode_stack.len() > 1 {
+            let breadcrumb: Vec<String> = self.mode_stack
+                .iter()
+                .rev()
+                .take(2) // Show last 2 modes in breadcrumb
+                .skip(1) // Skip current mode (already shown)
+                .map(|m| self.get_mode_name(m))
+                .collect();
+            
+            if !breadcrumb.is_empty() {
+                content.push_str(&format!(" ← {}", breadcrumb.join(" ← ")));
+            }
+        }
+        
+        content
+    }
+
+    fn min_width(&self) -> u16 {
+        15
+    }
+
+    fn priority(&self) -> u8 {
+        100 // Highest priority - always visible
+    }
+
+    fn custom_style(&self, theme: &Theme) -> Option<Style> {
+        let base_color = match self.current_mode {
+            crate::ui::UIMode::Normal => theme.colors.palette.text_primary,
+            crate::ui::UIMode::Compose => theme.colors.palette.warning,
+            crate::ui::UIMode::Search => theme.colors.palette.info,
+            crate::ui::UIMode::Settings => theme.colors.palette.accent,
+            crate::ui::UIMode::Calendar => theme.colors.palette.success,
+            crate::ui::UIMode::EmailViewer => theme.colors.palette.info,
+            crate::ui::UIMode::EventCreate | crate::ui::UIMode::EventEdit => theme.colors.palette.warning,
+            _ => theme.colors.palette.text_secondary,
+        };
+        
+        Some(
+            Style::default()
+                .fg(base_color)
+                .add_modifier(Modifier::BOLD)
+        )
+    }
+}
+
+impl ModeIndicatorSegment {
+    fn get_mode_icon(&self) -> &'static str {
+        match self.current_mode {
+            crate::ui::UIMode::Normal => "📧",
+            crate::ui::UIMode::Compose => "✏️",
+            crate::ui::UIMode::DraftList => "📝",
+            crate::ui::UIMode::Calendar => "📅",
+            crate::ui::UIMode::EventCreate => "➕",
+            crate::ui::UIMode::EventEdit => "📝",
+            crate::ui::UIMode::EventView => "👁️",
+            crate::ui::UIMode::EmailViewer => "📖",
+            crate::ui::UIMode::InvitationViewer => "📨",
+            crate::ui::UIMode::Search => "🔍",
+            crate::ui::UIMode::KeyboardShortcuts => "⌨️",
+            crate::ui::UIMode::Settings => "⚙️",
+            crate::ui::UIMode::ContactsPopup => "👤",
+            crate::ui::UIMode::Contacts => "📞",
+            crate::ui::UIMode::ContextAware => "🔗",
+        }
+    }
+    
+    fn get_mode_display_name(&self) -> &'static str {
+        match self.current_mode {
+            crate::ui::UIMode::Normal => "Mail",
+            crate::ui::UIMode::Compose => "Compose",
+            crate::ui::UIMode::DraftList => "Drafts",
+            crate::ui::UIMode::Calendar => "Calendar",
+            crate::ui::UIMode::EventCreate => "New Event",
+            crate::ui::UIMode::EventEdit => "Edit Event",
+            crate::ui::UIMode::EventView => "Event",
+            crate::ui::UIMode::EmailViewer => "Reading",
+            crate::ui::UIMode::InvitationViewer => "Invitation",
+            crate::ui::UIMode::Search => "Search",
+            crate::ui::UIMode::KeyboardShortcuts => "Shortcuts",
+            crate::ui::UIMode::Settings => "Settings",
+            crate::ui::UIMode::ContactsPopup => "Contacts",
+            crate::ui::UIMode::Contacts => "Address Book",
+            crate::ui::UIMode::ContextAware => "Context",
+        }
+    }
+    
+    fn get_mode_name(&self, mode: &crate::ui::UIMode) -> String {
+        match mode {
+            crate::ui::UIMode::Normal => "Mail".to_string(),
+            crate::ui::UIMode::Compose => "Compose".to_string(),
+            crate::ui::UIMode::DraftList => "Drafts".to_string(),
+            crate::ui::UIMode::Calendar => "Cal".to_string(),
+            crate::ui::UIMode::EventCreate => "New".to_string(),
+            crate::ui::UIMode::EventEdit => "Edit".to_string(),
+            crate::ui::UIMode::EventView => "Event".to_string(),
+            crate::ui::UIMode::EmailViewer => "Read".to_string(),
+            crate::ui::UIMode::InvitationViewer => "Invite".to_string(),
+            crate::ui::UIMode::Search => "Search".to_string(),
+            crate::ui::UIMode::KeyboardShortcuts => "Keys".to_string(),
+            crate::ui::UIMode::Settings => "Config".to_string(),
+            crate::ui::UIMode::ContactsPopup => "Contact".to_string(),
+            crate::ui::UIMode::Contacts => "Contacts".to_string(),
+            crate::ui::UIMode::ContextAware => "Context".to_string(),
+        }
+    }
+}
+
+impl StatusSegment for ModeHintsSegment {
+    fn content(&self) -> String {
+        let mode_prefix = if self.is_vim_mode { "VIM" } else { "STD" };
+        
+        if self.key_hints.is_empty() {
+            format!("[{}]", mode_prefix)
+        } else {
+            let hints: Vec<String> = self.key_hints
+                .iter()
+                .take(3) // Limit to 3 hints to avoid crowding
+                .map(|(key, desc)| format!("{}: {}", key, desc))
+                .collect();
+            
+            format!("[{}] {}", mode_prefix, hints.join(" | "))
+        }
+    }
+
+    fn min_width(&self) -> u16 {
+        20
+    }
+
+    fn priority(&self) -> u8 {
+        40 // Medium priority
+    }
+
+    fn custom_style(&self, theme: &Theme) -> Option<Style> {
+        Some(
+            Style::default()
+                .fg(theme.colors.palette.text_muted)
+                .add_modifier(if self.is_vim_mode { Modifier::ITALIC } else { Modifier::empty() })
+        )
     }
 }
 

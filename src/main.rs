@@ -93,6 +93,16 @@ async fn main() -> Result<()> {
     app.initialize_services().await?;
     println!("✅ Background services initialized");
 
+    // Check if onboarding is needed before starting main application
+    if comunicado::ui::onboarding::should_show_onboarding() {
+        println!("👋 First time user detected - starting onboarding...");
+        if !comunicado::ui::onboarding::maybe_run_onboarding().await? {
+            println!("👋 Onboarding cancelled. Goodbye!");
+            return Ok(());
+        }
+        println!("🎉 Onboarding completed successfully!");
+    }
+
     // Run the application
     tracing::info!("Starting application main loop...");
     app.run().await?;

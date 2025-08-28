@@ -12,42 +12,76 @@ use ratatui::{
 };
 use crossterm::event::{KeyCode, KeyModifiers};
 
-/// Settings tab categories
+/// Settings tab categories - consolidated for better UX
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SettingsTab {
+    Core,        // General + Accounts + Performance
+    Interface,   // UI + Keyboard 
+    Privacy,     // Privacy + AI (AI has privacy implications)
+    Advanced,    // Advanced + System
+}
+
+/// Sub-sections within each main tab for better organization
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SettingsSubSection {
+    // Core tab sub-sections
     General,
     Accounts,
-    UI,
-    Keyboard,
     Performance,
+    
+    // Interface tab sub-sections  
+    UITheme,
+    Keyboard,
+    
+    // Privacy tab sub-sections
     Privacy,
     AI,
-    Advanced,
+    
+    // Advanced tab sub-sections
+    System,
+    Debug,
+}
+
+impl SettingsSubSection {
+    pub fn title(&self) -> &'static str {
+        match self {
+            SettingsSubSection::General => "General",
+            SettingsSubSection::Accounts => "Accounts",
+            SettingsSubSection::Performance => "Performance",
+            SettingsSubSection::UITheme => "UI & Theme",
+            SettingsSubSection::Keyboard => "Keyboard",
+            SettingsSubSection::Privacy => "Privacy",
+            SettingsSubSection::AI => "AI Assistant",
+            SettingsSubSection::System => "System",
+            SettingsSubSection::Debug => "Debug",
+        }
+    }
 }
 
 impl SettingsTab {
     pub fn title(&self) -> &'static str {
         match self {
-            SettingsTab::General => "General",
-            SettingsTab::Accounts => "Accounts",
-            SettingsTab::UI => "UI & Theme",
-            SettingsTab::Keyboard => "Keyboard",
-            SettingsTab::Performance => "Performance", 
-            SettingsTab::Privacy => "Privacy",
-            SettingsTab::AI => "AI Assistant",
-            SettingsTab::Advanced => "Advanced",
+            SettingsTab::Core => "Core Settings",
+            SettingsTab::Interface => "Interface & Input",
+            SettingsTab::Privacy => "Privacy & AI",
+            SettingsTab::Advanced => "Advanced & System",
+        }
+    }
+
+    pub fn description(&self) -> &'static str {
+        match self {
+            SettingsTab::Core => "Email, accounts, sync, and performance",
+            SettingsTab::Interface => "Theme, layout, and keyboard shortcuts",
+            SettingsTab::Privacy => "Security, privacy, and AI assistant",
+            SettingsTab::Advanced => "Debug, system, and advanced options",
         }
     }
 
     pub fn all() -> Vec<SettingsTab> {
         vec![
-            SettingsTab::General,
-            SettingsTab::Accounts,
-            SettingsTab::UI,
-            SettingsTab::Keyboard,
-            SettingsTab::Performance,
+            SettingsTab::Core,
+            SettingsTab::Interface,
             SettingsTab::Privacy,
-            SettingsTab::AI,
             SettingsTab::Advanced,
         ]
     }
@@ -72,10 +106,14 @@ pub struct SettingsUIState {
     pub visible: bool,
     /// Current settings tab
     pub current_tab: SettingsTab,
-    /// Current selection within the active tab
+    /// Current sub-section within the tab
+    pub current_sub_section: SettingsSubSection,
+    /// Current selection within the active sub-section
     pub selected_index: usize,
     /// List state for navigation
     pub list_state: ListState,
+    /// List state for sub-section navigation
+    pub sub_section_state: ListState,
     /// Whether we're in edit mode for a setting
     pub edit_mode: bool,
     /// Current input buffer for text settings
@@ -84,19 +122,24 @@ pub struct SettingsUIState {
     pub modified: bool,
     /// Status message to display
     pub status_message: Option<String>,
+    /// Whether showing sub-section panel
+    pub show_sub_sections: bool,
 }
 
 impl Default for SettingsUIState {
     fn default() -> Self {
         Self {
             visible: false,
-            current_tab: SettingsTab::General,
+            current_tab: SettingsTab::Core,
+            current_sub_section: SettingsSubSection::General,
             selected_index: 0,
             list_state: ListState::default(),
+            sub_section_state: ListState::default(),
             edit_mode: false,
             input_buffer: String::new(),
             modified: false,
             status_message: None,
+            show_sub_sections: true, // Start with sub-sections visible for better UX
         }
     }
 }
@@ -108,12 +151,15 @@ impl SettingsUIState {
 
     pub fn show(&mut self) {
         self.visible = true;
-        self.current_tab = SettingsTab::General;
+        self.current_tab = SettingsTab::Core;
+        self.current_sub_section = SettingsSubSection::General;
         self.selected_index = 0;
         self.list_state.select(Some(0));
+        self.sub_section_state.select(Some(0));
         self.edit_mode = false;
         self.input_buffer.clear();
         self.status_message = None;
+        self.show_sub_sections = true;
     }
 
     pub fn hide(&mut self) {
@@ -129,18 +175,71 @@ impl SettingsUIState {
 
     pub fn next_tab(&mut self) {
         self.current_tab = self.current_tab.next();
+        self.current_sub_section = self.get_default_sub_section_for_tab(&self.current_tab);
         self.selected_index = 0;
         self.list_state.select(Some(0));
+        self.sub_section_state.select(Some(0));
         self.edit_mode = false;
         self.input_buffer.clear();
     }
 
     pub fn previous_tab(&mut self) {
         self.current_tab = self.current_tab.previous();
+        self.current_sub_section = self.get_default_sub_section_for_tab(&self.current_tab);
         self.selected_index = 0;
         self.list_state.select(Some(0));
+        self.sub_section_state.select(Some(0));
         self.edit_mode = false;
         self.input_buffer.clear();
+    }
+
+    pub fn next_sub_section(&mut self) {
+        let sub_sections = self.get_sub_sections_for_tab(&self.current_tab);
+        if let Some(current_index) = sub_sections.iter().position(|&s| s == self.current_sub_section) {
+            self.current_sub_section = sub_sections[(current_index + 1) % sub_sections.len()];
+            self.selected_index = 0;
+            self.list_state.select(Some(0));
+        }
+    }
+
+    pub fn previous_sub_section(&mut self) {
+        let sub_sections = self.get_sub_sections_for_tab(&self.current_tab);
+        if let Some(current_index) = sub_sections.iter().position(|&s| s == self.current_sub_section) {
+            self.current_sub_section = sub_sections[(current_index + sub_sections.len() - 1) % sub_sections.len()];
+            self.selected_index = 0;
+            self.list_state.select(Some(0));
+        }
+    }
+
+    pub fn toggle_sub_sections(&mut self) {
+        self.show_sub_sections = !self.show_sub_sections;
+    }
+
+    fn get_default_sub_section_for_tab(&self, tab: &SettingsTab) -> SettingsSubSection {
+        let sub_sections = self.get_sub_sections_for_tab(tab);
+        sub_sections[0]
+    }
+
+    pub fn get_sub_sections_for_tab(&self, tab: &SettingsTab) -> Vec<SettingsSubSection> {
+        match tab {
+            SettingsTab::Core => vec![
+                SettingsSubSection::General,
+                SettingsSubSection::Accounts,
+                SettingsSubSection::Performance,
+            ],
+            SettingsTab::Interface => vec![
+                SettingsSubSection::UITheme,
+                SettingsSubSection::Keyboard,
+            ],
+            SettingsTab::Privacy => vec![
+                SettingsSubSection::Privacy,
+                SettingsSubSection::AI,
+            ],
+            SettingsTab::Advanced => vec![
+                SettingsSubSection::System,
+                SettingsSubSection::Debug,
+            ],
+        }
     }
 
     pub fn next_item(&mut self) {
@@ -189,17 +288,18 @@ impl SettingsUIState {
         self.status_message = None;
     }
 
-    /// Get the maximum number of items for the current tab
+    /// Get the maximum number of items for the current sub-section
     pub fn get_max_items_for_tab(&self) -> usize {
-        match self.current_tab {
-            SettingsTab::General => 10, // Updated to include sync settings
-            SettingsTab::Accounts => 6,
-            SettingsTab::UI => 7,
-            SettingsTab::Keyboard => 5,
-            SettingsTab::Performance => 6,
-            SettingsTab::Privacy => 5,
-            SettingsTab::AI => 8,
-            SettingsTab::Advanced => 6,
+        match self.current_sub_section {
+            SettingsSubSection::General => 10, // General email and sync settings
+            SettingsSubSection::Accounts => 6, // Account management
+            SettingsSubSection::Performance => 6, // Performance and caching
+            SettingsSubSection::UITheme => 7, // UI, theme, and layout
+            SettingsSubSection::Keyboard => 5, // Keyboard shortcuts and vim mode
+            SettingsSubSection::Privacy => 5, // Privacy and security
+            SettingsSubSection::AI => 8, // AI assistant configuration
+            SettingsSubSection::System => 4, // System paths and maintenance
+            SettingsSubSection::Debug => 2, // Debug and development settings
         }
     }
 }
@@ -357,13 +457,28 @@ impl SettingsUI {
     fn handle_select(&mut self) {
         // Toggle boolean settings or start editing for other types
         match self.state.current_tab {
-            SettingsTab::General => self.handle_general_select(),
-            SettingsTab::Accounts => self.handle_accounts_select(),
-            SettingsTab::UI => self.handle_ui_select(),
-            SettingsTab::Keyboard => self.handle_keyboard_select(),
-            SettingsTab::Performance => self.handle_performance_select(),
-            SettingsTab::Privacy => self.handle_privacy_select(),
-            SettingsTab::AI => self.handle_ai_select(),
+            SettingsTab::Core => {
+                match self.state.current_sub_section {
+                    SettingsSubSection::General => self.handle_general_select(),
+                    SettingsSubSection::Accounts => self.handle_accounts_select(),
+                    SettingsSubSection::Performance => self.handle_performance_select(),
+                    _ => {}
+                }
+            },
+            SettingsTab::Interface => {
+                match self.state.current_sub_section {
+                    SettingsSubSection::UITheme => self.handle_ui_select(),
+                    SettingsSubSection::Keyboard => self.handle_keyboard_select(),
+                    _ => {}
+                }
+            },
+            SettingsTab::Privacy => {
+                match self.state.current_sub_section {
+                    SettingsSubSection::Privacy => self.handle_privacy_select(),
+                    SettingsSubSection::AI => self.handle_ai_select(),
+                    _ => {}
+                }
+            },
             SettingsTab::Advanced => self.handle_advanced_select(),
         }
     }
@@ -473,14 +588,29 @@ impl SettingsUI {
         // Apply the current edit based on tab and selected index
         let value = self.state.input_buffer.clone();
         match self.state.current_tab {
-            SettingsTab::General => self.apply_general_edit(value),
-            SettingsTab::UI => self.apply_ui_edit(value),
-            SettingsTab::Performance => self.apply_performance_edit(value),
-            SettingsTab::Privacy => self.apply_privacy_edit(value),
-            SettingsTab::Keyboard => self.apply_keyboard_edit(value),
+            SettingsTab::Core => {
+                match self.state.current_sub_section {
+                    SettingsSubSection::General => self.apply_general_edit(value),
+                    SettingsSubSection::Accounts => self.apply_accounts_edit(value),
+                    SettingsSubSection::Performance => self.apply_performance_edit(value),
+                    _ => {}
+                }
+            },
+            SettingsTab::Interface => {
+                match self.state.current_sub_section {
+                    SettingsSubSection::UITheme => self.apply_ui_edit(value),
+                    SettingsSubSection::Keyboard => self.apply_keyboard_edit(value),
+                    _ => {}
+                }
+            },
+            SettingsTab::Privacy => {
+                match self.state.current_sub_section {
+                    SettingsSubSection::Privacy => self.apply_privacy_edit(value),
+                    SettingsSubSection::AI => self.apply_ai_edit(value),
+                    _ => {}
+                }
+            },
             SettingsTab::Advanced => self.apply_advanced_edit(value),
-            SettingsTab::Accounts => self.apply_accounts_edit(value),
-            SettingsTab::AI => self.apply_ai_edit(value),
         }
         self.state.modified = true;
     }
@@ -1376,13 +1506,28 @@ impl SettingsUI {
 
     fn render_tab_content(&mut self, frame: &mut Frame, area: Rect, theme: &Theme) {
         match self.state.current_tab {
-            SettingsTab::General => self.render_general_tab(frame, area, theme),
-            SettingsTab::Accounts => self.render_accounts_tab(frame, area, theme),
-            SettingsTab::UI => self.render_ui_tab(frame, area, theme),
-            SettingsTab::Keyboard => self.render_keyboard_tab(frame, area, theme),
-            SettingsTab::Performance => self.render_performance_tab(frame, area, theme),
-            SettingsTab::Privacy => self.render_privacy_tab(frame, area, theme),
-            SettingsTab::AI => self.render_ai_tab(frame, area, theme),
+            SettingsTab::Core => {
+                match self.state.current_sub_section {
+                    SettingsSubSection::General => self.render_general_tab(frame, area, theme),
+                    SettingsSubSection::Accounts => self.render_accounts_tab(frame, area, theme),
+                    SettingsSubSection::Performance => self.render_performance_tab(frame, area, theme),
+                    _ => {}
+                }
+            },
+            SettingsTab::Interface => {
+                match self.state.current_sub_section {
+                    SettingsSubSection::UITheme => self.render_ui_tab(frame, area, theme),
+                    SettingsSubSection::Keyboard => self.render_keyboard_tab(frame, area, theme),
+                    _ => {}
+                }
+            },
+            SettingsTab::Privacy => {
+                match self.state.current_sub_section {
+                    SettingsSubSection::Privacy => self.render_privacy_tab(frame, area, theme),
+                    SettingsSubSection::AI => self.render_ai_tab(frame, area, theme),
+                    _ => {}
+                }
+            },
             SettingsTab::Advanced => self.render_advanced_tab(frame, area, theme),
         }
     }
