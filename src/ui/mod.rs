@@ -2672,6 +2672,11 @@ impl UI {
         &mut self.context_menu
     }
 
+    /// Show context menu at position with specific context
+    pub fn show_context_menu_at_position(&mut self, x: u16, y: u16, context_type: crate::ui::context_menu::ContextType) {
+        self.context_menu.show_at_position(x, y, context_type);
+    }
+
     /// Show context-aware menu
     pub fn show_context_aware_menu(&mut self) {
         let context = MenuContext {
@@ -2715,6 +2720,11 @@ impl UI {
     /// Get selected folder path (helper for context actions)
     pub fn get_selected_folder_path(&self) -> Option<String> {
         self.folder_tree.selected_folder().map(|f| f.path.clone())
+    }
+
+    /// Get selected message for context menu
+    pub fn get_selected_message(&self) -> Option<&crate::ui::message_list::MessageItem> {
+        self.message_list.selected_message()
     }
 
     /// Get current account ID (helper for context actions)

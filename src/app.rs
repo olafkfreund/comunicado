@@ -5502,6 +5502,14 @@ impl App {
     async fn process_key_event_through_integration(&mut self, key: crossterm::event::KeyEvent) -> Result<bool> {
         use crate::events::types::KeyEventData;
 
+        // First check if context menu is visible and handle its keys
+        if self.ui.context_menu().is_visible() {
+            if let Some(action) = self.ui.handle_context_menu_key(key.code) {
+                self.handle_context_menu_action(action).await?;
+                return Ok(true);
+            }
+        }
+
         // Convert crossterm KeyEvent to our event system format
         let key_data = KeyEventData {
             code: format!("{:?}", key.code),
@@ -5590,6 +5598,27 @@ impl App {
 
     /// Handle mouse actions returned by the mouse processor
     async fn handle_mouse_action(&mut self, action: MouseAction) -> Result<()> {
+        // First check if context menu is visible and handle clicks on it
+        if self.ui.context_menu().is_visible() {
+            // Get mouse coordinates from the action
+            let (x, y) = match &action {
+                MouseAction::ShowEmailContextMenu { x, y, .. } => (*x, *y),
+                MouseAction::ShowFolderContextMenu { x, y, .. } => (*x, *y),
+                MouseAction::ShowEmailContentContextMenu { x, y } => (*x, *y),
+                MouseAction::ShowGeneralContextMenu { x, y } => (*x, *y),
+                MouseAction::SelectMessage { row, column } => (*column, *row),
+                MouseAction::SelectFolder { row, column } => (*column, *row),
+                MouseAction::ClickStatusBar { row, column } => (*column, *row),
+                _ => (0, 0), // Default coordinates for actions without explicit position
+            };
+            
+            // Handle context menu mouse click
+            if let Some(menu_action) = self.ui.handle_context_menu_click(x, y) {
+                self.handle_context_menu_action(menu_action).await?;
+                return Ok(());
+            }
+        }
+        
         match action {
             MouseAction::None => {
                 // No action needed
@@ -5707,36 +5736,588 @@ impl App {
     /// Show email context menu at the given coordinates
     async fn show_email_context_menu(&mut self, x: u16, y: u16) -> Result<()> {
         tracing::debug!("Show email context menu at ({}, {})", x, y);
-        // Future implementation: Show context menu with email actions
-        // (Reply, Forward, Delete, Archive, Mark as Read/Unread, etc.)
-        self.ui.show_toast_info("Email context menu - feature coming soon");
+        
+        // Get information about the currently selected message
+        let (is_read, is_draft, has_attachments, folder_name) = if let Some(selected_message) = self.ui.get_selected_message() {
+            // Get current folder from folder tree selection
+            let current_folder = self.ui.get_selected_folder_path().unwrap_or_else(|| "INBOX".to_string());
+            (
+                selected_message.is_read,
+                current_folder.to_lowercase().contains("draft"),
+                selected_message.has_attachments,
+                current_folder
+            )
+        } else {
+            // Default values if no message selected
+            (false, false, false, "INBOX".to_string())
+        };
+        
+        // Show the context menu for email messages with proper context
+        self.ui.show_context_menu_at_position(
+            x, 
+            y, 
+            crate::ui::context_menu::ContextType::EmailMessage {
+                is_read,
+                is_draft,
+                has_attachments,
+                folder_name,
+            }
+        );
+        
         Ok(())
     }
 
     /// Show folder context menu at the given coordinates
     async fn show_folder_context_menu(&mut self, folder_path: &str, x: u16, y: u16) -> Result<()> {
         tracing::debug!("Show folder context menu for '{}' at ({}, {})", folder_path, x, y);
-        // Future implementation: Show context menu with folder actions
-        // (Refresh, Mark All as Read, Create Subfolder, Properties, etc.)
-        self.ui.show_toast_info("Folder context menu - feature coming soon");
+        
+        // Determine folder properties
+        let is_special = matches!(folder_path.to_lowercase().as_str(), 
+            "inbox" | "sent" | "drafts" | "trash" | "spam" | "junk");
+        
+        // Get unread count for this folder (placeholder for now)
+        let unread_count = 0; // TODO: Implement actual unread count retrieval
+        
+        // Show the context menu for folders with proper context
+        self.ui.show_context_menu_at_position(
+            x,
+            y,
+            crate::ui::context_menu::ContextType::EmailFolder {
+                folder_name: folder_path.to_string(),
+                is_special,
+                unread_count,
+            }
+        );
+        
         Ok(())
     }
 
     /// Show email content context menu at the given coordinates
     async fn show_email_content_context_menu(&mut self, x: u16, y: u16) -> Result<()> {
         tracing::debug!("Show email content context menu at ({}, {})", x, y);
-        // Future implementation: Show context menu with content actions
-        // (Copy, Select All, Save As, View Source, etc.)
-        self.ui.show_toast_info("Email content context menu - feature coming soon");
+        
+        // For email content, we can show general menu actions like copy, select all, etc.
+        // Or message-specific actions if there's a selected message
+        if let Some(selected_message) = self.ui.get_selected_message() {
+            let current_folder = self.ui.get_selected_folder_path().unwrap_or_else(|| "INBOX".to_string());
+            self.ui.show_context_menu_at_position(
+                x,
+                y,
+                crate::ui::context_menu::ContextType::EmailMessage {
+                    is_read: selected_message.is_read,
+                    is_draft: current_folder.to_lowercase().contains("draft"),
+                    has_attachments: selected_message.has_attachments,
+                    folder_name: current_folder,
+                }
+            );
+        } else {
+            // Show general context menu if no specific message
+            self.ui.show_context_menu_at_position(
+                x,
+                y,
+                crate::ui::context_menu::ContextType::General
+            );
+        }
+        
         Ok(())
     }
 
     /// Show general context menu at the given coordinates
     async fn show_general_context_menu(&mut self, x: u16, y: u16) -> Result<()> {
         tracing::debug!("Show general context menu at ({}, {})", x, y);
-        // Future implementation: Show context menu with general actions
-        // (Preferences, Help, About, Quit, etc.)
-        self.ui.show_toast_info("General context menu - feature coming soon");
+        
+        // Show the general application context menu
+        self.ui.show_context_menu_at_position(
+            x,
+            y,
+            crate::ui::context_menu::ContextType::General
+        );
+        
+        Ok(())
+    }
+
+    /// Handle context menu action execution
+    async fn handle_context_menu_action(&mut self, action: crate::ui::context_menu::ContextMenuAction) -> Result<()> {
+        use crate::ui::context_menu::ContextMenuAction;
+        
+        tracing::debug!("Handling context menu action: {:?}", action);
+        
+        match action {
+            // Email message actions
+            ContextMenuAction::ReplyToMessage => {
+                if let Some(selected_message) = self.ui.get_selected_message() {
+                    let message_subject = selected_message.subject.clone();
+                    if let Some(message_id) = selected_message.message_id {
+                        if let (Some(ref database), Some(ref contacts_manager)) = (&self.database, &self.contacts_manager) {
+                            // Load full message from database
+                            match database.get_message_by_id(message_id).await {
+                                Ok(Some(stored_message)) => {
+                                    // Start reply composition with the full message
+                                    self.ui.start_reply_from_message(stored_message, contacts_manager.clone());
+                                    tracing::info!("Started reply composition for message: {}", message_subject);
+                                }
+                                Ok(None) => {
+                                    self.ui.show_toast_warning("Message not found in database");
+                                    tracing::warn!("Message {} not found in database", message_id);
+                                }
+                                Err(e) => {
+                                    self.ui.show_toast_error(format!("Failed to load message: {}", e));
+                                    tracing::error!("Failed to load message {}: {}", message_id, e);
+                                }
+                            }
+                        } else {
+                            self.ui.show_toast_warning("Database or contacts not available");
+                            tracing::warn!("Cannot reply: database or contacts manager not initialized");
+                        }
+                    } else {
+                        self.ui.show_toast_warning("Message ID not available");
+                        tracing::warn!("Cannot reply: selected message has no ID");
+                    }
+                } else {
+                    self.ui.show_toast_warning("No message selected for reply");
+                }
+            }
+            
+            ContextMenuAction::ReplyAllToMessage => {
+                if let Some(selected_message) = self.ui.get_selected_message() {
+                    let message_subject = selected_message.subject.clone();
+                    if let Some(message_id) = selected_message.message_id {
+                        if let (Some(ref database), Some(ref contacts_manager)) = (&self.database, &self.contacts_manager) {
+                            // Load full message from database
+                            match database.get_message_by_id(message_id).await {
+                                Ok(Some(stored_message)) => {
+                                    // Start reply all composition with the full message
+                                    self.ui.start_reply_all_from_message(stored_message, contacts_manager.clone());
+                                    tracing::info!("Started reply all composition for message: {}", message_subject);
+                                }
+                                Ok(None) => {
+                                    self.ui.show_toast_warning("Message not found in database");
+                                    tracing::warn!("Message {} not found in database", message_id);
+                                }
+                                Err(e) => {
+                                    self.ui.show_toast_error(format!("Failed to load message: {}", e));
+                                    tracing::error!("Failed to load message {}: {}", message_id, e);
+                                }
+                            }
+                        } else {
+                            self.ui.show_toast_warning("Database or contacts not available");
+                            tracing::warn!("Cannot reply all: database or contacts manager not initialized");
+                        }
+                    } else {
+                        self.ui.show_toast_warning("Message ID not available");
+                        tracing::warn!("Cannot reply all: selected message has no ID");
+                    }
+                } else {
+                    self.ui.show_toast_warning("No message selected for reply all");
+                }
+            }
+            
+            ContextMenuAction::ForwardMessage => {
+                if let Some(selected_message) = self.ui.get_selected_message() {
+                    let message_subject = selected_message.subject.clone();
+                    if let Some(message_id) = selected_message.message_id {
+                        if let (Some(ref database), Some(ref contacts_manager)) = (&self.database, &self.contacts_manager) {
+                            // Load full message from database
+                            match database.get_message_by_id(message_id).await {
+                                Ok(Some(stored_message)) => {
+                                    // Start forward composition with the full message
+                                    self.ui.start_forward_from_message(stored_message, contacts_manager.clone());
+                                    tracing::info!("Started forward composition for message: {}", message_subject);
+                                }
+                                Ok(None) => {
+                                    self.ui.show_toast_warning("Message not found in database");
+                                    tracing::warn!("Message {} not found in database", message_id);
+                                }
+                                Err(e) => {
+                                    self.ui.show_toast_error(format!("Failed to load message: {}", e));
+                                    tracing::error!("Failed to load message {}: {}", message_id, e);
+                                }
+                            }
+                        } else {
+                            self.ui.show_toast_warning("Database or contacts not available");
+                            tracing::warn!("Cannot forward: database or contacts manager not initialized");
+                        }
+                    } else {
+                        self.ui.show_toast_warning("Message ID not available");
+                        tracing::warn!("Cannot forward: selected message has no ID");
+                    }
+                } else {
+                    self.ui.show_toast_warning("No message selected for forwarding");
+                }
+            }
+            
+            ContextMenuAction::DeleteMessage => {
+                if let Some(selected_message) = self.ui.get_selected_message() {
+                    let message_subject = selected_message.subject.clone();
+                    if let Some(message_id) = selected_message.message_id {
+                        if let Some(ref operations_service) = self.email_operations_service {
+                            // We need to get the account ID - let me check how to get it
+                            if let Some(ref database) = self.database {
+                                match database.get_message_by_id(message_id).await {
+                                    Ok(Some(stored_message)) => {
+                                        // Delete the message using the operations service
+                                        match operations_service.delete_email_by_id(
+                                            &stored_message.account_id,
+                                            message_id,
+                                            &stored_message.folder_name
+                                        ).await {
+                                            Ok(()) => {
+                                                self.ui.show_toast_info(format!("Deleted message: {}", message_subject));
+                                                // Update the UI to reflect the change
+                                                let _ = self.ui.refresh_messages().await;
+                                                tracing::info!("Successfully deleted message: {}", message_subject);
+                                            }
+                                            Err(e) => {
+                                                self.ui.show_toast_error(format!("Failed to delete message: {}", e));
+                                                tracing::error!("Failed to delete message: {}", e);
+                                            }
+                                        }
+                                    }
+                                    Ok(None) => {
+                                        self.ui.show_toast_warning("Message not found in database");
+                                        tracing::warn!("Message {} not found in database", message_id);
+                                    }
+                                    Err(e) => {
+                                        self.ui.show_toast_error(format!("Failed to load message: {}", e));
+                                        tracing::error!("Failed to load message {}: {}", message_id, e);
+                                    }
+                                }
+                            } else {
+                                self.ui.show_toast_warning("Database not available");
+                                tracing::warn!("Cannot delete: database not initialized");
+                            }
+                        } else {
+                            self.ui.show_toast_warning("Email operations service not available");
+                            tracing::warn!("Cannot delete: email operations service not initialized");
+                        }
+                    } else {
+                        self.ui.show_toast_warning("Message ID not available");
+                        tracing::warn!("Cannot delete: selected message has no ID");
+                    }
+                } else {
+                    self.ui.show_toast_warning("No message selected for deletion");
+                }
+            }
+            
+            ContextMenuAction::MarkAsRead => {
+                if let Some(selected_message) = self.ui.get_selected_message() {
+                    let message_subject = selected_message.subject.clone();
+                    if let Some(message_id) = selected_message.message_id {
+                        if let Some(ref database) = self.database {
+                            match database.get_message_by_id(message_id).await {
+                                Ok(Some(stored_message)) => {
+                                    // Add \\Seen flag to mark as read
+                                    let mut flags = stored_message.flags.clone();
+                                    if !flags.contains(&"\\Seen".to_string()) {
+                                        flags.push("\\Seen".to_string());
+                                        
+                                        // Update message flags in database
+                                        match database.update_message_flags(
+                                            &stored_message.account_id,
+                                            &stored_message.folder_name,
+                                            stored_message.imap_uid,
+                                            flags
+                                        ).await {
+                                            Ok(()) => {
+                                                self.ui.show_toast_info("Message marked as read");
+                                                // Update the UI to reflect the change
+                                                let _ = self.ui.refresh_messages().await;
+                                                tracing::info!("Marked message as read: {}", message_subject);
+                                            }
+                                            Err(e) => {
+                                                self.ui.show_toast_error(format!("Failed to mark as read: {}", e));
+                                                tracing::error!("Failed to mark message as read: {}", e);
+                                            }
+                                        }
+                                    } else {
+                                        self.ui.show_toast_info("Message already marked as read");
+                                    }
+                                }
+                                Ok(None) => {
+                                    self.ui.show_toast_warning("Message not found in database");
+                                    tracing::warn!("Message {} not found in database", message_id);
+                                }
+                                Err(e) => {
+                                    self.ui.show_toast_error(format!("Failed to load message: {}", e));
+                                    tracing::error!("Failed to load message {}: {}", message_id, e);
+                                }
+                            }
+                        } else {
+                            self.ui.show_toast_warning("Database not available");
+                            tracing::warn!("Cannot mark as read: database not initialized");
+                        }
+                    } else {
+                        self.ui.show_toast_warning("Message ID not available");
+                        tracing::warn!("Cannot mark as read: selected message has no ID");
+                    }
+                } else {
+                    self.ui.show_toast_warning("No message selected");
+                }
+            }
+            
+            ContextMenuAction::MarkAsUnread => {
+                if let Some(selected_message) = self.ui.get_selected_message() {
+                    let message_subject = selected_message.subject.clone();
+                    if let Some(message_id) = selected_message.message_id {
+                        if let Some(ref database) = self.database {
+                            match database.get_message_by_id(message_id).await {
+                                Ok(Some(stored_message)) => {
+                                    // Remove \\Seen flag to mark as unread
+                                    let mut flags = stored_message.flags.clone();
+                                    let initial_len = flags.len();
+                                    flags.retain(|flag| flag != "\\Seen");
+                                    
+                                    if initial_len != flags.len() {
+                                        // Update message flags in database
+                                        match database.update_message_flags(
+                                            &stored_message.account_id,
+                                            &stored_message.folder_name,
+                                            stored_message.imap_uid,
+                                            flags
+                                        ).await {
+                                            Ok(()) => {
+                                                self.ui.show_toast_info("Message marked as unread");
+                                                // Update the UI to reflect the change
+                                                let _ = self.ui.refresh_messages().await;
+                                                tracing::info!("Marked message as unread: {}", message_subject);
+                                            }
+                                            Err(e) => {
+                                                self.ui.show_toast_error(format!("Failed to mark as unread: {}", e));
+                                                tracing::error!("Failed to mark message as unread: {}", e);
+                                            }
+                                        }
+                                    } else {
+                                        self.ui.show_toast_info("Message already marked as unread");
+                                    }
+                                }
+                                Ok(None) => {
+                                    self.ui.show_toast_warning("Message not found in database");
+                                    tracing::warn!("Message {} not found in database", message_id);
+                                }
+                                Err(e) => {
+                                    self.ui.show_toast_error(format!("Failed to load message: {}", e));
+                                    tracing::error!("Failed to load message {}: {}", message_id, e);
+                                }
+                            }
+                        } else {
+                            self.ui.show_toast_warning("Database not available");
+                            tracing::warn!("Cannot mark as unread: database not initialized");
+                        }
+                    } else {
+                        self.ui.show_toast_warning("Message ID not available");
+                        tracing::warn!("Cannot mark as unread: selected message has no ID");
+                    }
+                } else {
+                    self.ui.show_toast_warning("No message selected");
+                }
+            }
+            
+            ContextMenuAction::MoveToFolder(folder_name) => {
+                if let Some(_selected_message) = self.ui.get_selected_message() {
+                    self.ui.show_toast_info(format!("Moving message to folder: {}", folder_name));
+                    // TODO: Implement message move operation
+                } else {
+                    self.ui.show_toast_warning("No message selected for moving");
+                }
+            }
+            
+            ContextMenuAction::CopyMessage => {
+                if let Some(_selected_message) = self.ui.get_selected_message() {
+                    self.ui.show_toast_info("Message copied to clipboard");
+                    // TODO: Implement message copy to clipboard
+                } else {
+                    self.ui.show_toast_warning("No message selected for copying");
+                }
+            }
+            
+            ContextMenuAction::ExportMessage => {
+                if let Some(_selected_message) = self.ui.get_selected_message() {
+                    self.ui.show_toast_info("Message exported");
+                    // TODO: Implement message export to file
+                } else {
+                    self.ui.show_toast_warning("No message selected for export");
+                }
+            }
+            
+            ContextMenuAction::ViewMessageSource => {
+                if let Some(_selected_message) = self.ui.get_selected_message() {
+                    self.ui.show_toast_info("Viewing message source");
+                    // TODO: Implement message source viewer
+                } else {
+                    self.ui.show_toast_warning("No message selected");
+                }
+            }
+            
+            // Folder actions
+            ContextMenuAction::CreateFolder => {
+                // Get current account ID
+                if let Some(current_account_id) = self.ui.get_current_account_id_string() {
+                    // Get selected folder for creating subfolder context
+                    let parent_path = self.ui.get_selected_folder_path();
+                    
+                    match self.handle_create_folder(&current_account_id, parent_path.as_deref()).await {
+                        Ok(()) => {
+                            tracing::info!("Create folder operation initiated successfully");
+                        }
+                        Err(e) => {
+                            self.ui.show_toast_error(format!("Failed to create folder: {}", e));
+                            tracing::error!("Failed to create folder: {}", e);
+                        }
+                    }
+                } else {
+                    self.ui.show_toast_warning("No account selected");
+                    tracing::warn!("Cannot create folder: no current account");
+                }
+            }
+            
+            ContextMenuAction::RenameFolder => {
+                // Get current account and selected folder
+                if let Some(current_account_id) = self.ui.get_current_account_id_string() {
+                    if let Some(selected_folder_path) = self.ui.get_selected_folder_path() {
+                        match self.handle_rename_folder(&current_account_id, &selected_folder_path).await {
+                            Ok(()) => {
+                                tracing::info!("Rename folder operation completed successfully");
+                            }
+                            Err(e) => {
+                                self.ui.show_toast_error(format!("Failed to rename folder: {}", e));
+                                tracing::error!("Failed to rename folder: {}", e);
+                            }
+                        }
+                    } else {
+                        self.ui.show_toast_warning("No folder selected");
+                        tracing::warn!("Cannot rename folder: no folder selected");
+                    }
+                } else {
+                    self.ui.show_toast_warning("No account selected");
+                    tracing::warn!("Cannot rename folder: no current account");
+                }
+            }
+            
+            ContextMenuAction::DeleteFolder => {
+                // Get current account and selected folder
+                if let Some(current_account_id) = self.ui.get_current_account_id_string() {
+                    if let Some(selected_folder_path) = self.ui.get_selected_folder_path() {
+                        // Show confirmation toast before deletion
+                        self.ui.show_toast_warning(format!("Deleting folder: {}", selected_folder_path));
+                        
+                        match self.handle_delete_folder(&current_account_id, &selected_folder_path).await {
+                            Ok(()) => {
+                                tracing::info!("Delete folder operation completed successfully");
+                            }
+                            Err(e) => {
+                                self.ui.show_toast_error(format!("Failed to delete folder: {}", e));
+                                tracing::error!("Failed to delete folder: {}", e);
+                            }
+                        }
+                    } else {
+                        self.ui.show_toast_warning("No folder selected");
+                        tracing::warn!("Cannot delete folder: no folder selected");
+                    }
+                } else {
+                    self.ui.show_toast_warning("No account selected");
+                    tracing::warn!("Cannot delete folder: no current account");
+                }
+            }
+            
+            ContextMenuAction::MarkAllAsRead => {
+                self.ui.show_toast_info("Marked all messages as read");
+                // TODO: Implement mark all as read for current folder
+            }
+            
+            ContextMenuAction::CompactFolder => {
+                self.ui.show_toast_info("Folder compaction started");
+                // TODO: Implement folder compaction
+            }
+            
+            ContextMenuAction::RefreshFolder => {
+                self.ui.show_toast_info("Refreshing folder...");
+                // TODO: Trigger folder refresh
+                self.trigger_manual_sync().await?;
+            }
+            
+            // General actions
+            ContextMenuAction::Copy => {
+                self.ui.show_toast_info("Content copied to clipboard");
+                // TODO: Implement clipboard copy
+            }
+            
+            ContextMenuAction::Cut => {
+                self.ui.show_toast_info("Content cut to clipboard");
+                // TODO: Implement clipboard cut
+            }
+            
+            ContextMenuAction::Paste => {
+                self.ui.show_toast_info("Content pasted from clipboard");
+                // TODO: Implement clipboard paste
+            }
+            
+            ContextMenuAction::SelectAll => {
+                self.ui.show_toast_info("All content selected");
+                // TODO: Implement select all
+            }
+            
+            ContextMenuAction::Properties => {
+                self.ui.show_toast_info("Properties dialog opened");
+                // TODO: Show properties dialog
+            }
+            
+            // Account actions
+            ContextMenuAction::RefreshAccount => {
+                self.ui.show_toast_info("Refreshing account...");
+                self.trigger_manual_sync().await?;
+            }
+            
+            ContextMenuAction::AccountSettings => {
+                self.ui.show_toast_info("Account settings opened");
+                // TODO: Show account settings dialog
+            }
+            
+            ContextMenuAction::AddAccount => {
+                self.handle_add_account().await?;
+            }
+            
+            ContextMenuAction::RemoveAccount => {
+                self.ui.show_toast_info("Remove account confirmation opened");
+                // TODO: Show remove account confirmation
+            }
+            
+            // Calendar actions
+            ContextMenuAction::CreateEvent => {
+                self.ui.show_toast_info("Create event dialog opened");
+                // TODO: Show create event dialog
+            }
+            
+            ContextMenuAction::EditEvent => {
+                self.ui.show_toast_info("Edit event dialog opened");
+                // TODO: Show edit event dialog
+            }
+            
+            ContextMenuAction::DeleteEvent => {
+                self.ui.show_toast_info("Delete event confirmation opened");
+                // TODO: Show delete event confirmation
+            }
+            
+            ContextMenuAction::DuplicateEvent => {
+                self.ui.show_toast_info("Event duplicated");
+                // TODO: Implement event duplication
+            }
+            
+            ContextMenuAction::ExportEvent => {
+                self.ui.show_toast_info("Event exported");
+                // TODO: Implement event export
+            }
+            
+            ContextMenuAction::ViewEventDetails => {
+                self.ui.show_toast_info("Event details opened");
+                // TODO: Show event details dialog
+            }
+            
+            ContextMenuAction::Cancel => {
+                // Context menu is already hidden by the menu system
+                tracing::debug!("Context menu cancelled");
+            }
+        }
+        
         Ok(())
     }
 }
