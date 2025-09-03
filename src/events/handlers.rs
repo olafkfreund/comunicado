@@ -518,14 +518,21 @@ mod tests {
     #[test]
     fn test_notification_handler() {
         let service = MockNotificationService::new();
-        let mut handler = NotificationHandler::new(service);
+        let service_arc = Arc::new(Mutex::new(service));
+        let mut enabled_notifications = HashMap::new();
+        enabled_notifications.insert("email_received".to_string(), true);
+        
+        let mut handler = NotificationHandler {
+            notification_service: service_arc.clone(),
+            enabled_notifications,
+        };
         
         let event = events::email_received("account1".to_string(), Uuid::new_v4());
         assert!(handler.handle(&event).is_ok());
         
-        // Test that notification was triggered
-        let service = handler.notification_service.lock().unwrap();
-        let mock_service = service.as_any().downcast_ref::<MockNotificationService>().unwrap();
+        // Test that notification was triggered by accessing the mock service directly
+        let service_guard = service_arc.lock().unwrap();
+        let mock_service = service_guard.as_any().downcast_ref::<MockNotificationService>().unwrap();
         assert_eq!(mock_service.get_notifications().len(), 1);
     }
     

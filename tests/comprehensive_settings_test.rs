@@ -181,7 +181,7 @@ mod settings_ui_tests {
         let mut settings_ui = create_test_settings_ui();
         
         // Ensure we're on General tab
-        while settings_ui.state().current_tab != SettingsTab::General {
+        while settings_ui.state().current_tab != SettingsTab::Core {
             assert!(settings_ui.handle_key(KeyCode::Tab, KeyModifiers::NONE));
         }
 
@@ -191,7 +191,7 @@ mod settings_ui_tests {
         for i in 0..max_items {
             // Navigate to specific item
             let mut test_ui = create_test_settings_ui();
-            while test_ui.state().current_tab != SettingsTab::General {
+            while test_ui.state().current_tab != SettingsTab::Core {
                 assert!(test_ui.handle_key(KeyCode::Tab, KeyModifiers::NONE));
             }
             
@@ -213,7 +213,7 @@ mod settings_ui_tests {
         let mut settings_ui = create_test_settings_ui();
         
         // Navigate to AI tab
-        while settings_ui.state().current_tab != SettingsTab::AI {
+        while settings_ui.state().current_tab != SettingsTab::Privacy {
             assert!(settings_ui.handle_key(KeyCode::Tab, KeyModifiers::NONE));
         }
 
@@ -222,7 +222,7 @@ mod settings_ui_tests {
         
         for i in 0..max_items {
             let mut test_ui = create_test_settings_ui();
-            while test_ui.state().current_tab != SettingsTab::AI {
+            while test_ui.state().current_tab != SettingsTab::Privacy {
                 assert!(test_ui.handle_key(KeyCode::Tab, KeyModifiers::NONE));
             }
             
@@ -279,7 +279,7 @@ mod settings_ui_tests {
         let mut settings_ui = create_test_settings_ui();
         
         // 1. Navigate to AI tab
-        while settings_ui.state().current_tab != SettingsTab::AI {
+        while settings_ui.state().current_tab != SettingsTab::Privacy {
             assert!(settings_ui.handle_key(KeyCode::Tab, KeyModifiers::NONE));
         }
         
@@ -365,40 +365,32 @@ mod settings_tab_tests {
     fn test_settings_tab_enum() {
         let all_tabs = SettingsTab::all();
         
-        // Verify all expected tabs exist
-        assert!(all_tabs.contains(&SettingsTab::General));
-        assert!(all_tabs.contains(&SettingsTab::Accounts));
-        assert!(all_tabs.contains(&SettingsTab::UI));
-        assert!(all_tabs.contains(&SettingsTab::Keyboard));
-        assert!(all_tabs.contains(&SettingsTab::Performance));
+        // Verify all expected tabs exist (using consolidated tabs)
+        assert!(all_tabs.contains(&SettingsTab::Core));
+        assert!(all_tabs.contains(&SettingsTab::Interface));
         assert!(all_tabs.contains(&SettingsTab::Privacy));
-        assert!(all_tabs.contains(&SettingsTab::AI));
         assert!(all_tabs.contains(&SettingsTab::Advanced));
         
         // Test tab titles
-        assert_eq!(SettingsTab::General.title(), "General");
-        assert_eq!(SettingsTab::Accounts.title(), "Accounts");
-        assert_eq!(SettingsTab::UI.title(), "UI & Theme");
-        assert_eq!(SettingsTab::Keyboard.title(), "Keyboard");
-        assert_eq!(SettingsTab::Performance.title(), "Performance");
-        assert_eq!(SettingsTab::Privacy.title(), "Privacy");
-        assert_eq!(SettingsTab::AI.title(), "AI Assistant");
-        assert_eq!(SettingsTab::Advanced.title(), "Advanced");
+        assert_eq!(SettingsTab::Core.title(), "Core Settings");
+        assert_eq!(SettingsTab::Interface.title(), "Interface & Input");
+        assert_eq!(SettingsTab::Privacy.title(), "Privacy & AI");
+        assert_eq!(SettingsTab::Advanced.title(), "Advanced & System");
     }
 
     #[test]
     fn test_tab_navigation() {
-        let general = SettingsTab::General;
+        let general = SettingsTab::Core;
         let next = general.next();
-        assert_eq!(next, SettingsTab::Accounts);
+        assert_eq!(next, SettingsTab::Core);
         
         let previous = next.previous();
-        assert_eq!(previous, SettingsTab::General);
+        assert_eq!(previous, SettingsTab::Core);
         
         // Test wraparound
         let advanced = SettingsTab::Advanced;
         let wrapped_next = advanced.next();
-        assert_eq!(wrapped_next, SettingsTab::General);
+        assert_eq!(wrapped_next, SettingsTab::Core);
         
         let wrapped_previous = general.previous();
         assert_eq!(wrapped_previous, SettingsTab::Advanced);
@@ -415,7 +407,7 @@ mod settings_state_tests {
         let state = SettingsUIState::new();
         
         assert!(!state.visible);
-        assert_eq!(state.current_tab, SettingsTab::General);
+        assert_eq!(state.current_tab, SettingsTab::Core);
         assert_eq!(state.selected_index, 0);
         assert!(!state.edit_mode);
         assert!(state.input_buffer.is_empty());
@@ -430,7 +422,7 @@ mod settings_state_tests {
         // Test show
         state.show();
         assert!(state.visible);
-        assert_eq!(state.current_tab, SettingsTab::General);
+        assert_eq!(state.current_tab, SettingsTab::Core);
         assert_eq!(state.selected_index, 0);
         assert!(!state.edit_mode);
         assert!(state.input_buffer.is_empty());
@@ -480,25 +472,25 @@ mod settings_state_tests {
         let mut state = SettingsUIState::new();
         
         // Test max items for each tab matches the render functions
-        state.current_tab = SettingsTab::General;
+        state.current_tab = SettingsTab::Core;
         assert_eq!(state.get_max_items_for_tab(), 10);
         
-        state.current_tab = SettingsTab::Accounts;
+        state.current_tab = SettingsTab::Core;
         assert_eq!(state.get_max_items_for_tab(), 6);
         
-        state.current_tab = SettingsTab::UI;
+        state.current_tab = SettingsTab::Interface;
         assert_eq!(state.get_max_items_for_tab(), 7);
         
-        state.current_tab = SettingsTab::Keyboard;
+        state.current_tab = SettingsTab::Interface;
         assert_eq!(state.get_max_items_for_tab(), 5);
         
-        state.current_tab = SettingsTab::Performance;
+        state.current_tab = SettingsTab::Core;
         assert_eq!(state.get_max_items_for_tab(), 6);
         
         state.current_tab = SettingsTab::Privacy;
         assert_eq!(state.get_max_items_for_tab(), 5);
         
-        state.current_tab = SettingsTab::AI;
+        state.current_tab = SettingsTab::Privacy;
         assert_eq!(state.get_max_items_for_tab(), 8);
         
         state.current_tab = SettingsTab::Advanced;

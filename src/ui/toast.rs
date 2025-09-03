@@ -189,6 +189,11 @@ impl ToastManager {
         !self.toasts.is_empty()
     }
 
+    /// Get count of active toasts
+    pub fn active_count(&self) -> usize {
+        self.toasts.len()
+    }
+
     /// Clear all toasts
     pub fn clear(&mut self) {
         self.toasts.clear();

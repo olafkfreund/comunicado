@@ -1,109 +1,155 @@
-//! Performance optimization module
-//!
-//! This module provides comprehensive performance optimizations including:
-//! - Async background processing for non-blocking operations
-//! - Intelligent caching systems for messages and folders
-//! - Real-time progress indicators and status updates
-//! - Optimized startup process with deferred loading
-//! - UI responsiveness improvements
+//! Performance optimization and monitoring system
 
+pub mod metrics;
 pub mod cache;
-pub mod background_processor;
-pub mod progress_tracker;
-pub mod startup_optimizer;
+pub mod database;
+pub mod memory;
+pub mod network;
+pub mod profiling;
+pub mod optimization;
+pub mod monitoring;
 
-// Re-export main types for easy access
-pub use cache::{MessageCache, FolderCache, CacheManager, CacheSettings, CacheStats};
-pub use background_processor::{
-    BackgroundProcessor, BackgroundTask, BackgroundTaskType, TaskPriority, TaskStatus, 
-    TaskResult, ProcessorSettings
+pub use metrics::{
+    PerformanceMetrics, MetricsCollector, MetricsRegistry, MetricType, 
+    PerformanceCounter, LatencyTracker, ThroughputTracker, MetricsStatistics
 };
-pub use progress_tracker::{
-    ProgressTracker, ProgressUpdate, ProgressStatus, ProgressBuilder
+pub use cache::{
+    PerformanceCache, CacheManager, CachePolicy, CacheStatistics, 
+    CacheLevel, CacheEvictionStrategy
 };
-pub use startup_optimizer::{
-    StartupOptimizer, StartupPhase, StartupProgress, StartupSettings, 
-    DeferredTask, DeferredTaskPriority
+pub use database::{
+    DatabaseOptimizer, QueryOptimizer, ConnectionPool, IndexAnalyzer,
+    QueryStats, DatabaseMetrics, DatabaseStatistics
+};
+pub use memory::{
+    MemoryManager, MemoryProfiler, AllocationTracker, GarbageCollector,
+    MemoryStats, HeapAnalyzer, MemoryStatistics
+};
+pub use network::{
+    NetworkOptimizer, ConnectionManager, RequestBatcher, CircuitBreaker,
+    NetworkMetrics, BandwidthManager, NetworkStatistics
+};
+pub use profiling::{
+    Profiler, ProfileResult, FlameGraph, HotspotAnalyzer,
+    ProfilerConfig, ProfilingSession
+};
+pub use optimization::{
+    OptimizationEngine, OptimizationRule, PerformanceTuner, 
+    AutoOptimizer, OptimizationRecommendation
+};
+pub use monitoring::{
+    PerformanceMonitor, AlertManager, Threshold, Alert,
+    MonitoringDashboard, HealthCheck
 };
 
-use std::sync::Arc;
-use tokio::sync::mpsc;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::time::{Duration, Instant};
+use tokio::sync::RwLock;
+use uuid::Uuid;
 
-/// Comprehensive performance optimization system
-pub struct PerformanceSystem {
-    /// Cache manager for messages and folders
-    pub cache_manager: Arc<CacheManager>,
-    /// Background task processor
-    pub background_processor: Arc<BackgroundProcessor>,
-    /// Progress tracker for UI updates
-    pub progress_tracker: Arc<ProgressTracker>,
-    /// Startup optimizer
-    pub startup_optimizer: Arc<StartupOptimizer>,
+/// Performance optimization configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PerformanceConfig {
+    pub monitoring_enabled: bool,
+    pub profiling_enabled: bool,
+    pub auto_optimization: bool,
+    pub cache_enabled: bool,
+    pub database_optimization: bool,
+    pub network_optimization: bool,
+    pub memory_optimization: bool,
+    pub alert_thresholds: AlertThresholds,
+    pub optimization_intervals: OptimizationIntervals,
 }
 
-impl PerformanceSystem {
-    /// Create a new performance system with default settings
-    pub fn new() -> Self {
-        let (progress_tx, _) = mpsc::unbounded_channel();
-        let (completion_tx, _) = mpsc::unbounded_channel();
-        
-        Self {
-            cache_manager: Arc::new(CacheManager::new()),
-            background_processor: Arc::new(BackgroundProcessor::new_standalone(progress_tx, completion_tx)),
-            progress_tracker: Arc::new(ProgressTracker::new()),
-            startup_optimizer: Arc::new(StartupOptimizer::new()),
-        }
-    }
-
-    /// Initialize all performance systems
-    pub async fn initialize(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        // Start background processor
-        self.background_processor.start().await?;
-        
-        // Start cache cleanup task
-        self.cache_manager.start_cleanup_task().await;
-        
-        // Run optimized startup
-        self.startup_optimizer.start_optimized_startup().await
-            .map_err(|e| Box::new(std::io::Error::new(std::io::ErrorKind::Other, e)) as Box<dyn std::error::Error + Send + Sync>)?;
-
-        Ok(())
-    }
-
-    /// Shutdown performance systems
-    pub async fn shutdown(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        self.background_processor.stop().await?;
-        Ok(())
-    }
-
-    /// Get system-wide performance statistics
-    pub async fn get_performance_stats(&self) -> PerformanceStats {
-        let (message_cache_stats, folder_cache_stats) = self.cache_manager.get_comprehensive_stats().await;
-        let active_operations = self.progress_tracker.active_operation_count().await;
-        let startup_progress = self.startup_optimizer.get_progress().await;
-        
-        PerformanceStats {
-            message_cache_hit_rate: message_cache_stats.hit_rate(),
-            folder_cache_hit_rate: folder_cache_stats.hit_rate(),
-            active_background_operations: active_operations,
-            startup_complete: startup_progress.current_phase == StartupPhase::Complete,
-            total_startup_time: self.startup_optimizer.total_startup_time(),
-        }
-    }
+/// Alert threshold configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AlertThresholds {
+    pub cpu_usage_percent: f64,
+    pub memory_usage_percent: f64,
+    pub disk_usage_percent: f64,
+    pub response_time_ms: u64,
+    pub error_rate_percent: f64,
+    pub queue_depth: usize,
 }
 
-impl Default for PerformanceSystem {
+/// Optimization interval configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OptimizationIntervals {
+    pub metrics_collection_seconds: u64,
+    pub cache_cleanup_seconds: u64,
+    pub database_optimization_seconds: u64,
+    pub memory_gc_seconds: u64,
+    pub profiling_duration_seconds: u64,
+}
+
+/// Performance optimization errors
+#[derive(Debug, thiserror::Error)]
+pub enum PerformanceError {
+    #[error("Metrics collection failed: {0}")]
+    MetricsError(String),
+    
+    #[error("Cache operation failed: {0}")]
+    CacheError(String),
+    
+    #[error("Database optimization failed: {0}")]
+    DatabaseError(String),
+    
+    #[error("Memory management failed: {0}")]
+    MemoryError(String),
+    
+    #[error("Network optimization failed: {0}")]
+    NetworkError(String),
+    
+    #[error("Profiling failed: {0}")]
+    ProfilingError(String),
+    
+    #[error("Configuration error: {0}")]
+    ConfigurationError(String),
+    
+    #[error("IO error: {0}")]
+    IoError(#[from] std::io::Error),
+}
+
+pub type PerformanceResult<T> = Result<T, PerformanceError>;
+
+impl Default for PerformanceConfig {
     fn default() -> Self {
-        Self::new()
+        Self {
+            monitoring_enabled: true,
+            profiling_enabled: true,
+            auto_optimization: false,
+            cache_enabled: true,
+            database_optimization: true,
+            network_optimization: true,
+            memory_optimization: true,
+            alert_thresholds: AlertThresholds::default(),
+            optimization_intervals: OptimizationIntervals::default(),
+        }
     }
 }
 
-/// System-wide performance statistics
-#[derive(Debug, Clone)]
-pub struct PerformanceStats {
-    pub message_cache_hit_rate: f64,
-    pub folder_cache_hit_rate: f64,
-    pub active_background_operations: usize,
-    pub startup_complete: bool,
-    pub total_startup_time: std::time::Duration,
+impl Default for AlertThresholds {
+    fn default() -> Self {
+        Self {
+            cpu_usage_percent: 80.0,
+            memory_usage_percent: 85.0,
+            disk_usage_percent: 90.0,
+            response_time_ms: 1000,
+            error_rate_percent: 5.0,
+            queue_depth: 1000,
+        }
+    }
+}
+
+impl Default for OptimizationIntervals {
+    fn default() -> Self {
+        Self {
+            metrics_collection_seconds: 60,
+            cache_cleanup_seconds: 300,
+            database_optimization_seconds: 3600,
+            memory_gc_seconds: 120,
+            profiling_duration_seconds: 300,
+        }
+    }
 }

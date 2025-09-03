@@ -196,8 +196,8 @@ mod tests {
     use super::*;
     use crate::events::bus::NoOpEvent;
     
-    #[test]
-    fn test_global_event_bus_initialization() {
+    #[tokio::test]
+    async fn test_global_event_bus_initialization() {
         let _bus = initialize_event_bus();
         assert!(get_event_bus().is_some());
         
@@ -205,8 +205,8 @@ mod tests {
         assert!(stats.is_some());
     }
     
-    #[test]
-    fn test_event_publishing() {
+    #[tokio::test]
+    async fn test_event_publishing() {
         let _bus = initialize_event_bus();
         
         let event = NoOpEvent::new("test event");

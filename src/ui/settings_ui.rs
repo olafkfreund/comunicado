@@ -1,7 +1,7 @@
 //! Application settings UI components for comprehensive configuration management
 
 use crate::theme::Theme;
-use crate::config::AppConfig;
+use crate::config::{AppConfig, FocusIndicatorStyle};
 use crate::ui::account_manager_ui::AccountManagerUI;
 use crate::ui::keyboard_bindings_ui::KeyboardBindingsUI;
 use ratatui::{
@@ -31,6 +31,9 @@ pub enum SettingsSubSection {
     
     // Interface tab sub-sections  
     UITheme,
+    ContextIndicators,
+    FocusIndicators,
+    ResponsiveLayout,
     Keyboard,
     
     // Privacy tab sub-sections
@@ -49,6 +52,9 @@ impl SettingsSubSection {
             SettingsSubSection::Accounts => "Accounts",
             SettingsSubSection::Performance => "Performance",
             SettingsSubSection::UITheme => "UI & Theme",
+            SettingsSubSection::ContextIndicators => "Context Indicators",
+            SettingsSubSection::FocusIndicators => "Focus Indicators",
+            SettingsSubSection::ResponsiveLayout => "Responsive Layout",
             SettingsSubSection::Keyboard => "Keyboard",
             SettingsSubSection::Privacy => "Privacy",
             SettingsSubSection::AI => "AI Assistant",
@@ -229,6 +235,9 @@ impl SettingsUIState {
             ],
             SettingsTab::Interface => vec![
                 SettingsSubSection::UITheme,
+                SettingsSubSection::ContextIndicators,
+                SettingsSubSection::FocusIndicators,
+                SettingsSubSection::ResponsiveLayout,
                 SettingsSubSection::Keyboard,
             ],
             SettingsTab::Privacy => vec![
@@ -295,6 +304,9 @@ impl SettingsUIState {
             SettingsSubSection::Accounts => 6, // Account management
             SettingsSubSection::Performance => 6, // Performance and caching
             SettingsSubSection::UITheme => 7, // UI, theme, and layout
+            SettingsSubSection::ContextIndicators => 7, // Context indicator settings
+            SettingsSubSection::FocusIndicators => 4, // Focus indicator settings
+            SettingsSubSection::ResponsiveLayout => 8, // Responsive layout settings
             SettingsSubSection::Keyboard => 5, // Keyboard shortcuts and vim mode
             SettingsSubSection::Privacy => 5, // Privacy and security
             SettingsSubSection::AI => 8, // AI assistant configuration
@@ -468,6 +480,9 @@ impl SettingsUI {
             SettingsTab::Interface => {
                 match self.state.current_sub_section {
                     SettingsSubSection::UITheme => self.handle_ui_select(),
+                    SettingsSubSection::ContextIndicators => self.handle_context_indicators_select(),
+                    SettingsSubSection::FocusIndicators => self.handle_focus_indicators_select(),
+                    SettingsSubSection::ResponsiveLayout => self.handle_responsive_layout_select(),
                     SettingsSubSection::Keyboard => self.handle_keyboard_select(),
                     _ => {}
                 }
@@ -599,6 +614,9 @@ impl SettingsUI {
             SettingsTab::Interface => {
                 match self.state.current_sub_section {
                     SettingsSubSection::UITheme => self.apply_ui_edit(value),
+                    SettingsSubSection::ContextIndicators => self.apply_context_indicators_edit(value),
+                    SettingsSubSection::FocusIndicators => self.apply_focus_indicators_edit(value),
+                    SettingsSubSection::ResponsiveLayout => self.apply_responsive_layout_edit(value),
                     SettingsSubSection::Keyboard => self.apply_keyboard_edit(value),
                     _ => {}
                 }
@@ -1517,6 +1535,9 @@ impl SettingsUI {
             SettingsTab::Interface => {
                 match self.state.current_sub_section {
                     SettingsSubSection::UITheme => self.render_ui_tab(frame, area, theme),
+                    SettingsSubSection::ContextIndicators => self.render_context_indicators_tab(frame, area, theme),
+                    SettingsSubSection::FocusIndicators => self.render_focus_indicators_tab(frame, area, theme),
+                    SettingsSubSection::ResponsiveLayout => self.render_responsive_layout_tab(frame, area, theme),
                     SettingsSubSection::Keyboard => self.render_keyboard_tab(frame, area, theme),
                     _ => {}
                 }
@@ -1729,6 +1750,230 @@ impl SettingsUI {
             .style(theme.get_component_style("secondary", false));
 
         frame.render_widget(footer, area);
+    }
+
+    // Context Indicators Settings
+    fn render_context_indicators_tab(&mut self, frame: &mut Frame, area: Rect, theme: &Theme) {
+        let items = vec![
+            ListItem::new(format!("🗺️  Show breadcrumb navigation: {}", 
+                if self.config.ui.context_indicators.show_breadcrumb { "Enabled" } else { "Disabled" })),
+            ListItem::new(format!("🔄 Show mode transitions: {}", 
+                if self.config.ui.context_indicators.show_mode_transitions { "Enabled" } else { "Disabled" })),
+            ListItem::new(format!("💡 Show action hints: {}", 
+                if self.config.ui.context_indicators.show_action_hints { "Enabled" } else { "Disabled" })),
+            ListItem::new(format!("📐 Show layout context: {}", 
+                if self.config.ui.context_indicators.show_layout_context { "Enabled" } else { "Disabled" })),
+            ListItem::new(format!("⌨️  Show keyboard hints: {}", 
+                if self.config.ui.context_indicators.show_keyboard_hints { "Enabled" } else { "Disabled" })),
+            ListItem::new(format!("🔢 Breadcrumb depth: {}", self.config.ui.context_indicators.breadcrumb_depth)),
+            ListItem::new(format!("⏱️  Animation duration: {} ms", self.config.ui.context_indicators.animation_duration_ms)),
+        ];
+
+        let list = List::new(items)
+            .block(Block::default()
+                .borders(Borders::ALL)
+                .title("Context Indicators Settings")
+                .style(theme.get_component_style("primary", false)))
+            .style(theme.get_component_style("secondary", false))
+            .highlight_style(theme.get_component_style("primary", true));
+
+        frame.render_stateful_widget(list, area, &mut self.state.list_state);
+    }
+
+    fn handle_context_indicators_select(&mut self) {
+        match self.state.selected_index {
+            0 => self.config.ui.context_indicators.show_breadcrumb = !self.config.ui.context_indicators.show_breadcrumb,
+            1 => self.config.ui.context_indicators.show_mode_transitions = !self.config.ui.context_indicators.show_mode_transitions,
+            2 => self.config.ui.context_indicators.show_action_hints = !self.config.ui.context_indicators.show_action_hints,
+            3 => self.config.ui.context_indicators.show_layout_context = !self.config.ui.context_indicators.show_layout_context,
+            4 => self.config.ui.context_indicators.show_keyboard_hints = !self.config.ui.context_indicators.show_keyboard_hints,
+            5 => {
+                self.state.edit_mode = true;
+                self.state.input_buffer = self.config.ui.context_indicators.breadcrumb_depth.to_string();
+            },
+            6 => {
+                self.state.edit_mode = true;
+                self.state.input_buffer = self.config.ui.context_indicators.animation_duration_ms.to_string();
+            },
+            _ => {}
+        }
+        self.state.modified = true;
+    }
+
+    fn apply_context_indicators_edit(&mut self, value: String) {
+        match self.state.selected_index {
+            5 => { // breadcrumb_depth
+                if let Ok(depth) = value.parse::<usize>() {
+                    if depth > 0 && depth <= 10 {
+                        self.config.ui.context_indicators.breadcrumb_depth = depth;
+                    }
+                }
+            },
+            6 => { // animation_duration_ms
+                if let Ok(duration) = value.parse::<u64>() {
+                    if duration <= 2000 {
+                        self.config.ui.context_indicators.animation_duration_ms = duration;
+                    }
+                }
+            },
+            _ => {}
+        }
+    }
+
+    // Focus Indicators Settings
+    fn render_focus_indicators_tab(&mut self, frame: &mut Frame, area: Rect, theme: &Theme) {
+        let style_text = match self.config.ui.focus_indicators.style {
+            FocusIndicatorStyle::Outline => "Outline",
+            FocusIndicatorStyle::Border => "Border",
+            FocusIndicatorStyle::Background => "Background",
+            FocusIndicatorStyle::Corners => "Corners",
+            FocusIndicatorStyle::Glow => "Glow",
+        };
+
+        let items = vec![
+            ListItem::new(format!("✨ Focus indicators enabled: {}", 
+                if self.config.ui.focus_indicators.enabled { "Enabled" } else { "Disabled" })),
+            ListItem::new(format!("🎨 Focus indicator style: {}", style_text)),
+            ListItem::new(format!("🌈 Color override: {}", 
+                self.config.ui.focus_indicators.color_override.as_ref().unwrap_or(&"Default".to_string()))),
+            ListItem::new(format!("🎭 Animate focus changes: {}", 
+                if self.config.ui.focus_indicators.animate_focus_changes { "Enabled" } else { "Disabled" })),
+        ];
+
+        let list = List::new(items)
+            .block(Block::default()
+                .borders(Borders::ALL)
+                .title("Focus Indicators Settings")
+                .style(theme.get_component_style("primary", false)))
+            .style(theme.get_component_style("secondary", false))
+            .highlight_style(theme.get_component_style("primary", true));
+
+        frame.render_stateful_widget(list, area, &mut self.state.list_state);
+    }
+
+    fn handle_focus_indicators_select(&mut self) {
+        match self.state.selected_index {
+            0 => self.config.ui.focus_indicators.enabled = !self.config.ui.focus_indicators.enabled,
+            1 => {
+                // Cycle through focus indicator styles
+                self.config.ui.focus_indicators.style = match self.config.ui.focus_indicators.style {
+                    FocusIndicatorStyle::Outline => FocusIndicatorStyle::Border,
+                    FocusIndicatorStyle::Border => FocusIndicatorStyle::Background,
+                    FocusIndicatorStyle::Background => FocusIndicatorStyle::Corners,
+                    FocusIndicatorStyle::Corners => FocusIndicatorStyle::Glow,
+                    FocusIndicatorStyle::Glow => FocusIndicatorStyle::Outline,
+                };
+            },
+            2 => {
+                self.state.edit_mode = true;
+                self.state.input_buffer = self.config.ui.focus_indicators.color_override.as_ref().unwrap_or(&String::new()).clone();
+            },
+            3 => self.config.ui.focus_indicators.animate_focus_changes = !self.config.ui.focus_indicators.animate_focus_changes,
+            _ => {}
+        }
+        self.state.modified = true;
+    }
+
+    fn apply_focus_indicators_edit(&mut self, value: String) {
+        match self.state.selected_index {
+            2 => { // color_override
+                if value.is_empty() {
+                    self.config.ui.focus_indicators.color_override = None;
+                } else {
+                    self.config.ui.focus_indicators.color_override = Some(value);
+                }
+            },
+            _ => {}
+        }
+    }
+
+    // Responsive Layout Settings
+    fn render_responsive_layout_tab(&mut self, frame: &mut Frame, area: Rect, theme: &Theme) {
+        let items = vec![
+            ListItem::new(format!("📱 Responsive layout enabled: {}", 
+                if self.config.ui.responsive.enabled { "Enabled" } else { "Disabled" })),
+            ListItem::new(format!("📏 Extra small breakpoint: {} columns", self.config.ui.responsive.breakpoints.extra_small_max)),
+            ListItem::new(format!("📐 Small breakpoint: {} columns", self.config.ui.responsive.breakpoints.small_max)),
+            ListItem::new(format!("📊 Medium breakpoint: {} columns", self.config.ui.responsive.breakpoints.medium_max)),
+            ListItem::new(format!("📈 Large breakpoint: {} columns", self.config.ui.responsive.breakpoints.large_max)),
+            ListItem::new(format!("🔄 Auto-hide sidebar: {}", 
+                if self.config.ui.responsive.adaptive_behavior.auto_hide_sidebar { "Enabled" } else { "Disabled" })),
+            ListItem::new(format!("📚 Auto-stack panels: {}", 
+                if self.config.ui.responsive.adaptive_behavior.auto_stack_panels { "Enabled" } else { "Disabled" })),
+            ListItem::new(format!("🔍 Scale content: {}", 
+                if self.config.ui.responsive.adaptive_behavior.scale_content { "Enabled" } else { "Disabled" })),
+        ];
+
+        let list = List::new(items)
+            .block(Block::default()
+                .borders(Borders::ALL)
+                .title("Responsive Layout Settings")
+                .style(theme.get_component_style("primary", false)))
+            .style(theme.get_component_style("secondary", false))
+            .highlight_style(theme.get_component_style("primary", true));
+
+        frame.render_stateful_widget(list, area, &mut self.state.list_state);
+    }
+
+    fn handle_responsive_layout_select(&mut self) {
+        match self.state.selected_index {
+            0 => self.config.ui.responsive.enabled = !self.config.ui.responsive.enabled,
+            1 => {
+                self.state.edit_mode = true;
+                self.state.input_buffer = self.config.ui.responsive.breakpoints.extra_small_max.to_string();
+            },
+            2 => {
+                self.state.edit_mode = true;
+                self.state.input_buffer = self.config.ui.responsive.breakpoints.small_max.to_string();
+            },
+            3 => {
+                self.state.edit_mode = true;
+                self.state.input_buffer = self.config.ui.responsive.breakpoints.medium_max.to_string();
+            },
+            4 => {
+                self.state.edit_mode = true;
+                self.state.input_buffer = self.config.ui.responsive.breakpoints.large_max.to_string();
+            },
+            5 => self.config.ui.responsive.adaptive_behavior.auto_hide_sidebar = !self.config.ui.responsive.adaptive_behavior.auto_hide_sidebar,
+            6 => self.config.ui.responsive.adaptive_behavior.auto_stack_panels = !self.config.ui.responsive.adaptive_behavior.auto_stack_panels,
+            7 => self.config.ui.responsive.adaptive_behavior.scale_content = !self.config.ui.responsive.adaptive_behavior.scale_content,
+            _ => {}
+        }
+        self.state.modified = true;
+    }
+
+    fn apply_responsive_layout_edit(&mut self, value: String) {
+        match self.state.selected_index {
+            1 => { // extra_small_max
+                if let Ok(size) = value.parse::<u16>() {
+                    if size >= 20 && size <= 200 {
+                        self.config.ui.responsive.breakpoints.extra_small_max = size;
+                    }
+                }
+            },
+            2 => { // small_max
+                if let Ok(size) = value.parse::<u16>() {
+                    if size >= 40 && size <= 200 {
+                        self.config.ui.responsive.breakpoints.small_max = size;
+                    }
+                }
+            },
+            3 => { // medium_max
+                if let Ok(size) = value.parse::<u16>() {
+                    if size >= 60 && size <= 300 {
+                        self.config.ui.responsive.breakpoints.medium_max = size;
+                    }
+                }
+            },
+            4 => { // large_max
+                if let Ok(size) = value.parse::<u16>() {
+                    if size >= 80 && size <= 400 {
+                        self.config.ui.responsive.breakpoints.large_max = size;
+                    }
+                }
+            },
+            _ => {}
+        }
     }
 }
 

@@ -541,7 +541,7 @@ mod tests {
         let provider = create_test_provider();
         let intent = provider.parse_schedule_from_response(
             "Schedule a meeting for tomorrow at 3 PM",
-            "This is a detailed meeting request with structured information about the event scheduled for tomorrow afternoon."
+            "Title: Tomorrow's Meeting\nThis is a detailed meeting request with structured information about the event scheduled for tomorrow afternoon."
         );
         
         assert_eq!(intent.intent_type, "meeting");

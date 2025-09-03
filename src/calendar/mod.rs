@@ -8,6 +8,8 @@ pub mod invitation;
 pub mod invitation_manager;
 pub mod manager;
 pub mod notifications;
+pub mod sharing;
+pub mod sharing_ui;
 pub mod sync;
 pub mod ui;
 
@@ -26,6 +28,11 @@ pub use invitation::{InvitationMethod, InvitationProcessor, MeetingInvitation, R
 pub use invitation_manager::{InvitationManager, InvitationStatistics};
 pub use manager::CalendarManager;
 pub use notifications::{CalendarNotification, CalendarNotificationManager};
+pub use sharing::{
+    CalendarSharingManager, CalendarShare, SharedUser, SharingInvitation, CalendarPermission,
+    DesktopIntegrationType, SharingError, SharingResult,
+};
+pub use sharing_ui::{CalendarSharingUI, SharingAction, SharingTab};
 pub use sync::{CalendarSyncEngine, CalendarSyncProgress};
 pub use ui::{CalendarAction, CalendarUI, CalendarViewMode};
 

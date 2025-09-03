@@ -5,6 +5,7 @@
 
 pub mod background;
 pub mod cache;
+pub mod categorization;
 pub mod config;
 pub mod config_manager;
 pub mod enhanced_service;
@@ -16,6 +17,7 @@ pub mod providers;
 pub mod retry;
 pub mod service;
 pub mod smart_compose;
+pub mod smart_reply;
 pub mod streaming;
 
 #[cfg(test)]
@@ -50,6 +52,14 @@ pub use service::{
 pub use smart_compose::{
     SmartComposeService, SmartComposeConfig, SmartComposeResponse, ComposeSuggestion,
     CompositionContext, EmailType, SuggestionType, SmartComposeStats
+};
+pub use smart_reply::{
+    SmartReplyGenerator, ReplyRequest, ReplyType, ReplyTone, ReplyLength, 
+    GeneratedReply, ReplyTemplate, UserPreferences
+};
+pub use categorization::{
+    EmailCategorizer, EmailCategory, ClassificationResult, NotificationPriority as CategoryPriority,
+    AutoAction, SuggestedAction, ActionType
 };
 pub use streaming::{AIStreamingManager, StreamChunk, StreamingConfig, StreamingSession, StreamingStats};
 

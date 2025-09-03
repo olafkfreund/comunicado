@@ -43,10 +43,12 @@ pub mod time_picker;
 pub mod toast;
 pub mod toast_integration_simple;
 pub mod typography;
+pub mod unified_feedback;
 pub mod unified_sidebar;
 pub mod notes;
 pub mod onboarding;
 pub mod mode_indicator;
+pub mod context_indicators;
 pub mod threading_display;
 pub mod thread_hierarchy_view;
 pub mod form_validation;
@@ -71,7 +73,7 @@ use crate::keyboard::KeyboardManager;
 use crate::theme::{Theme, ThemeManager};
 use chrono::Duration as ChronoDuration;
 use ratatui::{
-    layout::Rect,
+    layout::{Rect, Layout, Direction, Constraint},
     widgets::{Block, Borders, Paragraph},
     Frame,
 };
@@ -90,16 +92,19 @@ use self::{
     folder_tree::FolderTree,
     help::HelpOverlay,
     keyboard_shortcuts::KeyboardShortcutsUI,
-    layout::AppLayout,
+    layout::{AppLayout, LayoutMode, LayoutBreakpoint, ResponsiveBreakpoints, ComponentMinWidths},
     message_list::MessageList,
     status_bar::{
         CalendarStatusSegment, EmailStatusSegment, NavigationHintsSegment, StatusBar, SyncStatus,
-        SystemInfoSegment,
+        SystemInfoSegment, StatusBarContext, InformationDensity as StatusBarInformationDensity,
+        ModeIndicatorSegment, SearchStatusSegment,
     },
     sync_progress::SyncProgressOverlay,
     toast::ToastManager,
     toast_integration_simple::SimpleToastIntegration,
     typography::{TypographySystem, InformationDensity},
+    unified_feedback::UnifiedFeedbackManager,
+    context_indicators::{ContextIndicators, ContextIndicatorConfig, FocusIndicatorStyle},
 };
 
 // Re-export compose and draft types for external use
@@ -234,6 +239,10 @@ pub struct UI {
     unified_sidebar: UnifiedSidebar,
     // Modern toast notification system
     toast_manager: ToastManager,
+    // Unified feedback system (consolidates all notifications)
+    unified_feedback: UnifiedFeedbackManager,
+    // Enhanced context indicators for better user orientation
+    context_indicators: ContextIndicators,
     // Typography and visual hierarchy system
     typography: TypographySystem,
     // Contextual help overlay system
@@ -314,6 +323,10 @@ impl UI {
             unified_sidebar: UnifiedSidebar::new(),
             // Initialize modern toast notification system
             toast_manager: ToastManager::new(),
+            // Initialize unified feedback system
+            unified_feedback: UnifiedFeedbackManager::new(),
+            // Initialize enhanced context indicators
+            context_indicators: ContextIndicators::new(),
             // Initialize typography and visual hierarchy system
             typography: TypographySystem::new(),
             // Initialize contextual help overlay system
@@ -397,6 +410,17 @@ impl UI {
     }
 
     fn initialize_status_bar(&mut self) {
+        // Set up responsive thresholds and intelligent context management
+        self.status_bar.set_information_density(StatusBarInformationDensity::Standard);
+        
+        // Add mode indicator segment (highest priority)
+        let mode_segment = ModeIndicatorSegment {
+            current_mode: self.mode.clone(),
+            sub_mode: None,
+            mode_stack: vec![self.mode.clone()],
+        };
+        self.status_bar.add_segment("mode".to_string(), mode_segment);
+        
         // Add email status segment (will be updated with real data when messages are loaded)
         let email_segment = EmailStatusSegment {
             unread_count: 0,
@@ -442,6 +466,84 @@ impl UI {
         };
         self.status_bar
             .add_segment("navigation".to_string(), nav_segment);
+        
+        // Add search status segment (initially hidden)
+        let search_segment = SearchStatusSegment {
+            query: String::new(),
+            results_count: 0,
+            is_active: false,
+        };
+        self.status_bar.add_segment("search".to_string(), search_segment);
+        
+        // Update context based on current mode
+        self.update_status_bar_context();
+    }
+
+    /// Update status bar context based on current UI mode and state
+    pub fn update_status_bar_context(&mut self) {
+        let context = match self.mode {
+            UIMode::Normal => StatusBarContext::EmailFocus,
+            UIMode::Calendar => StatusBarContext::CalendarFocus,
+            UIMode::Compose => StatusBarContext::ComposeFocus,
+            UIMode::Search => StatusBarContext::SearchActive,
+            UIMode::Settings => StatusBarContext::SettingsActive,
+            _ => StatusBarContext::EmailFocus, // Default fallback
+        };
+        
+        self.status_bar.update_context(context);
+        
+        // Update status bar density based on layout breakpoint
+        let density = match self.layout.current_breakpoint() {
+            LayoutBreakpoint::ExtraSmall => StatusBarInformationDensity::Minimal,
+            LayoutBreakpoint::Small => StatusBarInformationDensity::Compact,
+            LayoutBreakpoint::Medium => StatusBarInformationDensity::Standard,
+            LayoutBreakpoint::Large | LayoutBreakpoint::ExtraLarge => StatusBarInformationDensity::Standard,
+        };
+        self.status_bar.set_information_density(density);
+        
+        // Update mode indicator segment
+        let mode_segment = ModeIndicatorSegment {
+            current_mode: self.mode.clone(),
+            sub_mode: self.get_current_sub_mode(),
+            mode_stack: self.get_mode_stack(),
+        };
+        self.status_bar.add_segment("mode".to_string(), mode_segment);
+    }
+    
+    /// Get current sub-mode description for more context
+    fn get_current_sub_mode(&self) -> Option<String> {
+        match self.mode {
+            UIMode::Compose => {
+                if let Some(ref compose_ui) = self.compose_ui {
+                    if compose_ui.is_modified() {
+                        Some("modified".to_string())
+                    } else {
+                        Some("editing".to_string())
+                    }
+                } else {
+                    None
+                }
+            }
+            UIMode::Calendar => {
+                // Calendar view mode - for now just show that it's calendar mode
+                Some("calendar".to_string())
+            }
+            UIMode::Search => {
+                if self.search_ui.is_active() {
+                    Some("active".to_string())
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
+    }
+    
+    /// Get mode navigation stack for breadcrumb display
+    fn get_mode_stack(&self) -> Vec<UIMode> {
+        // For now, just return current mode, but could be expanded
+        // to track mode history for better navigation context
+        vec![self.mode.clone()]
     }
 
     pub fn render(&mut self, frame: &mut Frame) {
@@ -459,16 +561,14 @@ impl UI {
         match self.mode {
             UIMode::Normal => {
                 let chunks = self.layout.calculate_layout(size);
+                let layout_mode = self.layout.current_layout_mode();
 
-                // Render each pane with focus styling
-                self.render_account_switcher(frame, chunks[0]);
-                self.render_folder_tree(frame, chunks[1]);
-                self.render_message_list(frame, chunks[2]);
-                self.render_content_preview(frame, chunks[3]);
+                // Render components based on responsive layout
+                self.render_responsive_layout(frame, &chunks, layout_mode);
 
-                // Render the status bar
+                // Render the status bar with integrated context indicators
                 if chunks.len() > 4 {
-                    self.render_status_bar(frame, chunks[4]);
+                    self.render_status_bar_with_context(frame, chunks[4]);
                 }
 
                 // Render progress overlays (enhanced takes priority over sync)
@@ -520,12 +620,10 @@ impl UI {
             UIMode::Search => {
                 // Render search UI over the normal interface
                 let chunks = self.layout.calculate_layout(size);
+                let layout_mode = self.layout.current_layout_mode();
 
                 // Render normal interface in background
-                self.render_account_switcher(frame, chunks[0]);
-                self.render_folder_tree(frame, chunks[1]);
-                self.render_message_list(frame, chunks[2]);
-                self.render_content_preview(frame, chunks[3]);
+                self.render_responsive_layout(frame, &chunks, layout_mode);
 
                 // Render the status bar
                 if chunks.len() > 4 {
@@ -539,12 +637,10 @@ impl UI {
             UIMode::KeyboardShortcuts => {
                 // Render keyboard shortcuts over the normal interface
                 let chunks = self.layout.calculate_layout(size);
+                let layout_mode = self.layout.current_layout_mode();
 
                 // Render normal interface in background
-                self.render_account_switcher(frame, chunks[0]);
-                self.render_folder_tree(frame, chunks[1]);
-                self.render_message_list(frame, chunks[2]);
-                self.render_content_preview(frame, chunks[3]);
+                self.render_responsive_layout(frame, &chunks, layout_mode);
 
                 // Render the status bar
                 if chunks.len() > 4 {
@@ -559,12 +655,10 @@ impl UI {
             UIMode::Settings => {
                 // Render settings over the normal interface
                 let chunks = self.layout.calculate_layout(size);
+                let layout_mode = self.layout.current_layout_mode();
 
                 // Render normal interface in background
-                self.render_account_switcher(frame, chunks[0]);
-                self.render_folder_tree(frame, chunks[1]);
-                self.render_message_list(frame, chunks[2]);
-                self.render_content_preview(frame, chunks[3]);
+                self.render_responsive_layout(frame, &chunks, layout_mode);
 
                 // Render the status bar
                 if chunks.len() > 4 {
@@ -578,12 +672,10 @@ impl UI {
             UIMode::ContactsPopup => {
                 // Render contacts popup over the normal interface
                 let chunks = self.layout.calculate_layout(size);
+                let layout_mode = self.layout.current_layout_mode();
 
                 // Render normal interface in background
-                self.render_account_switcher(frame, chunks[0]);
-                self.render_folder_tree(frame, chunks[1]);
-                self.render_message_list(frame, chunks[2]);
-                self.render_content_preview(frame, chunks[3]);
+                self.render_responsive_layout(frame, &chunks, layout_mode);
 
                 // Render the status bar
                 if chunks.len() > 4 {
@@ -616,11 +708,9 @@ impl UI {
             }
         }
 
-        // Render toast notifications on top of everything
+        // Render unified feedback system on top of everything
         let theme = self.theme_manager.current_theme();
-        if self.toast_manager.has_toasts() {
-            crate::ui::toast::ToastRenderer::render(frame, size, self.toast_manager.toasts(), theme);
-        }
+        self.unified_feedback.render(frame, size, theme);
 
         // Render context shortcuts popup on top of everything if visible
         self.context_shortcuts_popup.render(frame, size, theme, &self.mode);
@@ -786,43 +876,91 @@ impl UI {
     fn render_folder_tree(&self, frame: &mut Frame, area: Rect) {
         let is_focused = matches!(self.focused_pane, FocusedPane::FolderTree);
         let theme = self.theme_manager.current_theme();
+        let is_compact = self.should_use_compact_ui();
 
         let border_style = theme.get_component_style("border", is_focused);
+        let title = if is_compact { "Folders" } else { "📁 Folders" };
+        let borders = if is_compact { Borders::TOP | Borders::BOTTOM } else { Borders::ALL };
+        
         let block = Block::default()
-            .title("Folders")
-            .borders(Borders::ALL)
+            .title(title)
+            .borders(borders)
             .border_style(border_style);
 
         self.folder_tree
             .render(frame, area, block, is_focused, theme);
+            
+        // Render focus indicators if this pane is focused
+        if is_focused {
+            self.context_indicators.render_focus_indicator(frame, area, FocusedPane::FolderTree, theme);
+        }
     }
 
     fn render_message_list(&mut self, frame: &mut Frame, area: Rect) {
         let is_focused = matches!(self.focused_pane, FocusedPane::MessageList);
         let theme = self.theme_manager.current_theme();
+        let is_compact = self.should_use_compact_ui();
+        let layout_mode = self.layout.current_layout_mode();
 
         let border_style = theme.get_component_style("border", is_focused);
+        let title = match (is_compact, layout_mode) {
+            (true, LayoutMode::SingleColumn) => "📧 Mail",
+            (true, _) => "Messages",
+            (false, LayoutMode::SingleColumn) => "📧 Messages (Full Screen)",
+            (false, _) => "📧 Messages",
+        };
+        
+        let borders = if is_compact && matches!(layout_mode, LayoutMode::Stacked) {
+            Borders::TOP | Borders::BOTTOM
+        } else {
+            Borders::ALL
+        };
+        
         let block = Block::default()
-            .title("Messages")
-            .borders(Borders::ALL)
+            .title(title)
+            .borders(borders)
             .border_style(border_style);
 
         self.message_list
             .render(frame, area, block, is_focused, theme);
+            
+        // Render focus indicators if this pane is focused
+        if is_focused {
+            self.context_indicators.render_focus_indicator(frame, area, FocusedPane::MessageList, theme);
+        }
     }
 
     fn render_content_preview(&mut self, frame: &mut Frame, area: Rect) {
         let is_focused = matches!(self.focused_pane, FocusedPane::ContentPreview);
         let theme = self.theme_manager.current_theme();
+        let is_compact = self.should_use_compact_ui();
+        let layout_mode = self.layout.current_layout_mode();
 
         let border_style = theme.get_component_style("border", is_focused);
+        let title = match (is_compact, layout_mode) {
+            (true, _) => "📄 Content",
+            (false, LayoutMode::TwoColumn) => "📄 Content Preview", 
+            (false, _) => "📄 Email Content",
+        };
+        
+        let borders = if matches!(layout_mode, LayoutMode::SingleColumn | LayoutMode::Stacked) {
+            Borders::ALL // Full borders when content has focus
+        } else {
+            Borders::ALL
+        };
+        
         let block = Block::default()
-            .title("Content")
-            .borders(Borders::ALL)
+            .title(title)
+            .borders(borders)
             .border_style(border_style);
 
         self.content_preview
             .render(frame, area, block, is_focused, theme);
+            
+        // Render focus indicators if this pane is focused  
+        if is_focused {
+            self.context_indicators.render_focus_indicator(frame, area, FocusedPane::ContentPreview, theme);
+        }
     }
 
     fn render_status_bar(&self, frame: &mut Frame, area: Rect) {
@@ -861,13 +999,43 @@ impl UI {
         }
     }
 
+    /// Render status bar with integrated context indicators  
+    fn render_status_bar_with_context(&mut self, frame: &mut Frame, area: Rect) {
+        if area.height < 3 {
+            // Fall back to regular status bar if not enough height
+            self.render_status_bar(frame, area);
+            return;
+        }
+
+        let theme = self.theme_manager.current_theme();
+        
+        // Split status bar area to include context indicators
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(1), // Context indicators line
+                Constraint::Length(2), // Main status bar
+            ])
+            .split(area);
+
+        // Render context indicators in the top line
+        if chunks.len() >= 1 {
+            self.context_indicators.render(frame, chunks[0], theme, &self.typography);
+        }
+
+        // Render traditional status bar in the bottom area
+        if chunks.len() >= 2 {
+            self.render_status_bar(frame, chunks[1]);
+        }
+    }
+
     // Navigation methods
     pub fn next_pane(&mut self) {
         if matches!(self.mode, UIMode::Compose | UIMode::Calendar) {
             return; // No pane switching in compose or calendar mode
         }
 
-        self.focused_pane = match self.focused_pane {
+        let new_pane = match self.focused_pane {
             FocusedPane::AccountSwitcher => FocusedPane::FolderTree,
             FocusedPane::FolderTree => FocusedPane::MessageList,
             FocusedPane::MessageList => FocusedPane::ContentPreview,
@@ -876,6 +1044,7 @@ impl UI {
             FocusedPane::DraftList => FocusedPane::DraftList, // Stay in draft list
             FocusedPane::Calendar => FocusedPane::Calendar, // Stay in calendar
         };
+        self.set_focused_pane(new_pane);
         self.update_navigation_hints();
     }
 
@@ -884,7 +1053,7 @@ impl UI {
             return; // No pane switching in compose or calendar mode
         }
 
-        self.focused_pane = match self.focused_pane {
+        let new_pane = match self.focused_pane {
             FocusedPane::AccountSwitcher => FocusedPane::ContentPreview,
             FocusedPane::FolderTree => FocusedPane::AccountSwitcher,
             FocusedPane::MessageList => FocusedPane::FolderTree,
@@ -893,6 +1062,7 @@ impl UI {
             FocusedPane::DraftList => FocusedPane::DraftList, // Stay in draft list
             FocusedPane::Calendar => FocusedPane::Calendar, // Stay in calendar
         };
+        self.set_focused_pane(new_pane);
         self.update_navigation_hints();
     }
 
@@ -1015,6 +1185,180 @@ impl UI {
 
         self.status_bar
             .add_segment("navigation".to_string(), nav_segment);
+    }
+
+    /// Render components based on responsive layout mode
+    fn render_responsive_layout(&mut self, frame: &mut Frame, chunks: &[Rect], layout_mode: LayoutMode) {
+        match layout_mode {
+            LayoutMode::ThreeColumn => {
+                // Full three-column layout
+                self.render_account_switcher(frame, chunks[0]);
+                self.render_folder_tree(frame, chunks[1]);
+                self.render_message_list(frame, chunks[2]);
+                self.render_content_preview(frame, chunks[3]);
+            }
+            LayoutMode::TwoColumn => {
+                // Two-column layout (sidebar hidden)
+                self.render_message_list(frame, chunks[2]);
+                self.render_content_preview(frame, chunks[3]);
+                // Render compact account switcher as overlay or in status area
+                self.render_compact_account_indicator(frame, chunks[2]);
+            }
+            LayoutMode::SingleColumn => {
+                // Focus mode - only message list visible
+                self.render_message_list(frame, chunks[2]);
+                // Show navigation hints for accessing other panes
+                self.render_navigation_overlay(frame, chunks[2]);
+            }
+            LayoutMode::Stacked => {
+                // Vertical stacked layout for very narrow screens
+                self.render_account_switcher(frame, chunks[0]);
+                self.render_folder_tree(frame, chunks[1]);
+                self.render_message_list(frame, chunks[2]);
+                // Content preview is hidden in stacked mode
+            }
+        }
+    }
+    
+    /// Render compact account indicator for narrow layouts
+    fn render_compact_account_indicator(&self, frame: &mut Frame, area: Rect) {
+        use ratatui::{
+            layout::Alignment,
+            style::{Modifier, Style},
+            text::{Line, Span},
+            widgets::{Block, Borders, Paragraph},
+        };
+        
+        // Create a small overlay in the top-right corner
+        let indicator_area = Rect {
+            x: area.x + area.width.saturating_sub(25),
+            y: area.y,
+            width: 25.min(area.width),
+            height: 3,
+        };
+        
+        if let Some(account) = self.account_switcher.get_current_account() {
+            let theme = self.theme_manager.current_theme();
+            let account_text = if account.email_address.len() > 20 {
+                format!("{}...", &account.email_address[..17])
+            } else {
+                account.email_address.clone()
+            };
+            
+            let paragraph = Paragraph::new(Line::from(vec![
+                Span::styled(
+                    format!("📧 {}", account_text),
+                    Style::default()
+                        .fg(theme.colors.palette.text_primary)
+                        .add_modifier(Modifier::BOLD),
+                ),
+            ]))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_style(theme.get_component_style("account_indicator", false))
+            )
+            .alignment(Alignment::Center);
+            
+            frame.render_widget(paragraph, indicator_area);
+        }
+    }
+    
+    /// Render navigation overlay for single column mode
+    fn render_navigation_overlay(&self, frame: &mut Frame, area: Rect) {
+        use ratatui::{
+            layout::Alignment,
+            style::{Modifier, Style},
+            text::{Line, Span},
+            widgets::{Block, Borders, Paragraph},
+        };
+        
+        // Create overlay at the bottom of the message area
+        let overlay_area = Rect {
+            x: area.x,
+            y: area.y + area.height.saturating_sub(4),
+            width: area.width,
+            height: 4.min(area.height),
+        };
+        
+        let theme = self.theme_manager.current_theme();
+        let help_text = vec![
+            Line::from(vec![
+                Span::styled("Navigation: ", Style::default().fg(theme.colors.palette.text_secondary)),
+                Span::styled("Tab", Style::default().fg(theme.colors.palette.accent).add_modifier(Modifier::BOLD)),
+                Span::styled(" Switch | ", Style::default().fg(theme.colors.palette.text_secondary)),
+                Span::styled("Esc", Style::default().fg(theme.colors.palette.accent).add_modifier(Modifier::BOLD)),
+                Span::styled(" Wide View | ", Style::default().fg(theme.colors.palette.text_secondary)),
+                Span::styled("?", Style::default().fg(theme.colors.palette.accent).add_modifier(Modifier::BOLD)),
+                Span::styled(" Help", Style::default().fg(theme.colors.palette.text_secondary)),
+            ])
+        ];
+        
+        let paragraph = Paragraph::new(help_text)
+            .block(
+                Block::default()
+                    .borders(Borders::TOP)
+                    .border_style(theme.get_component_style("navigation_overlay", false))
+            )
+            .alignment(Alignment::Center);
+            
+        frame.render_widget(paragraph, overlay_area);
+    }
+    
+    /// Get responsive layout information for status bar
+    pub fn get_responsive_layout_info(&self) -> (LayoutBreakpoint, LayoutMode) {
+        (self.layout.current_breakpoint(), self.layout.current_layout_mode())
+    }
+    
+    /// Check if responsive layout adaptations should be applied
+    pub fn should_use_compact_ui(&self) -> bool {
+        matches!(
+            self.layout.current_breakpoint(),
+            LayoutBreakpoint::ExtraSmall | LayoutBreakpoint::Small
+        )
+    }
+    
+    /// Toggle to next layout mode (for user override)
+    pub fn cycle_layout_mode(&mut self) {
+        use crate::ui::layout::{AdaptiveBehavior, ResponsiveConfig};
+        
+        // Temporarily disable auto-adaptation to allow manual control
+        // Create new configuration with manual control enabled
+        let behavior = AdaptiveBehavior {
+            auto_hide_sidebar: false,
+            auto_stack_panels: false,
+            scale_content: true,
+            simplify_interface: true,
+        };
+        
+        let config = ResponsiveConfig {
+            breakpoints: ResponsiveBreakpoints::default(),
+            min_widths: ComponentMinWidths::default(),
+            adaptive_behavior: behavior,
+        };
+        self.layout.update_responsive_config(config);
+        
+        // Force re-layout with user preference
+        // This will be handled by the next render cycle
+        self.update_status_bar_context();
+    }
+    
+    /// Toggle sidebar visibility (manual override)
+    pub fn toggle_sidebar(&mut self) {
+        // This will be used to manually control sidebar visibility
+        // regardless of responsive breakpoints
+        self.cycle_layout_mode();
+    }
+    
+    /// Get layout status for debugging and user feedback
+    pub fn get_layout_status(&self) -> String {
+        format!(
+            "Layout: {:?} | Screen: {:?} | Sidebar: {} | Mode: {:?}",
+            self.layout.current_layout_mode(),
+            self.layout.current_breakpoint(),
+            if self.layout.is_sidebar_visible() { "On" } else { "Off" },
+            self.mode
+        )
     }
 
     fn get_current_shortcuts(&self) -> Vec<(String, String)> {
@@ -1839,6 +2183,7 @@ impl UI {
         self.compose_ui = Some(ComposeUI::new(contacts_manager));
         self.mode = UIMode::Compose;
         self.focused_pane = FocusedPane::Compose;
+        self.update_status_bar_context();
     }
 
     /// Enter compose mode for replying to a message
@@ -1976,6 +2321,7 @@ impl UI {
         self.compose_ui = None;
         self.mode = UIMode::Normal;
         self.focused_pane = FocusedPane::FolderTree;
+        self.update_status_bar_context();
     }
 
     /// Handle key input for compose mode
@@ -2042,6 +2388,7 @@ impl UI {
         self.draft_list.show();
         self.mode = UIMode::DraftList;
         self.focused_pane = FocusedPane::DraftList;
+        self.update_status_bar_context();
     }
 
     /// Hide draft list UI and return to normal mode
@@ -2049,6 +2396,7 @@ impl UI {
         self.draft_list.hide();
         self.mode = UIMode::Normal;
         self.focused_pane = FocusedPane::MessageList;
+        self.update_status_bar_context();
     }
 
     /// Update the draft list with new drafts
@@ -2182,12 +2530,14 @@ impl UI {
         self.focused_pane = FocusedPane::Calendar;
         self.calendar_ui.set_focus(true);
         self.update_navigation_hints();
+        self.update_status_bar_context();
     }
 
     /// Show contacts interface
     pub fn show_contacts(&mut self) {
         self.mode = UIMode::Contacts;
         self.update_navigation_hints();
+        self.update_status_bar_context();
     }
 
 
@@ -2198,6 +2548,7 @@ impl UI {
         self.focused_pane = FocusedPane::FolderTree;
         self.calendar_ui.set_focus(false);
         self.update_navigation_hints();
+        self.update_status_bar_context();
     }
 
     /// Hide contacts interface and return to normal mode  
@@ -3003,74 +3354,96 @@ impl UI {
         }
     }
 
-    // ===== MODERN TOAST NOTIFICATION SYSTEM =====
+    // ===== UNIFIED FEEDBACK SYSTEM =====
 
-    /// Show an info toast notification
+    /// Show info feedback with intelligent routing
     pub fn show_toast_info<S: Into<String>>(&mut self, message: S) {
-        self.toast_manager.info(message);
+        use crate::ui::unified_feedback::{FeedbackLevel, FeedbackContext};
+        self.unified_feedback.show_contextual(
+            message.into(),
+            FeedbackLevel::Info,
+            FeedbackContext::user_action(self.mode.clone(), self.focused_pane)
+        );
     }
 
-    /// Show a success toast notification
+    /// Show success feedback with intelligent routing
     pub fn show_toast_success<S: Into<String>>(&mut self, message: S) {
-        self.toast_manager.success(message);
+        use crate::ui::unified_feedback::{FeedbackLevel, FeedbackContext};
+        self.unified_feedback.show_contextual(
+            message.into(),
+            FeedbackLevel::Success,
+            FeedbackContext::user_action(self.mode.clone(), self.focused_pane)
+        );
     }
 
-    /// Show a warning toast notification
+    /// Show warning feedback with intelligent routing
     pub fn show_toast_warning<S: Into<String>>(&mut self, message: S) {
-        self.toast_manager.warning(message);
+        use crate::ui::unified_feedback::{FeedbackLevel, FeedbackContext};
+        self.unified_feedback.show_contextual(
+            message.into(),
+            FeedbackLevel::Warning,
+            FeedbackContext::user_action(self.mode.clone(), self.focused_pane)
+        );
     }
 
-    /// Show an error toast notification
+    /// Show error feedback with intelligent routing
     pub fn show_toast_error<S: Into<String>>(&mut self, message: S) {
-        self.toast_manager.error(message);
+        use crate::ui::unified_feedback::{FeedbackLevel, FeedbackContext};
+        self.unified_feedback.show_contextual(
+            message.into(),
+            FeedbackLevel::Error,
+            FeedbackContext::user_action(self.mode.clone(), self.focused_pane)
+        );
     }
 
-    /// Show a custom toast notification with specific level and duration
-    pub fn show_custom_toast<S: Into<String>>(
-        &mut self, 
-        message: S, 
-        level: crate::tea::message::ToastLevel, 
-        duration: Duration
-    ) {
-        self.toast_manager.show_with_duration(message.into(), level, duration);
+    /// Show progress feedback
+    pub fn show_progress<S: Into<String>>(&mut self, message: S, progress: f32) {
+        use crate::ui::unified_feedback::{FeedbackLevel, FeedbackContext};
+        self.unified_feedback.show_progress(
+            message.into(),
+            progress,
+            FeedbackContext::system_status(self.mode.clone())
+        );
     }
 
-    /// Show a persistent toast (longer duration)
-    pub fn show_persistent_toast<S: Into<String>>(
-        &mut self, 
-        message: S, 
-        level: crate::tea::message::ToastLevel
-    ) {
-        self.toast_manager.persistent(message, level);
+    /// Show status update
+    pub fn show_status<S: Into<String>>(&mut self, message: S) {
+        use crate::ui::unified_feedback::{FeedbackLevel, FeedbackContext};
+        self.unified_feedback.show_contextual(
+            message.into(),
+            FeedbackLevel::Status,
+            FeedbackContext::system_status(self.mode.clone())
+        );
     }
 
-    /// Show a quick toast (shorter duration)
-    pub fn show_quick_toast<S: Into<String>>(
-        &mut self, 
-        message: S, 
-        level: crate::tea::message::ToastLevel
-    ) {
-        self.toast_manager.quick(message, level);
+    /// Show critical system feedback
+    pub fn show_critical<S: Into<String>>(&mut self, message: S) {
+        use crate::ui::unified_feedback::{FeedbackLevel, FeedbackContext};
+        self.unified_feedback.show_contextual(
+            message.into(),
+            FeedbackLevel::Critical,
+            FeedbackContext::system_error(self.mode.clone())
+        );
     }
 
-    /// Update toast system (should be called every frame)
+    /// Update unified feedback system (should be called every frame)
     pub fn update_toasts(&mut self) {
-        self.toast_manager.update();
+        self.unified_feedback.update();
     }
 
-    /// Remove a specific toast by ID
-    pub fn remove_toast(&mut self, toast_id: &str) {
-        self.toast_manager.remove_toast(toast_id);
+    /// Remove specific feedback item
+    pub fn remove_toast(&mut self, feedback_id: &str) {
+        self.unified_feedback.dismiss(feedback_id);
     }
 
-    /// Clear all active toasts
+    /// Clear all active feedback
     pub fn clear_toasts(&mut self) {
-        self.toast_manager.clear();
+        self.unified_feedback.clear_all();
     }
 
-    /// Check if there are any active toasts
+    /// Check if there are any active feedback items
     pub fn has_active_toasts(&self) -> bool {
-        self.toast_manager.has_toasts()
+        self.unified_feedback.has_active_items()
     }
 
     /// Get access to the toast manager for advanced operations
@@ -3696,6 +4069,18 @@ impl UI {
         self.ai_popup.update_animation();
     }
 
+    /// Update all animations and UI state
+    pub fn update_animations(&mut self, delta_time: f32) {
+        // Update context indicators animations
+        self.context_indicators.update_animations(delta_time);
+        
+        // Update AI popup animation
+        self.ai_popup.update_animation();
+        
+        // Update other animations as needed
+        // (This can be extended with other UI components that have animations)
+    }
+
     /// Handle AI popup actions
     pub fn handle_ai_popup_action(&mut self, action: crate::ui::ai_popup::PopupAction) {
         use crate::ui::ai_popup::PopupAction;
@@ -4286,7 +4671,48 @@ impl UI {
     /// Set focused pane (mouse click support)
     pub fn set_focused_pane(&mut self, pane: FocusedPane) {
         self.focused_pane = pane;
+        
+        // Update context indicators with new focus
+        self.context_indicators.update_context(
+            self.mode.clone(),
+            pane,
+            None, // Sub-context can be added later
+        );
+        
         tracing::debug!("Set focused pane to: {:?}", pane);
+    }
+
+    /// Set UI mode with context indicator updates
+    pub fn set_mode(&mut self, mode: UIMode, sub_context: Option<String>) {
+        if mode != self.mode {
+            tracing::debug!("UI mode changing from {:?} to {:?}", self.mode, mode);
+            self.mode = mode.clone();
+            
+            // Update context indicators with new mode
+            self.context_indicators.update_context(
+                mode,
+                self.focused_pane,
+                sub_context,
+            );
+            
+            // Update status bar context for consistency
+            self.update_status_bar_context();
+        }
+    }
+
+    /// Set location path for breadcrumb navigation
+    pub fn set_location_path(&mut self, path: Vec<String>) {
+        self.context_indicators.set_location_path(path);
+    }
+
+    /// Configure context indicators
+    pub fn configure_context_indicators(&mut self, config: ContextIndicatorConfig) {
+        self.context_indicators.configure(config);
+    }
+
+    /// Set focus indicator style
+    pub fn set_focus_style(&mut self, style: FocusIndicatorStyle) {
+        self.context_indicators.set_focus_style(style);
     }
     
     /// Render command palette if visible

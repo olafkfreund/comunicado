@@ -836,7 +836,8 @@ pub fn is_html_content(content: &str) -> bool {
     for tag in &html_tags {
         if content_lower.contains(tag) {
             tag_count += 1;
-            if tag_count >= 2 {
+            // Special case for self-closing tags like <br> 
+            if tag.starts_with("<br") || tag.starts_with("<img") || tag_count >= 2 {
                 return true;
             }
         }

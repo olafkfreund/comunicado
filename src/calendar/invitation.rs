@@ -363,9 +363,10 @@ impl InvitationProcessor {
         // Handle different datetime formats
         if dt_str.ends_with('Z') {
             // UTC format: 20250128T100000Z
-            DateTime::parse_from_str(dt_str, "%Y%m%dT%H%M%SZ")
-                .map(|dt| dt.with_timezone(&Utc))
-                .map_err(InvitationError::DateParse)
+            let dt_without_z = &dt_str[..dt_str.len()-1]; // Remove the 'Z'
+            let naive = chrono::NaiveDateTime::parse_from_str(dt_without_z, "%Y%m%dT%H%M%S")
+                .map_err(InvitationError::DateParse)?;
+            Ok(naive.and_utc())
         } else if dt_str.contains('T') {
             // Local format: 20250128T100000
             let naive = chrono::NaiveDateTime::parse_from_str(dt_str, "%Y%m%dT%H%M%S")?;

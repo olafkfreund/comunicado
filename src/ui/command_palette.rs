@@ -7,12 +7,14 @@
 use crate::theme::Theme;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Margin, Rect},
-    style::{Modifier, Style},
+    style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph},
     Frame,
 };
-use std::collections::HashMap;
+use fuzzy_matcher::FuzzyMatcher;
+use fuzzy_matcher::skim::SkimMatcherV2;
+use std::collections::{HashMap, VecDeque};
 
 /// Command palette visibility and state
 #[derive(Debug, Clone, PartialEq)]
@@ -34,6 +36,53 @@ pub enum CommandContext {
     Global, // Always available commands
 }
 
+/// Command categories for better organization
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum CommandCategory {
+    Email,
+    Calendar,
+    Navigation,
+    Compose,
+    Search,
+    View,
+    Settings,
+    AI,
+    Help,
+    System,
+}
+
+impl CommandCategory {
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::Email => "Email",
+            Self::Calendar => "Calendar",
+            Self::Navigation => "Navigation",
+            Self::Compose => "Compose",
+            Self::Search => "Search",
+            Self::View => "View",
+            Self::Settings => "Settings",
+            Self::AI => "AI",
+            Self::Help => "Help",
+            Self::System => "System",
+        }
+    }
+    
+    pub fn color(&self) -> Color {
+        match self {
+            Self::Email => Color::Blue,
+            Self::Calendar => Color::Green,
+            Self::Navigation => Color::Cyan,
+            Self::Compose => Color::Yellow,
+            Self::Search => Color::Magenta,
+            Self::View => Color::Gray,
+            Self::Settings => Color::DarkGray,
+            Self::AI => Color::LightMagenta,
+            Self::Help => Color::LightCyan,
+            Self::System => Color::Red,
+        }
+    }
+}
+
 /// Individual command definition
 #[derive(Debug, Clone)]
 pub struct Command {
@@ -43,6 +92,8 @@ pub struct Command {
     pub shortcut: char, // Single letter shortcut (a, b, c, etc.)
     pub context: CommandContext,
     pub action: CommandAction,
+    pub category: CommandCategory,
+    pub keywords: Vec<String>, // For better fuzzy search
 }
 
 /// Actions that commands can perform
@@ -114,6 +165,10 @@ pub struct CommandPalette {
     list_state: ListState,
     search_query: String,
     filtered_commands: Vec<Command>,
+    recent_commands: VecDeque<String>, // Track recent command IDs
+    max_recent: usize,
+    fuzzy_matcher: SkimMatcherV2,
+    show_categories: bool,
 }
 
 impl Default for CommandPalette {
@@ -133,9 +188,14 @@ impl CommandPalette {
             list_state: ListState::default(),
             search_query: String::new(),
             filtered_commands: Vec::new(),
+            recent_commands: VecDeque::with_capacity(10),
+            max_recent: 10,
+            fuzzy_matcher: SkimMatcherV2::default(),
+            show_categories: true,
         };
         
         palette.initialize_commands();
+        palette.update_filtered_commands();
         palette
     }
     
@@ -150,6 +210,8 @@ impl CommandPalette {
                 shortcut: 'a',
                 context: CommandContext::Global,
                 action: CommandAction::ToggleAIAssistant,
+                category: CommandCategory::AI,
+                keywords: vec!["ai".to_string(), "assistant".to_string(), "help".to_string(), "smart".to_string()],
             },
             Command {
                 id: "settings".to_string(),
@@ -158,6 +220,8 @@ impl CommandPalette {
                 shortcut: 's',
                 context: CommandContext::Global,
                 action: CommandAction::OpenSettings,
+                category: CommandCategory::Settings,
+                keywords: vec!["preferences".to_string(), "config".to_string(), "options".to_string()],
             },
             Command {
                 id: "help".to_string(),
@@ -166,6 +230,8 @@ impl CommandPalette {
                 shortcut: 'h',
                 context: CommandContext::Global,
                 action: CommandAction::ShowHelp,
+                category: CommandCategory::Help,
+                keywords: vec!["documentation".to_string(), "guide".to_string(), "shortcuts".to_string()],
             },
             Command {
                 id: "sync".to_string(),
@@ -174,6 +240,8 @@ impl CommandPalette {
                 shortcut: 'y',
                 context: CommandContext::Global,
                 action: CommandAction::SyncEmails,
+                category: CommandCategory::Email,
+                keywords: vec!["refresh".to_string(), "update".to_string(), "fetch".to_string()],
             },
             Command {
                 id: "compose".to_string(),
@@ -182,6 +250,8 @@ impl CommandPalette {
                 shortcut: 'c',
                 context: CommandContext::Global,
                 action: CommandAction::ComposeEmail,
+                category: CommandCategory::Compose,
+                keywords: vec!["new".to_string(), "write".to_string(), "create".to_string(), "draft".to_string()],
             },
             Command {
                 id: "search".to_string(),
@@ -190,6 +260,8 @@ impl CommandPalette {
                 shortcut: 'f',
                 context: CommandContext::Global,
                 action: CommandAction::SearchEmails,
+                category: CommandCategory::Search,
+                keywords: vec!["find".to_string(), "query".to_string(), "filter".to_string(), "lookup".to_string()],
             },
             Command {
                 id: "calendar".to_string(),
@@ -198,6 +270,8 @@ impl CommandPalette {
                 shortcut: 'l',
                 context: CommandContext::Global,
                 action: CommandAction::ToggleCalendar,
+                category: CommandCategory::Calendar,
+                keywords: vec!["schedule".to_string(), "events".to_string(), "appointments".to_string()],
             },
             Command {
                 id: "contacts".to_string(),
@@ -206,6 +280,8 @@ impl CommandPalette {
                 shortcut: 'o',
                 context: CommandContext::Global,
                 action: CommandAction::ToggleContacts,
+                category: CommandCategory::Navigation,
+                keywords: vec!["address".to_string(), "people".to_string(), "directory".to_string()],
             },
         ];
         
@@ -218,6 +294,8 @@ impl CommandPalette {
                 shortcut: 'r',
                 context: CommandContext::EmailList,
                 action: CommandAction::MarkAsRead,
+                category: CommandCategory::Email,
+                keywords: vec!["read".to_string(), "seen".to_string(), "opened".to_string()],
             },
             Command {
                 id: "mark_unread".to_string(),
@@ -226,6 +304,8 @@ impl CommandPalette {
                 shortcut: 'u',
                 context: CommandContext::EmailList,
                 action: CommandAction::MarkAsUnread,
+                category: CommandCategory::Email,
+                keywords: vec!["unread".to_string(), "unseen".to_string(), "new".to_string()],
             },
             Command {
                 id: "delete".to_string(),
@@ -234,6 +314,8 @@ impl CommandPalette {
                 shortcut: 'd',
                 context: CommandContext::EmailList,
                 action: CommandAction::DeleteEmail,
+                category: CommandCategory::Email,
+                keywords: vec!["delete".to_string(), "remove".to_string(), "trash".to_string()],
             },
             Command {
                 id: "archive".to_string(),
@@ -242,6 +324,8 @@ impl CommandPalette {
                 shortcut: 'e',
                 context: CommandContext::EmailList,
                 action: CommandAction::ArchiveEmail,
+                category: CommandCategory::Email,
+                keywords: vec!["archive".to_string(), "store".to_string(), "save".to_string()],
             },
             Command {
                 id: "flag".to_string(),
@@ -250,6 +334,8 @@ impl CommandPalette {
                 shortcut: 'g',
                 context: CommandContext::EmailList,
                 action: CommandAction::FlagEmail,
+                category: CommandCategory::Email,
+                keywords: vec!["flag".to_string(), "star".to_string(), "important".to_string()],
             },
             Command {
                 id: "move".to_string(),
@@ -258,6 +344,8 @@ impl CommandPalette {
                 shortcut: 'm',
                 context: CommandContext::EmailList,
                 action: CommandAction::MoveEmail,
+                category: CommandCategory::Email,
+                keywords: vec!["move".to_string(), "folder".to_string(), "organize".to_string()],
             },
         ];
         
@@ -270,6 +358,8 @@ impl CommandPalette {
                 shortcut: 'r',
                 context: CommandContext::EmailViewer,
                 action: CommandAction::ReplyEmail,
+                category: CommandCategory::Email,
+                keywords: vec!["email".to_string(), "message".to_string(), "mail".to_string()],
             },
             Command {
                 id: "reply_all".to_string(),
@@ -278,6 +368,8 @@ impl CommandPalette {
                 shortcut: 'e',
                 context: CommandContext::EmailViewer,
                 action: CommandAction::ReplyAllEmail,
+                category: CommandCategory::Email,
+                keywords: vec!["email".to_string(), "message".to_string(), "mail".to_string()],
             },
             Command {
                 id: "forward".to_string(),
@@ -286,6 +378,8 @@ impl CommandPalette {
                 shortcut: 'w',
                 context: CommandContext::EmailViewer,
                 action: CommandAction::ForwardEmail,
+                category: CommandCategory::Email,
+                keywords: vec!["email".to_string(), "message".to_string(), "mail".to_string()],
             },
             Command {
                 id: "delete_viewer".to_string(),
@@ -294,6 +388,8 @@ impl CommandPalette {
                 shortcut: 'd',
                 context: CommandContext::EmailViewer,
                 action: CommandAction::DeleteEmail,
+                category: CommandCategory::Email,
+                keywords: vec!["email".to_string(), "message".to_string(), "mail".to_string()],
             },
             Command {
                 id: "archive_viewer".to_string(),
@@ -302,6 +398,8 @@ impl CommandPalette {
                 shortcut: 'v',
                 context: CommandContext::EmailViewer,
                 action: CommandAction::ArchiveEmail,
+                category: CommandCategory::Email,
+                keywords: vec!["email".to_string(), "message".to_string(), "mail".to_string()],
             },
         ];
         
@@ -314,6 +412,8 @@ impl CommandPalette {
                 shortcut: 'n',
                 context: CommandContext::Calendar,
                 action: CommandAction::CreateEvent,
+                category: CommandCategory::Calendar,
+                keywords: vec!["calendar".to_string(), "event".to_string(), "schedule".to_string()],
             },
             Command {
                 id: "view_event".to_string(),
@@ -322,6 +422,8 @@ impl CommandPalette {
                 shortcut: 'v',
                 context: CommandContext::Calendar,
                 action: CommandAction::ViewEvent,
+                category: CommandCategory::Calendar,
+                keywords: vec!["calendar".to_string(), "event".to_string(), "schedule".to_string()],
             },
             Command {
                 id: "edit_event".to_string(),
@@ -330,6 +432,8 @@ impl CommandPalette {
                 shortcut: 'e',
                 context: CommandContext::Calendar,
                 action: CommandAction::EditEvent,
+                category: CommandCategory::Calendar,
+                keywords: vec!["calendar".to_string(), "event".to_string(), "schedule".to_string()],
             },
             Command {
                 id: "delete_event".to_string(),
@@ -338,6 +442,8 @@ impl CommandPalette {
                 shortcut: 'd',
                 context: CommandContext::Calendar,
                 action: CommandAction::DeleteEvent,
+                category: CommandCategory::Calendar,
+                keywords: vec!["calendar".to_string(), "event".to_string(), "schedule".to_string()],
             },
             Command {
                 id: "create_todo".to_string(),
@@ -346,6 +452,8 @@ impl CommandPalette {
                 shortcut: 't',
                 context: CommandContext::Calendar,
                 action: CommandAction::CreateTodo,
+                category: CommandCategory::System,
+                keywords: vec!["system".to_string(), "app".to_string(), "general".to_string()],
             },
             Command {
                 id: "view_day".to_string(),
@@ -354,6 +462,8 @@ impl CommandPalette {
                 shortcut: 'j',
                 context: CommandContext::Calendar,
                 action: CommandAction::ViewDay,
+                category: CommandCategory::View,
+                keywords: vec!["view".to_string(), "show".to_string(), "display".to_string()],
             },
             Command {
                 id: "view_week".to_string(),
@@ -362,6 +472,8 @@ impl CommandPalette {
                 shortcut: 'w',
                 context: CommandContext::Calendar,
                 action: CommandAction::ViewWeek,
+                category: CommandCategory::View,
+                keywords: vec!["view".to_string(), "show".to_string(), "display".to_string()],
             },
             Command {
                 id: "view_month".to_string(),
@@ -370,6 +482,8 @@ impl CommandPalette {
                 shortcut: 'm',
                 context: CommandContext::Calendar,
                 action: CommandAction::ViewMonth,
+                category: CommandCategory::View,
+                keywords: vec!["view".to_string(), "show".to_string(), "display".to_string()],
             },
             Command {
                 id: "sync_calendar".to_string(),
@@ -378,6 +492,8 @@ impl CommandPalette {
                 shortcut: 'y',
                 context: CommandContext::Calendar,
                 action: CommandAction::SyncCalendar,
+                category: CommandCategory::Calendar,
+                keywords: vec!["calendar".to_string(), "event".to_string(), "schedule".to_string()],
             },
         ];
         
@@ -390,6 +506,8 @@ impl CommandPalette {
                 shortcut: 'n',
                 context: CommandContext::Contacts,
                 action: CommandAction::CreateContact,
+                category: CommandCategory::System,
+                keywords: vec!["system".to_string(), "app".to_string(), "general".to_string()],
             },
             Command {
                 id: "edit_contact".to_string(),
@@ -398,6 +516,8 @@ impl CommandPalette {
                 shortcut: 'e',
                 context: CommandContext::Contacts,
                 action: CommandAction::EditContact,
+                category: CommandCategory::System,
+                keywords: vec!["system".to_string(), "app".to_string(), "general".to_string()],
             },
             Command {
                 id: "delete_contact".to_string(),
@@ -406,6 +526,8 @@ impl CommandPalette {
                 shortcut: 'd',
                 context: CommandContext::Contacts,
                 action: CommandAction::DeleteContact,
+                category: CommandCategory::System,
+                keywords: vec!["system".to_string(), "app".to_string(), "general".to_string()],
             },
             Command {
                 id: "view_contact".to_string(),
@@ -414,6 +536,8 @@ impl CommandPalette {
                 shortcut: 'v',
                 context: CommandContext::Contacts,
                 action: CommandAction::ViewContact,
+                category: CommandCategory::View,
+                keywords: vec!["view".to_string(), "show".to_string(), "display".to_string()],
             },
             Command {
                 id: "search_contacts".to_string(),
@@ -422,6 +546,8 @@ impl CommandPalette {
                 shortcut: 'f',
                 context: CommandContext::Contacts,
                 action: CommandAction::SearchContacts,
+                category: CommandCategory::Search,
+                keywords: vec!["find".to_string(), "search".to_string(), "filter".to_string()],
             },
             Command {
                 id: "import_contacts".to_string(),
@@ -430,6 +556,8 @@ impl CommandPalette {
                 shortcut: 'i',
                 context: CommandContext::Contacts,
                 action: CommandAction::ImportContacts,
+                category: CommandCategory::System,
+                keywords: vec!["system".to_string(), "app".to_string(), "general".to_string()],
             },
             Command {
                 id: "export_contacts".to_string(),
@@ -438,6 +566,8 @@ impl CommandPalette {
                 shortcut: 'x',
                 context: CommandContext::Contacts,
                 action: CommandAction::ExportContacts,
+                category: CommandCategory::System,
+                keywords: vec!["system".to_string(), "app".to_string(), "general".to_string()],
             },
             Command {
                 id: "add_favorite".to_string(),
@@ -446,6 +576,8 @@ impl CommandPalette {
                 shortcut: 'g',
                 context: CommandContext::Contacts,
                 action: CommandAction::AddToFavorites,
+                category: CommandCategory::System,
+                keywords: vec!["system".to_string(), "app".to_string(), "general".to_string()],
             },
         ];
         
@@ -458,6 +590,8 @@ impl CommandPalette {
                 shortcut: 's',
                 context: CommandContext::Compose,
                 action: CommandAction::SendEmail,
+                category: CommandCategory::Email,
+                keywords: vec!["email".to_string(), "message".to_string(), "mail".to_string()],
             },
             Command {
                 id: "save_draft".to_string(),
@@ -466,6 +600,8 @@ impl CommandPalette {
                 shortcut: 'd',
                 context: CommandContext::Compose,
                 action: CommandAction::SaveDraft,
+                category: CommandCategory::Compose,
+                keywords: vec!["write".to_string(), "compose".to_string(), "draft".to_string()],
             },
             Command {
                 id: "attach_file".to_string(),
@@ -474,6 +610,8 @@ impl CommandPalette {
                 shortcut: 'a',
                 context: CommandContext::Compose,
                 action: CommandAction::AttachFile,
+                category: CommandCategory::System,
+                keywords: vec!["system".to_string(), "app".to_string(), "general".to_string()],
             },
             Command {
                 id: "toggle_format".to_string(),
@@ -482,6 +620,8 @@ impl CommandPalette {
                 shortcut: 't',
                 context: CommandContext::Compose,
                 action: CommandAction::ToggleFormat,
+                category: CommandCategory::View,
+                keywords: vec!["view".to_string(), "show".to_string(), "display".to_string()],
             },
             Command {
                 id: "insert_signature".to_string(),
@@ -490,6 +630,8 @@ impl CommandPalette {
                 shortcut: 'g',
                 context: CommandContext::Compose,
                 action: CommandAction::InsertSignature,
+                category: CommandCategory::System,
+                keywords: vec!["system".to_string(), "app".to_string(), "general".to_string()],
             },
         ];
         
@@ -541,15 +683,77 @@ impl CommandPalette {
             }
         }
         
-        // Filter by search query if present
+        // Filter and score by search query if present
         if !self.search_query.is_empty() {
-            commands.retain(|cmd| {
-                cmd.name.to_lowercase().contains(&self.search_query.to_lowercase()) ||
-                cmd.description.to_lowercase().contains(&self.search_query.to_lowercase())
-            });
+            let mut scored_commands: Vec<(i64, Command)> = Vec::new();
+            
+            for cmd in commands {
+                let mut best_score = 0i64;
+                
+                // Check name (highest priority)
+                if let Some(score) = self.fuzzy_matcher.fuzzy_match(&cmd.name, &self.search_query) {
+                    best_score = best_score.max(score + 20); // Boost name matches
+                }
+                
+                // Check description (medium priority) 
+                if let Some(score) = self.fuzzy_matcher.fuzzy_match(&cmd.description, &self.search_query) {
+                    best_score = best_score.max(score + 10); // Small boost for description
+                }
+                
+                // Check keywords (lower priority)
+                for keyword in &cmd.keywords {
+                    if let Some(score) = self.fuzzy_matcher.fuzzy_match(keyword, &self.search_query) {
+                        best_score = best_score.max(score);
+                    }
+                }
+                
+                // Also check for exact substring matches (helpful for single chars)
+                if cmd.name.to_lowercase().contains(&self.search_query.to_lowercase()) {
+                    best_score = best_score.max(50);
+                }
+                
+                if best_score > 0 {
+                    scored_commands.push((best_score, cmd));
+                }
+            }
+            
+            // Sort by score (highest first)
+            scored_commands.sort_by(|a, b| b.0.cmp(&a.0));
+            
+            // Extract commands
+            self.filtered_commands = scored_commands.into_iter().map(|(_, cmd)| cmd).collect();
+            
+            // Add recent commands at the top if they match
+            let recent_matching: Vec<Command> = self.filtered_commands
+                .iter()
+                .filter(|cmd| self.recent_commands.contains(&cmd.id))
+                .cloned()
+                .collect();
+                
+            if !recent_matching.is_empty() {
+                self.filtered_commands.retain(|cmd| !self.recent_commands.contains(&cmd.id));
+                self.filtered_commands.splice(0..0, recent_matching);
+            }
+        } else {
+            // No search query - show recent commands first
+            let mut ordered_commands = Vec::new();
+            
+            // Add recent commands first
+            for recent_id in &self.recent_commands {
+                if let Some(cmd) = commands.iter().find(|c| &c.id == recent_id) {
+                    ordered_commands.push(cmd.clone());
+                }
+            }
+            
+            // Then add remaining commands
+            for cmd in commands {
+                if !self.recent_commands.contains(&cmd.id) {
+                    ordered_commands.push(cmd);
+                }
+            }
+            
+            self.filtered_commands = ordered_commands;
         }
-        
-        self.filtered_commands = commands;
         
         // Reset selection if needed
         if self.selected_index >= self.filtered_commands.len() && !self.filtered_commands.is_empty() {
@@ -568,6 +772,11 @@ impl CommandPalette {
         for command in &self.filtered_commands {
             if command.shortcut == c.to_ascii_lowercase() {
                 let action = command.action.clone();
+                let command_id = command.id.clone();
+                
+                // Add to recent commands
+                self.add_to_recent(command_id);
+                
                 self.hide(); // Close palette after selection
                 return Some(action);
             }
@@ -603,11 +812,31 @@ impl CommandPalette {
     /// Execute currently selected command
     pub fn execute_selected(&mut self) -> Option<CommandAction> {
         if self.is_visible() && self.selected_index < self.filtered_commands.len() {
-            let action = self.filtered_commands[self.selected_index].action.clone();
+            let command = &self.filtered_commands[self.selected_index];
+            let action = command.action.clone();
+            let command_id = command.id.clone();
+            
+            // Add to recent commands
+            self.add_to_recent(command_id);
+            
             self.hide();
             Some(action)
         } else {
             None
+        }
+    }
+    
+    /// Add command to recent history
+    fn add_to_recent(&mut self, command_id: String) {
+        // Remove if already in recent
+        self.recent_commands.retain(|id| id != &command_id);
+        
+        // Add to front
+        self.recent_commands.push_front(command_id);
+        
+        // Trim to max size
+        while self.recent_commands.len() > self.max_recent {
+            self.recent_commands.pop_back();
         }
     }
     
@@ -692,6 +921,10 @@ impl CommandPalette {
                     .fg(theme.colors.palette.accent)
                     .add_modifier(Modifier::BOLD);
                     
+                let category_style = Style::default()
+                    .fg(command.category.color())
+                    .add_modifier(Modifier::DIM);
+                    
                 let name_style = Style::default()
                     .fg(theme.colors.palette.text_primary);
                 
@@ -706,13 +939,29 @@ impl CommandPalette {
                     .fg(theme.colors.palette.text_secondary)
                     .add_modifier(Modifier::DIM);
                 
-                let line = Line::from(vec![
+                // Check if this is a recent command
+                let is_recent = self.recent_commands.contains(&command.id);
+                
+                let mut spans = vec![
                     Span::styled(format!("{}", command.shortcut.to_uppercase()), shortcut_style),
                     Span::raw(" "),
-                    Span::styled(format!("{}", command.name), name_style),
-                    Span::raw(" "),
-                    Span::styled(format!("{}", desc_preview), desc_style),
-                ]);
+                ];
+                
+                // Add recent indicator
+                if is_recent {
+                    spans.push(Span::styled("◉ ", Style::default().fg(Color::Yellow)));
+                }
+                
+                // Add category if enabled
+                if self.show_categories {
+                    spans.push(Span::styled(format!("[{}] ", command.category.as_str()), category_style));
+                }
+                
+                spans.push(Span::styled(format!("{}", command.name), name_style));
+                spans.push(Span::raw(" "));
+                spans.push(Span::styled(format!("{}", desc_preview), desc_style));
+                
+                let line = Line::from(spans);
                 
                 ListItem::new(line)
             })

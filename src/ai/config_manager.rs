@@ -397,6 +397,9 @@ mod tests {
         let manager = AIConfigManager::new(config_path);
         manager.initialize().await.unwrap();
         
+        // First enable AI globally - required for individual features to work
+        manager.enable_ai().await.unwrap();
+        
         // Test feature enabling/disabling
         assert!(manager.is_feature_enabled("email_suggestions").await);
         

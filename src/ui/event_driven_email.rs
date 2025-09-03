@@ -541,6 +541,6 @@ mod tests {
         
         let action = crate::ui::command_palette::CommandAction::ShowKeyboardShortcuts;
         assert!(EventMigrationHelper::handle_command_action(&action, &email_handler, &mut ui_state).is_ok());
-        assert_eq!(ui_state.current_mode(), &EventUIMode::Help);
+        assert_eq!(ui_state.current_mode(), &UIMode::KeyboardShortcuts);
     }
 }

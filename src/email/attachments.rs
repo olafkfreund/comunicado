@@ -456,7 +456,7 @@ mod tests {
         // Test another case with ISO-8859-1 encoding
         let stored2 = StoredAttachment {
             id: "test_id2".to_string(),
-            filename: "=?ISO-8859-1?Q?caf=E9_menu.pdf?=".to_string(), // "café_menu.pdf"
+            filename: "=?ISO-8859-1?Q?caf=E9=5Fmenu.pdf?=".to_string(), // "café_menu.pdf"
             content_type: "application/pdf".to_string(),
             size: 1024,
             content_id: None,

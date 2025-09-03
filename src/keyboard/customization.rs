@@ -215,6 +215,14 @@ pub enum KeyboardContext {
     KeyboardShortcuts,
     /// Migration interface
     Migration,
+    /// Settings interface
+    Settings,
+    /// Context indicators configuration
+    ContextIndicators,
+    /// Focus indicators configuration  
+    FocusIndicators,
+    /// Responsive layout configuration
+    ResponsiveLayout,
     /// Custom context defined by plugins
     Custom(String),
 }
@@ -233,6 +241,10 @@ impl fmt::Display for KeyboardContext {
             KeyboardContext::InvitationViewer => write!(f, "Invitation Viewer"),
             KeyboardContext::KeyboardShortcuts => write!(f, "Keyboard Shortcuts"),
             KeyboardContext::Migration => write!(f, "Migration"),
+            KeyboardContext::Settings => write!(f, "Settings"),
+            KeyboardContext::ContextIndicators => write!(f, "Context Indicators"),
+            KeyboardContext::FocusIndicators => write!(f, "Focus Indicators"),
+            KeyboardContext::ResponsiveLayout => write!(f, "Responsive Layout"),
             KeyboardContext::Custom(name) => write!(f, "Custom: {}", name),
         }
     }
@@ -479,6 +491,46 @@ impl KeyboardCustomizationManager {
                 .with_default_binding(KeyCombination::alt(KeyCode::Char('d'))),
             KeyboardAction::new("delete_draft", "Delete Draft", "Delete selected draft", "Drafts", KeyboardContext::DraftList)
                 .with_default_binding(KeyCombination::from_key(KeyCode::Delete)),
+            
+            // Settings actions
+            KeyboardAction::new("show_settings", "Show Settings", "Open application settings", "Settings", KeyboardContext::Email)
+                .with_default_binding(KeyCombination::ctrl(KeyCode::Char(','))),
+            KeyboardAction::new("settings_tab_next", "Next Settings Tab", "Move to next settings tab", "Settings", KeyboardContext::Settings)
+                .with_default_binding(KeyCombination::from_key(KeyCode::Right)),
+            KeyboardAction::new("settings_tab_prev", "Previous Settings Tab", "Move to previous settings tab", "Settings", KeyboardContext::Settings)
+                .with_default_binding(KeyCombination::from_key(KeyCode::Left)),
+            KeyboardAction::new("settings_save", "Save Settings", "Save current settings", "Settings", KeyboardContext::Settings)
+                .with_default_binding(KeyCombination::ctrl(KeyCode::Char('s'))),
+            KeyboardAction::new("settings_reset", "Reset Settings", "Reset to default settings", "Settings", KeyboardContext::Settings)
+                .with_default_binding(KeyCombination::ctrl(KeyCode::Char('r'))),
+            
+            // Context indicators actions
+            KeyboardAction::new("toggle_breadcrumb", "Toggle Breadcrumb", "Show/hide breadcrumb navigation", "Context Indicators", KeyboardContext::ContextIndicators)
+                .with_default_binding(KeyCombination::from_key(KeyCode::Char('b'))),
+            KeyboardAction::new("toggle_mode_transitions", "Toggle Mode Transitions", "Show/hide mode transition indicators", "Context Indicators", KeyboardContext::ContextIndicators)
+                .with_default_binding(KeyCombination::from_key(KeyCode::Char('m'))),
+            KeyboardAction::new("toggle_action_hints", "Toggle Action Hints", "Show/hide action hints", "Context Indicators", KeyboardContext::ContextIndicators)
+                .with_default_binding(KeyCombination::from_key(KeyCode::Char('a'))),
+            KeyboardAction::new("toggle_keyboard_hints", "Toggle Keyboard Hints", "Show/hide keyboard shortcuts", "Context Indicators", KeyboardContext::ContextIndicators)
+                .with_default_binding(KeyCombination::from_key(KeyCode::Char('k'))),
+            
+            // Focus indicators actions
+            KeyboardAction::new("toggle_focus_indicators", "Toggle Focus Indicators", "Enable/disable focus indicators", "Focus Indicators", KeyboardContext::FocusIndicators)
+                .with_default_binding(KeyCombination::from_key(KeyCode::Char('f'))),
+            KeyboardAction::new("cycle_focus_style", "Cycle Focus Style", "Change focus indicator style", "Focus Indicators", KeyboardContext::FocusIndicators)
+                .with_default_binding(KeyCombination::from_key(KeyCode::Char('s'))),
+            KeyboardAction::new("toggle_focus_animation", "Toggle Focus Animation", "Enable/disable focus animations", "Focus Indicators", KeyboardContext::FocusIndicators)
+                .with_default_binding(KeyCombination::from_key(KeyCode::Char('n'))),
+            
+            // Responsive layout actions
+            KeyboardAction::new("toggle_responsive_layout", "Toggle Responsive Layout", "Enable/disable responsive layout", "Responsive Layout", KeyboardContext::ResponsiveLayout)
+                .with_default_binding(KeyCombination::from_key(KeyCode::Char('r'))),
+            KeyboardAction::new("toggle_auto_hide_sidebar", "Toggle Auto-hide Sidebar", "Enable/disable auto-hide sidebar", "Responsive Layout", KeyboardContext::ResponsiveLayout)
+                .with_default_binding(KeyCombination::from_key(KeyCode::Char('h'))),
+            KeyboardAction::new("toggle_auto_stack", "Toggle Auto-stack Panels", "Enable/disable auto-stack panels", "Responsive Layout", KeyboardContext::ResponsiveLayout)
+                .with_default_binding(KeyCombination::from_key(KeyCode::Char('p'))),
+            KeyboardAction::new("toggle_content_scaling", "Toggle Content Scaling", "Enable/disable content scaling", "Responsive Layout", KeyboardContext::ResponsiveLayout)
+                .with_default_binding(KeyCombination::from_key(KeyCode::Char('c'))),
         ];
         
         for action in actions {

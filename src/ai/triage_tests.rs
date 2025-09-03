@@ -224,8 +224,8 @@ mod tests {
         let score_consistency = 1.0 - (urgency_score - importance_score).abs();
         let confidence = (0.7 + score_consistency * 0.3).min(1.0);
         
-        // Should be around 0.73 (0.7 + 0.9 * 0.3)
-        assert!((confidence - 0.73).abs() < 0.01);
+        // Should be around 0.97 (0.7 + 0.9 * 0.3)
+        assert!((confidence - 0.97).abs() < 0.01);
         
         // Test with identical scores
         let identical_confidence = (0.7f32 + 1.0f32 * 0.3f32).min(1.0f32);

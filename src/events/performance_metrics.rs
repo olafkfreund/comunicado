@@ -370,6 +370,12 @@ impl PerformanceMonitor {
     /// Update queue depth
     pub fn update_queue_depth(&self, new_depth: usize) {
         self.metrics.current_queue_depth.store(new_depth, Ordering::Relaxed);
+        
+        // Update max queue depth if necessary
+        let current_max = self.metrics.max_queue_depth.load(Ordering::Relaxed);
+        if new_depth > current_max {
+            self.metrics.max_queue_depth.store(new_depth, Ordering::Relaxed);
+        }
     }
 
     /// Update active handler count

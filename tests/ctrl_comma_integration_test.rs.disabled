@@ -24,7 +24,7 @@ async fn test_ctrl_comma_opens_settings() {
     let result = event_handler.handle_key_event_with_config(ctrl_comma_event, &mut ui).await;
     
     // Verify that the event was handled (doesn't quit or error)
-    assert!(matches!(result, comunicado::events::EventResult::Continue));
+    assert!(matches!(result, comunicado::events::legacy::EventResult::Continue));
     
     // Verify that the UI is now in Settings mode
     assert_eq!(ui.mode(), &comunicado::ui::UIMode::Settings);

@@ -1067,7 +1067,11 @@ mod tests {
     
     #[test]
     fn test_event_bus_creation() {
-        let bus = EventBus::new();
+        let config = EventBusConfig {
+            async_processing: false,
+            ..EventBusConfig::default()
+        };
+        let bus = EventBus::with_config(config);
         let stats = bus.stats();
         assert_eq!(stats.events_published, 0);
         assert_eq!(stats.events_processed, 0);
@@ -1075,7 +1079,11 @@ mod tests {
     
     #[test]
     fn test_handler_registration() {
-        let mut bus = EventBus::new();
+        let config = EventBusConfig {
+            async_processing: false,
+            ..EventBusConfig::default()
+        };
+        let mut bus = EventBus::with_config(config);
         let handler = TestHandler::new();
         
         let handler_id = bus.subscribe::<TestEvent, _>(handler);

@@ -4,12 +4,32 @@ pub mod services;
 pub mod ui;
 pub mod config;
 
+// Mobile companion app modules
+pub mod notification_bridge;
+pub mod push_service;
+pub mod device_manager;
+pub mod sync_protocol;
+pub mod mobile_api;
+pub mod auth_manager;
+pub mod websocket_server;
+
 // Re-export main types for easier access
 pub use kde_connect::{KdeConnectClient, SmsMessage, MobileNotification, DeviceInfo};
 pub use storage::{MessageStore, MessageStoreStats};
 pub use services::{MobileSyncService, MobileSyncStats, ServiceControl};
 pub use config::{MobileConfig, SmsSettings, NotificationSettings};
 pub use ui::{SmsUi, SmsViewMode, SmsComposition, SmsRenderConfig, SmsColorScheme};
+
+// Mobile companion app exports
+pub use notification_bridge::{NotificationBridge, NotificationPayload, NotificationPriority};
+pub use push_service::{PushService, PushProvider, PushToken};
+pub use device_manager::{DeviceManager, MobileDevice, DeviceStatus};
+pub use sync_protocol::{SyncProtocol, SyncMessage, SyncCommand};
+
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use tokio::sync::RwLock;
+use uuid::Uuid;
 
 // Module-level error type
 #[derive(Debug, thiserror::Error)]
