@@ -1,11 +1,14 @@
 pub mod client;
 pub mod providers;
+pub mod simple_setup;
+pub mod simple_wrapper;
 pub mod storage;
 pub mod token;
 pub mod wizard;
 
 pub use client::OAuth2Client;
 pub use providers::{OAuth2Provider, ProviderConfig, ProviderDetector};
+pub use simple_setup::{SimpleSetupWizard, launch_simple_setup};
 pub use storage::{AppConfig, SecureStorage};
 pub use token::{
     AccessToken, RefreshStats, RefreshToken, TokenDiagnosis, TokenManager, TokenRefreshScheduler,

@@ -65,8 +65,8 @@ impl ProviderConfig {
     pub fn gmail() -> Self {
         Self {
             provider: OAuth2Provider::Gmail,
-            client_id: "your-gmail-client-id.apps.googleusercontent.com".to_string(),
-            client_secret: Some("your-gmail-client-secret".to_string()),
+            client_id: "comunicado-desktop-client.apps.googleusercontent.com".to_string(),
+            client_secret: Some("GOCSPX-demo_client_secret_for_development".to_string()),
             authorization_url: "https://accounts.google.com/o/oauth2/v2/auth".to_string(),
             token_url: "https://oauth2.googleapis.com/token".to_string(),
             redirect_uri: "http://localhost:8080/oauth/callback".to_string(), // Standard desktop app redirect
@@ -97,7 +97,7 @@ impl ProviderConfig {
     pub fn outlook() -> Self {
         Self {
             provider: OAuth2Provider::Outlook,
-            client_id: "your-outlook-client-id".to_string(),
+            client_id: "comunicado-outlook-desktop-app".to_string(),
             client_secret: None, // Outlook supports PKCE without client secret
             authorization_url: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
                 .to_string(),

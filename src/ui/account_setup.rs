@@ -6,6 +6,7 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use crate::oauth2::AccountConfig as Account;
+use crate::theme::Theme;
 
 /// Trait for account setup operations
 #[async_trait]
@@ -111,6 +112,38 @@ impl OAuth2SetupWizard for DefaultOAuth2Wrapper {
     }
 }
 
+/// Simplified account setup provider
+pub struct SimplifiedAccountProvider {
+    theme: Theme,
+}
+
+impl SimplifiedAccountProvider {
+    pub fn new(theme: Theme) -> Self {
+        Self { theme }
+    }
+}
+
+#[async_trait]
+impl AccountSetupProvider for SimplifiedAccountProvider {
+    async fn setup_account(&mut self) -> Result<Option<Account>> {
+        let wrapper = crate::oauth2::simple_wrapper::SimpleSetupWrapper::new(self.theme.clone());
+        let mut boxed_wrapper: Box<dyn OAuth2SetupWizard> = Box::new(wrapper);
+        boxed_wrapper.run().await
+    }
+    
+    fn is_available(&self) -> bool {
+        true
+    }
+    
+    fn provider_name(&self) -> &'static str {
+        "Quick Setup"
+    }
+    
+    fn supported_types(&self) -> Vec<&'static str> {
+        vec!["Gmail (1-Click)", "Outlook (1-Click)", "Auto-Detect"]
+    }
+}
+
 /// Manual account setup provider
 pub struct ManualAccountProvider;
 
@@ -164,6 +197,10 @@ impl AccountSetupManager {
     /// Create with default providers
     pub fn with_defaults() -> Result<Self> {
         let mut manager = Self::new();
+        
+        // Add simplified provider first (highest priority)
+        let theme = Theme::default();
+        manager.add_provider(Box::new(SimplifiedAccountProvider::new(theme)));
         
         // Add OAuth2 provider if available
         if let Ok(oauth2_provider) = OAuth2AccountProvider::with_default() {
