@@ -537,6 +537,8 @@ impl Default for RealTimeSyncStats {
     }
 }
 
+// TODO: Fix CloudProvider trait implementation
+/*
 impl CloudProvider {
     /// Clone the provider (required for real-time sync)
     fn clone_boxed(&self) -> Box<dyn CloudProvider> {
@@ -545,6 +547,7 @@ impl CloudProvider {
         Box::new(DummyProvider)
     }
 }
+*/
 
 // Dummy provider for compilation
 struct DummyProvider;

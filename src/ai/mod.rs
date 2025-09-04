@@ -38,6 +38,11 @@ pub use config_manager::{AIConfigManager, AIHealthStatus, ConfigStats};
 pub use error::AIError;
 pub use factory::AIFactory;
 pub use provider::{AIProvider, AIProviderManager, ProviderCapabilities};
+
+// Add type aliases for backwards compatibility
+pub type AiError = AIError;
+pub type AiResult<T> = AIResult<T>;
+pub type AiProvider = AIProvider;
 pub use providers::{AnthropicProvider, GoogleProvider, OllamaProvider, OpenAIProvider};
 pub use retry::{RetryConfig, RetryManager, RetryStats};
 pub use enhanced_service::{EnhancedAIService, EnhancedAIConfig, EnhancedAIRequest, EnhancedAIResponse, PerformanceMetrics};
@@ -58,7 +63,7 @@ pub use smart_reply::{
     GeneratedReply, ReplyTemplate, UserPreferences
 };
 pub use categorization::{
-    EmailCategorizer, EmailCategory, ClassificationResult, NotificationPriority as CategoryPriority,
+    EmailCategorizer, EmailCategory as CategorizedEmailCategory, ClassificationResult, NotificationPriority as CategoryPriority,
     AutoAction, SuggestedAction, ActionType
 };
 pub use streaming::{AIStreamingManager, StreamChunk, StreamingConfig, StreamingSession, StreamingStats};

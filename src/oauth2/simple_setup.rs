@@ -1,11 +1,11 @@
-use crate::oauth2::{OAuth2Error, OAuth2Result, providers::OAuth2Provider, storage::OAuth2Storage, client::OAuth2Client};
+use crate::oauth2::{OAuth2Error, OAuth2Result, providers::OAuth2Provider, client::OAuth2Client};
 use crate::theme::Theme;
 use ratatui::{
     prelude::*,
     widgets::{Block, Borders, Gauge, List, ListItem, Paragraph, Wrap},
 };
 use crossterm::{
-    event::{self, Event, KeyCode, KeyEventKind, KeyModifiers},
+    event::{self, Event, KeyCode, KeyEventKind},
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     ExecutableCommand,
 };

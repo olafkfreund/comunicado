@@ -1,4 +1,4 @@
-use crate::oauth2::{OAuth2Error, OAuth2Result, SimpleSetupWizard, launch_simple_setup};
+use crate::oauth2::{OAuth2Error, launch_simple_setup};
 use crate::ui::account_setup::OAuth2SetupWizard;
 use crate::theme::Theme;
 use async_trait::async_trait;
@@ -43,7 +43,7 @@ impl OAuth2SetupWizard for SimpleSetupWrapper {
 }
 
 fn create_placeholder_account(account_id: &str) -> crate::oauth2::AccountConfig {
-    use crate::oauth2::{AccountConfig, OAuth2Provider};
+    use crate::oauth2::AccountConfig;
     use chrono::Utc;
     
     let (email, provider, imap_server, smtp_server) = if account_id.contains("gmail") {
