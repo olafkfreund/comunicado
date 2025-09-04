@@ -27,8 +27,8 @@ pub use device_manager::{DeviceManager, MobileDevice, DeviceStatus};
 pub use sync_protocol::{SyncProtocol, SyncMessage, SyncCommand};
 
 // Add missing types for push_service and sync_protocol
-pub type PushProviderConfig = PushProvider;
-pub type PushProviderType = PushProvider;
+pub type PushProviderConfig = Box<dyn PushProvider>;
+pub type PushProviderType = Box<dyn PushProvider>;
 pub type EmailSummary = String; // Placeholder
 pub type CalendarEventSummary = String; // Placeholder
 

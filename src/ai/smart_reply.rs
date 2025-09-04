@@ -318,23 +318,23 @@ impl SmartReplyGenerator {
         let matching_templates = self.find_matching_templates(request).await;
 
         // Generate reply using AI provider
-        let prompt = format!("Generate a {} reply to this email:\n{}", 
-                           request.reply_type.to_string().to_lowercase(),
-                           request.original_email);
-        let ai_response = self.provider.suggest_reply(&request.original_email, &prompt).await?;
+        let prompt = format!("Generate a {:?} reply to this email:\n{}", 
+                           request.reply_type,
+                           request.email_content.body);
+        let ai_response = self.provider.suggest_reply(&request.email_content.body, &prompt).await?;
 
         // Process AI response - use first suggestion or create default
         let reply_text = ai_response.first().unwrap_or(&"Thank you for your email.".to_string()).clone();
         let generated_reply = GeneratedReply {
-            reply_id: uuid::Uuid::new_v4(),
-            content: reply_text,
-            reply_type: request.reply_type.clone(),
-            tone: request.preferred_tone.clone(),
-            length: request.reply_length.clone(),
+            id: uuid::Uuid::new_v4().to_string(),
+            subject: format!("Re: {}", request.email_content.subject),
+            body: reply_text,
             confidence: 0.8,
-            used_template: None,
-            generated_at: chrono::Utc::now(),
-            metadata: HashMap::new(),
+            alternatives: vec![],
+            suggested_actions: vec![],
+            reasoning: Some("AI-generated reply".to_string()),
+            estimated_send_time: Some(chrono::Utc::now()),
+            requires_review: true,
         };
 
         // Cache the response
@@ -385,25 +385,25 @@ impl SmartReplyGenerator {
 
     /// Get suggested reply types for an email
     pub async fn suggest_reply_types(&self, email: &EmailContext) -> AiResult<Vec<ReplyType>> {
-        let analysis = self.provider.extract_key_info(&email.content).await?;
+        let analysis = self.provider.extract_key_info(&email.body).await?;
         
         let mut suggested_types = Vec::new();
         
         // Based on email content, suggest appropriate reply types
-        if analysis.contains("meeting") || analysis.contains("invitation") {
+        if analysis.iter().any(|s| s.contains("meeting")) || analysis.iter().any(|s| s.contains("invitation")) {
             suggested_types.push(ReplyType::Accept);
             suggested_types.push(ReplyType::Decline);
         }
         
-        if analysis.contains("question") || analysis.contains("?") {
+        if analysis.iter().any(|s| s.contains("question")) || analysis.iter().any(|s| s.contains("?")) {
             suggested_types.push(ReplyType::Inform);
         }
         
-        if analysis.contains("thank") || analysis.contains("appreciation") {
+        if analysis.iter().any(|s| s.contains("thank")) || analysis.iter().any(|s| s.contains("appreciation")) {
             suggested_types.push(ReplyType::Acknowledge);
         }
         
-        if analysis.contains("request") || analysis.contains("need") {
+        if analysis.iter().any(|s| s.contains("request")) || analysis.iter().any(|s| s.contains("need")) {
             suggested_types.push(ReplyType::RequestInfo);
         }
 
@@ -459,7 +459,8 @@ impl SmartReplyGenerator {
         };
 
         // Send to AI provider for learning
-        self.provider.learn_from_reply_modification(&learning_data).await?;
+        // TODO: Learn from reply modification - not yet implemented
+        // self.provider.learn_from_reply_modification(&learning_data).await?;
 
         Ok(())
     }

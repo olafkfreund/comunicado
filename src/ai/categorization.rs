@@ -263,7 +263,7 @@ impl EmailCategorizer {
         // Process AI response into classification result
         let classification = ClassificationResult {
             email_id: email.id.clone(),
-            primary_category: category.name(),
+            primary_category: format!("{:?}", category),
             confidence: 0.8, // Default confidence
             secondary_categories: vec![],
             reasoning: Some("AI-based categorization".to_string()),

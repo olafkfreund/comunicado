@@ -74,7 +74,7 @@ pub enum CloudSyncError {
 pub type CloudSyncResult<T> = Result<T, CloudSyncError>;
 
 /// Synchronizable data types
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum SyncDataType {
     /// Application settings and preferences
     Settings,
