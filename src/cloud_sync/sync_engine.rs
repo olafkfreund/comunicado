@@ -1,6 +1,6 @@
 //! Core synchronization engine for cloud data sync
 
-use super::{CloudSyncError, CloudSyncResult, SyncDataType, SyncMetadata};
+use super::{CloudSyncResult, SyncDataType, SyncMetadata};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

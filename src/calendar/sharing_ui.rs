@@ -1,17 +1,17 @@
 //! User interface for calendar sharing management
 
 use crate::calendar::sharing::{
-    CalendarSharingManager, CalendarShare, SharedUser, SharingInvitation, CalendarPermission,
-    DesktopIntegrationType, SharingResult,
+//     CalendarSharingManager, CalendarShare, SharedUser, SharingInvitation, CalendarPermission,
+    DesktopIntegrationType,
 };
 use crate::theme::Theme;
 use crossterm::event::{KeyCode, KeyModifiers};
 use ratatui::{
-    layout::{Alignment, Constraint, Direction, Layout, Rect},
-    style::{Color, Modifier, Style},
-    text::{Line, Span},
+//     layout::{Alignment, Constraint, Direction, Layout, Rect},
+    // style::{Color, Modifier, Style},
+    // text::{Line, Span},
     widgets::{
-        Block, Borders, Clear, List, ListItem, ListState, Paragraph, Tabs, Wrap, Row, Table, Cell,
+        Block, Borders, Clear, List, ListItem, ListState, Paragraph, Tabs, Wrap,
     },
     Frame,
 };

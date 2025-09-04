@@ -28,6 +28,7 @@ pub mod offline_storage;
 pub mod performance;
 pub mod rfc_standards;
 pub mod plugins;
+pub mod safety;
 pub mod services;
 pub mod smtp;
 pub mod spell;

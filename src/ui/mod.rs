@@ -3398,7 +3398,7 @@ impl UI {
 
     /// Show progress feedback
     pub fn show_progress<S: Into<String>>(&mut self, message: S, progress: f32) {
-        use crate::ui::unified_feedback::{FeedbackContext, FeedbackLevel};
+        use crate::ui::unified_feedback::FeedbackContext;
         self.unified_feedback.show_progress(
             message.into(),
             progress,

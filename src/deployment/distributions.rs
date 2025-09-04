@@ -8,7 +8,7 @@
 //! - Scoop packages for Windows
 //! - Package submission and maintenance automation
 
-use crate::deployment::{Platform, Architecture, OperatingSystem, DeploymentArtifact, ArtifactType};
+// use crate::deployment::{Platform, Architecture, OperatingSystem, DeploymentArtifact, ArtifactType};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

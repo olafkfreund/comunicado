@@ -1,7 +1,7 @@
 //! AI-powered email categorization system
 
 use super::{AiError, AiResult, AIProvider};
-use crate::notifications::types::NotificationPriority;
+// use crate::notifications::types::NotificationPriority;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tokio::sync::RwLock;
