@@ -3,7 +3,7 @@
 use super::{CloudSyncError, CloudSyncResult};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+// use std::collections::HashMap;
 
 /// Supported cloud provider types
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

@@ -36,11 +36,11 @@ pub use encryption::{EncryptionEngine, EncryptionType, KeyDerivation};
 pub use versioning::{VersionManager, Version, VersionHistory, VersionDiff};
 pub use remote_sync::{RemoteSyncProvider, RemoteConfig, RemoteCredentials};
 
-use chrono::{DateTime, Utc};
+use chrono::{Utc}; // DateTime
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+// use std::collections::HashMap;
 use std::path::PathBuf;
-use uuid::Uuid;
+// use uuid::Uuid;
 
 /// Backup target types
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

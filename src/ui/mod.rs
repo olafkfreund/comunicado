@@ -3358,7 +3358,7 @@ impl UI {
 
     /// Show info feedback with intelligent routing
     pub fn show_toast_info<S: Into<String>>(&mut self, message: S) {
-        use crate::ui::unified_feedback::{FeedbackLevel, FeedbackContext};
+        use crate::ui::unified_feedback::{FeedbackContext}; // FeedbackLevel
         self.unified_feedback.show_contextual(
             message.into(),
             FeedbackLevel::Info,
@@ -3368,7 +3368,7 @@ impl UI {
 
     /// Show success feedback with intelligent routing
     pub fn show_toast_success<S: Into<String>>(&mut self, message: S) {
-        use crate::ui::unified_feedback::{FeedbackLevel, FeedbackContext};
+        use crate::ui::unified_feedback::{FeedbackContext}; // FeedbackLevel
         self.unified_feedback.show_contextual(
             message.into(),
             FeedbackLevel::Success,
@@ -3378,7 +3378,7 @@ impl UI {
 
     /// Show warning feedback with intelligent routing
     pub fn show_toast_warning<S: Into<String>>(&mut self, message: S) {
-        use crate::ui::unified_feedback::{FeedbackLevel, FeedbackContext};
+        use crate::ui::unified_feedback::{FeedbackContext}; // FeedbackLevel
         self.unified_feedback.show_contextual(
             message.into(),
             FeedbackLevel::Warning,
@@ -3388,7 +3388,7 @@ impl UI {
 
     /// Show error feedback with intelligent routing
     pub fn show_toast_error<S: Into<String>>(&mut self, message: S) {
-        use crate::ui::unified_feedback::{FeedbackLevel, FeedbackContext};
+        use crate::ui::unified_feedback::{FeedbackContext}; // FeedbackLevel
         self.unified_feedback.show_contextual(
             message.into(),
             FeedbackLevel::Error,
@@ -3398,7 +3398,7 @@ impl UI {
 
     /// Show progress feedback
     pub fn show_progress<S: Into<String>>(&mut self, message: S, progress: f32) {
-        use crate::ui::unified_feedback::{FeedbackLevel, FeedbackContext};
+        use crate::ui::unified_feedback::{FeedbackContext}; // FeedbackLevel
         self.unified_feedback.show_progress(
             message.into(),
             progress,
@@ -3408,7 +3408,7 @@ impl UI {
 
     /// Show status update
     pub fn show_status<S: Into<String>>(&mut self, message: S) {
-        use crate::ui::unified_feedback::{FeedbackLevel, FeedbackContext};
+        use crate::ui::unified_feedback::{FeedbackContext}; // FeedbackLevel
         self.unified_feedback.show_contextual(
             message.into(),
             FeedbackLevel::Status,
@@ -3418,7 +3418,7 @@ impl UI {
 
     /// Show critical system feedback
     pub fn show_critical<S: Into<String>>(&mut self, message: S) {
-        use crate::ui::unified_feedback::{FeedbackLevel, FeedbackContext};
+        use crate::ui::unified_feedback::{FeedbackContext}; // FeedbackLevel
         self.unified_feedback.show_contextual(
             message.into(),
             FeedbackLevel::Critical,

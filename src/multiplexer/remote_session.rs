@@ -1,8 +1,8 @@
 //! Remote session support for SSH and Mosh connections
 
-use super::{MultiplexerError, MultiplexerResult};
+use super::{MultiplexerResult}; // MultiplexerError
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+// use std::collections::HashMap;
 
 /// Remote session manager
 pub struct RemoteSession {

@@ -39,7 +39,7 @@ pub struct MobileDevice {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum DeviceType {
     Android,
-    iOS,
+    IOs,
     Web,
     Desktop,
     Other(String),

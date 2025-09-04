@@ -1,7 +1,7 @@
 //! User interface for backup management
 
 use crate::backup::{
-    BackupEngine, BackupConfig, BackupMetadata, BackupStatus, BackupType, BackupTarget,
+    BackupEngine, BackupConfig, BackupMetadata, BackupStatus, // BackupType, BackupTarget,
     DataCategory,
 };
 use crate::theme::Theme;

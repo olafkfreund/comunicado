@@ -11,7 +11,7 @@ use super::{MultiplexerError, MultiplexerResult, SessionInfo, MultiplexerType};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::process::{Command, Stdio};
-use uuid::Uuid;
+// use uuid::Uuid;
 
 /// Tmux integration handler
 pub struct TmuxIntegration {

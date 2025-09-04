@@ -28,7 +28,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use thiserror::Error;
-use uuid::Uuid;
+// use uuid::Uuid;
 
 /// Multiplexer integration errors
 #[derive(Error, Debug)]

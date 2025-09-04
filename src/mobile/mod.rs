@@ -26,10 +26,11 @@ pub use push_service::{PushService, PushProvider, PushToken};
 pub use device_manager::{DeviceManager, MobileDevice, DeviceStatus};
 pub use sync_protocol::{SyncProtocol, SyncMessage, SyncCommand};
 
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use tokio::sync::RwLock;
-use uuid::Uuid;
+// Unused imports commented out for now
+// use serde::{Deserialize, Serialize};
+// use std::collections::HashMap;
+// use tokio::sync::RwLock;
+// use uuid::Uuid;
 
 // Module-level error type
 #[derive(Debug, thiserror::Error)]

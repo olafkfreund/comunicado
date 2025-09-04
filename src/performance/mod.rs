@@ -43,10 +43,11 @@ pub use monitoring::{
 };
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::time::{Duration, Instant};
-use tokio::sync::RwLock;
-use uuid::Uuid;
+// Unused imports commented out for now
+// use std::collections::HashMap;
+// use std::time::{Duration, Instant};
+// use tokio::sync::RwLock;
+// use uuid::Uuid;
 
 /// Performance optimization configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]

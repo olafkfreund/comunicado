@@ -4,7 +4,7 @@ use super::{AiError, AiResult, AiProvider};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tokio::sync::RwLock;
-use uuid::Uuid;
+// use uuid::Uuid;
 
 /// Email categorization engine
 pub struct EmailCategorizer {

@@ -1,5 +1,5 @@
 use crate::theme::Theme;
-use crate::ui::typography::{TypographySystem, TypographyLevel, VisualHierarchy, InformationDensity as TypographyInformationDensity};
+use crate::ui::typography::{TypographySystem, TypographyLevel, VisualHierarchy}; // InformationDensity as TypographyInformationDensity
 use ratatui::{
     layout::{Alignment, Rect},
     style::{Modifier, Style},
