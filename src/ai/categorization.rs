@@ -1,6 +1,7 @@
 //! AI-powered email categorization system
 
-use super::{AiError, AiResult, AiProvider};
+use super::{AiError, AiResult, AIProvider};
+use crate::notifications::types::NotificationPriority;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tokio::sync::RwLock;
@@ -8,7 +9,7 @@ use tokio::sync::RwLock;
 
 /// Email categorization engine
 pub struct EmailCategorizer {
-    provider: Box<dyn AiProvider>,
+    provider: Box<dyn AIProvider>,
     categories: RwLock<HashMap<String, EmailCategory>>,
     classification_cache: RwLock<HashMap<String, ClassificationResult>>,
     learning_mode: bool,
@@ -52,6 +53,7 @@ pub enum AutoAction {
     SetPriority(Priority),
     ForwardTo(String),
     CreateReminder { minutes: u32 },
+    AddToCalendar,
 }
 
 /// Suggested actions
@@ -119,7 +121,7 @@ pub struct CategorizationStats {
 }
 
 impl EmailCategorizer {
-    pub fn new(provider: Box<dyn AiProvider>) -> AiResult<Self> {
+    pub fn new(provider: Box<dyn AIProvider>) -> AiResult<Self> {
         Ok(Self {
             provider,
             categories: RwLock::new(HashMap::new()),
@@ -254,11 +256,20 @@ impl EmailCategorizer {
         // Prepare context for AI analysis
         let analysis_context = self.prepare_analysis_context(email).await?;
 
-        // Use AI provider to analyze the email
-        let ai_response = self.provider.analyze_email(&analysis_context).await?;
+        // Use AI provider to categorize the email content
+        let email_content = format!("{}\n\n{}", email.subject, email.body);
+        let category = self.provider.categorize_email(&email_content).await?;
 
         // Process AI response into classification result
-        let classification = self.process_ai_response(email, ai_response).await?;
+        let classification = ClassificationResult {
+            email_id: email.id.clone(),
+            primary_category: category.name(),
+            confidence: 0.8, // Default confidence
+            secondary_categories: vec![],
+            reasoning: Some("AI-based categorization".to_string()),
+            suggested_actions: vec![],
+            processed_at: chrono::Utc::now(),
+        };
 
         // Cache the result
         self.cache_result(&classification).await;
@@ -370,8 +381,8 @@ impl EmailCategorizer {
                 timestamp: chrono::Utc::now(),
             };
 
-            // Send to AI provider for learning
-            self.provider.learn_from_feedback(&training_data).await?;
+            // TODO: Send to AI provider for learning - not yet implemented
+            // self.provider.learn_from_feedback(&training_data).await?;
         }
 
         Ok(())
@@ -412,15 +423,21 @@ impl EmailCategorizer {
                             ("minutes".to_string(), minutes.to_string())
                         ]),
                     },
+                    AutoAction::AddToCalendar => SuggestedAction {
+                        action_type: ActionType::AddToCalendar,
+                        description: "Add to calendar".to_string(),
+                        confidence: 0.8,
+                        parameters: HashMap::new(),
+                    },
                     _ => continue,
                 };
                 actions.push(suggested);
             }
         }
 
-        // Add AI-suggested actions based on content
-        let ai_actions = self.provider.suggest_actions(classification).await?;
-        actions.extend(ai_actions);
+        // TODO: Add AI-suggested actions based on content
+        // let ai_actions = self.provider.suggest_actions(classification).await?;
+        // actions.extend(ai_actions);
 
         Ok(actions)
     }

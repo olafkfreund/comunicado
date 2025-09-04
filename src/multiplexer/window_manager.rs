@@ -1,6 +1,7 @@
 //! Window and pane management for multiplexers
 
-use super::{MultiplexerError, MultiplexerResult, PaneArrangement};
+use super::{MultiplexerError, MultiplexerResult};
+use super::session::PaneArrangement;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 

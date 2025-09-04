@@ -8,6 +8,12 @@ pub struct MonitoringDashboard;
 pub struct SystemMetrics;
 pub struct ResourceTracker;
 
+// Add missing exports for performance module
+pub struct PerformanceMonitor;
+pub struct Threshold;
+pub struct Alert;
+pub struct HealthCheck;
+
 impl SystemMonitor {
     pub fn new() -> Self {
         Self

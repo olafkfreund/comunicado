@@ -1,6 +1,7 @@
 //! Performance optimization and monitoring system
 
 pub mod metrics;
+pub mod background_processor;
 pub mod cache;
 pub mod database;
 pub mod memory;
@@ -36,6 +37,10 @@ pub use profiling::{
 pub use optimization::{
     OptimizationEngine, OptimizationRule, PerformanceTuner, 
     AutoOptimizer, OptimizationRecommendation
+};
+pub use background_processor::{
+    BackgroundProcessor, BackgroundTask, TaskResult, TaskStatus, TaskPriority,
+    BackgroundTaskType, TaskResultData, ProcessorSettings, CalendarSyncType, CalendarDbOperationType
 };
 pub use monitoring::{
     PerformanceMonitor, AlertManager, Threshold, Alert,

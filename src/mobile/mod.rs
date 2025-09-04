@@ -26,6 +26,12 @@ pub use push_service::{PushService, PushProvider, PushToken};
 pub use device_manager::{DeviceManager, MobileDevice, DeviceStatus};
 pub use sync_protocol::{SyncProtocol, SyncMessage, SyncCommand};
 
+// Add missing types for push_service and sync_protocol
+pub type PushProviderConfig = PushProvider;
+pub type PushProviderType = PushProvider;
+pub type EmailSummary = String; // Placeholder
+pub type CalendarEventSummary = String; // Placeholder
+
 // Unused imports commented out for now
 // use serde::{Deserialize, Serialize};
 // use std::collections::HashMap;

@@ -1,6 +1,9 @@
 //! Session management and persistence
 
 use super::{MultiplexerError, MultiplexerResult};
+
+// Type alias for consistency
+pub type SessionResult<T> = Result<T, MultiplexerError>;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;

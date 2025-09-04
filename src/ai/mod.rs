@@ -42,7 +42,6 @@ pub use provider::{AIProvider, AIProviderManager, ProviderCapabilities};
 // Add type aliases for backwards compatibility
 pub type AiError = AIError;
 pub type AiResult<T> = AIResult<T>;
-pub type AiProvider = dyn AIProvider;
 pub use providers::{AnthropicProvider, GoogleProvider, OllamaProvider, OpenAIProvider};
 pub use retry::{RetryConfig, RetryManager, RetryStats};
 pub use enhanced_service::{EnhancedAIService, EnhancedAIConfig, EnhancedAIRequest, EnhancedAIResponse, PerformanceMetrics};
@@ -63,9 +62,10 @@ pub use smart_reply::{
     GeneratedReply, ReplyTemplate, UserPreferences
 };
 pub use categorization::{
-    EmailCategorizer, EmailCategory as CategorizedEmailCategory, ClassificationResult, NotificationPriority as CategoryPriority,
+    EmailCategorizer, EmailCategory as CategorizedEmailCategory, ClassificationResult,
     AutoAction, SuggestedAction, ActionType
 };
+pub use crate::notifications::types::NotificationPriority;
 pub use streaming::{AIStreamingManager, StreamChunk, StreamingConfig, StreamingSession, StreamingStats};
 
 use serde::{Deserialize, Serialize};

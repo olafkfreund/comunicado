@@ -28,6 +28,9 @@ pub enum AIError {
 
     #[error("AI configuration error: {message}")]
     ConfigurationError { message: String },
+    
+    #[error("Configuration error: {0}")]
+    Configuration(String),
 
     #[error("Network error: {message}")]
     NetworkError { message: String },

@@ -1,13 +1,13 @@
 //! AI-powered smart reply generation
 
-use super::{AiError, AiResult, AiProvider};
+use super::{AiError, AiResult, AIProvider};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tokio::sync::RwLock;
 
 /// Smart reply generator
 pub struct SmartReplyGenerator {
-    provider: Box<dyn AiProvider>,
+    provider: Box<dyn AIProvider>,
     reply_templates: RwLock<HashMap<String, ReplyTemplate>>,
     response_cache: RwLock<HashMap<String, CachedResponse>>,
     personalization_enabled: bool,
@@ -190,7 +190,7 @@ pub struct ReplyStats {
 }
 
 impl SmartReplyGenerator {
-    pub fn new(provider: Box<dyn AiProvider>) -> AiResult<Self> {
+    pub fn new(provider: Box<dyn AIProvider>) -> AiResult<Self> {
         Ok(Self {
             provider,
             reply_templates: RwLock::new(HashMap::new()),
@@ -318,11 +318,24 @@ impl SmartReplyGenerator {
         let matching_templates = self.find_matching_templates(request).await;
 
         // Generate reply using AI provider
-        let ai_context = self.prepare_ai_context(request, &matching_templates).await?;
-        let ai_response = self.provider.generate_reply(&ai_context).await?;
+        let prompt = format!("Generate a {} reply to this email:\n{}", 
+                           request.reply_type.to_string().to_lowercase(),
+                           request.original_email);
+        let ai_response = self.provider.suggest_reply(&request.original_email, &prompt).await?;
 
-        // Process AI response
-        let generated_reply = self.process_ai_reply_response(request, ai_response).await?;
+        // Process AI response - use first suggestion or create default
+        let reply_text = ai_response.first().unwrap_or(&"Thank you for your email.".to_string()).clone();
+        let generated_reply = GeneratedReply {
+            reply_id: uuid::Uuid::new_v4(),
+            content: reply_text,
+            reply_type: request.reply_type.clone(),
+            tone: request.preferred_tone.clone(),
+            length: request.reply_length.clone(),
+            confidence: 0.8,
+            used_template: None,
+            generated_at: chrono::Utc::now(),
+            metadata: HashMap::new(),
+        };
 
         // Cache the response
         self.cache_response(cache_key, &generated_reply).await;
@@ -372,7 +385,7 @@ impl SmartReplyGenerator {
 
     /// Get suggested reply types for an email
     pub async fn suggest_reply_types(&self, email: &EmailContext) -> AiResult<Vec<ReplyType>> {
-        let analysis = self.provider.analyze_email_intent(email).await?;
+        let analysis = self.provider.extract_key_info(&email.content).await?;
         
         let mut suggested_types = Vec::new();
         
