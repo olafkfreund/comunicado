@@ -671,6 +671,7 @@ pub enum OptimizationPriority {
 }
 
 /// Memory manager that coordinates all memory optimization components
+#[allow(dead_code)]
 pub struct MemoryManager {
     config: MemoryManagerConfig,
     profiler: Arc<MemoryProfiler>,

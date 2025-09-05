@@ -4,6 +4,7 @@ use super::{MultiplexerResult}; // MultiplexerError
 use serde::{Deserialize, Serialize};
 
 /// Clipboard synchronization manager
+#[allow(dead_code)]
 pub struct ClipboardSync {
     mode: ClipboardMode,
     last_content: Option<String>,

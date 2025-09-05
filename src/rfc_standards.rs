@@ -11,10 +11,12 @@ use uuid::Uuid;
 use tracing::{debug, warn, error};
 
 /// RFC standards parser for vCard and iCalendar data
+#[allow(dead_code)]
 pub struct RfcStandardsParser;
 
 impl RfcStandardsParser {
     /// Parse vCard data (RFC 6350) into Contact objects
+    #[allow(dead_code)]
     pub fn parse_vcard_to_contact(
         vcard_data: &str,
         source: ContactSource,

@@ -66,6 +66,7 @@ pub struct CachePolicy {
 
 /// Cache entry metadata
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct CacheEntry<T> {
     /// The cached value
     value: T,

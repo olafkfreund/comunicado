@@ -30,8 +30,11 @@ pub enum KeyDerivation {
     Scrypt,
 }
 
+#[allow(dead_code)]
 pub struct EncryptionEngine {
+    #[allow(dead_code)]
     encryption_type: EncryptionType,
+    #[allow(dead_code)]
     key_derivation: KeyDerivation,
 }
 

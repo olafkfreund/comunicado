@@ -86,6 +86,7 @@ pub struct SessionConfig {
 }
 
 /// Session manager for handling persistence
+#[allow(dead_code)]
 pub struct SessionManager {
     config: SessionConfig,
     current_state: Option<SessionState>,

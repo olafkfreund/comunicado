@@ -8,6 +8,7 @@ use tokio::sync::{broadcast, RwLock};
 use uuid::Uuid;
 
 /// Real-time synchronization manager
+#[allow(dead_code)]
 pub struct RealTimeSync {
     provider: Box<dyn CloudProvider>,
     websocket_client: Option<WebSocketClient>,
@@ -17,13 +18,17 @@ pub struct RealTimeSync {
 }
 
 /// WebSocket client for real-time updates
+#[allow(dead_code)]
 pub struct WebSocketClient {
+    #[allow(dead_code)]
     connection_url: String,
+    #[allow(dead_code)]
     client_id: Uuid,
     connection_status: ConnectionStatus,
     reconnect_attempts: u32,
     heartbeat_interval_ms: u64,
     last_ping: Option<DateTime<Utc>>,
+    #[allow(dead_code)]
     last_pong: Option<DateTime<Utc>>,
 }
 
@@ -38,9 +43,12 @@ pub enum ConnectionStatus {
 }
 
 /// Change stream for processing real-time updates
+#[allow(dead_code)]
 pub struct ChangeStream {
     sender: broadcast::Sender<ChangeEvent>,
+    #[allow(dead_code)]
     receiver: broadcast::Receiver<ChangeEvent>,
+    #[allow(dead_code)]
     buffer_size: usize,
     processing_queue: RwLock<Vec<ChangeEvent>>,
 }

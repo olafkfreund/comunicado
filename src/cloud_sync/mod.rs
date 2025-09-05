@@ -145,10 +145,12 @@ pub struct CloudSyncManager {
     config: CloudSyncConfig,
     provider: Box<dyn CloudProvider>,
     encryption: CloudEncryption,
+    #[allow(dead_code)]
     sync_engine: SyncEngine,
     offline_cache: OfflineCache,
     conflict_resolver: ConflictResolver,
     real_time_sync: Option<RealTimeSync>,
+    #[allow(dead_code)]
     collaboration: CollaborationManager,
     device_info: DeviceInfo,
     active_syncs: HashMap<SyncDataType, DateTime<Utc>>,

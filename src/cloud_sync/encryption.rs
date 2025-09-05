@@ -12,6 +12,7 @@ pub struct CloudEncryption {
 }
 
 /// Encryption key management
+#[allow(dead_code)]
 pub struct EncryptionKeyManager {
     master_key: Option<EncryptionKey>,
     device_keys: HashMap<String, EncryptionKey>,

@@ -140,6 +140,7 @@ impl Default for ShareEditor {
 }
 
 /// Calendar sharing UI component
+#[allow(dead_code)]
 pub struct CalendarSharingUI {
     state: SharingUIState,
     sharing_manager: Arc<Mutex<CalendarSharingManager>>,

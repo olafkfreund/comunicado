@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 // use std::collections::HashMap;
 
 /// Remote session manager
+#[allow(dead_code)]
 pub struct RemoteSession {
     session_type: RemoteSessionType,
     connection_info: ConnectionInfo,

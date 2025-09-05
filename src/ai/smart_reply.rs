@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use tokio::sync::RwLock;
 
 /// Smart reply generator
+#[allow(dead_code)]
 pub struct SmartReplyGenerator {
     provider: Box<dyn AIProvider>,
     reply_templates: RwLock<HashMap<String, ReplyTemplate>>,
@@ -516,6 +517,7 @@ impl SmartReplyGenerator {
         }
     }
 
+    #[allow(dead_code)]
     async fn prepare_ai_context(
         &self,
         request: &ReplyRequest,
@@ -533,6 +535,7 @@ impl SmartReplyGenerator {
         })
     }
 
+    #[allow(dead_code)]
     async fn process_ai_reply_response(
         &self,
         request: &ReplyRequest,
@@ -556,6 +559,7 @@ impl SmartReplyGenerator {
         })
     }
 
+    #[allow(dead_code)]
     fn generate_subject(&self, original_email: &EmailContext, ai_subject: &Option<String>) -> String {
         if let Some(subject) = ai_subject {
             subject.clone()

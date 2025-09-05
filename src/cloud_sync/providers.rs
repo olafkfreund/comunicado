@@ -319,6 +319,7 @@ impl CloudProvider for DropboxProvider {
 }
 
 /// Google Drive provider implementation
+#[allow(dead_code)]
 pub struct GoogleDriveProvider {
     access_token: Option<String>,
     client: reqwest::Client,

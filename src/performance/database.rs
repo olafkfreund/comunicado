@@ -221,7 +221,7 @@ pub struct DatabaseOptimizer {
 
 /// Slow query information
 #[derive(Debug, Clone)]
-struct SlowQuery {
+pub struct SlowQuery {
     query: String,
     duration: Duration,
     timestamp: Instant,
@@ -680,6 +680,7 @@ pub struct PoolHealth {
 }
 
 /// Index analyzer for database optimization
+#[allow(dead_code)]
 pub struct IndexAnalyzer {
     config: IndexAnalysisConfig,
 }

@@ -161,6 +161,7 @@ pub enum CgroupsMode {
 }
 
 /// Container manager
+#[allow(dead_code)]
 pub struct ContainerManager {
     config: ContainerManagerConfig,
     runtime_configs: HashMap<ContainerRuntime, RuntimeConfig>,

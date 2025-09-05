@@ -14,6 +14,7 @@ use std::process::{Command, Stdio};
 // use uuid::Uuid;
 
 /// Tmux integration handler
+#[allow(dead_code)]
 pub struct TmuxIntegration {
     session_info: Option<SessionInfo>,
     windows: HashMap<String, TmuxWindow>,

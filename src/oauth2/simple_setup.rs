@@ -11,6 +11,7 @@ use crossterm::{
 };
 use std::io;
 
+#[allow(dead_code)]
 pub struct SimpleSetupWizard {
     theme: Theme,
     state: SimpleSetupState,

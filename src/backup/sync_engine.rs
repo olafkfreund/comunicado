@@ -41,6 +41,7 @@ pub struct SyncConfig {
     pub created_at: DateTime<Utc>,
 }
 
+#[allow(dead_code)]
 pub struct SyncEngine {
     configs: Vec<SyncConfig>,
 }

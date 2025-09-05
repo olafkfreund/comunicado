@@ -169,6 +169,7 @@ pub enum DesktopIntegrationType {
 }
 
 /// Calendar sharing manager
+#[allow(dead_code)]
 pub struct CalendarSharingManager {
     caldav_client: CalDAVClient,
     shares: HashMap<Uuid, CalendarShare>,

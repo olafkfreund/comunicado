@@ -126,6 +126,7 @@ impl Default for BackupConfigEditor {
 }
 
 /// Main backup UI component
+#[allow(dead_code)]
 pub struct BackupUI {
     state: BackupUIState,
     backup_engine: Arc<Mutex<BackupEngine>>,

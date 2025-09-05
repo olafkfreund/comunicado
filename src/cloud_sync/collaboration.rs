@@ -171,14 +171,17 @@ pub struct CursorPosition {
 }
 
 /// Permission manager for access control
+#[allow(dead_code)]
 pub struct PermissionManager {
     permissions: HashMap<String, Vec<ResourcePermission>>,
     permission_cache: HashMap<String, Permission>,
 }
 
 /// Presence tracker for collaborative sessions
+#[allow(dead_code)]
 pub struct PresenceTracker {
     active_users: HashMap<String, UserPresence>,
+    #[allow(dead_code)]
     resource_watchers: HashMap<String, Vec<String>>,
 }
 

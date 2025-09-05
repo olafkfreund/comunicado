@@ -80,6 +80,7 @@ pub struct PushProviderStats {
 
 /// Firebase Cloud Messaging provider
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct FCMProvider {
     api_key: String,
     project_id: String,

@@ -104,6 +104,7 @@ pub struct RepositoryConfig {
 }
 
 /// Distribution manager
+#[allow(dead_code)]
 pub struct DistributionManager {
     config: DistributionManagerConfig,
     builders: HashMap<DistributionType, Box<dyn DistributionBuilder>>,

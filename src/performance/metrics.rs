@@ -74,6 +74,7 @@ pub struct PerformanceCounter {
 }
 
 /// Latency tracker for measuring response times
+#[allow(dead_code)]
 pub struct LatencyTracker {
     name: String,
     samples: Arc<RwLock<Vec<Duration>>>,

@@ -455,6 +455,7 @@ impl EmailCategorizer {
         })
     }
 
+    #[allow(dead_code)]
     async fn process_ai_response(
         &self,
         email: &EmailContent,

@@ -31,6 +31,7 @@ pub enum CompressionLevel {
     Custom(u8),
 }
 
+#[allow(dead_code)]
 pub struct CompressionEngine {
     compression_type: CompressionType,
 }

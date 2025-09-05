@@ -182,6 +182,7 @@ impl MultiplexerDetector {
 }
 
 /// Multiplexer integration manager
+#[allow(dead_code)]
 pub struct MultiplexerManager {
     detector: MultiplexerDetector,
     tmux: Option<TmuxIntegration>,

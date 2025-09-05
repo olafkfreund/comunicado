@@ -159,6 +159,7 @@ pub struct PackageScripts {
 }
 
 /// Main package manager
+#[allow(dead_code)]
 pub struct PackageManager {
     config: PackageManagerConfig,
     builders: HashMap<PackageType, Box<dyn PackageBuilder>>,
@@ -433,7 +434,9 @@ impl PackageBuilder for RpmPackage {
 }
 
 /// AppImage package builder
+#[allow(dead_code)]
 pub struct AppImagePackage {
+    #[allow(dead_code)]
     tools_available: bool,
 }
 
@@ -476,7 +479,9 @@ impl PackageBuilder for AppImagePackage {
 }
 
 /// Flatpak package builder
+#[allow(dead_code)]
 pub struct FlatpakPackage {
+    #[allow(dead_code)]
     tools_available: bool,
 }
 
