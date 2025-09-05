@@ -181,16 +181,23 @@ impl OfflineCache {
     pub async fn get_cached_data(&mut self, key: &str) -> CacheResult<CacheEntry> {
         if let Some(entry) = self.cache_index.get_entry_mut(key) {
             // Update access statistics
-            entry.last_accessed = Utc::now();
+            let now = Utc::now();
+            entry.last_accessed = now;
             entry.access_count += 1;
+            
+            // Extract all needed info before borrowing self again
+            let file_path = entry.file_path.clone();
+            let compression_type = entry.compression_type.clone();
+            let sync_metadata = entry.sync_metadata.clone();
+            let created_at = entry.created_at;
 
             // Read file data
-            match fs::read(&entry.file_path).await {
+            match fs::read(&file_path).await {
                 Ok(cached_data) => {
                     // Decompress if needed
-                    let data = match entry.compression_type {
+                    let data = match compression_type {
                         CompressionType::None => cached_data,
-                        _ => match self.decompress_data(&cached_data, &entry.compression_type) {
+                        _ => match self.decompress_data(&cached_data, &compression_type) {
                             Ok(decompressed) => decompressed,
                             Err(e) => return CacheResult::Error(e),
                         },
@@ -199,9 +206,9 @@ impl OfflineCache {
                     let cache_entry = CacheEntry {
                         key: key.to_string(),
                         data,
-                        metadata: entry.sync_metadata.clone(),
-                        cached_at: entry.created_at,
-                        last_accessed: entry.last_accessed,
+                        metadata: sync_metadata,
+                        cached_at: created_at,
+                        last_accessed: now,
                     };
 
                     // Save updated index
@@ -315,11 +322,19 @@ impl OfflineCache {
 
         // Remove expired entries
         let max_age = chrono::Duration::days(self.storage_limits.max_entry_age_days as i64);
-        for (key, entry) in &entries {
-            if now.signed_duration_since(entry.created_at) > max_age {
-                if self.remove_cached_data(key).await? {
-                    cleaned_count += 1;
+        let expired_keys: Vec<String> = entries.iter()
+            .filter_map(|(key, entry)| {
+                if now.signed_duration_since(entry.created_at) > max_age {
+                    Some((*key).clone())
+                } else {
+                    None
                 }
+            })
+            .collect();
+
+        for key in expired_keys {
+            if self.remove_cached_data(&key).await? {
+                cleaned_count += 1;
             }
         }
 

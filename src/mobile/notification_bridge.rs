@@ -349,7 +349,8 @@ impl NotificationBridge {
         // Clean up old sent notifications (keep last 1000)
         let mut sent = self.sent_notifications.write().await;
         if sent.len() > 1000 {
-            sent.drain(0..sent.len() - 1000);
+            let len = sent.len();
+            sent.drain(0..len - 1000);
         }
 
         Ok(())

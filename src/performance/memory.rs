@@ -204,6 +204,9 @@ impl MemoryProfiler {
             deallocated_at: None,
         };
 
+        // Store location before moving allocation
+        let allocation_location = allocation.location.clone();
+        
         // Update tracking
         {
             let mut allocations = self.allocations.write().await;
@@ -236,7 +239,7 @@ impl MemoryProfiler {
             tracing::warn!(
                 "Large allocation detected: {} bytes at {}",
                 size,
-                allocation.location
+                allocation_location
             );
         }
 

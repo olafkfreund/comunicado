@@ -166,7 +166,7 @@ impl RealTimeSync {
         let (sender, receiver) = broadcast::channel(1000); // Buffer 1000 events
 
         Ok(Self {
-            provider: provider.clone_boxed(),
+            provider: Box::new(DummyProvider),
             websocket_client: None,
             change_stream: ChangeStream {
                 sender,
@@ -576,5 +576,37 @@ impl CloudProvider for DummyProvider {
 
     fn supports_real_time(&self) -> bool {
         false
+    }
+
+    async fn exists(&self, _path: &str) -> CloudSyncResult<bool> {
+        Ok(false)
+    }
+
+    async fn metadata(&self, _path: &str) -> CloudSyncResult<super::providers::FileMetadata> {
+        Ok(super::providers::FileMetadata {
+            path: _path.to_string(),
+            size: 0,
+            modified: chrono::Utc::now(),
+            etag: None,
+            content_hash: None,
+        })
+    }
+
+    async fn quota(&self) -> CloudSyncResult<super::providers::QuotaInfo> {
+        Ok(super::providers::QuotaInfo {
+            total_bytes: 0,
+            used_bytes: 0,
+            available_bytes: 0,
+        })
+    }
+
+    fn capabilities(&self) -> super::providers::ProviderCapabilities {
+        super::providers::ProviderCapabilities {
+            max_file_size: 0,
+            supports_versioning: false,
+            supports_sharing: false,
+            supports_real_time: false,
+            supports_webhooks: false,
+        }
     }
 }

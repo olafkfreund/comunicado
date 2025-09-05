@@ -230,12 +230,18 @@ impl CloudSyncManager {
     pub async fn sync_all(&mut self) -> CloudSyncResult<HashMap<SyncDataType, SyncStatus>> {
         let mut results = HashMap::new();
         
-        for (data_type, enabled) in &self.config.selective_sync {
-            if *enabled {
-                let status = self.sync_data(data_type.clone()).await
-                    .unwrap_or(SyncStatus::Failed);
-                results.insert(data_type.clone(), status);
-            }
+        // Collect enabled data types first to avoid borrowing conflicts
+        let enabled_types: Vec<SyncDataType> = self.config.selective_sync
+            .iter()
+            .filter_map(|(data_type, enabled)| {
+                if *enabled { Some(data_type.clone()) } else { None }
+            })
+            .collect();
+        
+        for data_type in enabled_types {
+            let status = self.sync_data(data_type.clone()).await
+                .unwrap_or(SyncStatus::Failed);
+            results.insert(data_type, status);
         }
         
         Ok(results)

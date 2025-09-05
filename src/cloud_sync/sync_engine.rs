@@ -470,7 +470,7 @@ impl SyncEngine {
 
     /// Get synchronization statistics
     pub async fn get_statistics(&self) -> SyncStatistics {
-        self.statistics.read().await.clone()
+        (*self.statistics.read().await).clone()
     }
 
     /// Update statistics based on completed syncs

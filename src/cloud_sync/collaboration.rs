@@ -302,7 +302,7 @@ impl CollaborationManager {
             resource.last_modified = Utc::now();
 
             // Update permission manager
-            self.permission_manager.add_permission(resource_id, user_id.clone(), permission);
+            self.permission_manager.add_permission(resource_id, user_id.clone(), permission.clone());
 
             // Log activity
             self.activity_log.log_event(ActivityEvent {
