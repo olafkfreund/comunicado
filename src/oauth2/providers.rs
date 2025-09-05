@@ -38,6 +38,19 @@ impl OAuth2Provider {
             _ => Err(OAuth2Error::InvalidProvider(s.to_string())),
         }
     }
+
+    pub fn detect_from_email(email: &str) -> Option<Self> {
+        if let Some(domain) = email.split('@').nth(1) {
+            match domain.to_lowercase().as_str() {
+                "gmail.com" | "googlemail.com" => Some(OAuth2Provider::Gmail),
+                "outlook.com" | "hotmail.com" | "live.com" | "msn.com" => Some(OAuth2Provider::Outlook),
+                "yahoo.com" | "ymail.com" | "rocketmail.com" => Some(OAuth2Provider::Yahoo),
+                _ => None,
+            }
+        } else {
+            None
+        }
+    }
 }
 
 /// OAuth2 provider configuration

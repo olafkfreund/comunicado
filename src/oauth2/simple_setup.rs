@@ -259,7 +259,8 @@ impl SimpleSetupWizard {
         match provider {
             OAuth2Provider::Gmail => {
                 // Use pre-configured Gmail OAuth2 settings
-                let client = OAuth2Client::new();
+                let config = ProviderConfig::gmail();
+                let _client = OAuth2Client::new(config)?;
                 // Start authorization flow...
                 // For now, simulate success
                 tokio::time::sleep(tokio::time::Duration::from_millis(2000)).await;
@@ -267,7 +268,8 @@ impl SimpleSetupWizard {
             }
             OAuth2Provider::Outlook => {
                 // Use pre-configured Outlook OAuth2 settings
-                let client = OAuth2Client::new();
+                let config = ProviderConfig::outlook();
+                let _client = OAuth2Client::new(config)?;
                 // Start authorization flow...
                 tokio::time::sleep(tokio::time::Duration::from_millis(2000)).await;
                 self.state = SimpleSetupState::Complete("outlook_account".to_string());

@@ -137,7 +137,7 @@ impl PushService {
                 PushProviderType::WebPush => {
                     Box::new(WebPushProvider::new(config)?)
                 }
-                PushProviderType::Custom => {
+                PushProviderType::Custom(_) => {
                     Box::new(CustomProvider::new(config)?)
                 }
             };
@@ -157,14 +157,9 @@ impl PushService {
         // Validate all configured providers
         for (provider_type, provider) in &self.providers {
             // Test provider connection
-            match provider.get_provider_stats().await {
-                Ok(_) => {
-                    println!("Push provider {:?} initialized successfully", provider_type);
-                }
-                Err(e) => {
-                    eprintln!("Warning: Push provider {:?} failed initialization: {}", provider_type, e);
-                }
-            }
+            let stats = provider.get_provider_stats().await;
+            println!("Push provider {:?} initialized successfully with stats: sent={}, failed={}", 
+                     provider_type, stats.messages_sent, stats.messages_failed);
         }
 
         Ok(())
@@ -244,7 +239,7 @@ impl PushService {
 
         // Try other tokens as fallback
         for token in &device_info.tokens {
-            if !token.is_valid || Some(token) == device_info.primary_token.as_ref() {
+            if !token.is_valid || device_info.primary_token.as_ref() == Some(token) {
                 continue;
             }
 

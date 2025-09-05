@@ -83,6 +83,12 @@ pub enum MobileError {
     
     #[error("IO error: {0}")]
     IoError(#[from] std::io::Error),
+    
+    #[error("Push service error: {0}")]
+    PushService(String),
+    
+    #[error("Device not found: {0}")]
+    DeviceNotFound(String),
 }
 
 impl MobileError {
