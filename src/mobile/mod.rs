@@ -28,7 +28,15 @@ pub use sync_protocol::{SyncProtocol, SyncMessage, SyncCommand};
 
 // Add missing types for push_service and sync_protocol
 pub type PushProviderConfig = Box<dyn PushProvider>;
-pub type PushProviderType = Box<dyn PushProvider>;
+
+/// Push provider types
+#[derive(Debug, Clone, Hash, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+pub enum PushProviderType {
+    FCM,
+    APNS,
+    WebPush,
+    Custom(String),
+}
 pub type EmailSummary = String; // Placeholder
 pub type CalendarEventSummary = String; // Placeholder
 

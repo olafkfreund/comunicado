@@ -15,7 +15,7 @@ pub struct PushService {
 
 /// Push notification provider trait
 #[async_trait::async_trait]
-pub trait PushProvider: Send + Sync {
+pub trait PushProvider: Send + Sync + std::fmt::Debug {
     async fn send_notification(
         &self,
         token: &PushToken,
@@ -79,6 +79,7 @@ pub struct PushProviderStats {
 }
 
 /// Firebase Cloud Messaging provider
+#[derive(Debug)]
 pub struct FCMProvider {
     api_key: String,
     project_id: String,
@@ -87,6 +88,7 @@ pub struct FCMProvider {
 }
 
 /// Apple Push Notification Service provider
+#[derive(Debug)]
 pub struct APNSProvider {
     key_id: String,
     team_id: String,
@@ -97,6 +99,7 @@ pub struct APNSProvider {
 }
 
 /// Web Push provider
+#[derive(Debug)]
 pub struct WebPushProvider {
     vapid_private_key: String,
     vapid_public_key: String,
@@ -106,6 +109,7 @@ pub struct WebPushProvider {
 }
 
 /// Custom push provider
+#[derive(Debug)]
 pub struct CustomProvider {
     endpoint_url: String,
     api_key: Option<String>,

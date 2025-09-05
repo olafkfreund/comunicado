@@ -53,7 +53,7 @@ pub struct SyncResult {
 }
 
 /// Synchronization statistics
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SyncStatistics {
     pub total_syncs: u64,
     pub successful_syncs: u64,
