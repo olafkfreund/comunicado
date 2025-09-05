@@ -27,7 +27,7 @@ pub use device_manager::{DeviceManager, MobileDevice, DeviceStatus};
 pub use sync_protocol::{SyncProtocol, SyncMessage, SyncCommand};
 
 // Add missing types for push_service and sync_protocol
-pub type PushProviderConfig = Box<dyn PushProvider>;
+pub use push_service::PushProviderConfigReal as PushProviderConfig;
 
 /// Push provider types
 #[derive(Debug, Clone, Hash, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -89,6 +89,9 @@ pub enum MobileError {
     
     #[error("Device not found: {0}")]
     DeviceNotFound(String),
+    
+    #[error("Network error: {0}")]
+    Network(String),
 }
 
 impl MobileError {

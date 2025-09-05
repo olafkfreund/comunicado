@@ -30,7 +30,7 @@ pub trait PushProvider: Send + Sync + std::fmt::Debug {
 }
 
 /// Push token information
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PushToken {
     pub token: String,
     pub provider_type: PushProviderType,
@@ -108,6 +108,16 @@ pub struct WebPushProvider {
     stats: RwLock<PushProviderStats>,
 }
 
+/// Push provider configuration
+#[derive(Debug, Clone)]
+pub struct PushProviderConfigReal {
+    pub enabled: bool,
+    pub provider_type: PushProviderType,
+    pub api_key: String,
+    pub api_secret: Option<String>,
+    pub additional_settings: HashMap<String, String>,
+}
+
 /// Custom push provider
 #[derive(Debug)]
 pub struct CustomProvider {
@@ -119,7 +129,7 @@ pub struct CustomProvider {
 }
 
 impl PushService {
-    pub fn new(provider_configs: &[PushProviderConfig]) -> Result<Self> {
+    pub fn new(provider_configs: &[PushProviderConfigReal]) -> Result<Self> {
         let mut providers: HashMap<PushProviderType, Box<dyn PushProvider>> = HashMap::new();
 
         for config in provider_configs {
@@ -129,16 +139,40 @@ impl PushService {
 
             let provider: Box<dyn PushProvider> = match config.provider_type {
                 PushProviderType::FCM => {
-                    Box::new(FCMProvider::new(config)?)
+                    Box::new(FCMProvider {
+                        api_key: config.api_key.clone(),
+                        project_id: "default".to_string(),
+                        client: reqwest::Client::new(),
+                        stats: RwLock::new(PushProviderStats::default()),
+                    })
                 }
                 PushProviderType::APNS => {
-                    Box::new(APNSProvider::new(config)?)
+                    Box::new(APNSProvider {
+                        key_id: "default".to_string(),
+                        team_id: "default".to_string(),
+                        private_key: config.api_key.clone(),
+                        is_production: false,
+                        client: reqwest::Client::new(),
+                        stats: RwLock::new(PushProviderStats::default()),
+                    })
                 }
                 PushProviderType::WebPush => {
-                    Box::new(WebPushProvider::new(config)?)
+                    Box::new(WebPushProvider {
+                        vapid_private_key: config.api_key.clone(),
+                        vapid_public_key: "default".to_string(),
+                        subject: "default".to_string(),
+                        client: reqwest::Client::new(),
+                        stats: RwLock::new(PushProviderStats::default()),
+                    })
                 }
                 PushProviderType::Custom(_) => {
-                    Box::new(CustomProvider::new(config)?)
+                    Box::new(CustomProvider {
+                        endpoint_url: "https://example.com".to_string(),
+                        api_key: Some(config.api_key.clone()),
+                        headers: HashMap::new(),
+                        client: reqwest::Client::new(),
+                        stats: RwLock::new(PushProviderStats::default()),
+                    })
                 }
             };
 
@@ -159,7 +193,7 @@ impl PushService {
             // Test provider connection
             let stats = provider.get_provider_stats().await;
             println!("Push provider {:?} initialized successfully with stats: sent={}, failed={}", 
-                     provider_type, stats.messages_sent, stats.messages_failed);
+                     provider_type, stats.sent, stats.failed);
         }
 
         Ok(())

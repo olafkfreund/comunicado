@@ -59,7 +59,7 @@ pub struct ChangeEvent {
 }
 
 /// Types of change events
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum ChangeEventType {
     Create,
     Update,

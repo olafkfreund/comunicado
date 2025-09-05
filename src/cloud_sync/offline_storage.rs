@@ -344,11 +344,14 @@ impl OfflineCache {
             let target_size = (self.storage_limits.max_cache_size_mb as f32 * 0.8) as u64; // Clean to 80% of limit
             let target_size_bytes = target_size * 1024 * 1024;
 
+            // Re-collect entries for size-based cleanup (cache may have changed)
+            let entries_for_size: Vec<_> = self.cache_index.entries.iter().collect();
+            
             // Collect keys to remove based on size limits
             let mut current_size = self.cache_index.size_stats.total_compressed_bytes;
             let mut keys_to_remove = Vec::new();
             
-            for (key, entry) in entries.iter().rev() {
+            for (key, entry) in entries_for_size.iter().rev() {
                 if current_size <= target_size_bytes {
                     break;
                 }

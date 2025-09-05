@@ -502,7 +502,7 @@ impl GarbageCollector {
             stats.avg_gc_time = stats.total_gc_time / stats.total_collections as u32;
             stats.last_gc_time = Some(start_time);
             stats.bytes_collected += bytes_freed;
-            stats.objects_collected += objects_freed;
+            stats.objects_collected += objects_freed as u64;
             
             // Calculate efficiency (bytes collected per millisecond)
             let gc_ms = gc_duration.as_millis().max(1) as f64;

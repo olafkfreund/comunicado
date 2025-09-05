@@ -1,4 +1,4 @@
-use crate::oauth2::{OAuth2Error, OAuth2Result, providers::OAuth2Provider, client::OAuth2Client};
+use crate::oauth2::{OAuth2Error, OAuth2Result, providers::{OAuth2Provider, ProviderConfig}, client::OAuth2Client};
 use crate::theme::Theme;
 use ratatui::{
     prelude::*,
@@ -59,7 +59,7 @@ impl SimpleSetupWizard {
         let mut detected = Vec::new();
 
         // Common Gmail patterns
-        let common_emails = vec![
+        let common_emails: Vec<String> = vec![
             // Try to detect from common environment variables or files
             // This is a simplified example - real implementation might check:
             // - Git config

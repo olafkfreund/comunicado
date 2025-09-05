@@ -496,7 +496,7 @@ impl QueryOptimizer {
         Ok(OptimizedQuery {
             original_query: query.to_string(),
             optimizations,
-            estimated_improvement: estimated_improvement.min(1.0),
+            estimated_improvement: estimated_improvement.min(1.0f64),
             complexity_score: calculate_query_complexity(query),
         })
     }
