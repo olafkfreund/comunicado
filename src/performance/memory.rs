@@ -154,7 +154,6 @@ pub struct MemoryLeak {
     /// Estimated leaked bytes
     pub leaked_bytes: usize,
     /// Leak detection timestamp
-    #[serde(skip)]
     pub detected_at: Instant,
     /// Allocation location
     pub location: String,
@@ -782,7 +781,6 @@ pub struct MemoryStatistics {
     pub heap_analysis: HeapAnalysis,
     pub category_stats: HashMap<String, CategoryStats>,
     pub detected_leaks: usize,
-    #[serde(skip)]
     pub last_updated: Option<Instant>,
 }
 
