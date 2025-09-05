@@ -185,7 +185,7 @@ impl CloudSyncManager {
         
         // Set up real-time sync if supported
         if self.provider.supports_real_time() {
-            self.real_time_sync = Some(RealTimeSync::new(&self.provider).await?);
+            self.real_time_sync = Some(RealTimeSync::new(self.provider.as_ref()).await?);
         }
         
         // Initial sync if configured

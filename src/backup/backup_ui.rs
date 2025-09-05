@@ -7,9 +7,7 @@ use crate::backup::{
 use crate::theme::Theme;
 use crossterm::event::{KeyCode, KeyModifiers};
 use ratatui::{
-//     layout::{Alignment, Constraint, Direction, Layout, Rect},
-    // style::{Color, Modifier, Style},
-    // text::{Line, Span},
+    layout::{Constraint, Direction, Layout, Rect},
     widgets::{
         Block, Borders, Clear, List, ListItem, ListState, Paragraph, Tabs, Wrap,
     },

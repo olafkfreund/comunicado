@@ -39,7 +39,7 @@ pub enum SyncStatus {
 }
 
 /// Detailed synchronization result
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SyncResult {
     pub data_type: SyncDataType,
     pub status: SyncStatus,

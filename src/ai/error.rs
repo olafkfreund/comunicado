@@ -282,6 +282,12 @@ impl AIError {
                 "Disable response caching temporarily".to_string(),
                 "Restart the application".to_string(),
             ],
+            AIError::Configuration(msg) => vec![
+                format!("Configuration error: {}", msg),
+                "Check your configuration settings".to_string(),
+                "Verify all required fields are set".to_string(),
+                "Reset to default configuration if needed".to_string(),
+            ],
         }
     }
 }

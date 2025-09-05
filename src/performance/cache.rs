@@ -102,7 +102,8 @@ pub struct CacheStatistics {
     pub efficiency_score: f64,
     /// Eviction count
     pub eviction_count: u64,
-    /// Last cleanup time
+    /// Last cleanup time (not serialized)
+    #[serde(skip)]
     pub last_cleanup: Option<Instant>,
 }
 

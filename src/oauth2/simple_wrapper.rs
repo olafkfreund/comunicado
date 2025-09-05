@@ -1,4 +1,4 @@
-use crate::oauth2::{OAuth2Error, launch_simple_setup};
+use crate::oauth2::{OAuth2Error, launch_simple_setup, AuthType, SecurityType};
 use crate::ui::account_setup::OAuth2SetupWizard;
 use crate::theme::Theme;
 use async_trait::async_trait;
@@ -59,13 +59,15 @@ fn create_placeholder_account(account_id: &str) -> crate::oauth2::AccountConfig 
         display_name: "Quick Setup Account".to_string(),
         email_address: email.to_string(),
         provider: provider.to_string(),
-        access_token: "placeholder_access_token".to_string(),
-        refresh_token: Some("placeholder_refresh_token".to_string()),
-        token_expires_at: Some(Utc::now() + chrono::Duration::hours(1)),
+        auth_type: AuthType::OAuth2,
         imap_server: imap_server.to_string(),
         imap_port: 993,
         smtp_server: smtp_server.to_string(),
         smtp_port: 587,
+        security: SecurityType::SSL,
+        access_token: "placeholder_access_token".to_string(),
+        refresh_token: Some("placeholder_refresh_token".to_string()),
+        token_expires_at: Some(Utc::now() + chrono::Duration::hours(1)),
         scopes: vec![
             "https://www.googleapis.com/auth/gmail.readonly".to_string(),
             "https://www.googleapis.com/auth/gmail.modify".to_string(),
