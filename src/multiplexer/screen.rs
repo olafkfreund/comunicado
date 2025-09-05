@@ -305,7 +305,7 @@ impl ScreenIntegration {
 
     fn parse_window_part(&self, part: &str) -> MultiplexerResult<Option<ScreenWindow>> {
         // Extract window number and flags
-        let mut chars: Vec<char> = part.chars().collect();
+        let chars: Vec<char> = part.chars().collect();
         if chars.is_empty() {
             return Ok(None);
         }
@@ -352,7 +352,7 @@ impl ScreenIntegration {
         }))
     }
 
-    fn find_window_by_name(&self, output: &str, name: &str) -> MultiplexerResult<Option<ScreenWindow>> {
+    fn find_window_by_name(&self, _output: &str, _name: &str) -> MultiplexerResult<Option<ScreenWindow>> {
         // This is a simplified implementation
         // In practice, you'd need to parse the full window list with titles
         Ok(None)

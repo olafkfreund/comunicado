@@ -112,7 +112,7 @@ pub enum UserResolutionChoice {
 /// Trait for data type specific merge strategies
 pub trait MergeStrategy: Send + Sync {
     fn can_merge(&self, local: &[u8], remote: &[u8]) -> bool;
-    fn merge(&self, local: &[u8], remote: &[u8]) -> CloudSyncResult<Vec<u8>>;
+    fn merge(&self, local: &[u8], _remote: &[u8]) -> CloudSyncResult<Vec<u8>>;
     fn detect_conflicts(&self, local: &[u8], remote: &[u8]) -> Vec<String>;
 }
 
@@ -566,7 +566,7 @@ impl MergeStrategy for KeyboardShortcutsMergeStrategy {
         serde_json::from_slice::<serde_json::Value>(remote).is_ok()
     }
 
-    fn merge(&self, local: &[u8], remote: &[u8]) -> CloudSyncResult<Vec<u8>> {
+    fn merge(&self, local: &[u8], _remote: &[u8]) -> CloudSyncResult<Vec<u8>> {
         // For keyboard shortcuts, prefer local customizations
         Ok(local.to_vec())
     }

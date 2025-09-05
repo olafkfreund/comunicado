@@ -255,7 +255,7 @@ impl DatabaseOptimizer {
         query_id: String,
         duration: Duration,
         rows_affected: u64,
-        success: bool,
+        _success: bool,
     ) -> PerformanceResult<()> {
         let mut stats = self.query_stats.write().await;
         

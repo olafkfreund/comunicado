@@ -162,7 +162,7 @@ pub struct RealTimeSyncStats {
 }
 
 impl RealTimeSync {
-    pub async fn new(provider: &dyn CloudProvider) -> CloudSyncResult<Self> {
+    pub async fn new(_provider: &dyn CloudProvider) -> CloudSyncResult<Self> {
         let (sender, receiver) = broadcast::channel(1000); // Buffer 1000 events
 
         Ok(Self {

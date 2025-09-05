@@ -1,61 +1,36 @@
 #!/bin/bash
 
-echo "Fixing remaining compilation warnings..."
+# Fix specific unused variable warnings by adding underscore prefix
 
-# Fix backup module warnings
-echo "Fixing backup module warnings..."
-if [ -f "src/backup/backup_ui.rs" ]; then
-    sed -i 's/use super::{BackupService, BackupTarget, BackupType, BackupResult};/use super::{BackupService, BackupResult}; \/\/ BackupTarget, BackupType/' "src/backup/backup_ui.rs"
-    sed -i 's/use ratatui::{prelude::*, widgets::{Block, Borders, Clear, Gauge, List, ListItem, Paragraph, Wrap}, layout::{Alignment, Constraint, Direction, Layout, Margin}, style::{Color, Modifier, Style}, text::{Line, Span}};/use ratatui::{prelude::*, widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Wrap}, layout::{Constraint, Direction, Layout, Margin}};/' "src/backup/backup_ui.rs"
-fi
+echo "🔧 Fixing remaining unused variable warnings..."
 
-if [ -f "src/backup/sync_engine.rs" ]; then
-    sed -i 's/use std::path::{Path, PathBuf};/use std::path::{Path}; \/\/ PathBuf/' "src/backup/sync_engine.rs"
-fi
+# Fix files_processed in backup_engine.rs
+sed -i 's/let mut files_processed = 0;/let mut _files_processed = 0;/' src/backup/backup_engine.rs
 
-if [ -f "src/backup/mod.rs" ]; then
-    sed -i 's/use chrono::{DateTime, Utc};/use chrono::{Utc}; \/\/ DateTime/' "src/backup/mod.rs"
-    sed -i 's/^use std::collections::HashMap;$/\/\/ use std::collections::HashMap;/' "src/backup/mod.rs"
-    sed -i 's/^use uuid::Uuid;$/\/\/ use uuid::Uuid;/' "src/backup/mod.rs"
-fi
+# Fix data_type in cloud_sync/mod.rs method parameter
+sed -i 's/async fn perform_sync(&mut self, data_type: SyncDataType)/async fn perform_sync(&mut self, _data_type: SyncDataType)/' src/cloud_sync/mod.rs
 
-# Fix calendar module warnings  
-echo "Fixing calendar module warnings..."
-if [ -f "src/calendar/sharing_ui.rs" ]; then
-    sed -i 's/use super::{CalendarService, SharedUser, SharingResult};/use super::{CalendarService}; \/\/ SharedUser, SharingResult/' "src/calendar/sharing_ui.rs"
-    sed -i 's/use ratatui::{prelude::*, widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Table, Wrap}, layout::{Alignment, Constraint, Direction, Layout, Margin}, style::{Color, Modifier, Style}, text::{Line, Span}, widgets::{Cell, Row}};/use ratatui::{prelude::*, widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Wrap}, layout::{Constraint, Direction, Layout, Margin}};/' "src/calendar/sharing_ui.rs"
-fi
+# Fix provider in real_time.rs
+sed -i 's/pub async fn new(provider: &dyn CloudProvider)/pub async fn new(_provider: &dyn CloudProvider)/' src/cloud_sync/real_time.rs
 
-# Fix cloud sync warnings
-echo "Fixing cloud sync warnings..."
-if [ -f "src/cloud_sync/providers.rs" ]; then
-    sed -i 's/^use std::collections::HashMap;$/\/\/ use std::collections::HashMap;/' "src/cloud_sync/providers.rs"
-fi
+# Fix success in database.rs
+sed -i 's/success: bool,/_success: bool,/' src/performance/database.rs
 
-# Fix pwa module warnings
-echo "Fixing PWA module warnings..."  
-if [ -f "src/pwa/manifest.rs" ]; then
-    sed -i 's/^use std::path::PathBuf;$/\/\/ use std::path::PathBuf;/' "src/pwa/manifest.rs"
-fi
+# Fix calendar_id in sharing_ui.rs  
+sed -i 's/if let Some(calendar_id) = self.state.selected_share {/if let Some(_calendar_id) = self.state.selected_share {/' src/calendar/sharing_ui.rs
 
-if [ -f "src/pwa/service_worker.rs" ]; then
-    sed -i 's/^use std::path::Path;$/\/\/ use std::path::Path;/' "src/pwa/service_worker.rs"
-fi
+# Fix remote in conflict_resolution.rs
+sed -i 's/fn merge(&self, local: &\[u8\], remote: &\[u8\])/fn merge(\&self, local: \&[u8], _remote: \&[u8])/' src/cloud_sync/conflict_resolution.rs
 
-# Fix pwa/wasm warnings
-if [ -f "src/pwa/wasm/email_preview.rs" ]; then
-    sed -i 's/^use wasm_bindgen::prelude::*;$/\/\/ use wasm_bindgen::prelude::*;/' "src/pwa/wasm/email_preview.rs"
-    sed -i 's/^use web_sys::{console, HtmlElement};$/\/\/ use web_sys::{console, HtmlElement};/' "src/pwa/wasm/email_preview.rs"
-fi
+# Fix mutable variable in screen.rs
+sed -i 's/let mut chars: Vec<char>/let chars: Vec<char>/' src/multiplexer/screen.rs
 
-if [ -f "src/pwa/wasm/notifications.rs" ]; then
-    sed -i 's/^use wasm_bindgen::prelude::*;$/\/\/ use wasm_bindgen::prelude::*;/' "src/pwa/wasm/notifications.rs"
-    sed -i 's/^use web_sys::{console, Notification, NotificationOptions};$/\/\/ use web_sys::{console, Notification, NotificationOptions};/' "src/pwa/wasm/notifications.rs"
-fi
+# Fix unused parameters in screen.rs methods
+sed -i 's/fn find_window_by_name(&self, output: &str, name: &str)/fn find_window_by_name(\&self, _output: \&str, _name: \&str)/' src/multiplexer/screen.rs
 
-if [ -f "src/pwa/wasm/offline_storage.rs" ]; then
-    sed -i 's/^use wasm_bindgen::prelude::*;$/\/\/ use wasm_bindgen::prelude::*;/' "src/pwa/wasm/offline_storage.rs"
-    sed -i 's/^use web_sys::{console, Storage, Window};$/\/\/ use web_sys::{console, Storage, Window};/' "src/pwa/wasm/offline_storage.rs"
-fi
+echo "✅ Applied targeted unused variable fixes"
 
-echo "Additional warning fixes applied!"
+# Count remaining warnings
+echo "🔍 Checking remaining warnings..."
+REMAINING=$(cargo check --release 2>&1 | grep "warning:" | wc -l)
+echo "📊 Remaining warnings: $REMAINING"

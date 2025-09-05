@@ -451,7 +451,7 @@ impl SmartReplyGenerator {
             return Ok(());
         }
 
-        let learning_data = ReplyLearningData {
+        let _learning_data = ReplyLearningData {
             original_reply: original_reply.clone(),
             modified_reply: modified_reply.to_string(),
             user_feedback,

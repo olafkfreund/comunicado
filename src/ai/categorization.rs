@@ -254,7 +254,7 @@ impl EmailCategorizer {
         }
 
         // Prepare context for AI analysis
-        let analysis_context = self.prepare_analysis_context(email).await?;
+        let _analysis_context = self.prepare_analysis_context(email).await?;
 
         // Use AI provider to categorize the email content
         let email_content = format!("{}\n\n{}", email.subject, email.body);
@@ -372,7 +372,7 @@ impl EmailCategorizer {
         // Get the original classification
         if let Some(original_result) = self.get_cached_result(email_id).await {
             // Create training data from the correction
-            let training_data = TrainingData {
+            let _training_data = TrainingData {
                 email_id: email_id.to_string(),
                 correct_category: correct_category.to_string(),
                 original_prediction: original_result.primary_category,

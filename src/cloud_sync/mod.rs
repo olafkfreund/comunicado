@@ -413,7 +413,7 @@ impl CloudSyncManager {
         self.config.selective_sync.get(data_type).copied().unwrap_or(true)
     }
 
-    async fn perform_sync(&mut self, data_type: SyncDataType) -> CloudSyncResult<SyncStatus> {
+    async fn perform_sync(&mut self, _data_type: SyncDataType) -> CloudSyncResult<SyncStatus> {
         // Implementation would handle the actual sync logic
         Ok(SyncStatus::Success)
     }

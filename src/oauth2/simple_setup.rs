@@ -59,7 +59,7 @@ impl SimpleSetupWizard {
         let mut detected = Vec::new();
 
         // Common Gmail patterns
-        let common_emails: Vec<String> = vec![
+        let _common_emails: Vec<String> = vec![
             // Try to detect from common environment variables or files
             // This is a simplified example - real implementation might check:
             // - Git config

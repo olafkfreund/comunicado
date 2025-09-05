@@ -242,7 +242,7 @@ impl BackupEngine {
         // Create backup directory
         let backup_dir = self.create_backup_directory(backup_id, config)?;
 
-        let mut files_processed = 0;
+        let mut _files_processed = 0;
         let mut bytes_processed = 0;
         let total_files = backup_plan.len() as u64;
 
@@ -259,7 +259,7 @@ impl BackupEngine {
             // Copy file to backup
             match self.backup_file(file_path, &backup_dir, config).await {
                 Ok(size) => {
-                    files_processed += 1;
+                    _files_processed += 1;
                     bytes_processed += size;
                 }
                 Err(e) => {

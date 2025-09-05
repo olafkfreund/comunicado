@@ -122,7 +122,7 @@ impl TmuxIntegration {
     /// Update session information
     pub fn update_session_info(&mut self) -> MultiplexerResult<()> {
         let session_name = self.run_tmux_command(&["display-message", "-p", "#S"])?;
-        let session_id = self.run_tmux_command(&["display-message", "-p", "#{session_id}"])?;
+        let _session_id = self.run_tmux_command(&["display-message", "-p", "#{session_id}"])?;
         
         self.session_info = Some(SessionInfo {
             multiplexer: MultiplexerType::Tmux,
@@ -286,7 +286,7 @@ impl TmuxIntegration {
             "xclip -selection clipboard"
         };
 
-        let paste_command = if cfg!(target_os = "macos") {
+        let _paste_command = if cfg!(target_os = "macos") {
             "pbpaste"
         } else {
             "xclip -selection clipboard -o"

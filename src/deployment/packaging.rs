@@ -7,7 +7,7 @@
 //! - Flatpak packages for sandboxed distribution
 //! - Snap packages for Ubuntu Core and other distributions
 
-use crate::deployment::{Platform, DeploymentArtifact, Architecture, OperatingSystem, ArtifactType};
+use crate::deployment::{Platform, DeploymentArtifact, OperatingSystem, ArtifactType};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

@@ -328,7 +328,7 @@ impl CalendarSharingUI {
     }
 
     fn handle_revoke_access(&mut self) -> Option<SharingAction> {
-        if let Some(calendar_id) = self.state.selected_share {
+        if let Some(_calendar_id) = self.state.selected_share {
             // This would need a way to select the specific user to revoke
             // For now, return None - this would be implemented with a user selection dialog
         }
