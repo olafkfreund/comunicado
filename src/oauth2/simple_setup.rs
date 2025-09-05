@@ -33,7 +33,7 @@ enum SimpleSetupState {
     Error(String),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 struct DetectedAccount {
     email: String,
     provider: OAuth2Provider,
@@ -194,11 +194,12 @@ impl SimpleSetupWizard {
             }
 
             SimpleSetupState::OneClickSetup(ref account) => {
+                let provider = account.provider.clone();
                 match key.code {
                     KeyCode::Enter | KeyCode::Char('y') => {
                         // Start OAuth2 flow
                         self.state = SimpleSetupState::Authorization;
-                        self.start_oauth_flow(&account.provider).await?;
+                        self.start_oauth_flow(&provider).await?;
                     }
                     KeyCode::Esc | KeyCode::Char('n') => {
                         self.state = SimpleSetupState::QuickDetection;
@@ -222,11 +223,12 @@ impl SimpleSetupWizard {
                     KeyCode::Enter => {
                         if !self.email_input.is_empty() {
                             if let Some(provider) = OAuth2Provider::detect_from_email(&self.email_input) {
+                                let provider_name = provider.display_name();
                                 self.state = SimpleSetupState::OneClickSetup(DetectedAccount {
                                     email: self.email_input.clone(),
-                                    provider,
+                                    provider: provider.clone(),
                                     is_ready: true,
-                                    description: format!("Auto-detected {}", provider.display_name()),
+                                    description: format!("Auto-detected {}", provider_name),
                                 });
                             } else {
                                 self.state = SimpleSetupState::ProviderInstructions(OAuth2Provider::Custom("unknown".to_string()));
@@ -282,7 +284,7 @@ impl SimpleSetupWizard {
     }
 
     fn draw(&mut self, f: &mut Frame) {
-        let size = f.area();
+        let size = f.size();
         
         // Create main layout
         let chunks = Layout::default()
@@ -301,14 +303,14 @@ impl SimpleSetupWizard {
         f.render_widget(header, chunks[0]);
 
         // Content based on state
-        match &self.state {
+        match self.state.clone() {
             SimpleSetupState::Welcome => self.draw_welcome(f, chunks[1]),
             SimpleSetupState::QuickDetection => self.draw_quick_detection(f, chunks[1]),
-            SimpleSetupState::OneClickSetup(account) => self.draw_one_click_setup(f, chunks[1], account),
+            SimpleSetupState::OneClickSetup(account) => self.draw_one_click_setup(f, chunks[1], &account),
             SimpleSetupState::ManualEmailInput => self.draw_manual_input(f, chunks[1]),
             SimpleSetupState::Authorization => self.draw_authorization(f, chunks[1]),
-            SimpleSetupState::Complete(account_id) => self.draw_complete(f, chunks[1], account_id),
-            SimpleSetupState::Error(msg) => self.draw_error(f, chunks[1], msg),
+            SimpleSetupState::Complete(account_id) => self.draw_complete(f, chunks[1], &account_id),
+            SimpleSetupState::Error(msg) => self.draw_error(f, chunks[1], &msg),
             _ => {}
         }
 

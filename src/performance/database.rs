@@ -75,6 +75,7 @@ pub struct QueryStats {
     /// Maximum execution time
     pub max_duration: Duration,
     /// Last execution time
+    #[serde(skip)]
     pub last_executed: Option<Instant>,
     /// Number of rows affected (average)
     pub avg_rows_affected: f64,
@@ -127,6 +128,7 @@ pub struct DatabaseStatistics {
     /// Table statistics
     pub table_stats: HashMap<String, TableStats>,
     /// Last statistics update
+    #[serde(skip)]
     pub last_updated: Option<Instant>,
 }
 
@@ -163,6 +165,7 @@ pub struct IndexUsageStats {
     /// Number of lookups (key lookups)
     pub lookups: u64,
     /// Last used timestamp
+    #[serde(skip)]
     pub last_used: Option<Instant>,
     /// Size in bytes
     pub size_bytes: u64,
@@ -194,10 +197,13 @@ pub struct TableStats {
     /// User updates
     pub user_updates: u64,
     /// Last user scan
+    #[serde(skip)]
     pub last_user_scan: Option<Instant>,
     /// Last user seek
+    #[serde(skip)]
     pub last_user_seek: Option<Instant>,
     /// Last user update
+    #[serde(skip)]
     pub last_user_update: Option<Instant>,
 }
 
@@ -448,7 +454,7 @@ impl QueryOptimizer {
         // For now, we provide basic optimization suggestions
         
         let mut optimizations = Vec::new();
-        let mut estimated_improvement = 0.0;
+        let mut estimated_improvement = 0.0f64;
         
         // Basic query pattern analysis
         let query_lower = query.to_lowercase();
@@ -496,7 +502,7 @@ impl QueryOptimizer {
         Ok(OptimizedQuery {
             original_query: query.to_string(),
             optimizations,
-            estimated_improvement: estimated_improvement.min(1.0f64),
+            estimated_improvement: (estimated_improvement.min(1.0f64) as f32),
             complexity_score: calculate_query_complexity(query),
         })
     }

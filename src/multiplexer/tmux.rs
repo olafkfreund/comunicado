@@ -253,12 +253,13 @@ impl TmuxIntegration {
             ("bind-key", "-T", "prefix", "s", "display-message", "'⚙️  Settings'"),
             
             // Window management for Comunicado
-            ("bind-key", "-T", "prefix", "E", "new-window", "-n", "Email"),
-            ("bind-key", "-T", "prefix", "C", "new-window", "-n", "Calendar"),
+            ("bind-key", "-T", "prefix", "E", "new-window", "-n Email"),
+            ("bind-key", "-T", "prefix", "C", "new-window", "-n Calendar"),
         ];
 
         for binding in &bindings {
-            self.run_tmux_command(binding)?;
+            let args: &[&str] = &[binding.0, binding.1, binding.2, binding.3, binding.4, binding.5];
+            self.run_tmux_command(args)?;
         }
 
         Ok(())

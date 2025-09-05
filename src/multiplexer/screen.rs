@@ -57,7 +57,7 @@ pub enum SessionStatus {
 }
 
 /// Screen window flags
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum WindowFlag {
     Active,      // *
     Previous,    // -
@@ -196,8 +196,8 @@ impl ScreenIntegration {
             ("bind", "s", "stuff", "⚙️ Settings^M"),
             
             // Window management
-            ("bind", "E", "screen", "-t", "Email"),
-            ("bind", "C", "screen", "-t", "Calendar"),
+            ("bind", "E", "screen", "-t Email"),
+            ("bind", "C", "screen", "-t Calendar"),
         ];
 
         for binding in &bindings {

@@ -8,6 +8,11 @@ use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 
+// Helper function for serde default
+fn default_instant() -> Instant {
+    Instant::now()
+}
+
 /// Memory management configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MemoryManagerConfig {
@@ -39,6 +44,8 @@ pub struct AllocationInfo {
     /// Size in bytes
     pub size: usize,
     /// Allocation timestamp
+    #[serde(skip)]
+    #[serde(default = "default_instant")]
     pub allocated_at: Instant,
     /// Allocation location (file:line)
     pub location: String,
@@ -47,7 +54,23 @@ pub struct AllocationInfo {
     /// Whether allocation is still active
     pub is_active: bool,
     /// Deallocation timestamp
+    #[serde(skip)]
+    #[serde(default)]
     pub deallocated_at: Option<Instant>,
+}
+
+impl Default for AllocationInfo {
+    fn default() -> Self {
+        Self {
+            id: 0,
+            size: 0,
+            allocated_at: Instant::now(),
+            location: String::new(),
+            category: String::new(),
+            is_active: false,
+            deallocated_at: None,
+        }
+    }
 }
 
 /// Memory statistics
@@ -74,6 +97,7 @@ pub struct MemoryStats {
     /// Total GC time
     pub total_gc_time: Duration,
     /// Last GC timestamp
+    #[serde(skip)]
     pub last_gc: Option<Instant>,
 }
 
@@ -130,6 +154,7 @@ pub struct MemoryLeak {
     /// Estimated leaked bytes
     pub leaked_bytes: usize,
     /// Leak detection timestamp
+    #[serde(skip)]
     pub detected_at: Instant,
     /// Allocation location
     pub location: String,
@@ -377,6 +402,7 @@ pub struct CategoryStats {
     pub peak_allocated: usize,
     pub allocation_count: u64,
     pub avg_allocation_size: usize,
+    #[serde(skip)]
     pub last_allocation: Option<Instant>,
 }
 
@@ -452,6 +478,7 @@ pub struct GCStats {
     pub total_collections: u64,
     pub total_gc_time: Duration,
     pub avg_gc_time: Duration,
+    #[serde(skip)]
     pub last_gc_time: Option<Instant>,
     pub bytes_collected: usize,
     pub objects_collected: u64,
@@ -491,7 +518,7 @@ impl GarbageCollector {
         // This would trigger actual garbage collection
         // For now, we simulate the process
         let bytes_freed = simulate_gc_collection().await;
-        let objects_freed = bytes_freed / 64; // Assume average object size
+        let objects_freed = (bytes_freed / 64) as u64; // Assume average object size
         let gc_duration = start_time.elapsed();
         
         // Update statistics
@@ -755,6 +782,7 @@ pub struct MemoryStatistics {
     pub heap_analysis: HeapAnalysis,
     pub category_stats: HashMap<String, CategoryStats>,
     pub detected_leaks: usize,
+    #[serde(skip)]
     pub last_updated: Option<Instant>,
 }
 

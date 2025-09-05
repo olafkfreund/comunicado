@@ -292,7 +292,7 @@ impl CollaborationManager {
         if let Some(resource) = self.shared_resources.get_mut(resource_id) {
             let resource_permission = ResourcePermission {
                 user_id: user_id.clone(),
-                permission,
+                permission: permission.clone(),
                 granted_at: Utc::now(),
                 granted_by: granted_by.clone(),
                 expires_at: None,

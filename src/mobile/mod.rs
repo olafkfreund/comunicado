@@ -107,6 +107,9 @@ impl MobileError {
             Self::ConfigurationError(_) => "Mobile integration configuration error",
             Self::SerializationError(_) => "Data serialization error",
             Self::IoError(_) => "File system operation failed",
+            Self::PushService(_) => "Push service error",
+            Self::DeviceNotFound(_) => "Mobile device not found",
+            Self::Network(_) => "Network error",
         }
     }
 

@@ -54,7 +54,7 @@ impl RemoteSession {
         let connection_info = Self::gather_connection_info(&session_type)?;
         
         Ok(Self {
-            session_type,
+            session_type: session_type.clone(),
             connection_info,
             optimizations: RemoteOptimizations::for_session_type(&session_type),
         })

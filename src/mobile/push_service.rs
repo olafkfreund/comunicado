@@ -115,6 +115,7 @@ pub struct PushProviderConfigReal {
     pub provider_type: PushProviderType,
     pub api_key: String,
     pub api_secret: Option<String>,
+    pub endpoint_url: Option<String>,
     pub additional_settings: HashMap<String, String>,
 }
 
@@ -332,16 +333,23 @@ impl PushService {
     // Private methods
     async fn update_statistics(&self, provider_type: &PushProviderType, result: &PushResult) {
         let mut stats = self.statistics.write().await;
-        let provider_stats = stats.by_provider.entry(provider_type.clone()).or_insert_with(Default::default);
+        
+        // Update provider stats
+        {
+            let provider_stats = stats.by_provider.entry(provider_type.clone()).or_insert_with(Default::default);
+            provider_stats.sent += 1;
+            if result.success {
+                provider_stats.delivered += 1;
+            } else {
+                provider_stats.failed += 1;
+            }
+        }
 
-        provider_stats.sent += 1;
+        // Update total stats
         stats.total_sent += 1;
-
         if result.success {
-            provider_stats.delivered += 1;
             stats.total_delivered += 1;
         } else {
-            provider_stats.failed += 1;
             stats.total_failed += 1;
         }
     }
@@ -349,8 +357,7 @@ impl PushService {
 
 impl FCMProvider {
     pub fn new(config: &PushProviderConfig) -> Result<Self> {
-        let api_key = config.api_key.as_ref()
-            .ok_or_else(|| MobileError::ConfigurationError("FCM API key required".to_string()))?;
+        let api_key = &config.api_key;
 
         Ok(Self {
             api_key: api_key.clone(),
@@ -395,7 +402,7 @@ impl PushProvider for FCMProvider {
 
         if response.status().is_success() {
             let response_data: serde_json::Value = response.json().await
-                .map_err(|e| MobileError::SerializationError(e.into()))?;
+                .map_err(|e| MobileError::PushService(e.to_string()))?;
 
             Ok(PushResult {
                 success: true,
@@ -518,8 +525,7 @@ impl PushProvider for APNSProvider {
 
 impl WebPushProvider {
     pub fn new(config: &PushProviderConfig) -> Result<Self> {
-        let api_key = config.api_key.as_ref()
-            .ok_or_else(|| MobileError::ConfigurationError("Web Push VAPID key required".to_string()))?;
+        let api_key = &config.api_key;
         let api_secret = config.api_secret.as_ref()
             .ok_or_else(|| MobileError::ConfigurationError("Web Push VAPID private key required".to_string()))?;
 
@@ -593,7 +599,7 @@ impl CustomProvider {
 
         Ok(Self {
             endpoint_url: endpoint_url.clone(),
-            api_key: config.api_key.clone(),
+            api_key: Some(config.api_key.clone()),
             headers: HashMap::new(),
             client: reqwest::Client::new(),
             stats: RwLock::new(PushProviderStats::default()),
@@ -655,6 +661,6 @@ impl PushProvider for CustomProvider {
     }
 
     fn provider_type(&self) -> PushProviderType {
-        PushProviderType::Custom
+        PushProviderType::Custom("custom".to_string())
     }
 }
