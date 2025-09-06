@@ -36,4 +36,15 @@ impl ConfigManager {
     pub fn new() -> DeploymentResult<Self> {
         Ok(Self)
     }
+
+    /// Load custom deployment strategy configuration
+    pub async fn load_custom_strategy(&self, strategy_name: &str) -> DeploymentResult<serde_json::Value> {
+        println!("Loading custom strategy: {}", strategy_name);
+        // Return placeholder configuration
+        Ok(serde_json::json!({
+            "strategy": strategy_name,
+            "steps": ["build", "test", "deploy"],
+            "parallel": false
+        }))
+    }
 }

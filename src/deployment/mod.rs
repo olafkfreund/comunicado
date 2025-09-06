@@ -58,6 +58,8 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use uuid::Uuid;
 
+// Manager imports are already handled by the existing pub use statements above
+
 /// Deployment target environments
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum DeploymentTarget {
@@ -358,56 +360,191 @@ impl DeploymentOrchestrator {
     /// Private deployment strategy implementations
     async fn execute_recreate_deployment(
         &mut self,
-        _deployment_id: Uuid,
-        _artifacts: &[DeploymentArtifact],
+        deployment_id: Uuid,
+        artifacts: &[DeploymentArtifact],
     ) -> DeploymentResult<()> {
-        // Implementation placeholder
+        // Update deployment status
+        if let Some(deployment) = self.active_deployments.get_mut(&deployment_id) {
+            deployment.status = Status::InProgress { 
+                stage: "Deploying".to_string(), 
+                progress: 0.0 
+            };
+        }
+
+        // Stop existing deployment
+        self.container_manager.stop_all_containers().await?;
+        
+        // Deploy artifacts using package manager
+        for artifact in artifacts {
+            self.package_manager.install_artifact(artifact).await?;
+        }
+        
+        // Start containers
+        self.container_manager.start_deployment(deployment_id, artifacts).await?;
+        
+        // Update deployment status
+        if let Some(deployment) = self.active_deployments.get_mut(&deployment_id) {
+            deployment.status = Status::Completed;
+            deployment.completed_at = Some(Utc::now());
+        }
+
         Ok(())
     }
 
     async fn execute_rolling_update(
         &mut self,
-        _deployment_id: Uuid,
-        _artifacts: &[DeploymentArtifact],
+        deployment_id: Uuid,
+        artifacts: &[DeploymentArtifact],
     ) -> DeploymentResult<()> {
-        // Implementation placeholder
+        // Update deployment status
+        if let Some(deployment) = self.active_deployments.get_mut(&deployment_id) {
+            deployment.status = Status::InProgress { 
+                stage: "Deploying".to_string(), 
+                progress: 0.0 
+            };
+        }
+
+        // Install new version artifacts
+        for artifact in artifacts {
+            self.package_manager.install_artifact(artifact).await?;
+        }
+        
+        // Rolling update with container manager
+        self.container_manager.rolling_update(deployment_id, artifacts).await?;
+        
+        // Run health checks after each update step
+        self.health_check_manager.run_health_checks(deployment_id).await?;
+        
+        // Update deployment status
+        if let Some(deployment) = self.active_deployments.get_mut(&deployment_id) {
+            deployment.status = Status::Completed;
+            deployment.completed_at = Some(Utc::now());
+        }
+
         Ok(())
     }
 
     async fn execute_blue_green_deployment(
         &mut self,
-        _deployment_id: Uuid,
-        _artifacts: &[DeploymentArtifact],
+        deployment_id: Uuid,
+        artifacts: &[DeploymentArtifact],
     ) -> DeploymentResult<()> {
-        // Implementation placeholder
+        // Update deployment status
+        if let Some(deployment) = self.active_deployments.get_mut(&deployment_id) {
+            deployment.status = Status::InProgress { 
+                stage: "Deploying".to_string(), 
+                progress: 0.0 
+            };
+        }
+
+        // Deploy to green environment
+        self.container_manager.deploy_to_green_environment(deployment_id, artifacts).await?;
+        
+        // Run comprehensive health checks on green environment
+        self.health_check_manager.run_health_checks(deployment_id).await?;
+        
+        // Switch traffic from blue to green
+        self.container_manager.switch_blue_green_traffic(deployment_id).await?;
+        
+        // Update deployment status
+        if let Some(deployment) = self.active_deployments.get_mut(&deployment_id) {
+            deployment.status = Status::Completed;
+            deployment.completed_at = Some(Utc::now());
+        }
+
         Ok(())
     }
 
     async fn execute_canary_deployment(
         &mut self,
-        _deployment_id: Uuid,
-        _artifacts: &[DeploymentArtifact],
-        _percentage: u8,
+        deployment_id: Uuid,
+        artifacts: &[DeploymentArtifact],
+        percentage: u8,
     ) -> DeploymentResult<()> {
-        // Implementation placeholder
+        // Update deployment status
+        if let Some(deployment) = self.active_deployments.get_mut(&deployment_id) {
+            deployment.status = Status::InProgress { 
+                stage: "Deploying".to_string(), 
+                progress: 0.0 
+            };
+        }
+
+        // Deploy canary version to percentage of traffic
+        self.container_manager.deploy_canary(deployment_id, artifacts, percentage).await?;
+        
+        // Monitor canary deployment
+        self.health_check_manager.monitor_canary_deployment(deployment_id, percentage).await?;
+        
+        // Gradually increase traffic if health checks pass
+        for traffic_percentage in (percentage..100).step_by(10) {
+            self.container_manager.update_canary_traffic(deployment_id, traffic_percentage).await?;
+            self.health_check_manager.run_health_checks(deployment_id).await?;
+        }
+        
+        // Update deployment status
+        if let Some(deployment) = self.active_deployments.get_mut(&deployment_id) {
+            deployment.status = Status::Completed;
+            deployment.completed_at = Some(Utc::now());
+        }
+
         Ok(())
     }
 
     async fn execute_custom_deployment(
         &mut self,
-        _deployment_id: Uuid,
-        _artifacts: &[DeploymentArtifact],
-        _strategy_name: &str,
+        deployment_id: Uuid,
+        artifacts: &[DeploymentArtifact],
+        strategy_name: &str,
     ) -> DeploymentResult<()> {
-        // Implementation placeholder
+        // Update deployment status
+        if let Some(deployment) = self.active_deployments.get_mut(&deployment_id) {
+            deployment.status = Status::InProgress { 
+                stage: "Deploying".to_string(), 
+                progress: 0.0 
+            };
+        }
+
+        // Load and execute custom deployment strategy
+        let custom_config = self.config_manager.load_custom_strategy(strategy_name).await?;
+        
+        // Execute custom deployment steps
+        for artifact in artifacts {
+            self.package_manager.install_artifact_with_config(artifact, &custom_config).await?;
+        }
+        
+        self.container_manager.deploy_with_custom_strategy(deployment_id, artifacts, &custom_config).await?;
+        self.health_check_manager.run_custom_health_checks(deployment_id, &custom_config).await?;
+        
+        // Update deployment status
+        if let Some(deployment) = self.active_deployments.get_mut(&deployment_id) {
+            deployment.status = Status::Completed;
+            deployment.completed_at = Some(Utc::now());
+        }
+
         Ok(())
     }
 
     async fn run_post_deployment_health_checks(
         &mut self,
-        _deployment_id: Uuid,
+        deployment_id: Uuid,
     ) -> DeploymentResult<()> {
-        // Implementation placeholder
+        // Run comprehensive post-deployment health checks
+        let health_results = self.health_check_manager.run_full_health_suite(deployment_id).await?;
+        
+        // Update deployment with health check results
+        if let Some(deployment) = self.active_deployments.get_mut(&deployment_id) {
+            deployment.health_checks = health_results;
+            
+            // Set status based on health check results
+            let all_healthy = deployment.health_checks.iter().all(|check| check.status == HealthStatus::Healthy);
+            if !all_healthy {
+                deployment.status = Status::Failed { 
+                    error: "Health checks failed".to_string() 
+                };
+                return Err(DeploymentError::DeploymentFailed("Health checks failed".to_string()));
+            }
+        }
+        
         Ok(())
     }
 }

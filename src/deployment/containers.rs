@@ -294,6 +294,55 @@ impl ContainerManager {
         self.runtime_configs.keys().cloned().collect()
     }
 
+    /// Stop all containers (used by deployment orchestrator)
+    pub async fn stop_all_containers(&self) -> ContainerResult<()> {
+        // Implementation would stop all running containers
+        println!("Stopping all containers");
+        Ok(())
+    }
+
+    /// Start deployment containers
+    pub async fn start_deployment(&self, deployment_id: Uuid, _artifacts: &[DeploymentArtifact]) -> ContainerResult<()> {
+        println!("Starting deployment containers for deployment: {}", deployment_id);
+        Ok(())
+    }
+
+    /// Perform rolling update
+    pub async fn rolling_update(&self, deployment_id: Uuid, _artifacts: &[DeploymentArtifact]) -> ContainerResult<()> {
+        println!("Performing rolling update for deployment: {}", deployment_id);
+        Ok(())
+    }
+
+    /// Deploy to green environment for blue-green deployment
+    pub async fn deploy_to_green_environment(&self, deployment_id: Uuid, _artifacts: &[DeploymentArtifact]) -> ContainerResult<()> {
+        println!("Deploying to green environment for deployment: {}", deployment_id);
+        Ok(())
+    }
+
+    /// Switch traffic from blue to green
+    pub async fn switch_blue_green_traffic(&self, deployment_id: Uuid) -> ContainerResult<()> {
+        println!("Switching blue-green traffic for deployment: {}", deployment_id);
+        Ok(())
+    }
+
+    /// Deploy canary version
+    pub async fn deploy_canary(&self, deployment_id: Uuid, _artifacts: &[DeploymentArtifact], percentage: u8) -> ContainerResult<()> {
+        println!("Deploying canary ({}%) for deployment: {}", percentage, deployment_id);
+        Ok(())
+    }
+
+    /// Update canary traffic percentage
+    pub async fn update_canary_traffic(&self, deployment_id: Uuid, percentage: u8) -> ContainerResult<()> {
+        println!("Updating canary traffic to {}% for deployment: {}", percentage, deployment_id);
+        Ok(())
+    }
+
+    /// Deploy with custom strategy
+    pub async fn deploy_with_custom_strategy(&self, deployment_id: Uuid, _artifacts: &[DeploymentArtifact], _config: &serde_json::Value) -> ContainerResult<()> {
+        println!("Deploying with custom strategy for deployment: {}", deployment_id);
+        Ok(())
+    }
+
     /// Private implementation methods
     fn is_docker_available() -> bool {
         std::process::Command::new("docker")

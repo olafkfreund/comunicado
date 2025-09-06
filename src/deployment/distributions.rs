@@ -31,6 +31,9 @@ pub enum DistributionError {
     #[error("Missing dependency: {0}")]
     MissingDependency(String),
     
+    #[error("Missing tool: {0}")]
+    MissingTool(String),
+    
     #[error("Invalid metadata: {0}")]
     InvalidMetadata(String),
     
@@ -308,6 +311,10 @@ impl AurPackage {
 
 impl DistributionBuilder for AurPackage {
     fn build(&self, config: &DistributionConfig) -> DistributionResult<DeploymentArtifact> {
+        if !self.tools_available {
+            return Err(DistributionError::MissingTool("makepkg not found - install base-devel package".to_string()));
+        }
+        
         // Generate PKGBUILD file for AUR
         let pkgbuild_content = self.generate_pkgbuild(config)?;
         
@@ -407,6 +414,10 @@ impl NixPackage {
 
 impl DistributionBuilder for NixPackage {
     fn build(&self, config: &DistributionConfig) -> DistributionResult<DeploymentArtifact> {
+        if !self.tools_available {
+            return Err(DistributionError::MissingTool("nix-build not found - install Nix package manager".to_string()));
+        }
+        
         // Generate Nix derivation
         let derivation_content = self.generate_derivation(config)?;
         
@@ -502,6 +513,10 @@ impl HomebrewPackage {
 
 impl DistributionBuilder for HomebrewPackage {
     fn build(&self, config: &DistributionConfig) -> DistributionResult<DeploymentArtifact> {
+        if !self.tools_available {
+            return Err(DistributionError::MissingTool("brew not found - install Homebrew".to_string()));
+        }
+        
         // Generate Homebrew formula
         let formula_content = self.generate_formula(config)?;
         
@@ -591,6 +606,10 @@ impl SnapPackage {
 
 impl DistributionBuilder for SnapPackage {
     fn build(&self, config: &DistributionConfig) -> DistributionResult<DeploymentArtifact> {
+        if !self.tools_available {
+            return Err(DistributionError::MissingTool("snapcraft not found - install snapcraft".to_string()));
+        }
+        
         let artifact = DeploymentArtifact {
             id: config.id,
             name: format!("{}.snap", config.name),

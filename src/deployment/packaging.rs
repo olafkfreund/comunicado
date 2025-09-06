@@ -248,6 +248,21 @@ impl PackageManager {
             })
             .collect()
     }
+
+    /// Install an artifact (used by deployment orchestrator)
+    pub async fn install_artifact(&self, artifact: &DeploymentArtifact) -> PackageResult<()> {
+        // Implementation would install the artifact on the system
+        // This is a placeholder that simulates the installation process
+        println!("Installing artifact: {} v{}", artifact.name, artifact.version);
+        Ok(())
+    }
+
+    /// Install an artifact with custom configuration
+    pub async fn install_artifact_with_config(&self, artifact: &DeploymentArtifact, _config: &serde_json::Value) -> PackageResult<()> {
+        // Implementation would install with custom configuration
+        println!("Installing artifact with custom config: {} v{}", artifact.name, artifact.version);
+        Ok(())
+    }
 }
 
 impl Default for PackageManagerConfig {
