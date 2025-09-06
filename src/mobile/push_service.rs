@@ -676,6 +676,11 @@ impl PushProvider for CustomProvider {
             request = request.header("Authorization", format!("Bearer {}", api_key));
         }
 
+        // Add custom headers
+        for (key, value) in &self.headers {
+            request = request.header(key, value);
+        }
+
         let response = request
             .json(&custom_payload)
             .send()

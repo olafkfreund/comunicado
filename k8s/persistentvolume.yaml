@@ -1,0 +1,46 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: comunicado-data-pvc
+  namespace: comunicado
+  labels:
+    app.kubernetes.io/name: comunicado
+    app.kubernetes.io/instance: comunicado
+    app.kubernetes.io/component: storage
+    app.kubernetes.io/part-of: comunicado
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  # Optional: specify storage class for better control
+  # storageClassName: fast-ssd
+  
+---
+# Optional: If you need a specific PersistentVolume (for local development)
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: comunicado-data-pv
+  labels:
+    app.kubernetes.io/name: comunicado
+    app.kubernetes.io/component: storage
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  # Local storage example (replace with your preferred storage)
+  hostPath:
+    path: /data/comunicado
+    type: DirectoryOrCreate
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: kubernetes.io/hostname
+          operator: In
+          values:
+          - your-node-name  # Replace with actual node name

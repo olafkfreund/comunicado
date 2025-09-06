@@ -148,6 +148,11 @@ where
         }
     }
 
+    /// Get cache level
+    pub fn level(&self) -> CacheLevel {
+        self.level.clone()
+    }
+
     /// Get value from cache
     pub async fn get(&self, key: &K) -> Option<V> {
         let start_time = Instant::now();

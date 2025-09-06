@@ -21,6 +21,7 @@ mod tests {
     
     /// Test data structure for comprehensive search testing
     #[derive(Debug, Clone)]
+    #[allow(dead_code)]
     struct TestNote {
         title: String,
         content: String,
@@ -229,6 +230,7 @@ Follow-up: [[Sprint Planning]], [[Tech Debt]]
     
     /// Test data for search functionality
     #[derive(Debug)]
+    #[allow(dead_code)]
     struct SearchTestCase {
         query: String,
         expected_count: usize,
@@ -965,6 +967,7 @@ Tags: #performance #test #note{} #benchmark
     // ==================== Helper Structures ====================
     
     #[derive(Debug)]
+    #[allow(dead_code)]
     struct SnippetConfig {
         max_length: usize,
         context_words: usize,
@@ -973,6 +976,7 @@ Tags: #performance #test #note{} #benchmark
     }
     
     #[derive(Debug)]
+    #[allow(dead_code)]
     struct IndexingStats {
         total_notes: usize,
         indexed_notes: usize,
@@ -982,6 +986,7 @@ Tags: #performance #test #note{} #benchmark
     }
     
     #[derive(Debug)]
+    #[allow(dead_code)]
     struct SearchStats {
         query: String,
         total_results: usize,
@@ -1027,7 +1032,7 @@ Tags: #performance #test #note{} #benchmark
     
     #[tokio::test]
     async fn test_search_stats_collection() {
-        let temp_dir = TempDir::new().unwrap();
+        let _temp_dir = TempDir::new().unwrap();
         
         // TODO: Test search stats collection
         // let database = NotesDatabase::new(temp_dir.path()).await.unwrap();

@@ -1,5 +1,4 @@
-use comunicado::oauth2::{launch_simple_setup, OAuth2Provider};
-use comunicado::theme::Theme;
+use comunicado::oauth2::OAuth2Provider;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: comunicado
+  labels:
+    app.kubernetes.io/name: comunicado
+    app.kubernetes.io/instance: comunicado
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/component: email-client
+    app.kubernetes.io/part-of: comunicado
+    app.kubernetes.io/managed-by: kubectl

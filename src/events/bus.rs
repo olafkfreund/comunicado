@@ -1028,6 +1028,7 @@ mod tests {
     }
     
     impl TestEvent {
+        #[allow(dead_code)]
         fn new(message: String) -> Self {
             Self {
                 metadata: EventMetadata::new(EventPriority::Normal, "test".to_string()),

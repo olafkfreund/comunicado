@@ -1764,6 +1764,12 @@ impl App {
             if event::poll(timeout)? {
                 match event::read()? {
                     Event::Key(key) => {
+                        // Handle global quit commands first (Ctrl+C, Q, Esc)
+                        if self.handle_global_quit_keys(key) {
+                            self.should_quit = true;
+                            break;
+                        }
+                        
                         // Process key events through the new event-driven UI integration system
                         let event_handled = match self.process_key_event_through_integration(key).await {
                             Ok(handled) => handled,
@@ -5496,6 +5502,30 @@ impl App {
             self.ui.show_toast_error("Calendar manager not available");
         }
         Ok(())
+    }
+
+    /// Handle global quit keys that should work from anywhere in the application
+    fn handle_global_quit_keys(&self, key: crossterm::event::KeyEvent) -> bool {
+        use crossterm::event::{KeyCode, KeyModifiers};
+        
+        match key.code {
+            // Q for quit (when not in text input mode)
+            KeyCode::Char('q') | KeyCode::Char('Q') if !self.ui.is_in_text_input() => {
+                tracing::info!("User pressed Q to quit");
+                true
+            }
+            // Ctrl+C for quit
+            KeyCode::Char('c') | KeyCode::Char('C') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                tracing::info!("User pressed Ctrl+C to quit");
+                true
+            }
+            // Escape to quit (only from main view, not in modals/popups)
+            KeyCode::Esc if self.ui.is_in_main_view() => {
+                tracing::info!("User pressed Escape to quit from main view");
+                true
+            }
+            _ => false,
+        }
     }
 
     /// Process key events through the event-driven UI integration system

@@ -229,6 +229,24 @@ pub struct SlowQuery {
     execution_plan: Option<String>,
 }
 
+impl SlowQuery {
+    pub fn query(&self) -> &str {
+        &self.query
+    }
+    
+    pub fn duration(&self) -> Duration {
+        self.duration
+    }
+    
+    pub fn parameters(&self) -> &Option<Vec<String>> {
+        &self.parameters
+    }
+    
+    pub fn execution_plan(&self) -> &Option<String> {
+        &self.execution_plan
+    }
+}
+
 /// Cached query result
 #[derive(Debug, Clone)]
 struct CachedQuery {
@@ -236,6 +254,20 @@ struct CachedQuery {
     created_at: Instant,
     last_accessed: Instant,
     access_count: u64,
+}
+
+impl CachedQuery {
+    pub fn result_hash(&self) -> u64 {
+        self.result_hash
+    }
+    
+    pub fn last_accessed(&self) -> Instant {
+        self.last_accessed
+    }
+    
+    pub fn access_count(&self) -> u64 {
+        self.access_count
+    }
 }
 
 impl DatabaseOptimizer {
@@ -406,7 +438,14 @@ impl DatabaseOptimizer {
         // Clean up query cache
         {
             let mut cache = self.query_cache.write().await;
-            cache.retain(|_, cached| cached.created_at >= cutoff);
+            cache.retain(|_, cached| {
+                // Use accessor methods for cache cleanup logic
+                let is_recent = cached.created_at >= cutoff;
+                let recently_accessed = cached.last_accessed() >= cutoff;
+                let is_active = cached.access_count() > 0;
+                let hash_valid = cached.result_hash() != 0;
+                is_recent && (recently_accessed || is_active || hash_valid)
+            });
         }
         
         Ok(removed_count)
@@ -436,6 +475,16 @@ pub struct ResourceImpact {
 pub struct QueryOptimizer {
     config: QueryOptimizerConfig,
     optimizer: DatabaseOptimizer,
+}
+
+impl QueryOptimizer {
+    pub fn config(&self) -> &QueryOptimizerConfig {
+        &self.config
+    }
+    
+    pub fn optimizer(&self) -> &DatabaseOptimizer {
+        &self.optimizer
+    }
 }
 
 impl QueryOptimizer {

@@ -1,0 +1,428 @@
+name: Release and Deploy
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  create-release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+      release_id: ${{ steps.create_release.outputs.id }}
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Generate changelog
+      id: changelog
+      run: |
+        # Generate changelog between tags
+        if git describe --tags --abbrev=0 HEAD~1 >/dev/null 2>&1; then
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD~1)
+          echo "## Changes since $PREV_TAG" > CHANGELOG_TEMP.md
+          git log --pretty=format:"- %s" $PREV_TAG..HEAD >> CHANGELOG_TEMP.md
+        else
+          echo "## Initial Release" > CHANGELOG_TEMP.md
+          echo "First release of Comunicado - Modern TUI-based email and calendar client" >> CHANGELOG_TEMP.md
+        fi
+        
+        echo 'changelog<<EOF' >> $GITHUB_OUTPUT
+        cat CHANGELOG_TEMP.md >> $GITHUB_OUTPUT
+        echo 'EOF' >> $GITHUB_OUTPUT
+
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref }}
+        release_name: Comunicado ${{ github.ref }}
+        body: |
+          ${{ steps.changelog.outputs.changelog }}
+          
+          ## Installation
+          
+          ### Binary Downloads
+          Download the appropriate binary for your platform from the assets below.
+          
+          ### Package Managers
+          - **Arch Linux**: `yay -S comunicado` (AUR)
+          - **Fedora/RHEL**: Download `.rpm` package below
+          - **Ubuntu/Debian**: Download `.deb` package below
+          - **Nix**: `nix-shell -p comunicado`
+          - **Homebrew**: `brew install comunicado`
+          - **Cargo**: `cargo install comunicado`
+          
+          ### Container
+          ```bash
+          docker run -it ghcr.io/olafkfreund/comunicado:${{ github.ref_name }}
+          ```
+          
+          ## Features
+          - Modern TUI interface with rich HTML email rendering
+          - OAuth2 authentication for Gmail, Outlook, and other providers
+          - CalDAV calendar integration with bidirectional sync
+          - Plugin architecture with Notes and KDE Connect support
+          - Maildir support for local email storage
+          - Advanced search and email threading
+          - Desktop notifications and customizable shortcuts
+          
+          ## Documentation
+          - [Quick Start Guide](https://github.com/olafkfreund/comunicado/blob/main/docs/quick-start.md)
+          - [Configuration](https://github.com/olafkfreund/comunicado/blob/main/docs/configuration.md)
+          - [Troubleshooting](https://github.com/olafkfreund/comunicado/blob/main/docs/troubleshooting.md)
+        draft: false
+        prerelease: false
+
+  build-binaries:
+    name: Build Release Binaries
+    needs: create-release
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            name: comunicado-x86_64-linux
+            
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+            name: comunicado-aarch64-linux
+            cross: true
+            
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            name: comunicado-x86_64-macos
+            
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            name: comunicado-aarch64-macos
+            
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            name: comunicado-x86_64-windows.exe
+
+    runs-on: ${{ matrix.os }}
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: ${{ matrix.target }}
+
+    - name: Install system dependencies (Ubuntu)
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          libssl-dev \
+          libsqlite3-dev \
+          pkg-config \
+          libdbus-1-dev \
+          build-essential
+
+    - name: Install system dependencies (macOS)
+      if: matrix.os == 'macos-latest'
+      run: |
+        brew install openssl sqlite pkg-config
+
+    - name: Install cross (for cross-compilation)
+      if: matrix.cross
+      run: cargo install cross
+
+    - name: Build binary
+      run: |
+        if [[ "${{ matrix.cross }}" == "true" ]]; then
+          cross build --release --target ${{ matrix.target }} --all-features
+        else
+          cargo build --release --target ${{ matrix.target }} --all-features
+        fi
+
+    - name: Prepare binary (Unix)
+      if: matrix.os != 'windows-latest'
+      run: |
+        cd target/${{ matrix.target }}/release
+        strip comunicado || true
+        tar -czf ${{ matrix.name }}.tar.gz comunicado
+        echo "ASSET_PATH=target/${{ matrix.target }}/release/${{ matrix.name }}.tar.gz" >> $GITHUB_ENV
+        echo "ASSET_NAME=${{ matrix.name }}.tar.gz" >> $GITHUB_ENV
+
+    - name: Prepare binary (Windows)
+      if: matrix.os == 'windows-latest'
+      shell: bash
+      run: |
+        cd target/${{ matrix.target }}/release
+        7z a ${{ matrix.name }}.zip comunicado.exe
+        echo "ASSET_PATH=target/${{ matrix.target }}/release/${{ matrix.name }}.zip" >> $GITHUB_ENV
+        echo "ASSET_NAME=${{ matrix.name }}.zip" >> $GITHUB_ENV
+
+    - name: Upload Release Asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ needs.create-release.outputs.upload_url }}
+        asset_path: ${{ env.ASSET_PATH }}
+        asset_name: ${{ env.ASSET_NAME }}
+        asset_content_type: application/octet-stream
+
+  build-packages:
+    name: Build Distribution Packages
+    needs: create-release
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        package: [deb, rpm, appimage]
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          libssl-dev \
+          libsqlite3-dev \
+          pkg-config \
+          libdbus-1-dev \
+          build-essential
+
+    - name: Install packaging tools
+      run: |
+        if [[ "${{ matrix.package }}" == "deb" ]]; then
+          cargo install cargo-deb
+        elif [[ "${{ matrix.package }}" == "rpm" ]]; then
+          sudo apt-get install -y rpm
+          cargo install cargo-generate-rpm
+        elif [[ "${{ matrix.package }}" == "appimage" ]]; then
+          sudo apt-get install -y fuse libfuse2
+          wget https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x appimagetool-x86_64.AppImage
+        fi
+
+    - name: Build binary
+      run: cargo build --release --all-features
+
+    - name: Create DEB package
+      if: matrix.package == 'deb'
+      run: |
+        cargo deb --no-build --no-strip
+        echo "PACKAGE_PATH=$(find target/debian -name '*.deb' -type f)" >> $GITHUB_ENV
+        echo "PACKAGE_NAME=comunicado_$(grep '^version' Cargo.toml | cut -d'"' -f2)_amd64.deb" >> $GITHUB_ENV
+
+    - name: Create RPM package
+      if: matrix.package == 'rpm'
+      run: |
+        cargo generate-rpm
+        echo "PACKAGE_PATH=$(find target/generate-rpm -name '*.rpm' -type f)" >> $GITHUB_ENV
+        echo "PACKAGE_NAME=comunicado-$(grep '^version' Cargo.toml | cut -d'"' -f2)-1.x86_64.rpm" >> $GITHUB_ENV
+
+    - name: Create AppImage
+      if: matrix.package == 'appimage'
+      run: |
+        mkdir -p comunicado.AppDir/usr/bin
+        mkdir -p comunicado.AppDir/usr/share/applications
+        mkdir -p comunicado.AppDir/usr/share/icons/hicolor/256x256/apps
+        
+        # Copy binary
+        cp target/release/comunicado comunicado.AppDir/usr/bin/
+        
+        # Copy desktop file
+        cp debian/comunicado.desktop comunicado.AppDir/
+        cp debian/comunicado.desktop comunicado.AppDir/usr/share/applications/
+        
+        # Create icon (placeholder for now)
+        convert -size 256x256 xc:blue -pointsize 48 -fill white -gravity center \
+          -annotate 0 "C" comunicado.AppDir/usr/share/icons/hicolor/256x256/apps/comunicado.png
+        cp comunicado.AppDir/usr/share/icons/hicolor/256x256/apps/comunicado.png comunicado.AppDir/
+        
+        # Create AppRun
+        cat > comunicado.AppDir/AppRun << 'EOF'
+        #!/bin/bash
+        exec "$APPDIR/usr/bin/comunicado" "$@"
+        EOF
+        chmod +x comunicado.AppDir/AppRun
+        
+        # Build AppImage
+        ./appimagetool-x86_64.AppImage comunicado.AppDir comunicado-x86_64.AppImage
+        echo "PACKAGE_PATH=comunicado-x86_64.AppImage" >> $GITHUB_ENV
+        echo "PACKAGE_NAME=comunicado-x86_64.AppImage" >> $GITHUB_ENV
+
+    - name: Upload Package Asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ needs.create-release.outputs.upload_url }}
+        asset_path: ${{ env.PACKAGE_PATH }}
+        asset_name: ${{ env.PACKAGE_NAME }}
+        asset_content_type: application/octet-stream
+
+  build-container:
+    name: Build and Push Container Images
+    needs: create-release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Log in to GitHub Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Extract metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ghcr.io/${{ github.repository }}
+        tags: |
+          type=ref,event=tag
+          type=raw,value=latest,enable={{is_default_branch}}
+
+    - name: Create Dockerfile
+      run: |
+        cat > Dockerfile << 'EOF'
+        # Multi-stage build for optimal image size
+        FROM rust:1.70 AS builder
+        
+        # Install system dependencies
+        RUN apt-get update && apt-get install -y \
+            libssl-dev \
+            libsqlite3-dev \
+            pkg-config \
+            libdbus-1-dev \
+            && rm -rf /var/lib/apt/lists/*
+        
+        # Create app user
+        RUN useradd -m -u 1000 -s /bin/bash appuser
+        
+        WORKDIR /app
+        COPY . .
+        
+        # Build release binary
+        RUN cargo build --release --all-features
+        
+        # Runtime stage
+        FROM debian:bookworm-slim
+        
+        # Install runtime dependencies
+        RUN apt-get update && apt-get install -y \
+            libssl3 \
+            libsqlite3-0 \
+            libdbus-1-3 \
+            ca-certificates \
+            && rm -rf /var/lib/apt/lists/*
+        
+        # Create app user
+        RUN useradd -m -u 1000 -s /bin/bash appuser
+        
+        # Copy binary
+        COPY --from=builder /app/target/release/comunicado /usr/local/bin/comunicado
+        
+        # Set up data directories
+        RUN mkdir -p /home/appuser/.config/comunicado \
+            && mkdir -p /home/appuser/.local/share/comunicado \
+            && chown -R appuser:appuser /home/appuser
+        
+        USER appuser
+        WORKDIR /home/appuser
+        
+        # Set environment variables
+        ENV RUST_LOG=comunicado=info
+        ENV TERM=xterm-256color
+        
+        ENTRYPOINT ["comunicado"]
+        CMD ["--help"]
+        EOF
+
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        platforms: linux/amd64,linux/arm64
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+  publish-cargo:
+    name: Publish to Crates.io
+    needs: [create-release, build-binaries]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          libssl-dev \
+          libsqlite3-dev \
+          pkg-config \
+          libdbus-1-dev
+
+    - name: Publish to crates.io
+      run: cargo publish --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+  update-aur:
+    name: Update AUR Package
+    needs: [create-release, publish-cargo]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+    - name: Checkout AUR repository
+      uses: actions/checkout@v4
+      with:
+        repository: ${{ secrets.AUR_REPO }} # Private repo with AUR package
+        token: ${{ secrets.AUR_TOKEN }}
+
+    - name: Update PKGBUILD
+      run: |
+        # Extract version from tag
+        VERSION=${GITHUB_REF#refs/tags/v}
+        
+        # Update version in PKGBUILD
+        sed -i "s/pkgver=.*/pkgver=$VERSION/" PKGBUILD
+        
+        # Update checksums (this would need actual implementation)
+        updpkgsums
+        
+        # Test build
+        makepkg --printsrcinfo > .SRCINFO
+
+    - name: Commit and push changes
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add PKGBUILD .SRCINFO
+        git commit -m "Update to version ${GITHUB_REF#refs/tags/v}"
+        git push

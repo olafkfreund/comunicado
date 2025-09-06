@@ -767,7 +767,7 @@ impl NoteTUI {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::TempDir;
+    
     
     async fn create_test_tui() -> NoteTUI {
         let storage = Arc::new(NoteStorage::new_in_memory().await.unwrap());

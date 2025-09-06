@@ -1,7 +1,23 @@
 {
-  "email": "your-email@gmail.com",
-  "display_name": "Your Name",
-  "provider": "gmail",
-  "client_id": "your-client-id.apps.googleusercontent.com",
-  "client_secret": "your-client-secret-optional-for-pkce"
+  "gmail": {
+    "client_id": "YOUR_ACTUAL_CLIENT_ID.apps.googleusercontent.com",
+    "client_secret": "YOUR_ACTUAL_CLIENT_SECRET",
+    "redirect_uri": "http://localhost:8080/oauth/callback"
+  },
+  "outlook": {
+    "client_id": "your-outlook-client-id",
+    "redirect_uri": "http://localhost:8080/oauth/callback"
+  },
+  "setup_instructions": {
+    "gmail_setup": [
+      "1. Go to https://console.cloud.google.com/",
+      "2. Create new project or select existing",
+      "3. Enable Gmail API and Google Calendar API",
+      "4. Go to 'APIs & Services' > 'Credentials'", 
+      "5. Create OAuth 2.0 Client ID for 'Desktop application'",
+      "6. Copy client_id and client_secret to this config",
+      "7. IMPORTANT: Add your email to test users in OAuth consent screen"
+    ],
+    "file_location": "Copy this to ~/.config/comunicado/oauth2-config.json"
+  }
 }

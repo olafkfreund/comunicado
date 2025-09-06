@@ -129,7 +129,7 @@ mod settings_ui_tests {
     /// Test all settings tabs can be accessed
     #[test]
     fn test_all_settings_tabs() {
-        let mut settings_ui = create_test_settings_ui();
+        let _settings_ui = create_test_settings_ui();
         
         let all_tabs = SettingsTab::all();
         assert_eq!(all_tabs.len(), 8, "Should have 8 settings tabs");

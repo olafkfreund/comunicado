@@ -489,8 +489,8 @@ impl MobileNotesIntegration {
 mod tests {
     use super::*;
     use crate::mobile::kde_connect::types::MessageType;
-    use std::path::PathBuf;
-    use tempfile::TempDir;
+    
+    
 
     fn create_test_sms_message() -> SmsMessage {
         SmsMessage {
@@ -511,8 +511,8 @@ mod tests {
         // This would require setting up the full integration service
         // For now, just test the helper methods
         
-        let config = MobileNotesConfig::default();
-        let message = create_test_sms_message();
+        let _config = MobileNotesConfig::default();
+        let _message = create_test_sms_message();
         
         // Test structured info detection
         assert!(true); // Placeholder - would test actual functionality
@@ -535,13 +535,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_note_title_generation() {
-        let message = create_test_sms_message();
-        let contact = Some(ContactInfo {
+        let _message = create_test_sms_message();
+        let _contact = Some(ContactInfo {
             address: "+1234567890".to_string(),
             display_name: Some("John Doe".to_string()),
         });
         
-        let config = MobileNotesConfig::default();
+        let _config = MobileNotesConfig::default();
         
         // Would test actual title generation logic
         assert!(true);

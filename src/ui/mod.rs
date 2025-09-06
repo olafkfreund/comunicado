@@ -1187,6 +1187,41 @@ impl UI {
             .add_segment("navigation".to_string(), nav_segment);
     }
 
+    /// Check if the UI is currently in text input mode (compose, search, etc.)
+    /// Used by global quit handling to avoid quitting while user is typing
+    pub fn is_in_text_input(&self) -> bool {
+        match self.mode {
+            UIMode::Compose => true,  // User might be typing an email
+            UIMode::Search => true,   // User might be typing a search query
+            UIMode::Settings => true,  // Assume settings might have text input
+            UIMode::EventCreate | UIMode::EventEdit => true,  // Assume event forms have text input
+            _ => false,  // Most modes don't involve text input
+        }
+    }
+
+    /// Check if the UI is in the main view (not in popups, modals, etc.)
+    /// Used by global quit handling to allow Escape to quit only from main view
+    pub fn is_in_main_view(&self) -> bool {
+        match self.mode {
+            UIMode::Normal => true,  // Main application view
+            UIMode::DraftList => true,  // Draft list is part of main navigation
+            UIMode::Calendar => true,  // Calendar is part of main navigation
+            UIMode::ContextAware => true,  // Context-aware view is main view
+            // The following are considered popups/modals that shouldn't quit on Escape
+            UIMode::Compose => false,  // Compose modal
+            UIMode::EventCreate => false,  // Event creation modal
+            UIMode::EventEdit => false,  // Event editing modal
+            UIMode::EventView => false,  // Event viewing modal
+            UIMode::EmailViewer => false,  // Email viewer modal
+            UIMode::InvitationViewer => false,  // Invitation viewer modal
+            UIMode::Search => false,  // Search modal
+            UIMode::KeyboardShortcuts => false,  // Help modal
+            UIMode::Settings => false,  // Settings modal
+            UIMode::ContactsPopup => false,  // Contacts popup
+            UIMode::Contacts => false,  // Contacts modal
+        }
+    }
+
     /// Render components based on responsive layout mode
     fn render_responsive_layout(&mut self, frame: &mut Frame, chunks: &[Rect], layout_mode: LayoutMode) {
         match layout_mode {

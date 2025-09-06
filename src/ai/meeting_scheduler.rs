@@ -907,6 +907,7 @@ If no meeting request is detected, set has_meeting_request to false and confiden
 mod tests {
     use super::*;
 
+    #[allow(dead_code)]
     fn create_test_config() -> MeetingSchedulerConfig {
         MeetingSchedulerConfig {
             enabled: true,

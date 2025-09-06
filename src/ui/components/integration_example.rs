@@ -199,7 +199,7 @@ impl ExampleApp {
 #[cfg(test)]
 mod example_usage {
     use super::*;
-    use std::time::Duration;
+    
     
     #[tokio::test]
     async fn test_modular_ui_integration() {

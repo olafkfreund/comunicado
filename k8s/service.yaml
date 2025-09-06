@@ -1,0 +1,51 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: comunicado
+  namespace: comunicado
+  labels:
+    app.kubernetes.io/name: comunicado
+    app.kubernetes.io/instance: comunicado
+    app.kubernetes.io/component: email-client
+    app.kubernetes.io/part-of: comunicado
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9090"
+    prometheus.io/path: "/metrics"
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8080
+    targetPort: 8080
+    protocol: TCP
+    name: http
+  - port: 9090
+    targetPort: 9090
+    protocol: TCP
+    name: metrics
+  selector:
+    app.kubernetes.io/name: comunicado
+    app.kubernetes.io/instance: comunicado
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: comunicado-headless
+  namespace: comunicado
+  labels:
+    app.kubernetes.io/name: comunicado
+    app.kubernetes.io/instance: comunicado
+    app.kubernetes.io/component: email-client
+    app.kubernetes.io/part-of: comunicado
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+  - port: 8080
+    targetPort: 8080
+    protocol: TCP
+    name: http
+  selector:
+    app.kubernetes.io/name: comunicado
+    app.kubernetes.io/instance: comunicado

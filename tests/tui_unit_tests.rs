@@ -4,15 +4,13 @@
 //! without requiring external terminals or complex setup.
 
 use comunicado::app::App;
-use comunicado::ui::components::*;
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers};
 use ratatui::{
     backend::TestBackend,
     Terminal,
-    layout::{Constraint, Direction, Layout, Rect},
+    layout::{Constraint, Direction, Layout},
     style::{Color, Style},
     widgets::{Block, Borders, Paragraph},
-    text::Text,
 };
 use std::time::Duration;
 use tokio::sync::mpsc;

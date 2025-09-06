@@ -73,6 +73,18 @@ pub struct PerformanceCounter {
     tags: HashMap<String, String>,
 }
 
+impl PerformanceCounter {
+    /// Get counter name
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// Get counter tags
+    pub fn tags(&self) -> &HashMap<String, String> {
+        &self.tags
+    }
+}
+
 /// Latency tracker for measuring response times
 #[allow(dead_code)]
 pub struct LatencyTracker {
@@ -87,6 +99,13 @@ pub struct ThroughputTracker {
     window_size: Duration,
     samples: Arc<RwLock<Vec<(DateTime<Utc>, u64)>>>,
     current_rate: Arc<AtomicU64>,
+}
+
+impl ThroughputTracker {
+    /// Get tracker name
+    pub fn name(&self) -> &str {
+        &self.name
+    }
 }
 
 /// Percentile calculations
@@ -109,6 +128,13 @@ pub struct Histogram {
     buckets: Vec<HistogramBucket>,
     total_count: u64,
     total_sum: f64,
+}
+
+impl Histogram {
+    /// Get histogram name
+    pub fn name(&self) -> &str {
+        &self.name
+    }
 }
 
 /// Histogram bucket

@@ -1150,6 +1150,64 @@ impl StatusBar {
             self.information_density
         )
     }
+    
+    /// Calculate required width for status bar with current segments
+    pub fn calculate_required_width(&self, _theme: &Theme) -> u16 {
+        let visible_segments: Vec<_> = self
+            .segment_order
+            .iter()
+            .filter_map(|name| {
+                self.segments.get(name).and_then(|segment| {
+                    if segment.is_visible() {
+                        Some((name, segment))
+                    } else {
+                        None
+                    }
+                })
+            })
+            .collect();
+        
+        if visible_segments.is_empty() {
+            return 0;
+        }
+        
+        let total_content_width: u16 = visible_segments
+            .iter()
+            .map(|(_, segment)| segment.content().len() as u16)
+            .sum();
+            
+        let total_separator_width = self.get_separator_width() * (visible_segments.len().saturating_sub(1)) as u16;
+        
+        total_content_width + total_separator_width + 2 // +2 for borders
+    }
+    
+    /// Create a preview of status bar content for testing
+    pub fn create_preview(&self, theme: &Theme, width: u16) -> String {
+        let visible_segments: Vec<_> = self
+            .segment_order
+            .iter()
+            .filter_map(|name| {
+                self.segments.get(name).and_then(|segment| {
+                    if segment.is_visible() {
+                        Some((name, segment))
+                    } else {
+                        None
+                    }
+                })
+            })
+            .collect();
+            
+        let segments_content = self.create_segments_content(
+            &visible_segments,
+            width.saturating_sub(2),
+            theme
+        );
+        
+        segments_content.spans.iter()
+            .map(|span| span.content.as_ref())
+            .collect::<Vec<_>>()
+            .join("")
+    }
 }
 
 impl Default for StatusBar {

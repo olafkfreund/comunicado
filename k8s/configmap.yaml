@@ -1,0 +1,61 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: comunicado-config
+  namespace: comunicado
+  labels:
+    app.kubernetes.io/name: comunicado
+    app.kubernetes.io/component: config
+data:
+  config.toml: |
+    # Comunicado Kubernetes Configuration
+    
+    [ui]
+    theme = "dark"
+    enable_animations = false  # Disabled in K8s for performance
+    enable_mouse = false       # Terminal in K8s typically doesn't need mouse
+    
+    [email]
+    database_path = "~/.local/share/comunicado/email.db"
+    cache_size_mb = 200
+    max_concurrent_connections = 5
+    
+    [calendar]
+    database_path = "~/.local/share/comunicado/calendar.db"
+    sync_interval_minutes = 30
+    
+    [performance]
+    lazy_loading = true
+    background_sync = true
+    max_concurrent_connections = 3
+    
+    [logging]
+    level = "info"
+    file = "~/.cache/comunicado/comunicado.log"
+    
+    [plugins]
+    notes = { enabled = true }
+    kde_connect = { enabled = false }  # Disabled in K8s
+    
+  logging.yaml: |
+    # Logging configuration for structured logging
+    appenders:
+      stdout:
+        kind: console
+        encoder:
+          pattern: "{d} {l} {t} - {m}{n}"
+      file:
+        kind: rolling_file
+        path: "/home/comunicado/.cache/comunicado/comunicado.log"
+        encoder:
+          pattern: "{d} {l} {t} - {m}{n}"
+        policy:
+          kind: size_and_time
+          size_limit: 10MB
+          time_limit: 1d
+          max_files: 7
+    root:
+      level: info
+      appenders:
+        - stdout
+        - file

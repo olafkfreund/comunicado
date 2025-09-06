@@ -198,6 +198,13 @@ impl DistributionManager {
             })
             .collect()
     }
+
+    /// Register deployed version in distribution systems
+    pub async fn register_deployed_version(&self, version: &str, artifacts: &[DeploymentArtifact]) -> DistributionResult<()> {
+        println!("Distribution Manager: Registering deployed version {} with {} artifacts", version, artifacts.len());
+        // Implementation would update package repositories with new version
+        Ok(())
+    }
 }
 
 impl Default for DistributionManagerConfig {

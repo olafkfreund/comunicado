@@ -322,6 +322,12 @@ impl DeploymentOrchestrator {
 
         self.active_deployments.insert(deployment_id, deployment_status);
 
+        // Pre-deployment checks with CI/CD manager
+        self.ci_cd_manager.validate_deployment_readiness(&artifacts).await?;
+        
+        // Version management
+        self.version_manager.prepare_version_rollback(&version).await?;
+
         // Execute deployment strategy
         match strategy {
             DeploymentStrategy::Recreate => {
@@ -343,6 +349,13 @@ impl DeploymentOrchestrator {
 
         // Run health checks
         self.run_post_deployment_health_checks(deployment_id).await?;
+        
+        // Post-deployment tasks
+        self.distribution_manager.register_deployed_version(&version, &artifacts).await?;
+        self.auto_update_manager.schedule_update_checks(deployment_id).await?;
+        
+        // CI/CD post-deployment notifications
+        self.ci_cd_manager.notify_deployment_complete(deployment_id).await?;
 
         Ok(deployment_id)
     }

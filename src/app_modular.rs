@@ -507,7 +507,7 @@ mod tests {
     
     #[tokio::test]
     async fn test_modular_app_initialization() {
-        let mut app = ModularApp::new().unwrap();
+        let app = ModularApp::new().unwrap();
         // Note: Full initialization may fail in test environment due to missing databases
         // This test just verifies the structure works
         assert!(!app.initialization_complete);

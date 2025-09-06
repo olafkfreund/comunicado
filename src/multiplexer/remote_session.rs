@@ -44,9 +44,23 @@ pub struct SSHSession {
     connection_info: ConnectionInfo,
 }
 
+impl SSHSession {
+    /// Get SSH connection information
+    pub fn connection_info(&self) -> &ConnectionInfo {
+        &self.connection_info
+    }
+}
+
 /// Mosh-specific session handling  
 pub struct MoshSession {
     connection_info: ConnectionInfo,
+}
+
+impl MoshSession {
+    /// Get Mosh connection information  
+    pub fn connection_info(&self) -> &ConnectionInfo {
+        &self.connection_info
+    }
 }
 
 impl RemoteSession {

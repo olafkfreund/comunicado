@@ -221,7 +221,7 @@ mod tests {
     
     #[test]
     fn test_standard_manager_lifecycle() {
-        let mut manager = StandardTerminalManager::new();
+        let manager = StandardTerminalManager::new();
         assert!(!manager.is_active());
         
         // After setup (would need terminal in real test)

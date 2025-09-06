@@ -1,0 +1,163 @@
+version: '3.8'
+
+services:
+  comunicado:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    image: comunicado:latest
+    container_name: comunicado-app
+    restart: unless-stopped
+    
+    # For TUI applications in containers, we need TTY and stdin
+    tty: true
+    stdin_open: true
+    
+    # Environment variables
+    environment:
+      - RUST_LOG=comunicado=debug
+      - TERM=xterm-256color
+      - COMUNICADO_CONTAINER=true
+      
+    # Bind mount for persistent data
+    volumes:
+      - comunicado_config:/home/comunicado/.config/comunicado
+      - comunicado_data:/home/comunicado/.local/share/comunicado
+      - comunicado_cache:/home/comunicado/.cache/comunicado
+      
+    # Network for potential web interface
+    ports:
+      - "8080:8080"
+      
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '1.0'
+        reservations:
+          memory: 128M
+          cpus: '0.5'
+          
+    # Health check
+    healthcheck:
+      test: ["CMD", "comunicado", "--health-check"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Optional: Development container with hot reload
+  comunicado-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      target: development
+    image: comunicado:dev
+    container_name: comunicado-dev
+    restart: unless-stopped
+    profiles: ["dev"]
+    
+    tty: true
+    stdin_open: true
+    
+    environment:
+      - RUST_LOG=comunicado=trace
+      - TERM=xterm-256color
+      - COMUNICADO_DEV=true
+      
+    volumes:
+      # Mount source code for development
+      - .:/app:cached
+      - target_cache:/app/target
+      - registry_cache:/usr/local/cargo/registry
+      - git_cache:/usr/local/cargo/git
+      
+    working_dir: /app
+    command: ["cargo", "run", "--all-features"]
+
+  # Optional: Mock email server for testing
+  mailhog:
+    image: mailhog/mailhog:v1.0.1
+    container_name: comunicado-mailhog
+    profiles: ["testing", "dev"]
+    ports:
+      - "1025:1025"  # SMTP
+      - "8025:8025"  # Web UI
+    environment:
+      - MH_SMTP_BIND_ADDR=0.0.0.0:1025
+      - MH_UI_BIND_ADDR=0.0.0.0:8025
+      - MH_API_BIND_ADDR=0.0.0.0:8025
+
+  # Optional: CalDAV server for testing
+  radicale:
+    image: tomsquest/docker-radicale:3.1.8.2
+    container_name: comunicado-radicale
+    profiles: ["testing", "dev"]
+    ports:
+      - "5232:5232"
+    volumes:
+      - radicale_data:/data
+      - radicale_config:/config
+    environment:
+      - TAKE_FILE_OWNERSHIP=true
+    command: >
+      sh -c "
+      echo '[auth]' > /config/config &&
+      echo 'type = htpasswd' >> /config/config &&
+      echo 'htpasswd_filename = /config/users' >> /config/config &&
+      echo 'htpasswd_encryption = plain' >> /config/config &&
+      echo '[storage]' >> /config/config &&
+      echo 'filesystem_folder = /data' >> /config/config &&
+      echo 'test:password' > /config/users &&
+      radicale --config /config/config
+      "
+
+  # Optional: Database for testing
+  postgres:
+    image: postgres:15-alpine
+    container_name: comunicado-postgres
+    profiles: ["testing", "dev"]
+    environment:
+      - POSTGRES_DB=comunicado_test
+      - POSTGRES_USER=comunicado
+      - POSTGRES_PASSWORD=comunicado_test
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U comunicado -d comunicado_test"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  # Production volumes
+  comunicado_config:
+    driver: local
+  comunicado_data:
+    driver: local  
+  comunicado_cache:
+    driver: local
+    
+  # Development volumes
+  target_cache:
+    driver: local
+  registry_cache:
+    driver: local
+  git_cache:
+    driver: local
+    
+  # Testing service volumes
+  radicale_data:
+    driver: local
+  radicale_config:
+    driver: local
+  postgres_data:
+    driver: local
+
+networks:
+  default:
+    name: comunicado_network

@@ -74,12 +74,24 @@ pub struct ProviderConfig {
 
 impl ProviderConfig {
     /// Create Gmail configuration
-    /// Note: In production, these would come from app registration
+    /// Loads credentials from configuration file
     pub fn gmail() -> Self {
+        let (client_id, client_secret) = Self::load_credentials("gmail")
+            .unwrap_or_else(|| {
+                eprintln!("⚠️  Gmail OAuth2 credentials not found!");
+                eprintln!("📁 Create ~/.config/comunicado/oauth2-config.json with your credentials");
+                eprintln!("📖 See oauth2-config-example.json for setup instructions");
+                eprintln!("🔗 Get credentials at: https://console.cloud.google.com/");
+                (
+                    "MISSING_CLIENT_ID".to_string(), 
+                    Some("MISSING_CLIENT_SECRET".to_string())
+                )
+            });
+        
         Self {
             provider: OAuth2Provider::Gmail,
-            client_id: "comunicado-desktop-client.apps.googleusercontent.com".to_string(),
-            client_secret: Some("GOCSPX-demo_client_secret_for_development".to_string()),
+            client_id,
+            client_secret,
             authorization_url: "https://accounts.google.com/o/oauth2/v2/auth".to_string(),
             token_url: "https://oauth2.googleapis.com/token".to_string(),
             redirect_uri: "http://localhost:8080/oauth/callback".to_string(), // Standard desktop app redirect
@@ -237,11 +249,45 @@ impl ProviderConfig {
             .join(" ")
     }
 
+    /// Load credentials from configuration file
+    fn load_credentials(provider: &str) -> Option<(String, Option<String>)> {
+        use std::fs;
+        use std::path::PathBuf;
+        
+        // Try multiple config file locations
+        let config_paths = vec![
+            PathBuf::from(format!("{}/.config/comunicado/oauth2-config.json", 
+                std::env::var("HOME").unwrap_or_default())),
+            PathBuf::from("./oauth2-config.json"),
+            PathBuf::from("./config/oauth2-config.json"),
+        ];
+        
+        for config_path in config_paths {
+            if let Ok(config_content) = fs::read_to_string(&config_path) {
+                if let Ok(config) = serde_json::from_str::<serde_json::Value>(&config_content) {
+                    if let Some(provider_config) = config.get(provider) {
+                        let client_id = provider_config.get("client_id")
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_string())?;
+                        
+                        let client_secret = provider_config.get("client_secret")
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_string());
+                        
+                        return Some((client_id, client_secret));
+                    }
+                }
+            }
+        }
+        
+        None
+    }
+
     /// Validate configuration
     pub fn validate(&self) -> OAuth2Result<()> {
-        if self.client_id.is_empty() {
+        if self.client_id.is_empty() || self.client_id == "MISSING_CLIENT_ID" {
             return Err(OAuth2Error::InvalidConfig(
-                "Client ID is required".to_string(),
+                "OAuth2 client credentials not configured. Please create ~/.config/comunicado/oauth2-config.json with your Google OAuth2 credentials. See oauth2-config-example.json for instructions.".to_string(),
             ));
         }
 

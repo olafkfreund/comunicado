@@ -11,6 +11,24 @@ use crossterm::{
 };
 use std::io;
 
+/// RAII guard for terminal state cleanup
+struct TerminalGuard;
+
+impl TerminalGuard {
+    fn new() -> Result<Self, Box<dyn std::error::Error>> {
+        enable_raw_mode()?;
+        Ok(TerminalGuard)
+    }
+}
+
+impl Drop for TerminalGuard {
+    fn drop(&mut self) {
+        if let Err(e) = disable_raw_mode() {
+            tracing::warn!("Failed to disable raw mode during cleanup: {}", e);
+        }
+    }
+}
+
 #[allow(dead_code)]
 pub struct SimpleSetupWizard {
     theme: Theme,
@@ -96,9 +114,9 @@ impl SimpleSetupWizard {
     }
 
     pub async fn run(&mut self) -> OAuth2Result<Option<String>> {
-        // Setup terminal
-        enable_raw_mode()
-            .map_err(|e| OAuth2Error::StorageError(format!("Failed to enable raw mode: {}", e)))?;
+        // Setup terminal with proper error handling
+        let _terminal_guard = TerminalGuard::new()
+            .map_err(|e| OAuth2Error::StorageError(format!("Failed to setup terminal: {}", e)))?;
         
         let mut stdout = io::stdout();
         stdout.execute(EnterAlternateScreen)
@@ -112,17 +130,26 @@ impl SimpleSetupWizard {
         self.detected_providers = Self::detect_common_accounts();
         self.state = SimpleSetupState::QuickDetection;
 
-        let result = self.run_wizard_loop(&mut terminal).await;
+        // Run with proper cleanup on any exit
+        let result = match self.run_wizard_loop(&mut terminal).await {
+            Ok(result) => result,
+            Err(e) => {
+                // Ensure we clean up terminal even on error
+                let _ = terminal.backend_mut().execute(LeaveAlternateScreen);
+                let _ = terminal.show_cursor();
+                return Err(e);
+            }
+        };
 
-        // Cleanup terminal
-        disable_raw_mode()
-            .map_err(|e| OAuth2Error::StorageError(e.to_string()))?;
-        terminal.backend_mut().execute(LeaveAlternateScreen)
-            .map_err(|e| OAuth2Error::StorageError(e.to_string()))?;
-        terminal.show_cursor()
-            .map_err(|e| OAuth2Error::StorageError(e.to_string()))?;
+        // Clean cleanup terminal
+        if let Err(e) = terminal.backend_mut().execute(LeaveAlternateScreen) {
+            tracing::warn!("Failed to exit alternate screen: {}", e);
+        }
+        if let Err(e) = terminal.show_cursor() {
+            tracing::warn!("Failed to show cursor: {}", e);
+        }
 
-        result
+        Ok(result)
     }
 
     async fn run_wizard_loop(&mut self, terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> OAuth2Result<Option<String>> {
@@ -258,30 +285,116 @@ impl SimpleSetupWizard {
     }
 
     async fn start_oauth_flow(&mut self, provider: &OAuth2Provider) -> OAuth2Result<()> {
-        // This would integrate with the existing OAuth2Client
         match provider {
             OAuth2Provider::Gmail => {
-                // Use pre-configured Gmail OAuth2 settings
+                // Check for client credentials - for now, show error if missing
                 let config = ProviderConfig::gmail();
-                let _client = OAuth2Client::new(config)?;
-                // Start authorization flow...
-                // For now, simulate success
-                tokio::time::sleep(tokio::time::Duration::from_millis(2000)).await;
-                self.state = SimpleSetupState::Complete("gmail_account".to_string());
+                if let Err(_) = config.validate() {
+                    self.state = SimpleSetupState::Error("Gmail OAuth2 credentials not configured.\n\nPlease configure client_id and client_secret in:\n~/.config/comunicado/oauth2-config.json\n\nSee documentation for setup instructions.".to_string());
+                    return Ok(());
+                }
+                
+                let mut client = OAuth2Client::new(config)?;
+                let auth_request = client.start_authorization().await?;
+                
+                // Open browser automatically  
+                if let Err(e) = self.open_browser_url(&auth_request.authorization_url) {
+                    tracing::warn!("Failed to open browser automatically: {}", e);
+                    // Continue anyway, user can manually copy the URL
+                }
+                
+                // Wait for authorization with timeout
+                match client.wait_for_authorization(300).await {
+                    Ok(auth_code) => {
+                        // Exchange code for tokens
+                        let token_response = client.exchange_code(&auth_code).await?;
+                        
+                        // Create account configuration
+                        let account_config = client.create_account_config(&token_response, None).await?;
+                        
+                        // TODO: Store account configuration (would need storage integration)
+                        self.state = SimpleSetupState::Complete(account_config.account_id);
+                    }
+                    Err(e) => {
+                        self.state = SimpleSetupState::Error(format!("Authorization failed: {}", e));
+                    }
+                }
             }
             OAuth2Provider::Outlook => {
-                // Use pre-configured Outlook OAuth2 settings
+                // Check for client credentials
                 let config = ProviderConfig::outlook();
-                let _client = OAuth2Client::new(config)?;
-                // Start authorization flow...
-                tokio::time::sleep(tokio::time::Duration::from_millis(2000)).await;
-                self.state = SimpleSetupState::Complete("outlook_account".to_string());
+                if let Err(_) = config.validate() {
+                    self.state = SimpleSetupState::Error("Outlook OAuth2 credentials not configured.\n\nPlease configure client_id and client_secret in:\n~/.config/comunicado/oauth2-config.json\n\nSee documentation for setup instructions.".to_string());
+                    return Ok(());
+                }
+                
+                let mut client = OAuth2Client::new(config)?;
+                let auth_request = client.start_authorization().await?;
+                
+                // Open browser automatically
+                if let Err(e) = self.open_browser_url(&auth_request.authorization_url) {
+                    tracing::warn!("Failed to open browser automatically: {}", e);
+                }
+                
+                // Wait for authorization with timeout
+                match client.wait_for_authorization(300).await {
+                    Ok(auth_code) => {
+                        // Exchange code for tokens
+                        let token_response = client.exchange_code(&auth_code).await?;
+                        
+                        // Create account configuration  
+                        let account_config = client.create_account_config(&token_response, None).await?;
+                        
+                        // TODO: Store account configuration
+                        self.state = SimpleSetupState::Complete(account_config.account_id);
+                    }
+                    Err(e) => {
+                        self.state = SimpleSetupState::Error(format!("Authorization failed: {}", e));
+                    }
+                }
             }
             _ => {
                 self.state = SimpleSetupState::Error("Provider not supported in quick setup".to_string());
             }
         }
         Ok(())
+    }
+    
+    /// Open URL in browser (cross-platform)
+    fn open_browser_url(&self, url: &str) -> Result<(), String> {
+        // First try using webbrowser crate if available
+        if let Err(e1) = webbrowser::open(url) {
+            // Fallback to platform-specific commands
+            self.open_browser_platform_specific(url).map_err(|e2| {
+                format!("Both webbrowser crate ({}) and platform-specific commands ({}) failed", e1, e2)
+            })
+        } else {
+            Ok(())
+        }
+    }
+    
+    /// Platform-specific browser opening fallback
+    fn open_browser_platform_specific(&self, url: &str) -> Result<(), String> {
+        use std::process::Command;
+
+        let commands = if cfg!(target_os = "linux") {
+            vec!["xdg-open", "firefox", "chromium", "google-chrome"]
+        } else if cfg!(target_os = "macos") {
+            vec!["open"]
+        } else if cfg!(target_os = "windows") {
+            vec!["start", "explorer"]
+        } else {
+            return Err("Unsupported platform for automatic browser opening".to_string());
+        };
+
+        for command in commands {
+            match Command::new(command).arg(url).spawn() {
+                Ok(_) => return Ok(()),
+                Err(_) => continue,
+            }
+        }
+        
+        Err("Failed to find any working browser command".to_string())
     }
 
     fn draw(&mut self, f: &mut Frame) {

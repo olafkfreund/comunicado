@@ -3,9 +3,9 @@
 //! Tests that the notes system and calendar system can work together,
 //! verifying meeting note creation, event linking, and template processing.
 
-use comunicado::plugins::notes::{NoteStorage, Note, WatchedDirectory, CalendarNotesIntegration, CalendarNotesConfig, EventLinkType, MeetingNote};
-use comunicado::calendar::{Event, CalendarManager, Calendar, CalendarSource};
-use comunicado::calendar::event::{EventAttendee, AttendeeStatus, AttendeeRole};
+use comunicado::plugins::notes::{NoteStorage, Note, WatchedDirectory, CalendarNotesConfig, EventLinkType};
+use comunicado::calendar::{Event, Calendar, CalendarSource};
+use comunicado::calendar::event::{EventAttendee, AttendeeStatus};
 
 use std::sync::Arc;
 use tempfile::TempDir;
@@ -32,6 +32,7 @@ fn create_test_event() -> Event {
     event
 }
 
+#[allow(dead_code)]
 fn create_test_calendar() -> Calendar {
     Calendar::new(
         "test-calendar".to_string(),
@@ -47,7 +48,7 @@ async fn test_calendar_notes_integration_basic() {
     let temp_dir = TempDir::new().unwrap();
     
     // Test that we can create the storage system
-    let note_storage = match NoteStorage::new(temp_dir.path()).await {
+    let _note_storage = match NoteStorage::new(temp_dir.path()).await {
         Ok(storage) => Arc::new(storage),
         Err(e) => {
             println!("Note storage creation failed: {}", e);

@@ -541,8 +541,8 @@ impl CalendarNotesIntegration {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::calendar::event::{EventStatus, EventPriority, EventAttendee};
-    use std::path::PathBuf;
+    use crate::calendar::event::EventAttendee;
+    
     use tempfile::TempDir;
 
     fn create_test_event() -> Event {
@@ -569,7 +569,7 @@ mod tests {
     #[tokio::test]
     async fn test_calendar_notes_integration_creation() {
         let temp_dir = TempDir::new().unwrap();
-        let note_storage = Arc::new(
+        let _note_storage = Arc::new(
             crate::plugins::notes::NoteStorage::new(temp_dir.path()).await.unwrap()
         );
         
@@ -581,7 +581,7 @@ mod tests {
     #[test]
     fn test_meeting_note_title_generation() {
         let event = create_test_event();
-        let config = CalendarNotesConfig::default();
+        let _config = CalendarNotesConfig::default();
         
         // Since we can't create the full integration in tests, test the logic
         let title = format!("Meeting: {}", event.title);

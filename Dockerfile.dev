@@ -1,0 +1,39 @@
+# Development Dockerfile with hot reload capabilities
+FROM rust:1.70-slim AS development
+
+# Install development dependencies
+RUN apt-get update && apt-get install -y \
+    pkg-config \
+    libssl-dev \
+    libsqlite3-dev \
+    libdbus-1-dev \
+    build-essential \
+    git \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install development tools
+RUN cargo install cargo-watch cargo-audit cargo-deny cargo-outdated
+
+# Create a non-root user for development
+RUN useradd -m -u 1001 -s /bin/bash developer
+RUN usermod -aG sudo developer
+
+# Set working directory
+WORKDIR /app
+
+# Create cache directories
+RUN mkdir -p /usr/local/cargo/registry \
+    && mkdir -p /usr/local/cargo/git \
+    && chown -R developer:developer /usr/local/cargo
+
+# Switch to developer user
+USER developer
+
+# Set environment variables for development
+ENV RUST_LOG=comunicado=trace
+ENV TERM=xterm-256color
+ENV COMUNICADO_DEV=true
+
+# Default command for development (can be overridden)
+CMD ["cargo", "watch", "-x", "run --all-features"]
