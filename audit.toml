@@ -1,0 +1,11 @@
+[advisories]
+# Allow the RSA vulnerability as no fix is available
+# RUSTSEC-2023-0071: Marvin Attack: potential key recovery through timing sidechannels
+# This is acceptable as it's a medium severity timing attack that requires specific conditions
+ignore = [
+    "RUSTSEC-2023-0071",  # RSA Marvin Attack - no fixed upgrade available
+    "RUSTSEC-2024-0388",  # derivative - unmaintained (via keyring)
+    "RUSTSEC-2025-0057",  # fxhash - unmaintained (via scraper)
+    "RUSTSEC-2024-0384",  # instant - unmaintained (via keyring)
+    "RUSTSEC-2024-0436",  # paste - unmaintained (via ratatui)
+]
