@@ -2,7 +2,7 @@
 name = "comunicado"
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.81"
+rust-version = "1.83"
 authors = ["Your Name <your.email@example.com>"]
 description = "A modern TUI-based email and calendar client"
 license = "AGPL-3.0"
