@@ -1,18 +1,17 @@
+use crate::tea::message::{
+    AccountMessage, BackgroundMessage, CalendarMessage, CalendarView, ContactsMessage,
+    EmailMessage, KdeConnectMessage, NotesMessage, NotificationMessage, SystemMessage, ToastLevel,
+    ToggleTarget, UIMessage, ViewMode,
+};
+use crate::tea::model::{ComposeField, ComposeState, PhaseStatus, TaskState, TaskStatus, Toast};
 /// Update function for TEA pattern
-/// 
+///
 /// Central update function that handles all messages and updates the model accordingly.
 /// This is the heart of the TEA architecture where all state changes happen.
-
-use crate::tea::{Message, Model, Command, UpdateResult};
-use crate::tea::message::{
-    SystemMessage, UIMessage, EmailMessage, CalendarMessage, ContactsMessage, NotesMessage, KdeConnectMessage,
-    AccountMessage, BackgroundMessage, NotificationMessage, ViewMode, ToastLevel,
-    ToggleTarget, CalendarView
-};
-use crate::tea::model::{Toast, PhaseStatus, ComposeState, ComposeField, TaskState, TaskStatus};
+use crate::tea::{Command, Message, Model, UpdateResult};
+use chrono::Datelike;
 use tokio::time::{Duration, Instant};
 use uuid::Uuid;
-use chrono::Datelike;
 
 /// Main update function that processes messages and returns updated model with commands
 pub fn update(model: Model, message: Message) -> UpdateResult<Model> {
@@ -37,7 +36,7 @@ fn update_system(mut model: Model, message: SystemMessage) -> UpdateResult<Model
             model.app_state.should_quit = true;
             UpdateResult::just_model(model)
         }
-        
+
         SystemMessage::Initialize(startup_mode) => {
             // Set view based on startup mode
             model.current_view = match startup_mode {
@@ -46,106 +45,112 @@ fn update_system(mut model: Model, message: SystemMessage) -> UpdateResult<Model
                 crate::cli::StartupMode::Calendar => ViewMode::Calendar,
                 crate::cli::StartupMode::Contacts => ViewMode::Contacts,
             };
-            
+
             // Start initialization
             model.app_state.initialization.in_progress = true;
             model.app_state.initialization.current_phase = Some("Database".to_string());
-            model.app_state.initialization.phases.insert(
-                "Database".to_string(), 
-                PhaseStatus::InProgress
-            );
-            
-            let commands = vec![
-                Command::database(crate::tea::command::DatabaseCommand::Initialize),
-            ];
-            
+            model
+                .app_state
+                .initialization
+                .phases
+                .insert("Database".to_string(), PhaseStatus::InProgress);
+
+            let commands = vec![Command::database(
+                crate::tea::command::DatabaseCommand::Initialize,
+            )];
+
             UpdateResult::new(model, commands)
         }
-        
+
         SystemMessage::InitializationComplete => {
             model.app_state.initialization.complete = true;
             model.app_state.initialization.in_progress = false;
             model.app_state.initialization.current_phase = None;
-            
+
             // Load initial data based on current view
             let commands = match model.current_view {
                 ViewMode::Email => vec![
-                    Command::message(Message::Email(EmailMessage::LoadMessages("INBOX".to_string()))),
+                    Command::message(Message::Email(EmailMessage::LoadMessages(
+                        "INBOX".to_string(),
+                    ))),
                     Command::message(Message::Account(AccountMessage::LoadAccounts)),
                 ],
-                ViewMode::Calendar => vec![
-                    Command::message(Message::Calendar(CalendarMessage::LoadEvents(
+                ViewMode::Calendar => vec![Command::message(Message::Calendar(
+                    CalendarMessage::LoadEvents(
                         chrono::Local::now().date_naive(),
-                        chrono::Local::now().date_naive() + chrono::Duration::days(30)
-                    ))),
-                ],
-                ViewMode::Contacts => vec![
-                    Command::message(Message::Contacts(ContactsMessage::LoadContacts)),
-                ],
-                ViewMode::Notes => vec![
-                    Command::message(Message::Notes(NotesMessage::LoadNotes)),
-                ],
+                        chrono::Local::now().date_naive() + chrono::Duration::days(30),
+                    ),
+                ))],
+                ViewMode::Contacts => vec![Command::message(Message::Contacts(
+                    ContactsMessage::LoadContacts,
+                ))],
+                ViewMode::Notes => vec![Command::message(Message::Notes(NotesMessage::LoadNotes))],
                 ViewMode::Settings => vec![],
             };
-            
+
             UpdateResult::new(model, commands)
         }
-        
+
         SystemMessage::InitializationFailed(error) => {
             model.app_state.initialization.in_progress = false;
             model.app_state.initialization.error = Some(error.clone());
-            
+
             if let Some(phase) = &model.app_state.initialization.current_phase {
-                model.app_state.initialization.phases.insert(
-                    phase.clone(), 
-                    PhaseStatus::Failed(error.clone())
-                );
+                model
+                    .app_state
+                    .initialization
+                    .phases
+                    .insert(phase.clone(), PhaseStatus::Failed(error.clone()));
             }
-            
-            let commands = vec![
-                Command::ui(crate::tea::command::UICommand::ShowToast(
-                    format!("Initialization failed: {}", error),
-                    ToastLevel::Error,
-                )),
-            ];
-            
+
+            let commands = vec![Command::ui(crate::tea::command::UICommand::ShowToast(
+                format!("Initialization failed: {}", error),
+                ToastLevel::Error,
+            ))];
+
             UpdateResult::new(model, commands)
         }
-        
+
         SystemMessage::Resize(width, height) => {
             model.app_state.terminal_size = (width, height);
             UpdateResult::just_model(model)
         }
-        
+
         SystemMessage::Tick => {
             model.app_state.last_tick = Instant::now();
-            
+
             // Check for auto-sync
             let mut commands = Vec::new();
-            if model.auto_sync.enabled && 
-               model.app_state.last_tick.duration_since(model.auto_sync.last_sync) >= model.auto_sync.interval {
+            if model.auto_sync.enabled
+                && model
+                    .app_state
+                    .last_tick
+                    .duration_since(model.auto_sync.last_sync)
+                    >= model.auto_sync.interval
+            {
                 commands.push(Command::message(Message::System(SystemMessage::AutoSync)));
             }
-            
+
             // Clean up expired toasts
             let now = Instant::now();
-            model.ui_state.toasts.retain(|toast| {
-                now.duration_since(toast.created_at) < toast.duration
-            });
-            
+            model
+                .ui_state
+                .toasts
+                .retain(|toast| now.duration_since(toast.created_at) < toast.duration);
+
             UpdateResult::new(model, commands)
         }
-        
+
         SystemMessage::AutoSync => {
             model.auto_sync.last_sync = Instant::now();
             model.auto_sync.status = crate::tea::message::SyncStatus::Syncing;
-            
+
             let commands = vec![
                 Command::message(Message::Email(EmailMessage::SyncAll)),
                 Command::message(Message::Calendar(CalendarMessage::SyncCalendar)),
                 Command::message(Message::Contacts(ContactsMessage::SyncContacts)),
             ];
-            
+
             UpdateResult::new(model, commands)
         }
     }
@@ -158,35 +163,41 @@ fn update_ui(mut model: Model, message: UIMessage) -> UpdateResult<Model> {
             // TODO: Handle keyboard shortcuts based on current view and context
             UpdateResult::just_model(model)
         }
-        
+
         UIMessage::MouseEvent(_mouse_event) => {
             // TODO: Handle mouse events
             UpdateResult::just_model(model)
         }
-        
+
         UIMessage::Navigate(view_mode) => {
             model.current_view = view_mode;
-            
+
             // Load data for the new view if needed
             let commands = match view_mode {
                 ViewMode::Email if model.email_state.messages.is_empty() => {
-                    vec![Command::message(Message::Email(EmailMessage::LoadMessages("INBOX".to_string())))]
+                    vec![Command::message(Message::Email(
+                        EmailMessage::LoadMessages("INBOX".to_string()),
+                    ))]
                 }
                 ViewMode::Calendar if model.calendar_state.events.is_empty() => {
-                    vec![Command::message(Message::Calendar(CalendarMessage::LoadEvents(
-                        chrono::Local::now().date_naive(),
-                        chrono::Local::now().date_naive() + chrono::Duration::days(30)
-                    )))]
+                    vec![Command::message(Message::Calendar(
+                        CalendarMessage::LoadEvents(
+                            chrono::Local::now().date_naive(),
+                            chrono::Local::now().date_naive() + chrono::Duration::days(30),
+                        ),
+                    ))]
                 }
                 ViewMode::Contacts if model.contacts_state.contacts.is_empty() => {
-                    vec![Command::message(Message::Contacts(ContactsMessage::LoadContacts))]
+                    vec![Command::message(Message::Contacts(
+                        ContactsMessage::LoadContacts,
+                    ))]
                 }
                 _ => vec![],
             };
-            
+
             UpdateResult::new(model, commands)
         }
-        
+
         UIMessage::Toggle(target) => {
             match target {
                 ToggleTarget::Sidebar => {
@@ -211,22 +222,22 @@ fn update_ui(mut model: Model, message: UIMessage) -> UpdateResult<Model> {
             }
             UpdateResult::just_model(model)
         }
-        
+
         UIMessage::ToggleHelp => {
             model.ui_state.help_visible = !model.ui_state.help_visible;
             UpdateResult::just_model(model)
         }
-        
+
         UIMessage::ShowContextMenu(_menu_type) => {
             // TODO: Implement context menu display
             UpdateResult::just_model(model)
         }
-        
+
         UIMessage::HideContextMenu => {
             model.ui_state.context_menu = None;
             UpdateResult::just_model(model)
         }
-        
+
         UIMessage::ShowToast(message, level) => {
             let toast = Toast {
                 id: Uuid::new_v4().to_string(),
@@ -240,58 +251,60 @@ fn update_ui(mut model: Model, message: UIMessage) -> UpdateResult<Model> {
                     ToastLevel::Error => Duration::from_secs(5),
                 },
             };
-            
+
             model.ui_state.toasts.push(toast);
             UpdateResult::just_model(model)
         }
-        
+
         UIMessage::SearchChanged(query) => {
             model.ui_state.search.query = query;
             model.ui_state.search.loading = true;
-            
+
             // Trigger search based on current view
             let commands = match model.current_view {
-                ViewMode::Email => vec![
-                    Command::message(Message::Email(EmailMessage::Search(model.ui_state.search.query.clone())))
-                ],
-                ViewMode::Contacts => vec![
-                    Command::message(Message::Contacts(ContactsMessage::Search(model.ui_state.search.query.clone())))
-                ],
-                ViewMode::Notes => vec![
-                    Command::message(Message::Notes(NotesMessage::Search(model.ui_state.search.query.clone())))
-                ],
+                ViewMode::Email => vec![Command::message(Message::Email(EmailMessage::Search(
+                    model.ui_state.search.query.clone(),
+                )))],
+                ViewMode::Contacts => vec![Command::message(Message::Contacts(
+                    ContactsMessage::Search(model.ui_state.search.query.clone()),
+                ))],
+                ViewMode::Notes => vec![Command::message(Message::Notes(NotesMessage::Search(
+                    model.ui_state.search.query.clone(),
+                )))],
                 _ => vec![],
             };
-            
+
             UpdateResult::new(model, commands)
         }
-        
+
         UIMessage::SearchSubmit => {
             // Search already triggered by SearchChanged
             UpdateResult::just_model(model)
         }
-        
+
         UIMessage::SearchClear => {
             model.ui_state.search.query.clear();
             model.ui_state.search.results_count = None;
             model.ui_state.search.loading = false;
-            
+
             // Reload default view data
             let commands = match model.current_view {
-                ViewMode::Email => vec![
-                    Command::message(Message::Email(EmailMessage::LoadMessages(
-                        model.email_state.current_folder.clone().unwrap_or_else(|| "INBOX".to_string())
-                    )))
-                ],
-                ViewMode::Contacts => vec![
-                    Command::message(Message::Contacts(ContactsMessage::LoadContacts))
-                ],
-                ViewMode::Notes => vec![
-                    Command::message(Message::Notes(NotesMessage::LoadNotes))
-                ],
+                ViewMode::Email => vec![Command::message(Message::Email(
+                    EmailMessage::LoadMessages(
+                        model
+                            .email_state
+                            .current_folder
+                            .clone()
+                            .unwrap_or_else(|| "INBOX".to_string()),
+                    ),
+                ))],
+                ViewMode::Contacts => vec![Command::message(Message::Contacts(
+                    ContactsMessage::LoadContacts,
+                ))],
+                ViewMode::Notes => vec![Command::message(Message::Notes(NotesMessage::LoadNotes))],
                 _ => vec![],
             };
-            
+
             UpdateResult::new(model, commands)
         }
     }
@@ -303,14 +316,14 @@ fn update_email(mut model: Model, message: EmailMessage) -> UpdateResult<Model> 
         EmailMessage::LoadMessages(folder_name) => {
             model.email_state.current_folder = Some(folder_name.clone());
             model.email_state.loading = true;
-            
-            let commands = vec![
-                Command::database(crate::tea::command::DatabaseCommand::LoadMessages(folder_name)),
-            ];
-            
+
+            let commands = vec![Command::database(
+                crate::tea::command::DatabaseCommand::LoadMessages(folder_name),
+            )];
+
             UpdateResult::new(model, commands)
         }
-        
+
         EmailMessage::MessagesLoaded(_messages) => {
             // Convert from crate::email::EmailMessage to model storage
             // For now, we'll store them as-is but in a real implementation
@@ -320,31 +333,29 @@ fn update_email(mut model: Model, message: EmailMessage) -> UpdateResult<Model> 
             model.email_state.sync_status = crate::tea::message::SyncStatus::Success;
             UpdateResult::just_model(model)
         }
-        
+
         EmailMessage::LoadingFailed(error) => {
             model.email_state.loading = false;
             model.email_state.sync_status = crate::tea::message::SyncStatus::Error;
-            
-            let commands = vec![
-                Command::ui(crate::tea::command::UICommand::ShowToast(
-                    format!("Failed to load messages: {}", error),
-                    ToastLevel::Error,
-                )),
-            ];
-            
+
+            let commands = vec![Command::ui(crate::tea::command::UICommand::ShowToast(
+                format!("Failed to load messages: {}", error),
+                ToastLevel::Error,
+            ))];
+
             UpdateResult::new(model, commands)
         }
-        
+
         EmailMessage::SelectMessage(message_id) => {
             model.email_state.selected_message = Some(message_id);
             UpdateResult::just_model(model)
         }
-        
+
         EmailMessage::OpenMessage(message_id) => {
             model.email_state.reading_message = Some(message_id);
             UpdateResult::just_model(model)
         }
-        
+
         EmailMessage::ComposeNew => {
             model.email_state.compose = Some(ComposeState {
                 to: String::new(),
@@ -358,7 +369,7 @@ fn update_email(mut model: Model, message: EmailMessage) -> UpdateResult<Model> 
             });
             UpdateResult::just_model(model)
         }
-        
+
         EmailMessage::Reply(message_id) => {
             // TODO: Pre-fill compose state with reply data
             model.email_state.compose = Some(ComposeState {
@@ -366,14 +377,14 @@ fn update_email(mut model: Model, message: EmailMessage) -> UpdateResult<Model> 
                 cc: String::new(),
                 bcc: String::new(),
                 subject: String::new(), // TODO: Add "Re: " prefix
-                body: String::new(), // TODO: Quote original message
+                body: String::new(),    // TODO: Quote original message
                 in_reply_to: Some(message_id),
                 attachments: Vec::new(),
                 current_field: ComposeField::Body,
             });
             UpdateResult::just_model(model)
         }
-        
+
         EmailMessage::Forward(_message_id) => {
             // TODO: Pre-fill compose state with forward data
             model.email_state.compose = Some(ComposeState {
@@ -381,75 +392,77 @@ fn update_email(mut model: Model, message: EmailMessage) -> UpdateResult<Model> 
                 cc: String::new(),
                 bcc: String::new(),
                 subject: String::new(), // TODO: Add "Fwd: " prefix
-                body: String::new(), // TODO: Include original message
+                body: String::new(),    // TODO: Include original message
                 in_reply_to: None,
                 attachments: Vec::new(), // TODO: Include original attachments
                 current_field: ComposeField::To,
             });
             UpdateResult::just_model(model)
         }
-        
+
         EmailMessage::Delete(message_id) => {
-            let commands = vec![
-                Command::database(crate::tea::command::DatabaseCommand::DeleteMessage(message_id)),
-            ];
+            let commands = vec![Command::database(
+                crate::tea::command::DatabaseCommand::DeleteMessage(message_id),
+            )];
             UpdateResult::new(model, commands)
         }
-        
+
         EmailMessage::ToggleRead(message_id) => {
-            let commands = vec![
-                Command::database(crate::tea::command::DatabaseCommand::UpdateMessageFlags(
-                    message_id, 
-                    vec!["\\Seen".to_string()]
-                )),
-            ];
+            let commands = vec![Command::database(
+                crate::tea::command::DatabaseCommand::UpdateMessageFlags(
+                    message_id,
+                    vec!["\\Seen".to_string()],
+                ),
+            )];
             UpdateResult::new(model, commands)
         }
-        
+
         EmailMessage::ToggleFlag(message_id) => {
-            let commands = vec![
-                Command::database(crate::tea::command::DatabaseCommand::UpdateMessageFlags(
-                    message_id, 
-                    vec!["\\Flagged".to_string()]
-                )),
-            ];
+            let commands = vec![Command::database(
+                crate::tea::command::DatabaseCommand::UpdateMessageFlags(
+                    message_id,
+                    vec!["\\Flagged".to_string()],
+                ),
+            )];
             UpdateResult::new(model, commands)
         }
-        
+
         EmailMessage::MoveToFolder(_message_id, _folder_name) => {
             // TODO: Implement message move
             UpdateResult::just_model(model)
         }
-        
+
         EmailMessage::SyncFolder(folder_name) => {
-            let commands = vec![
-                Command::network(crate::tea::command::NetworkCommand::SyncIMAPFolder(
-                    model.account_state.active_account.clone().unwrap_or_default(),
+            let commands = vec![Command::network(
+                crate::tea::command::NetworkCommand::SyncIMAPFolder(
+                    model
+                        .account_state
+                        .active_account
+                        .clone()
+                        .unwrap_or_default(),
                     folder_name,
-                )),
-            ];
+                ),
+            )];
             UpdateResult::new(model, commands)
         }
-        
+
         EmailMessage::SyncAll => {
             model.email_state.sync_status = crate::tea::message::SyncStatus::Syncing;
-            
+
             let commands = if let Some(account_id) = &model.account_state.active_account {
-                vec![
-                    Command::network(crate::tea::command::NetworkCommand::ConnectIMAP(account_id.clone())),
-                ]
+                vec![Command::network(
+                    crate::tea::command::NetworkCommand::ConnectIMAP(account_id.clone()),
+                )]
             } else {
-                vec![
-                    Command::ui(crate::tea::command::UICommand::ShowToast(
-                        "No active account for sync".to_string(),
-                        ToastLevel::Warning,
-                    )),
-                ]
+                vec![Command::ui(crate::tea::command::UICommand::ShowToast(
+                    "No active account for sync".to_string(),
+                    ToastLevel::Warning,
+                ))]
             };
-            
+
             UpdateResult::new(model, commands)
         }
-        
+
         EmailMessage::Search(_query) => {
             model.ui_state.search.loading = true;
             // TODO: Implement email search
@@ -463,14 +476,14 @@ fn update_calendar(mut model: Model, message: CalendarMessage) -> UpdateResult<M
     match message {
         CalendarMessage::LoadEvents(start_date, end_date) => {
             model.calendar_state.loading = true;
-            
-            let commands = vec![
-                Command::database(crate::tea::command::DatabaseCommand::LoadEvents(start_date, end_date)),
-            ];
-            
+
+            let commands = vec![Command::database(
+                crate::tea::command::DatabaseCommand::LoadEvents(start_date, end_date),
+            )];
+
             UpdateResult::new(model, commands)
         }
-        
+
         CalendarMessage::EventsLoaded(events) => {
             model.calendar_state.events = events;
             model.calendar_state.loading = false;
@@ -478,29 +491,27 @@ fn update_calendar(mut model: Model, message: CalendarMessage) -> UpdateResult<M
             model.calendar_state.sync_status = crate::tea::message::SyncStatus::Success;
             UpdateResult::just_model(model)
         }
-        
+
         CalendarMessage::LoadingFailed(error) => {
             model.calendar_state.loading = false;
             model.calendar_state.sync_status = crate::tea::message::SyncStatus::Error;
-            
-            let commands = vec![
-                Command::ui(crate::tea::command::UICommand::ShowToast(
-                    format!("Failed to load events: {}", error),
-                    ToastLevel::Error,
-                )),
-            ];
-            
+
+            let commands = vec![Command::ui(crate::tea::command::UICommand::ShowToast(
+                format!("Failed to load events: {}", error),
+                ToastLevel::Error,
+            ))];
+
             UpdateResult::new(model, commands)
         }
-        
+
         CalendarMessage::SelectEvent(event_id) => {
             model.calendar_state.selected_event = Some(event_id);
             UpdateResult::just_model(model)
         }
-        
+
         CalendarMessage::ChangeView(view) => {
             model.calendar_state.view = view;
-            
+
             // Load events for new view if needed
             let (start_date, end_date) = match view {
                 CalendarView::Day => {
@@ -509,7 +520,8 @@ fn update_calendar(mut model: Model, message: CalendarMessage) -> UpdateResult<M
                 }
                 CalendarView::Week => {
                     let date = model.calendar_state.current_date;
-                    let start = date - chrono::Duration::days(date.weekday().num_days_from_monday() as i64);
+                    let start =
+                        date - chrono::Duration::days(date.weekday().num_days_from_monday() as i64);
                     let end = start + chrono::Duration::days(6);
                     (start, end)
                 }
@@ -517,9 +529,11 @@ fn update_calendar(mut model: Model, message: CalendarMessage) -> UpdateResult<M
                     let date = model.calendar_state.current_date;
                     let start = date.with_day(1).unwrap();
                     let end = if date.month() == 12 {
-                        chrono::NaiveDate::from_ymd_opt(date.year() + 1, 1, 1).unwrap() - chrono::Duration::days(1)
+                        chrono::NaiveDate::from_ymd_opt(date.year() + 1, 1, 1).unwrap()
+                            - chrono::Duration::days(1)
                     } else {
-                        chrono::NaiveDate::from_ymd_opt(date.year(), date.month() + 1, 1).unwrap() - chrono::Duration::days(1)
+                        chrono::NaiveDate::from_ymd_opt(date.year(), date.month() + 1, 1).unwrap()
+                            - chrono::Duration::days(1)
                     };
                     (start, end)
                 }
@@ -528,38 +542,38 @@ fn update_calendar(mut model: Model, message: CalendarMessage) -> UpdateResult<M
                     (date, date + chrono::Duration::days(30))
                 }
             };
-            
-            let commands = vec![
-                Command::message(Message::Calendar(CalendarMessage::LoadEvents(start_date, end_date))),
-            ];
-            
+
+            let commands = vec![Command::message(Message::Calendar(
+                CalendarMessage::LoadEvents(start_date, end_date),
+            ))];
+
             UpdateResult::new(model, commands)
         }
-        
+
         CalendarMessage::NavigateToDate(date) => {
             model.calendar_state.current_date = date;
-            
+
             // Reload events for new date
             let commands = match model.calendar_state.view {
-                CalendarView::Day => vec![
-                    Command::message(Message::Calendar(CalendarMessage::LoadEvents(date, date))),
-                ],
+                CalendarView::Day => vec![Command::message(Message::Calendar(
+                    CalendarMessage::LoadEvents(date, date),
+                ))],
                 _ => vec![], // Other views will handle date navigation differently
             };
-            
+
             UpdateResult::new(model, commands)
         }
-        
+
         CalendarMessage::SyncCalendar => {
             model.calendar_state.sync_status = crate::tea::message::SyncStatus::Syncing;
-            
-            let commands = vec![
-                Command::network(crate::tea::command::NetworkCommand::SyncCalendar("default".to_string())),
-            ];
-            
+
+            let commands = vec![Command::network(
+                crate::tea::command::NetworkCommand::SyncCalendar("default".to_string()),
+            )];
+
             UpdateResult::new(model, commands)
         }
-        
+
         _ => {
             // TODO: Implement remaining calendar message handlers
             UpdateResult::just_model(model)
@@ -572,14 +586,14 @@ fn update_contacts(mut model: Model, message: ContactsMessage) -> UpdateResult<M
     match message {
         ContactsMessage::LoadContacts => {
             model.contacts_state.loading = true;
-            
-            let commands = vec![
-                Command::database(crate::tea::command::DatabaseCommand::LoadContacts),
-            ];
-            
+
+            let commands = vec![Command::database(
+                crate::tea::command::DatabaseCommand::LoadContacts,
+            )];
+
             UpdateResult::new(model, commands)
         }
-        
+
         ContactsMessage::ContactsLoaded(contacts) => {
             model.contacts_state.contacts = contacts;
             model.contacts_state.loading = false;
@@ -587,38 +601,40 @@ fn update_contacts(mut model: Model, message: ContactsMessage) -> UpdateResult<M
             model.contacts_state.sync_status = crate::tea::message::SyncStatus::Success;
             UpdateResult::just_model(model)
         }
-        
+
         ContactsMessage::LoadingFailed(error) => {
             model.contacts_state.loading = false;
             model.contacts_state.sync_status = crate::tea::message::SyncStatus::Error;
-            
-            let commands = vec![
-                Command::ui(crate::tea::command::UICommand::ShowToast(
-                    format!("Failed to load contacts: {}", error),
-                    ToastLevel::Error,
-                )),
-            ];
-            
+
+            let commands = vec![Command::ui(crate::tea::command::UICommand::ShowToast(
+                format!("Failed to load contacts: {}", error),
+                ToastLevel::Error,
+            ))];
+
             UpdateResult::new(model, commands)
         }
-        
+
         ContactsMessage::SelectContact(contact_id) => {
             model.contacts_state.selected_contact = Some(contact_id);
             UpdateResult::just_model(model)
         }
-        
+
         ContactsMessage::SyncContacts => {
             model.contacts_state.sync_status = crate::tea::message::SyncStatus::Syncing;
-            
-            let commands = vec![
-                Command::network(crate::tea::command::NetworkCommand::SyncContacts(
-                    model.account_state.active_account.clone().unwrap_or_default()
-                )),
-            ];
-            
+
+            let commands = vec![Command::network(
+                crate::tea::command::NetworkCommand::SyncContacts(
+                    model
+                        .account_state
+                        .active_account
+                        .clone()
+                        .unwrap_or_default(),
+                ),
+            )];
+
             UpdateResult::new(model, commands)
         }
-        
+
         _ => {
             // TODO: Implement remaining contacts message handlers
             UpdateResult::just_model(model)
@@ -634,24 +650,27 @@ fn update_account(mut model: Model, message: AccountMessage) -> UpdateResult<Mod
             // TODO: Load accounts from storage
             UpdateResult::just_model(model)
         }
-        
+
         AccountMessage::AccountsLoaded(accounts) => {
             model.account_state.accounts = accounts;
             model.account_state.loading = false;
-            
+
             // Set first account as active if none selected
-            if model.account_state.active_account.is_none() && !model.account_state.accounts.is_empty() {
-                model.account_state.active_account = Some(model.account_state.accounts[0].account_id.clone());
+            if model.account_state.active_account.is_none()
+                && !model.account_state.accounts.is_empty()
+            {
+                model.account_state.active_account =
+                    Some(model.account_state.accounts[0].account_id.clone());
             }
-            
+
             UpdateResult::just_model(model)
         }
-        
+
         AccountMessage::SyncStatusChanged(account_id, status) => {
             model.account_state.sync_status.insert(account_id, status);
             UpdateResult::just_model(model)
         }
-        
+
         _ => {
             // TODO: Implement remaining account message handlers
             UpdateResult::just_model(model)
@@ -663,48 +682,50 @@ fn update_account(mut model: Model, message: AccountMessage) -> UpdateResult<Mod
 fn update_background(mut model: Model, message: BackgroundMessage) -> UpdateResult<Model> {
     match message {
         BackgroundMessage::TaskStarted(task_id) => {
-            model.background_state.tasks.insert(task_id.clone(), TaskState {
-                name: task_id.clone(),
-                started_at: Instant::now(),
-                progress: None,
-                status: TaskStatus::Running,
-            });
+            model.background_state.tasks.insert(
+                task_id.clone(),
+                TaskState {
+                    name: task_id.clone(),
+                    started_at: Instant::now(),
+                    progress: None,
+                    status: TaskStatus::Running,
+                },
+            );
             model.background_state.processing = true;
             UpdateResult::just_model(model)
         }
-        
+
         BackgroundMessage::TaskCompleted(task_id) => {
             if let Some(task) = model.background_state.tasks.get_mut(&task_id) {
                 task.status = TaskStatus::Completed;
             }
-            
+
             // Check if all tasks are complete
-            let all_complete = model.background_state.tasks.values().all(|task| {
-                matches!(task.status, TaskStatus::Completed | TaskStatus::Failed(_))
-            });
-            
+            let all_complete =
+                model.background_state.tasks.values().all(|task| {
+                    matches!(task.status, TaskStatus::Completed | TaskStatus::Failed(_))
+                });
+
             if all_complete {
                 model.background_state.processing = false;
             }
-            
+
             UpdateResult::just_model(model)
         }
-        
+
         BackgroundMessage::TaskFailed(task_id, error) => {
             if let Some(task) = model.background_state.tasks.get_mut(&task_id) {
                 task.status = TaskStatus::Failed(error.clone());
             }
-            
-            let commands = vec![
-                Command::ui(crate::tea::command::UICommand::ShowToast(
-                    format!("Task failed: {}", error),
-                    ToastLevel::Error,
-                )),
-            ];
-            
+
+            let commands = vec![Command::ui(crate::tea::command::UICommand::ShowToast(
+                format!("Task failed: {}", error),
+                ToastLevel::Error,
+            ))];
+
             UpdateResult::new(model, commands)
         }
-        
+
         BackgroundMessage::TaskProgress(task_id, current, total) => {
             if let Some(task) = model.background_state.tasks.get_mut(&task_id) {
                 task.progress = Some((current, total));
@@ -728,10 +749,10 @@ fn update_notification(model: Model, message: NotificationMessage) -> UpdateResu
                     format!("From: {}\n{}", sender, subject),
                 )),
             ];
-            
+
             UpdateResult::new(model, commands)
         }
-        
+
         NotificationMessage::CalendarReminder(event_title, time) => {
             let commands = vec![
                 Command::ui(crate::tea::command::UICommand::ShowToast(
@@ -743,31 +764,34 @@ fn update_notification(model: Model, message: NotificationMessage) -> UpdateResu
                     format!("{} at {}", event_title, time),
                 )),
             ];
-            
+
             UpdateResult::new(model, commands)
         }
-        
+
         NotificationMessage::System(message) => {
-            let commands = vec![
-                Command::ui(crate::tea::command::UICommand::ShowToast(message, ToastLevel::Info)),
-            ];
-            
+            let commands = vec![Command::ui(crate::tea::command::UICommand::ShowToast(
+                message,
+                ToastLevel::Info,
+            ))];
+
             UpdateResult::new(model, commands)
         }
-        
+
         NotificationMessage::Error(message) => {
-            let commands = vec![
-                Command::ui(crate::tea::command::UICommand::ShowToast(message, ToastLevel::Error)),
-            ];
-            
+            let commands = vec![Command::ui(crate::tea::command::UICommand::ShowToast(
+                message,
+                ToastLevel::Error,
+            ))];
+
             UpdateResult::new(model, commands)
         }
-        
+
         NotificationMessage::Success(message) => {
-            let commands = vec![
-                Command::ui(crate::tea::command::UICommand::ShowToast(message, ToastLevel::Success)),
-            ];
-            
+            let commands = vec![Command::ui(crate::tea::command::UICommand::ShowToast(
+                message,
+                ToastLevel::Success,
+            ))];
+
             UpdateResult::new(model, commands)
         }
     }
@@ -776,129 +800,125 @@ fn update_notification(model: Model, message: NotificationMessage) -> UpdateResu
 /// Handle notes messages
 fn update_notes(mut model: Model, message: NotesMessage) -> UpdateResult<Model> {
     use crate::plugins::notes::tui::TUIMode as NotesTUIMode;
-    
+
     match message {
         NotesMessage::LoadNotes => {
             model.notes_state.loading = true;
             model.notes_state.error_message = None;
-            let commands = vec![
-                Command::notes(crate::tea::command::NotesCommand::LoadNotes),
-            ];
+            let commands = vec![Command::notes(crate::tea::command::NotesCommand::LoadNotes)];
             UpdateResult::new(model, commands)
         }
-        
+
         NotesMessage::NotesLoaded(notes) => {
             model.notes_state.notes = notes;
             model.notes_state.loading = false;
             model.notes_state.status_message = Some("Notes loaded successfully".to_string());
             UpdateResult::just_model(model)
         }
-        
+
         NotesMessage::LoadingFailed(error) => {
             model.notes_state.loading = false;
             model.notes_state.error_message = Some(error);
             UpdateResult::just_model(model)
         }
-        
+
         NotesMessage::SelectNote(note_id) => {
             model.notes_state.selected_note = Some(note_id);
             UpdateResult::just_model(model)
         }
-        
+
         NotesMessage::OpenNote(note_id) => {
             model.notes_state.viewing_note = Some(note_id);
             model.notes_state.tui_mode = NotesTUIMode::View;
             UpdateResult::just_model(model)
         }
-        
+
         NotesMessage::CreateNote => {
             model.notes_state.tui_mode = NotesTUIMode::Create;
             UpdateResult::just_model(model)
         }
-        
+
         NotesMessage::CreateNoteWithContent(title, content) => {
-            let commands = vec![
-                Command::notes(crate::tea::command::NotesCommand::CreateNoteWithContent(title, content)),
-            ];
+            let commands = vec![Command::notes(
+                crate::tea::command::NotesCommand::CreateNoteWithContent(title, content),
+            )];
             UpdateResult::new(model, commands)
         }
-        
+
         NotesMessage::EditNote(note_id) => {
             model.notes_state.tui_mode = NotesTUIMode::Edit;
             model.notes_state.viewing_note = Some(note_id);
             UpdateResult::just_model(model)
         }
-        
+
         NotesMessage::DeleteNote(note_id) => {
-            let commands = vec![
-                Command::notes(crate::tea::command::NotesCommand::DeleteNote(note_id)),
-            ];
+            let commands = vec![Command::notes(
+                crate::tea::command::NotesCommand::DeleteNote(note_id),
+            )];
             UpdateResult::new(model, commands)
         }
-        
+
         NotesMessage::SaveNote(note_id, content) => {
-            let commands = vec![
-                Command::notes(crate::tea::command::NotesCommand::SaveNote(note_id, content)),
-            ];
+            let commands = vec![Command::notes(crate::tea::command::NotesCommand::SaveNote(
+                note_id, content,
+            ))];
             UpdateResult::new(model, commands)
         }
-        
+
         NotesMessage::Search(query) => {
             model.notes_state.search_query = query.clone();
             model.notes_state.tui_mode = NotesTUIMode::Search;
-            let commands = vec![
-                Command::notes(crate::tea::command::NotesCommand::Search(query)),
-            ];
+            let commands = vec![Command::notes(crate::tea::command::NotesCommand::Search(
+                query,
+            ))];
             UpdateResult::new(model, commands)
         }
-        
+
         NotesMessage::ConvertEmailToNote(email_id) => {
-            let commands = vec![
-                Command::notes(crate::tea::command::NotesCommand::ConvertEmailToNote(email_id)),
-            ];
+            let commands = vec![Command::notes(
+                crate::tea::command::NotesCommand::ConvertEmailToNote(email_id),
+            )];
             UpdateResult::new(model, commands)
         }
-        
+
         NotesMessage::ConvertEventToNote(event_id) => {
-            let commands = vec![
-                Command::notes(crate::tea::command::NotesCommand::ConvertEventToNote(event_id)),
-            ];
+            let commands = vec![Command::notes(
+                crate::tea::command::NotesCommand::ConvertEventToNote(event_id),
+            )];
             UpdateResult::new(model, commands)
         }
-        
+
         NotesMessage::ConvertKdeMessageToNote(title, content) => {
-            let commands = vec![
-                Command::notes(crate::tea::command::NotesCommand::ConvertKdeMessageToNote(title, content)),
-            ];
+            let commands = vec![Command::notes(
+                crate::tea::command::NotesCommand::ConvertKdeMessageToNote(title, content),
+            )];
             UpdateResult::new(model, commands)
         }
-        
+
         NotesMessage::SwitchToCreateMode => {
             model.notes_state.tui_mode = NotesTUIMode::Create;
             UpdateResult::just_model(model)
         }
-        
+
         NotesMessage::SwitchToBrowseMode => {
             model.notes_state.tui_mode = NotesTUIMode::Browse;
             UpdateResult::just_model(model)
         }
-        
+
         NotesMessage::SwitchToEditMode(note_id) => {
             model.notes_state.tui_mode = NotesTUIMode::Edit;
             model.notes_state.viewing_note = Some(note_id);
             UpdateResult::just_model(model)
         }
-        
+
         NotesMessage::SwitchToSearchMode => {
             model.notes_state.tui_mode = NotesTUIMode::Search;
             UpdateResult::just_model(model)
         }
-        
+
         NotesMessage::SyncNotes => {
             model.notes_state.loading = true;
-            let commands = vec![
-                Command::notes(crate::tea::command::NotesCommand::SyncNotes),
-            ];
+            let commands = vec![Command::notes(crate::tea::command::NotesCommand::SyncNotes)];
             UpdateResult::new(model, commands)
         }
     }
@@ -906,114 +926,128 @@ fn update_notes(mut model: Model, message: NotesMessage) -> UpdateResult<Model> 
 
 /// Handle KDE Connect messages
 fn update_kde_connect(mut model: Model, message: KdeConnectMessage) -> UpdateResult<Model> {
-    use crate::tea::model::{KdeConnectConnectionStatus, KdeConnectNotification, KdeConnectNotificationType};
-    
+    use crate::tea::model::{
+        KdeConnectConnectionStatus, KdeConnectNotification, KdeConnectNotificationType,
+    };
+
     match message {
         KdeConnectMessage::Initialize => {
             model.kde_connect_state.connection_status = KdeConnectConnectionStatus::Checking;
             model.kde_connect_state.error_message = None;
-            let commands = vec![
-                Command::kde_connect(crate::tea::command::KdeConnectCommand::Initialize),
-            ];
+            let commands = vec![Command::kde_connect(
+                crate::tea::command::KdeConnectCommand::Initialize,
+            )];
             UpdateResult::new(model, commands)
         }
-        
+
         KdeConnectMessage::InitializationComplete => {
             model.kde_connect_state.connection_status = KdeConnectConnectionStatus::Connected;
             model.kde_connect_state.enabled = true;
             UpdateResult::just_model(model)
         }
-        
+
         KdeConnectMessage::InitializationFailed(error) => {
-            model.kde_connect_state.connection_status = KdeConnectConnectionStatus::Error(error.clone());
+            model.kde_connect_state.connection_status =
+                KdeConnectConnectionStatus::Error(error.clone());
             model.kde_connect_state.error_message = Some(error);
             model.kde_connect_state.enabled = false;
             UpdateResult::just_model(model)
         }
-        
+
         KdeConnectMessage::Enable => {
             model.kde_connect_state.enabled = true;
             model.kde_connect_state.connection_status = KdeConnectConnectionStatus::Checking;
-            let commands = vec![
-                Command::kde_connect(crate::tea::command::KdeConnectCommand::Enable),
-            ];
+            let commands = vec![Command::kde_connect(
+                crate::tea::command::KdeConnectCommand::Enable,
+            )];
             UpdateResult::new(model, commands)
         }
-        
+
         KdeConnectMessage::Disable => {
             model.kde_connect_state.enabled = false;
             model.kde_connect_state.connection_status = KdeConnectConnectionStatus::Disabled;
             model.kde_connect_state.active_device = None;
             UpdateResult::just_model(model)
         }
-        
+
         KdeConnectMessage::RefreshDevices => {
             model.kde_connect_state.connection_status = KdeConnectConnectionStatus::Checking;
-            let commands = vec![
-                Command::kde_connect(crate::tea::command::KdeConnectCommand::RefreshDevices),
-            ];
+            let commands = vec![Command::kde_connect(
+                crate::tea::command::KdeConnectCommand::RefreshDevices,
+            )];
             UpdateResult::new(model, commands)
         }
-        
+
         KdeConnectMessage::DevicesRefreshed(devices) => {
             model.kde_connect_state.available_devices = devices;
             model.kde_connect_state.connection_status = KdeConnectConnectionStatus::Available;
             UpdateResult::just_model(model)
         }
-        
+
         KdeConnectMessage::ConnectDevice(device_id) => {
             model.kde_connect_state.connection_status = KdeConnectConnectionStatus::Checking;
-            let commands = vec![
-                Command::kde_connect(crate::tea::command::KdeConnectCommand::ConnectDevice(device_id)),
-            ];
+            let commands = vec![Command::kde_connect(
+                crate::tea::command::KdeConnectCommand::ConnectDevice(device_id),
+            )];
             UpdateResult::new(model, commands)
         }
-        
+
         KdeConnectMessage::DeviceConnected(device_id) => {
             model.kde_connect_state.active_device = Some(device_id);
             model.kde_connect_state.connection_status = KdeConnectConnectionStatus::Connected;
             model.kde_connect_state.error_message = None;
             UpdateResult::just_model(model)
         }
-        
+
         KdeConnectMessage::DeviceConnectionFailed(device_id, error) => {
-            model.kde_connect_state.connection_status = KdeConnectConnectionStatus::Error(error.clone());
-            model.kde_connect_state.error_message = Some(format!("Failed to connect to {}: {}", device_id, error));
+            model.kde_connect_state.connection_status =
+                KdeConnectConnectionStatus::Error(error.clone());
+            model.kde_connect_state.error_message =
+                Some(format!("Failed to connect to {}: {}", device_id, error));
             UpdateResult::just_model(model)
         }
-        
+
         KdeConnectMessage::PairDevice(device_id) => {
-            let commands = vec![
-                Command::kde_connect(crate::tea::command::KdeConnectCommand::PairDevice(device_id)),
-            ];
+            let commands = vec![Command::kde_connect(
+                crate::tea::command::KdeConnectCommand::PairDevice(device_id),
+            )];
             UpdateResult::new(model, commands)
         }
-        
+
         KdeConnectMessage::DevicePaired(device_id) => {
             // Update the device in the available devices list
-            if let Some(device) = model.kde_connect_state.available_devices.iter_mut()
-                .find(|d| d.id == device_id) {
+            if let Some(device) = model
+                .kde_connect_state
+                .available_devices
+                .iter_mut()
+                .find(|d| d.id == device_id)
+            {
                 device.paired = true;
             }
             UpdateResult::just_model(model)
         }
-        
+
         KdeConnectMessage::DevicePairingFailed(device_id, error) => {
-            model.kde_connect_state.error_message = Some(format!("Failed to pair with {}: {}", device_id, error));
+            model.kde_connect_state.error_message =
+                Some(format!("Failed to pair with {}: {}", device_id, error));
             UpdateResult::just_model(model)
         }
-        
+
         KdeConnectMessage::UnpairDevice(device_id) => {
-            let commands = vec![
-                Command::kde_connect(crate::tea::command::KdeConnectCommand::UnpairDevice(device_id)),
-            ];
+            let commands = vec![Command::kde_connect(
+                crate::tea::command::KdeConnectCommand::UnpairDevice(device_id),
+            )];
             UpdateResult::new(model, commands)
         }
-        
+
         KdeConnectMessage::DeviceUnpaired(device_id) => {
             // Update the device in the available devices list
-            if let Some(device) = model.kde_connect_state.available_devices.iter_mut()
-                .find(|d| d.id == device_id) {
+            if let Some(device) = model
+                .kde_connect_state
+                .available_devices
+                .iter_mut()
+                .find(|d| d.id == device_id)
+            {
                 device.paired = false;
             }
             // If this was the active device, clear it
@@ -1022,8 +1056,12 @@ fn update_kde_connect(mut model: Model, message: KdeConnectMessage) -> UpdateRes
             }
             UpdateResult::just_model(model)
         }
-        
-        KdeConnectMessage::SendEmailNotification { sender, subject, preview } => {
+
+        KdeConnectMessage::SendEmailNotification {
+            sender,
+            subject,
+            preview,
+        } => {
             let notification_id = uuid::Uuid::new_v4().to_string();
             let notification = KdeConnectNotification {
                 id: notification_id.clone(),
@@ -1034,19 +1072,25 @@ fn update_kde_connect(mut model: Model, message: KdeConnectMessage) -> UpdateRes
                 retry_count: 0,
                 max_retries: 3,
             };
-            model.kde_connect_state.notification_queue.push(notification);
-            
-            let commands = vec![
-                Command::kde_connect(crate::tea::command::KdeConnectCommand::SendNotification {
+            model
+                .kde_connect_state
+                .notification_queue
+                .push(notification);
+
+            let commands = vec![Command::kde_connect(
+                crate::tea::command::KdeConnectCommand::SendNotification {
                     notification_id,
                     title: format!("📧 New Email from {}", sender),
                     message: format!("Subject: {}\n\n{}", subject, preview),
-                }),
-            ];
+                },
+            )];
             UpdateResult::new(model, commands)
         }
-        
-        KdeConnectMessage::SendCalendarReminder { event_title, start_time } => {
+
+        KdeConnectMessage::SendCalendarReminder {
+            event_title,
+            start_time,
+        } => {
             let notification_id = uuid::Uuid::new_v4().to_string();
             let notification = KdeConnectNotification {
                 id: notification_id.clone(),
@@ -1057,19 +1101,25 @@ fn update_kde_connect(mut model: Model, message: KdeConnectMessage) -> UpdateRes
                 retry_count: 0,
                 max_retries: 3,
             };
-            model.kde_connect_state.notification_queue.push(notification);
-            
-            let commands = vec![
-                Command::kde_connect(crate::tea::command::KdeConnectCommand::SendNotification {
+            model
+                .kde_connect_state
+                .notification_queue
+                .push(notification);
+
+            let commands = vec![Command::kde_connect(
+                crate::tea::command::KdeConnectCommand::SendNotification {
                     notification_id,
                     title: "📅 Calendar Reminder".to_string(),
                     message: format!("Event: {}\nTime: {}", event_title, start_time),
-                }),
-            ];
+                },
+            )];
             UpdateResult::new(model, commands)
         }
-        
-        KdeConnectMessage::SendSyncCompleteNotification { account, new_emails } => {
+
+        KdeConnectMessage::SendSyncCompleteNotification {
+            account,
+            new_emails,
+        } => {
             let notification_id = uuid::Uuid::new_v4().to_string();
             let title = "🔄 Sync Complete".to_string();
             let message = if new_emails > 0 {
@@ -1077,7 +1127,7 @@ fn update_kde_connect(mut model: Model, message: KdeConnectMessage) -> UpdateRes
             } else {
                 format!("Account: {}\nNo new emails", account)
             };
-            
+
             let notification = KdeConnectNotification {
                 id: notification_id.clone(),
                 notification_type: KdeConnectNotificationType::SyncComplete,
@@ -1087,18 +1137,21 @@ fn update_kde_connect(mut model: Model, message: KdeConnectMessage) -> UpdateRes
                 retry_count: 0,
                 max_retries: 3,
             };
-            model.kde_connect_state.notification_queue.push(notification);
-            
-            let commands = vec![
-                Command::kde_connect(crate::tea::command::KdeConnectCommand::SendNotification {
+            model
+                .kde_connect_state
+                .notification_queue
+                .push(notification);
+
+            let commands = vec![Command::kde_connect(
+                crate::tea::command::KdeConnectCommand::SendNotification {
                     notification_id,
                     title,
                     message,
-                }),
-            ];
+                },
+            )];
             UpdateResult::new(model, commands)
         }
-        
+
         KdeConnectMessage::SendNotification { title, message } => {
             let notification_id = uuid::Uuid::new_v4().to_string();
             let notification = KdeConnectNotification {
@@ -1110,97 +1163,108 @@ fn update_kde_connect(mut model: Model, message: KdeConnectMessage) -> UpdateRes
                 retry_count: 0,
                 max_retries: 3,
             };
-            model.kde_connect_state.notification_queue.push(notification);
-            
-            let commands = vec![
-                Command::kde_connect(crate::tea::command::KdeConnectCommand::SendNotification {
+            model
+                .kde_connect_state
+                .notification_queue
+                .push(notification);
+
+            let commands = vec![Command::kde_connect(
+                crate::tea::command::KdeConnectCommand::SendNotification {
                     notification_id,
                     title,
                     message,
-                }),
-            ];
+                },
+            )];
             UpdateResult::new(model, commands)
         }
-        
+
         KdeConnectMessage::NotificationSent(notification_id) => {
             // Remove from queue and update stats
-            model.kde_connect_state.notification_queue.retain(|n| n.id != notification_id);
+            model
+                .kde_connect_state
+                .notification_queue
+                .retain(|n| n.id != notification_id);
             model.kde_connect_state.stats.notifications_sent += 1;
             model.kde_connect_state.stats.last_activity = Some(chrono::Local::now());
             UpdateResult::just_model(model)
         }
-        
+
         KdeConnectMessage::NotificationFailed(notification_id, error) => {
             // Find notification and increment retry count or remove if max retries reached
-            if let Some(notification) = model.kde_connect_state.notification_queue.iter_mut()
-                .find(|n| n.id == notification_id) {
+            if let Some(notification) = model
+                .kde_connect_state
+                .notification_queue
+                .iter_mut()
+                .find(|n| n.id == notification_id)
+            {
                 notification.retry_count += 1;
                 if notification.retry_count >= notification.max_retries {
                     model.kde_connect_state.stats.notifications_failed += 1;
-                    model.kde_connect_state.error_message = Some(format!("Notification failed: {}", error));
+                    model.kde_connect_state.error_message =
+                        Some(format!("Notification failed: {}", error));
                 }
             }
-            model.kde_connect_state.notification_queue.retain(|n| 
-                n.id != notification_id || n.retry_count < n.max_retries
-            );
+            model
+                .kde_connect_state
+                .notification_queue
+                .retain(|n| n.id != notification_id || n.retry_count < n.max_retries);
             UpdateResult::just_model(model)
         }
-        
+
         KdeConnectMessage::FindPhone => {
-            let commands = vec![
-                Command::kde_connect(crate::tea::command::KdeConnectCommand::FindPhone),
-            ];
+            let commands = vec![Command::kde_connect(
+                crate::tea::command::KdeConnectCommand::FindPhone,
+            )];
             UpdateResult::new(model, commands)
         }
-        
+
         KdeConnectMessage::PhoneFindTriggered => {
             model.kde_connect_state.stats.last_activity = Some(chrono::Local::now());
             UpdateResult::just_model(model)
         }
-        
+
         KdeConnectMessage::ShareFile(file_path) => {
-            let commands = vec![
-                Command::kde_connect(crate::tea::command::KdeConnectCommand::ShareFile(file_path)),
-            ];
+            let commands = vec![Command::kde_connect(
+                crate::tea::command::KdeConnectCommand::ShareFile(file_path),
+            )];
             UpdateResult::new(model, commands)
         }
-        
+
         KdeConnectMessage::FileShared(_file_path) => {
             model.kde_connect_state.stats.files_shared += 1;
             model.kde_connect_state.stats.last_activity = Some(chrono::Local::now());
             UpdateResult::just_model(model)
         }
-        
+
         KdeConnectMessage::FileSharingFailed(file_path, error) => {
-            model.kde_connect_state.error_message = Some(format!("Failed to share {}: {}", file_path, error));
+            model.kde_connect_state.error_message =
+                Some(format!("Failed to share {}: {}", file_path, error));
             UpdateResult::just_model(model)
         }
-        
+
         KdeConnectMessage::UpdateConfig(config) => {
             model.kde_connect_state.config = Some(config.clone());
             model.kde_connect_state.enabled = config.enabled;
-            let commands = vec![
-                Command::kde_connect(crate::tea::command::KdeConnectCommand::UpdateConfig(config)),
-            ];
+            let commands = vec![Command::kde_connect(
+                crate::tea::command::KdeConnectCommand::UpdateConfig(config),
+            )];
             UpdateResult::new(model, commands)
         }
-        
-        KdeConnectMessage::ConfigurationUpdated => {
-            UpdateResult::just_model(model)
-        }
-        
+
+        KdeConnectMessage::ConfigurationUpdated => UpdateResult::just_model(model),
+
         KdeConnectMessage::CheckConnectionStatus => {
-            let commands = vec![
-                Command::kde_connect(crate::tea::command::KdeConnectCommand::CheckStatus),
-            ];
+            let commands = vec![Command::kde_connect(
+                crate::tea::command::KdeConnectCommand::CheckStatus,
+            )];
             UpdateResult::new(model, commands)
         }
-        
+
         KdeConnectMessage::ConnectionStatusUpdated(status) => {
             model.kde_connect_state.connection_status = status;
             UpdateResult::just_model(model)
         }
-        
+
         KdeConnectMessage::ClearError => {
             model.kde_connect_state.error_message = None;
             UpdateResult::just_model(model)

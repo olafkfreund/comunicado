@@ -58,7 +58,7 @@ impl BackupManager {
 
     pub async fn execute_backup_plan(&self, plan: &BackupPlan) -> BackupResult<Vec<Uuid>> {
         let mut backup_ids = Vec::new();
-        
+
         for config_id in &plan.execution_order {
             if let Some(_config) = self.configs.get(config_id) {
                 // Execute backup - placeholder implementation

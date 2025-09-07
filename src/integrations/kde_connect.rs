@@ -1,8 +1,8 @@
-use std::process::Stdio;
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
-use tokio::process::Command as AsyncCommand;
+use std::process::Stdio;
 use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::process::Command as AsyncCommand;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KdeConnectConfig {
@@ -68,7 +68,9 @@ impl KdeConnectIntegration {
         }
 
         if !Self::is_available().await {
-            return Err(anyhow!("KDE Connect CLI not found. Please install kdeconnect."));
+            return Err(anyhow!(
+                "KDE Connect CLI not found. Please install kdeconnect."
+            ));
         }
 
         // Refresh devices
@@ -76,12 +78,16 @@ impl KdeConnectIntegration {
 
         if let Some(device_id) = &self.config.device_id {
             if self.is_device_available(device_id).await? {
-                tracing::info!("✅ KDE Connect initialized with device: {} ({})", 
-                    device_id, 
+                tracing::info!(
+                    "✅ KDE Connect initialized with device: {} ({})",
+                    device_id,
                     self.config.device_name.as_deref().unwrap_or("Unknown")
                 );
             } else {
-                tracing::warn!("⚠️ Configured KDE Connect device not available: {}", device_id);
+                tracing::warn!(
+                    "⚠️ Configured KDE Connect device not available: {}",
+                    device_id
+                );
             }
         } else {
             tracing::info!("KDE Connect enabled but no device configured");
@@ -152,18 +158,18 @@ impl KdeConnectIntegration {
         // Expected format: "- DeviceName: device-id (paired and reachable)"
         // or: "- DeviceName: device-id (paired)"
         // or: "- DeviceName: device-id (reachable)"
-        
+
         if let Some(colon_pos) = line.find(':') {
             let name_part = line[..colon_pos].trim_start_matches("- ").trim();
             let rest = &line[colon_pos + 1..].trim();
-            
+
             if let Some(paren_pos) = rest.find('(') {
                 let device_id = rest[..paren_pos].trim();
                 let status = &rest[paren_pos..];
-                
+
                 let paired = status.contains("paired");
                 let reachable = status.contains("reachable");
-                
+
                 return Some(KdeConnectDevice {
                     id: device_id.to_string(),
                     name: name_part.to_string(),
@@ -172,31 +178,50 @@ impl KdeConnectIntegration {
                 });
             }
         }
-        
+
         None
     }
 
     /// Send email notification to configured device
-    pub async fn send_email_notification(&self, sender: &str, subject: &str, preview: &str) -> Result<()> {
-        if !self.config.enabled || !self.config.notification_types.contains(&"new_email".to_string()) {
+    pub async fn send_email_notification(
+        &self,
+        sender: &str,
+        subject: &str,
+        preview: &str,
+    ) -> Result<()> {
+        if !self.config.enabled
+            || !self
+                .config
+                .notification_types
+                .contains(&"new_email".to_string())
+        {
             return Ok(()); // Silently skip if not enabled or configured
         }
 
-        let device_id = self.config.device_id.as_ref()
+        let device_id = self
+            .config
+            .device_id
+            .as_ref()
             .ok_or_else(|| anyhow!("No KDE Connect device configured"))?;
 
         // Create notification content
         let title = format!("📧 New Email from {}", sender);
-        let body = format!("Subject: {}\n\n{}", subject, 
-            if preview.len() > 100 { 
-                format!("{}...", &preview[..97]) 
-            } else { 
-                preview.to_string() 
+        let body = format!(
+            "Subject: {}\n\n{}",
+            subject,
+            if preview.len() > 100 {
+                format!("{}...", &preview[..97])
+            } else {
+                preview.to_string()
             }
         );
 
-        self.send_notification_internal(device_id, &title, &body).await?;
-        tracing::info!("📱 Sent email notification to KDE Connect device: {}", sender);
+        self.send_notification_internal(device_id, &title, &body)
+            .await?;
+        tracing::info!(
+            "📱 Sent email notification to KDE Connect device: {}",
+            sender
+        );
         Ok(())
     }
 
@@ -206,18 +231,27 @@ impl KdeConnectIntegration {
             return Ok(());
         }
 
-        let device_id = self.config.device_id.as_ref()
+        let device_id = self
+            .config
+            .device_id
+            .as_ref()
             .ok_or_else(|| anyhow!("No KDE Connect device configured"))?;
 
-        self.send_notification_internal(device_id, title, message).await?;
+        self.send_notification_internal(device_id, title, message)
+            .await?;
         tracing::debug!("📱 Sent notification via KDE Connect: {}", title);
         Ok(())
     }
 
     /// Internal method to send notification
-    async fn send_notification_internal(&self, device_id: &str, title: &str, message: &str) -> Result<()> {
+    async fn send_notification_internal(
+        &self,
+        device_id: &str,
+        title: &str,
+        message: &str,
+    ) -> Result<()> {
         let notification_text = format!("{}\n{}", title, message);
-        
+
         let output = AsyncCommand::new("kdeconnect-cli")
             .arg("--device-id")
             .arg(device_id)
@@ -228,7 +262,10 @@ impl KdeConnectIntegration {
 
         if !output.status.success() {
             let error = String::from_utf8_lossy(&output.stderr);
-            return Err(anyhow!("Failed to send KDE Connect notification: {}", error));
+            return Err(anyhow!(
+                "Failed to send KDE Connect notification: {}",
+                error
+            ));
         }
 
         Ok(())
@@ -240,7 +277,10 @@ impl KdeConnectIntegration {
             return Err(anyhow!("KDE Connect not enabled"));
         }
 
-        let device_id = self.config.device_id.as_ref()
+        let device_id = self
+            .config
+            .device_id
+            .as_ref()
             .ok_or_else(|| anyhow!("No KDE Connect device configured"))?;
 
         let output = AsyncCommand::new("kdeconnect-cli")
@@ -265,7 +305,10 @@ impl KdeConnectIntegration {
             return Err(anyhow!("KDE Connect not enabled"));
         }
 
-        let device_id = self.config.device_id.as_ref()
+        let device_id = self
+            .config
+            .device_id
+            .as_ref()
             .ok_or_else(|| anyhow!("No KDE Connect device configured"))?;
 
         // Check if file exists
@@ -343,19 +386,29 @@ impl KdeConnectIntegration {
 
     /// Send calendar reminder
     pub async fn send_calendar_reminder(&self, event_title: &str, start_time: &str) -> Result<()> {
-        if !self.config.enabled || !self.config.notification_types.contains(&"calendar_reminder".to_string()) {
+        if !self.config.enabled
+            || !self
+                .config
+                .notification_types
+                .contains(&"calendar_reminder".to_string())
+        {
             return Ok(());
         }
 
         let title = "📅 Calendar Reminder";
         let message = format!("Event: {}\nTime: {}", event_title, start_time);
-        
+
         self.send_notification(title, &message).await
     }
 
     /// Send sync completion notification
     pub async fn send_sync_complete(&self, account: &str, new_emails: usize) -> Result<()> {
-        if !self.config.enabled || !self.config.notification_types.contains(&"sync_complete".to_string()) {
+        if !self.config.enabled
+            || !self
+                .config
+                .notification_types
+                .contains(&"sync_complete".to_string())
+        {
             return Ok(());
         }
 
@@ -365,7 +418,7 @@ impl KdeConnectIntegration {
         } else {
             format!("Account: {}\nNo new emails", account)
         };
-        
+
         self.send_notification(title, &message).await
     }
 }
@@ -378,7 +431,7 @@ mod tests {
     fn test_parse_device_line() {
         let line = "- My Phone: abc123def (paired and reachable)";
         let device = KdeConnectIntegration::parse_device_line(line).unwrap();
-        
+
         assert_eq!(device.name, "My Phone");
         assert_eq!(device.id, "abc123def");
         assert!(device.paired);
@@ -389,7 +442,7 @@ mod tests {
     fn test_parse_device_line_paired_only() {
         let line = "- Tablet: xyz789 (paired)";
         let device = KdeConnectIntegration::parse_device_line(line).unwrap();
-        
+
         assert_eq!(device.name, "Tablet");
         assert_eq!(device.id, "xyz789");
         assert!(device.paired);
@@ -400,6 +453,9 @@ mod tests {
     async fn test_is_available() {
         // This test will pass if KDE Connect is installed, fail otherwise
         // In CI/CD, this would be skipped or mocked
-        println!("KDE Connect available: {}", KdeConnectIntegration::is_available().await);
+        println!(
+            "KDE Connect available: {}",
+            KdeConnectIntegration::is_available().await
+        );
     }
 }

@@ -1,6 +1,6 @@
 //! Performance-optimized caching system
 
-use crate::performance::{PerformanceResult}; // PerformanceError
+use crate::performance::PerformanceResult; // PerformanceError
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -156,10 +156,10 @@ where
     /// Get value from cache
     pub async fn get(&self, key: &K) -> Option<V> {
         let start_time = Instant::now();
-        
+
         let mut cache = self.cache.write().await;
         let mut stats = self.stats.write().await;
-        
+
         if let Some(entry) = cache.get_mut(key) {
             // Check if entry is expired
             if entry.created_at.elapsed() > entry.ttl {
@@ -170,17 +170,17 @@ where
                 // Update access metadata
                 entry.last_accessed = Instant::now();
                 entry.access_count += 1;
-                
+
                 // Update LRU order
                 self.update_lru_order(key).await;
-                
+
                 stats.total_hits += 1;
                 let value = entry.value.clone();
-                
+
                 // Update statistics
                 let access_time = start_time.elapsed().as_micros() as f64;
                 stats.avg_access_time_us = (stats.avg_access_time_us + access_time) / 2.0;
-                
+
                 Some(value)
             }
         } else {
@@ -191,7 +191,8 @@ where
 
     /// Put value in cache
     pub async fn put(&self, key: K, value: V, priority: CachePriority) -> PerformanceResult<()> {
-        self.put_with_ttl(key, value, priority, self.policy.default_ttl).await
+        self.put_with_ttl(key, value, priority, self.policy.default_ttl)
+            .await
     }
 
     /// Put value in cache with custom TTL
@@ -209,8 +210,9 @@ where
         let size_bytes = std::mem::size_of::<V>() + std::mem::size_of::<K>();
 
         // Check if we need to evict entries
-        if cache.len() >= self.policy.max_items || 
-           stats.memory_usage_bytes + size_bytes > self.policy.max_memory_bytes {
+        if cache.len() >= self.policy.max_items
+            || stats.memory_usage_bytes + size_bytes > self.policy.max_memory_bytes
+        {
             self.evict_entries(&mut cache, &mut stats).await?;
         }
 
@@ -242,11 +244,11 @@ where
         if let Some(entry) = cache.remove(key) {
             stats.total_entries = cache.len();
             stats.memory_usage_bytes = stats.memory_usage_bytes.saturating_sub(entry.size_bytes);
-            
+
             // Remove from LRU order
             let mut lru_order = self.lru_order.write().await;
             lru_order.retain(|k| k != key);
-            
+
             Some(entry.value)
         } else {
             None
@@ -261,26 +263,27 @@ where
 
         cache.clear();
         lru_order.clear();
-        
+
         stats.total_entries = 0;
         stats.memory_usage_bytes = 0;
-        
+
         Ok(())
     }
 
     /// Get cache statistics
     pub async fn statistics(&self) -> CacheStatistics {
         let mut stats = self.stats.write().await;
-        
+
         // Update hit ratio
         let total_requests = stats.total_hits + stats.total_misses;
         if total_requests > 0 {
             stats.hit_ratio = stats.total_hits as f64 / total_requests as f64;
         }
-        
+
         // Calculate efficiency score based on hit ratio and access time
-        stats.efficiency_score = stats.hit_ratio * (1.0 / (1.0 + stats.avg_access_time_us / 1000.0));
-        
+        stats.efficiency_score =
+            stats.hit_ratio * (1.0 / (1.0 + stats.avg_access_time_us / 1000.0));
+
         stats.clone()
     }
 
@@ -307,44 +310,44 @@ where
         let mut cache = self.cache.write().await;
         let mut stats = self.stats.write().await;
         let mut lru_order = self.lru_order.write().await;
-        
+
         let now = Instant::now();
         let mut removed_count = 0;
         let mut removed_size = 0;
-        
+
         // Collect expired keys
         let expired_keys: Vec<K> = cache
             .iter()
             .filter(|(_, entry)| now.duration_since(entry.created_at) > entry.ttl)
             .map(|(key, _)| key.clone())
             .collect();
-        
+
         // Remove expired entries
         for key in expired_keys {
             if let Some(entry) = cache.remove(&key) {
                 removed_count += 1;
                 removed_size += entry.size_bytes;
-                
+
                 // Remove from LRU order
                 lru_order.retain(|k| k != &key);
             }
         }
-        
+
         // Update statistics
         stats.total_entries = cache.len();
         stats.memory_usage_bytes = stats.memory_usage_bytes.saturating_sub(removed_size);
         stats.last_cleanup = Some(now);
-        
+
         Ok(removed_count)
     }
 
     /// Update LRU ordering for a key
     async fn update_lru_order(&self, key: &K) {
         let mut lru_order = self.lru_order.write().await;
-        
+
         // Remove key if it exists
         lru_order.retain(|k| k != key);
-        
+
         // Add to front (most recently used)
         lru_order.insert(0, key.clone());
     }
@@ -375,7 +378,7 @@ where
                 self.evict_arc(cache, stats).await?;
             }
         }
-        
+
         Ok(())
     }
 
@@ -386,17 +389,18 @@ where
         stats: &mut CacheStatistics,
     ) -> PerformanceResult<()> {
         let mut lru_order = self.lru_order.write().await;
-        
+
         // Evict from the end (least recently used)
         while cache.len() > self.policy.max_items / 2 && !lru_order.is_empty() {
             if let Some(key) = lru_order.pop() {
                 if let Some(entry) = cache.remove(&key) {
-                    stats.memory_usage_bytes = stats.memory_usage_bytes.saturating_sub(entry.size_bytes);
+                    stats.memory_usage_bytes =
+                        stats.memory_usage_bytes.saturating_sub(entry.size_bytes);
                     stats.eviction_count += 1;
                 }
             }
         }
-        
+
         Ok(())
     }
 
@@ -411,17 +415,18 @@ where
             .iter()
             .map(|(k, v)| (k.clone(), v.access_count))
             .collect();
-        
+
         entries.sort_by_key(|(_, count)| *count);
-        
+
         let evict_count = cache.len().saturating_sub(self.policy.max_items / 2);
         for (key, _) in entries.into_iter().take(evict_count) {
             if let Some(entry) = cache.remove(&key) {
-                stats.memory_usage_bytes = stats.memory_usage_bytes.saturating_sub(entry.size_bytes);
+                stats.memory_usage_bytes =
+                    stats.memory_usage_bytes.saturating_sub(entry.size_bytes);
                 stats.eviction_count += 1;
             }
         }
-        
+
         Ok(())
     }
 
@@ -437,14 +442,15 @@ where
             .filter(|(_, entry)| now.duration_since(entry.created_at) > entry.ttl)
             .map(|(key, _)| key.clone())
             .collect();
-        
+
         for key in expired_keys {
             if let Some(entry) = cache.remove(&key) {
-                stats.memory_usage_bytes = stats.memory_usage_bytes.saturating_sub(entry.size_bytes);
+                stats.memory_usage_bytes =
+                    stats.memory_usage_bytes.saturating_sub(entry.size_bytes);
                 stats.eviction_count += 1;
             }
         }
-        
+
         Ok(())
     }
 
@@ -459,17 +465,18 @@ where
             .iter()
             .map(|(k, v)| (k.clone(), v.created_at))
             .collect();
-        
+
         entries.sort_by_key(|(_, created)| *created);
-        
+
         let evict_count = cache.len().saturating_sub(self.policy.max_items / 2);
         for (key, _) in entries.into_iter().take(evict_count) {
             if let Some(entry) = cache.remove(&key) {
-                stats.memory_usage_bytes = stats.memory_usage_bytes.saturating_sub(entry.size_bytes);
+                stats.memory_usage_bytes =
+                    stats.memory_usage_bytes.saturating_sub(entry.size_bytes);
                 stats.eviction_count += 1;
             }
         }
-        
+
         Ok(())
     }
 
@@ -481,20 +488,21 @@ where
     ) -> PerformanceResult<()> {
         use rand::seq::SliceRandom;
         use rand::thread_rng;
-        
+
         let keys: Vec<K> = cache.keys().cloned().collect();
         let mut rng = thread_rng();
         let mut shuffled_keys = keys;
         shuffled_keys.shuffle(&mut rng);
-        
+
         let evict_count = cache.len().saturating_sub(self.policy.max_items / 2);
         for key in shuffled_keys.into_iter().take(evict_count) {
             if let Some(entry) = cache.remove(&key) {
-                stats.memory_usage_bytes = stats.memory_usage_bytes.saturating_sub(entry.size_bytes);
+                stats.memory_usage_bytes =
+                    stats.memory_usage_bytes.saturating_sub(entry.size_bytes);
                 stats.eviction_count += 1;
             }
         }
-        
+
         Ok(())
     }
 
@@ -506,7 +514,7 @@ where
     ) -> PerformanceResult<()> {
         // Simplified ARC implementation - combines LRU and LFU
         // In practice, this would maintain separate T1, T2, B1, B2 lists
-        
+
         // Calculate score based on both recency and frequency
         let mut entries: Vec<(K, f64)> = cache
             .iter()
@@ -517,17 +525,18 @@ where
                 (k.clone(), combined_score)
             })
             .collect();
-        
+
         entries.sort_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-        
+
         let evict_count = cache.len().saturating_sub(self.policy.max_items / 2);
         for (key, _) in entries.into_iter().take(evict_count) {
             if let Some(entry) = cache.remove(&key) {
-                stats.memory_usage_bytes = stats.memory_usage_bytes.saturating_sub(entry.size_bytes);
+                stats.memory_usage_bytes =
+                    stats.memory_usage_bytes.saturating_sub(entry.size_bytes);
                 stats.eviction_count += 1;
             }
         }
-        
+
         Ok(())
     }
 }
@@ -574,7 +583,7 @@ impl CacheManager {
     /// Optimize cache configuration based on usage patterns
     pub async fn optimize_configuration(&self) -> PerformanceResult<CachePolicy> {
         let stats = self.get_statistics().await;
-        
+
         let optimized_policy = CachePolicy {
             max_items: if stats.hit_ratio > 0.8 {
                 // High hit ratio - can increase capacity
@@ -598,19 +607,19 @@ impl CacheManager {
             hit_ratio_threshold: 0.7,
             cleanup_interval: Duration::from_secs(300),
         };
-        
+
         Ok(optimized_policy)
     }
 
     /// Run maintenance tasks on all cache levels
     pub async fn run_maintenance(&self) -> PerformanceResult<()> {
         tracing::info!("Running cache maintenance tasks");
-        
+
         // Update statistics
         let mut stats = self.stats.write().await;
         stats.last_cleanup = Some(Instant::now());
         stats.total_entries = self.l1_cache.len() + self.l2_cache.len() + self.l3_cache.len();
-        
+
         Ok(())
     }
 }
@@ -619,7 +628,7 @@ impl Default for CachePolicy {
     fn default() -> Self {
         Self {
             max_items: 10000,
-            max_memory_bytes: 256 * 1024 * 1024, // 256MB
+            max_memory_bytes: 256 * 1024 * 1024,    // 256MB
             default_ttl: Duration::from_secs(3600), // 1 hour
             eviction_strategy: CacheEvictionStrategy::LRU,
             enable_compression: false,
@@ -649,57 +658,74 @@ impl Default for CacheStatistics {
 mod tests {
     use super::*;
     use std::time::Duration;
-    
+
     #[tokio::test]
     async fn test_cache_basic_operations() {
         let policy = CachePolicy::default();
         let cache = PerformanceCache::new(policy, CacheLevel::L1Memory);
-        
+
         // Test put and get
-        cache.put("key1".to_string(), "value1".to_string(), CachePriority::Normal).await.unwrap();
+        cache
+            .put(
+                "key1".to_string(),
+                "value1".to_string(),
+                CachePriority::Normal,
+            )
+            .await
+            .unwrap();
         let result = cache.get(&"key1".to_string()).await;
         assert_eq!(result, Some("value1".to_string()));
-        
+
         // Test miss
         let result = cache.get(&"nonexistent".to_string()).await;
         assert_eq!(result, None);
     }
-    
+
     #[tokio::test]
     async fn test_cache_expiration() {
         let policy = CachePolicy::default();
         let cache = PerformanceCache::new(policy, CacheLevel::L1Memory);
-        
+
         // Put with short TTL
-        cache.put_with_ttl(
-            "key1".to_string(),
-            "value1".to_string(),
-            CachePriority::Normal,
-            Duration::from_millis(100),
-        ).await.unwrap();
-        
+        cache
+            .put_with_ttl(
+                "key1".to_string(),
+                "value1".to_string(),
+                CachePriority::Normal,
+                Duration::from_millis(100),
+            )
+            .await
+            .unwrap();
+
         // Should be available immediately
         let result = cache.get(&"key1".to_string()).await;
         assert_eq!(result, Some("value1".to_string()));
-        
+
         // Wait for expiration
         tokio::time::sleep(Duration::from_millis(150)).await;
-        
+
         // Should be expired
         let result = cache.get(&"key1".to_string()).await;
         assert_eq!(result, None);
     }
-    
+
     #[tokio::test]
     async fn test_cache_statistics() {
         let policy = CachePolicy::default();
         let cache = PerformanceCache::new(policy, CacheLevel::L1Memory);
-        
+
         // Generate some cache activity
-        cache.put("key1".to_string(), "value1".to_string(), CachePriority::Normal).await.unwrap();
+        cache
+            .put(
+                "key1".to_string(),
+                "value1".to_string(),
+                CachePriority::Normal,
+            )
+            .await
+            .unwrap();
         cache.get(&"key1".to_string()).await; // Hit
         cache.get(&"nonexistent".to_string()).await; // Miss
-        
+
         let stats = cache.statistics().await;
         assert_eq!(stats.total_hits, 1);
         assert_eq!(stats.total_misses, 1);

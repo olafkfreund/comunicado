@@ -1,12 +1,11 @@
+use crate::calendar::Event;
 /// Central message type for the entire application following TEA pattern
-/// 
+///
 /// All user interactions, system events, and async operation results
 /// flow through this message system for centralized state management.
-
 use crate::cli::StartupMode;
-use crate::oauth2::AccountConfig;
 use crate::contacts::Contact;
-use crate::calendar::Event;
+use crate::oauth2::AccountConfig;
 use crate::plugins::notes::types::{Note, NoteId};
 use crossterm::event::{KeyEvent, MouseEvent};
 
@@ -15,31 +14,31 @@ use crossterm::event::{KeyEvent, MouseEvent};
 pub enum Message {
     /// System-level messages
     System(SystemMessage),
-    
+
     /// UI interaction messages
     UI(UIMessage),
-    
+
     /// Email-related messages
     Email(EmailMessage),
-    
+
     /// Calendar-related messages
     Calendar(CalendarMessage),
-    
+
     /// Contacts-related messages
     Contacts(ContactsMessage),
-    
+
     /// Notes-related messages
     Notes(NotesMessage),
-    
+
     /// KDE Connect integration messages
     KdeConnect(KdeConnectMessage),
-    
+
     /// Account management messages
     Account(AccountMessage),
-    
+
     /// Background task messages
     Background(BackgroundMessage),
-    
+
     /// Notification messages
     Notification(NotificationMessage),
 }
@@ -49,22 +48,22 @@ pub enum Message {
 pub enum SystemMessage {
     /// Application should quit
     Quit,
-    
+
     /// Initialize application with startup mode
     Initialize(StartupMode),
-    
+
     /// Initialization completed
     InitializationComplete,
-    
+
     /// Initialization failed with error
     InitializationFailed(String),
-    
+
     /// Resize terminal
     Resize(u16, u16),
-    
+
     /// Tick for periodic updates
     Tick,
-    
+
     /// Request auto-sync
     AutoSync,
 }
@@ -74,34 +73,34 @@ pub enum SystemMessage {
 pub enum UIMessage {
     /// Keyboard input
     KeyPressed(KeyEvent),
-    
+
     /// Mouse input
     MouseEvent(MouseEvent),
-    
+
     /// Navigate to different view
     Navigate(ViewMode),
-    
+
     /// Toggle UI element
     Toggle(ToggleTarget),
-    
+
     /// Show/hide help overlay
     ToggleHelp,
-    
+
     /// Show context menu
     ShowContextMenu(ContextMenuType),
-    
+
     /// Hide context menu
     HideContextMenu,
-    
+
     /// Show toast notification
     ShowToast(String, ToastLevel),
-    
+
     /// Search query changed
     SearchChanged(String),
-    
+
     /// Search submitted
     SearchSubmit,
-    
+
     /// Clear search
     SearchClear,
 }
@@ -111,46 +110,46 @@ pub enum UIMessage {
 pub enum EmailMessage {
     /// Load messages for folder
     LoadMessages(String),
-    
+
     /// Messages loaded successfully
     MessagesLoaded(Vec<crate::email::EmailMessage>),
-    
+
     /// Message loading failed
     LoadingFailed(String),
-    
+
     /// Select message
     SelectMessage(String),
-    
+
     /// Open message for reading
     OpenMessage(String),
-    
+
     /// Compose new message
     ComposeNew,
-    
+
     /// Reply to message
     Reply(String),
-    
+
     /// Forward message
     Forward(String),
-    
+
     /// Delete message
     Delete(String),
-    
+
     /// Mark as read/unread
     ToggleRead(String),
-    
+
     /// Flag message
     ToggleFlag(String),
-    
+
     /// Move message to folder
     MoveToFolder(String, String),
-    
+
     /// Sync folder
     SyncFolder(String),
-    
+
     /// Sync all folders
     SyncAll,
-    
+
     /// Search in messages
     Search(String),
 }
@@ -160,34 +159,34 @@ pub enum EmailMessage {
 pub enum CalendarMessage {
     /// Load events for date range
     LoadEvents(chrono::NaiveDate, chrono::NaiveDate),
-    
+
     /// Events loaded successfully
     EventsLoaded(Vec<Event>),
-    
+
     /// Event loading failed
     LoadingFailed(String),
-    
+
     /// Select event
     SelectEvent(String),
-    
+
     /// Create new event
     CreateEvent,
-    
+
     /// Edit event
     EditEvent(String),
-    
+
     /// Delete event
     DeleteEvent(String),
-    
+
     /// Change calendar view
     ChangeView(CalendarView),
-    
+
     /// Navigate to date
     NavigateToDate(chrono::NaiveDate),
-    
+
     /// Sync calendar
     SyncCalendar,
-    
+
     /// RSVP to event
     RSVP(String, RsvpResponse),
 }
@@ -197,28 +196,28 @@ pub enum CalendarMessage {
 pub enum ContactsMessage {
     /// Load all contacts
     LoadContacts,
-    
+
     /// Contacts loaded successfully
     ContactsLoaded(Vec<Contact>),
-    
+
     /// Contact loading failed
     LoadingFailed(String),
-    
+
     /// Select contact
     SelectContact(String),
-    
+
     /// Create new contact
     CreateContact,
-    
+
     /// Edit contact
     EditContact(String),
-    
+
     /// Delete contact
     DeleteContact(String),
-    
+
     /// Search contacts
     Search(String),
-    
+
     /// Sync contacts
     SyncContacts,
 }
@@ -228,58 +227,58 @@ pub enum ContactsMessage {
 pub enum NotesMessage {
     /// Load all notes
     LoadNotes,
-    
+
     /// Notes loaded successfully
     NotesLoaded(Vec<Note>),
-    
+
     /// Note loading failed
     LoadingFailed(String),
-    
+
     /// Select note
     SelectNote(NoteId),
-    
+
     /// Open note for viewing
     OpenNote(NoteId),
-    
+
     /// Create new note
     CreateNote,
-    
+
     /// Create note with content
     CreateNoteWithContent(String, String), // title, content
-    
+
     /// Edit note
     EditNote(NoteId),
-    
+
     /// Delete note
     DeleteNote(NoteId),
-    
+
     /// Save note changes
     SaveNote(NoteId, String), // note_id, content
-    
+
     /// Search notes
     Search(String),
-    
+
     /// Convert email to note
     ConvertEmailToNote(String), // email_id
-    
+
     /// Convert calendar event to note
     ConvertEventToNote(String), // event_id
-    
+
     /// Convert KDE Connect message to note
     ConvertKdeMessageToNote(String, String), // title, content
-    
+
     /// Switch to note creation mode
     SwitchToCreateMode,
-    
+
     /// Switch to browse mode
     SwitchToBrowseMode,
-    
+
     /// Switch to edit mode
     SwitchToEditMode(NoteId),
-    
+
     /// Switch to search mode
     SwitchToSearchMode,
-    
+
     /// Sync notes with external sources
     SyncNotes,
 }
@@ -289,107 +288,101 @@ pub enum NotesMessage {
 pub enum KdeConnectMessage {
     /// Initialize KDE Connect integration
     Initialize,
-    
+
     /// Initialization completed successfully
     InitializationComplete,
-    
+
     /// Initialization failed
     InitializationFailed(String),
-    
+
     /// Enable KDE Connect integration
     Enable,
-    
+
     /// Disable KDE Connect integration
     Disable,
-    
+
     /// Refresh available devices
     RefreshDevices,
-    
+
     /// Devices refreshed
     DevicesRefreshed(Vec<crate::integrations::KdeConnectDevice>),
-    
+
     /// Connect to device
     ConnectDevice(String), // device_id
-    
+
     /// Device connected successfully
     DeviceConnected(String), // device_id
-    
+
     /// Device connection failed
     DeviceConnectionFailed(String, String), // device_id, error
-    
+
     /// Pair with device
     PairDevice(String), // device_id
-    
+
     /// Device paired successfully
     DevicePaired(String), // device_id
-    
+
     /// Device pairing failed
     DevicePairingFailed(String, String), // device_id, error
-    
+
     /// Unpair from device
     UnpairDevice(String), // device_id
-    
+
     /// Device unpaired successfully
     DeviceUnpaired(String), // device_id
-    
+
     /// Send email notification
     SendEmailNotification {
         sender: String,
         subject: String,
         preview: String,
     },
-    
+
     /// Send calendar reminder
     SendCalendarReminder {
         event_title: String,
         start_time: String,
     },
-    
+
     /// Send sync complete notification
-    SendSyncCompleteNotification {
-        account: String,
-        new_emails: usize,
-    },
-    
+    SendSyncCompleteNotification { account: String, new_emails: usize },
+
     /// Send custom notification
-    SendNotification {
-        title: String,
-        message: String,
-    },
-    
+    SendNotification { title: String, message: String },
+
     /// Notification sent successfully
     NotificationSent(String), // notification_id
-    
+
     /// Notification failed to send
     NotificationFailed(String, String), // notification_id, error
-    
+
     /// Find phone (ring device)
     FindPhone,
-    
+
     /// Phone finding triggered
     PhoneFindTriggered,
-    
+
     /// Share file with device
     ShareFile(String), // file_path
-    
+
     /// File shared successfully
     FileShared(String), // file_path
-    
+
     /// File sharing failed
     FileSharingFailed(String, String), // file_path, error
-    
+
     /// Update configuration
     UpdateConfig(crate::integrations::KdeConnectConfig),
-    
+
     /// Configuration updated
     ConfigurationUpdated,
-    
+
     /// Check connection status
     CheckConnectionStatus,
-    
+
     /// Connection status updated
     ConnectionStatusUpdated(crate::tea::model::KdeConnectConnectionStatus),
-    
+
     /// Clear error
     ClearError,
 }
@@ -399,19 +392,19 @@ pub enum KdeConnectMessage {
 pub enum AccountMessage {
     /// Load accounts
     LoadAccounts,
-    
+
     /// Accounts loaded
     AccountsLoaded(Vec<AccountConfig>),
-    
+
     /// Add new account
     AddAccount,
-    
+
     /// Remove account
     RemoveAccount(String),
-    
+
     /// Refresh account tokens
     RefreshTokens(String),
-    
+
     /// Account sync status changed
     SyncStatusChanged(String, SyncStatus),
 }
@@ -421,13 +414,13 @@ pub enum AccountMessage {
 pub enum BackgroundMessage {
     /// Task started
     TaskStarted(String),
-    
+
     /// Task completed successfully
     TaskCompleted(String),
-    
+
     /// Task failed with error
     TaskFailed(String, String),
-    
+
     /// Task progress update
     TaskProgress(String, u32, u32),
 }
@@ -437,16 +430,16 @@ pub enum BackgroundMessage {
 pub enum NotificationMessage {
     /// New email notification
     NewEmail(String, String), // sender, subject
-    
+
     /// Calendar reminder
     CalendarReminder(String, String), // event title, time
-    
+
     /// System notification
     System(String),
-    
+
     /// Error notification
     Error(String),
-    
+
     /// Success notification
     Success(String),
 }

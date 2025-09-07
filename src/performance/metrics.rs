@@ -1,6 +1,6 @@
 //! Performance metrics collection and analysis
 
-use super::{PerformanceError, PerformanceResult, PerformanceConfig};
+use super::{PerformanceConfig, PerformanceError, PerformanceResult};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -173,7 +173,7 @@ impl MetricsCollector {
     pub async fn initialize(&mut self) -> PerformanceResult<()> {
         // Register default metrics
         self.register_default_metrics().await?;
-        
+
         // Start collection loop if enabled
         if self.config.monitoring_enabled {
             self.start_collection_loop().await?;
@@ -183,14 +183,19 @@ impl MetricsCollector {
     }
 
     /// Increment a counter metric
-    pub async fn increment_counter(&self, name: &str, value: u64, tags: HashMap<String, String>) -> PerformanceResult<()> {
+    pub async fn increment_counter(
+        &self,
+        name: &str,
+        value: u64,
+        tags: HashMap<String, String>,
+    ) -> PerformanceResult<()> {
         let counters = self.counters.read().await;
-        
+
         if let Some(counter) = counters.get(name) {
             counter.fetch_add(value, Ordering::Relaxed);
         } else {
             drop(counters);
-            
+
             // Create new counter
             let mut counters = self.counters.write().await;
             let new_counter = AtomicU64::new(value);
@@ -198,28 +203,35 @@ impl MetricsCollector {
         }
 
         // Record metric
-        self.registry.record_metric(PerformanceMetrics {
-            name: name.to_string(),
-            metric_type: MetricType::Counter,
-            value: value as f64,
-            unit: "count".to_string(),
-            tags,
-            timestamp: Utc::now(),
-            samples: vec![],
-        }).await;
+        self.registry
+            .record_metric(PerformanceMetrics {
+                name: name.to_string(),
+                metric_type: MetricType::Counter,
+                value: value as f64,
+                unit: "count".to_string(),
+                tags,
+                timestamp: Utc::now(),
+                samples: vec![],
+            })
+            .await;
 
         Ok(())
     }
 
     /// Set a gauge value
-    pub async fn set_gauge(&self, name: &str, value: u64, tags: HashMap<String, String>) -> PerformanceResult<()> {
+    pub async fn set_gauge(
+        &self,
+        name: &str,
+        value: u64,
+        tags: HashMap<String, String>,
+    ) -> PerformanceResult<()> {
         let gauges = self.gauges.read().await;
-        
+
         if let Some(gauge) = gauges.get(name) {
             gauge.store(value, Ordering::Relaxed);
         } else {
             drop(gauges);
-            
+
             // Create new gauge
             let mut gauges = self.gauges.write().await;
             let new_gauge = Arc::new(AtomicU64::new(value));
@@ -227,15 +239,17 @@ impl MetricsCollector {
         }
 
         // Record metric
-        self.registry.record_metric(PerformanceMetrics {
-            name: name.to_string(),
-            metric_type: MetricType::Gauge,
-            value: value as f64,
-            unit: "value".to_string(),
-            tags,
-            timestamp: Utc::now(),
-            samples: vec![],
-        }).await;
+        self.registry
+            .record_metric(PerformanceMetrics {
+                name: name.to_string(),
+                metric_type: MetricType::Gauge,
+                value: value as f64,
+                unit: "value".to_string(),
+                tags,
+                timestamp: Utc::now(),
+                samples: vec![],
+            })
+            .await;
 
         Ok(())
     }
@@ -248,50 +262,65 @@ impl MetricsCollector {
     }
 
     /// End timing an operation and record the duration
-    pub async fn end_timer(&self, name: &str, tags: HashMap<String, String>) -> PerformanceResult<Duration> {
+    pub async fn end_timer(
+        &self,
+        name: &str,
+        tags: HashMap<String, String>,
+    ) -> PerformanceResult<Duration> {
         let mut timers = self.active_timers.write().await;
-        
+
         if let Some(start_time) = timers.remove(name) {
             let duration = start_time.elapsed();
-            
+
             // Record timing metric
-            self.registry.record_metric(PerformanceMetrics {
-                name: name.to_string(),
-                metric_type: MetricType::Timer,
-                value: duration.as_millis() as f64,
-                unit: "milliseconds".to_string(),
-                tags,
-                timestamp: Utc::now(),
-                samples: vec![],
-            }).await;
+            self.registry
+                .record_metric(PerformanceMetrics {
+                    name: name.to_string(),
+                    metric_type: MetricType::Timer,
+                    value: duration.as_millis() as f64,
+                    unit: "milliseconds".to_string(),
+                    tags,
+                    timestamp: Utc::now(),
+                    samples: vec![],
+                })
+                .await;
 
             Ok(duration)
         } else {
-            Err(PerformanceError::MetricsError(
-                format!("Timer '{}' was not started", name)
-            ))
+            Err(PerformanceError::MetricsError(format!(
+                "Timer '{}' was not started",
+                name
+            )))
         }
     }
 
     /// Record histogram value
-    pub async fn record_histogram(&self, name: &str, value: f64, tags: HashMap<String, String>) -> PerformanceResult<()> {
+    pub async fn record_histogram(
+        &self,
+        name: &str,
+        value: f64,
+        tags: HashMap<String, String>,
+    ) -> PerformanceResult<()> {
         let mut histograms = self.histograms.write().await;
-        
-        let histogram = histograms.entry(name.to_string())
+
+        let histogram = histograms
+            .entry(name.to_string())
             .or_insert_with(|| Histogram::new(name));
-        
+
         histogram.record(value);
 
         // Record metric
-        self.registry.record_metric(PerformanceMetrics {
-            name: name.to_string(),
-            metric_type: MetricType::Histogram,
-            value,
-            unit: "value".to_string(),
-            tags,
-            timestamp: Utc::now(),
-            samples: vec![],
-        }).await;
+        self.registry
+            .record_metric(PerformanceMetrics {
+                name: name.to_string(),
+                metric_type: MetricType::Histogram,
+                value,
+                unit: "value".to_string(),
+                tags,
+                timestamp: Utc::now(),
+                samples: vec![],
+            })
+            .await;
 
         Ok(())
     }
@@ -330,14 +359,18 @@ impl MetricsCollector {
     }
 
     /// Create throughput tracker
-    pub fn create_throughput_tracker(&self, name: &str, window_size: Duration) -> ThroughputTracker {
+    pub fn create_throughput_tracker(
+        &self,
+        name: &str,
+        window_size: Duration,
+    ) -> ThroughputTracker {
         ThroughputTracker::new(name, window_size)
     }
 
     /// Get collection statistics
     pub async fn get_statistics(&self) -> PerformanceResult<MetricsStatistics> {
         let metrics = self.get_metrics().await;
-        
+
         let mut counters_count = 0;
         let mut gauges_count = 0;
         let mut histograms_count = 0;
@@ -407,14 +440,18 @@ impl MetricsCollector {
     }
 
     async fn start_collection_loop(&self) -> PerformanceResult<()> {
-        let interval = Duration::from_secs(self.config.optimization_intervals.metrics_collection_seconds);
-        
+        let interval = Duration::from_secs(
+            self.config
+                .optimization_intervals
+                .metrics_collection_seconds,
+        );
+
         tokio::spawn(async move {
             let mut interval_timer = tokio::time::interval(interval);
-            
+
             loop {
                 interval_timer.tick().await;
-                
+
                 // Collect system metrics
                 // This would include CPU, memory, disk, network metrics
                 // Implementation would use system APIs
@@ -435,19 +472,21 @@ impl MetricsRegistry {
 
     async fn record_metric(&self, metric: PerformanceMetrics) {
         let mut metrics = self.metrics.write().await;
-        
+
         // Update existing metric or create new one
-        let entry = metrics.entry(metric.name.clone()).or_insert_with(|| metric.clone());
-        
+        let entry = metrics
+            .entry(metric.name.clone())
+            .or_insert_with(|| metric.clone());
+
         // Add sample to existing metric
         let sample = MetricSample {
             value: metric.value,
             timestamp: metric.timestamp,
             tags: metric.tags,
         };
-        
+
         entry.samples.push(sample);
-        
+
         // Keep only recent samples (last 1000)
         if entry.samples.len() > 1000 {
             entry.samples.drain(0..100);
@@ -460,7 +499,8 @@ impl MetricsRegistry {
     }
 
     fn register_metric_definition(&mut self, definition: MetricDefinition) {
-        self.metric_definitions.insert(definition.name.clone(), definition);
+        self.metric_definitions
+            .insert(definition.name.clone(), definition);
     }
 }
 
@@ -498,12 +538,12 @@ impl LatencyTracker {
     pub async fn record(&self, duration: Duration) {
         let mut samples = self.samples.write().await;
         samples.push(duration);
-        
+
         // Keep only recent samples
         if samples.len() > 10000 {
             samples.drain(0..1000);
         }
-        
+
         // Recalculate percentiles
         let mut percentiles = self.percentiles.write().await;
         *percentiles = Self::calculate_percentiles(&samples);
@@ -519,9 +559,7 @@ impl LatencyTracker {
             return Percentiles::default();
         }
 
-        let mut sorted_samples: Vec<f64> = samples.iter()
-            .map(|d| d.as_millis() as f64)
-            .collect();
+        let mut sorted_samples: Vec<f64> = samples.iter().map(|d| d.as_millis() as f64).collect();
         sorted_samples.sort_by(|a, b| a.partial_cmp(b).unwrap());
 
         let count = sorted_samples.len();
@@ -581,7 +619,7 @@ impl ThroughputTracker {
         // Calculate current rate
         let total_count: u64 = samples.iter().map(|(_, count)| count).sum();
         let rate = total_count * 1000 / self.window_size.as_millis() as u64; // Per second
-        
+
         self.current_rate.store(rate, Ordering::Relaxed);
     }
 
@@ -594,17 +632,50 @@ impl Histogram {
     fn new(name: &str) -> Self {
         // Create default buckets (exponential)
         let buckets = vec![
-            HistogramBucket { upper_bound: 1.0, count: 0 },
-            HistogramBucket { upper_bound: 2.0, count: 0 },
-            HistogramBucket { upper_bound: 5.0, count: 0 },
-            HistogramBucket { upper_bound: 10.0, count: 0 },
-            HistogramBucket { upper_bound: 25.0, count: 0 },
-            HistogramBucket { upper_bound: 50.0, count: 0 },
-            HistogramBucket { upper_bound: 100.0, count: 0 },
-            HistogramBucket { upper_bound: 250.0, count: 0 },
-            HistogramBucket { upper_bound: 500.0, count: 0 },
-            HistogramBucket { upper_bound: 1000.0, count: 0 },
-            HistogramBucket { upper_bound: f64::INFINITY, count: 0 },
+            HistogramBucket {
+                upper_bound: 1.0,
+                count: 0,
+            },
+            HistogramBucket {
+                upper_bound: 2.0,
+                count: 0,
+            },
+            HistogramBucket {
+                upper_bound: 5.0,
+                count: 0,
+            },
+            HistogramBucket {
+                upper_bound: 10.0,
+                count: 0,
+            },
+            HistogramBucket {
+                upper_bound: 25.0,
+                count: 0,
+            },
+            HistogramBucket {
+                upper_bound: 50.0,
+                count: 0,
+            },
+            HistogramBucket {
+                upper_bound: 100.0,
+                count: 0,
+            },
+            HistogramBucket {
+                upper_bound: 250.0,
+                count: 0,
+            },
+            HistogramBucket {
+                upper_bound: 500.0,
+                count: 0,
+            },
+            HistogramBucket {
+                upper_bound: 1000.0,
+                count: 0,
+            },
+            HistogramBucket {
+                upper_bound: f64::INFINITY,
+                count: 0,
+            },
         ];
 
         Self {
@@ -629,7 +700,7 @@ impl Histogram {
     fn calculate_percentiles(&self) -> Percentiles {
         // Simplified percentile calculation from histogram buckets
         // In practice, would use more sophisticated estimation
-        
+
         if self.total_count == 0 {
             return Percentiles::default();
         }
@@ -641,7 +712,9 @@ impl Histogram {
             p90: self.estimate_percentile(90.0),
             p95: self.estimate_percentile(95.0),
             p99: self.estimate_percentile(99.0),
-            max: self.buckets.iter()
+            max: self
+                .buckets
+                .iter()
                 .filter(|b| b.count > 0)
                 .map(|b| b.upper_bound)
                 .fold(0.0, f64::max),

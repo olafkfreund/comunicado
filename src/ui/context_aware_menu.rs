@@ -1,8 +1,7 @@
 /// Context-aware menu system triggered by Ctrl+D
-/// 
+///
 /// Provides hierarchical menus that work reliably across all terminal environments,
 /// replacing problematic F-key and Ctrl+Alt shortcuts that don't work in tmux/screen.
-
 use ratatui::{
     layout::{Alignment, Rect},
     style::{Modifier, Style},
@@ -47,13 +46,13 @@ pub enum ContextAction {
     MarkAsRead,
     MarkAsUnread,
     ShowDrafts,
-    
+
     // Folder actions
     CreateFolder,
     DeleteFolder,
     RefreshFolder,
     MarkAllAsRead,
-    
+
     // Calendar actions
     ShowCalendar,
     CreateEvent,
@@ -66,26 +65,26 @@ pub enum ContextAction {
     WeekView,
     MonthView,
     AgendaView,
-    
+
     // Contacts actions
     ShowContacts,
     CreateContact,
     EditContact,
     DeleteContact,
     SyncContacts,
-    
+
     // Account actions
     AddAccount,
     RemoveAccount,
     RefreshAccount,
     AccountSettings,
-    
+
     // View actions
     ShowSearch,
     ShowSettings,
     ShowKeyboardShortcuts,
     ToggleThreadedView,
-    
+
     // AI actions
     AISummarizeEmail,
     AIComposeAssist,
@@ -140,7 +139,7 @@ impl ContextAwareMenu {
             },
         }
     }
-    
+
     /// Show the context-aware menu for the current context
     pub fn show(&mut self, context: MenuContext) {
         tracing::debug!("Context menu: showing menu with context: {:?}", context);
@@ -151,7 +150,7 @@ impl ContextAwareMenu {
         self.visible = true;
         tracing::debug!("Context menu: menu is now visible");
     }
-    
+
     /// Hide the menu
     pub fn hide(&mut self) {
         tracing::debug!("Context menu: hiding menu");
@@ -160,12 +159,12 @@ impl ContextAwareMenu {
         self.selected_index = 0;
         tracing::debug!("Context menu: menu is now hidden");
     }
-    
+
     /// Check if menu is visible
     pub fn is_visible(&self) -> bool {
         self.visible
     }
-    
+
     /// Navigate up in the current menu
     pub fn navigate_up(&mut self) {
         if let Some(current_menu) = self.menu_stack.last() {
@@ -176,7 +175,7 @@ impl ContextAwareMenu {
             }
         }
     }
-    
+
     /// Navigate down in the current menu
     pub fn navigate_down(&mut self) {
         if let Some(current_menu) = self.menu_stack.last() {
@@ -187,7 +186,7 @@ impl ContextAwareMenu {
             }
         }
     }
-    
+
     /// Navigate back to parent menu
     pub fn navigate_back(&mut self) -> bool {
         if self.menu_stack.len() > 1 {
@@ -198,17 +197,17 @@ impl ContextAwareMenu {
             false
         }
     }
-    
+
     /// Select the current menu item
     pub fn select_current(&mut self) -> Option<ContextAction> {
         let selected_index = self.selected_index;
-        
+
         if let Some(current_menu) = self.menu_stack.last().cloned() {
             if let Some(item) = current_menu.get(selected_index) {
                 if !item.enabled {
                     return None;
                 }
-                
+
                 match &item.action {
                     MenuAction::Execute(action) => {
                         let action_clone = action.clone();
@@ -233,32 +232,30 @@ impl ContextAwareMenu {
             None
         }
     }
-    
+
     /// Generate the main context-aware menu
     fn generate_main_menu(&self) -> Vec<MenuItem> {
         let mut menu = Vec::new();
-        
+
         // Context-aware main categories
         match self.current_context.ui_mode {
-            UIMode::Normal => {
-                match self.current_context.focused_pane {
-                    FocusedPane::MessageList => {
-                        menu.extend(self.generate_email_menu());
-                        menu.extend(self.generate_view_menu());
-                    }
-                    FocusedPane::FolderTree => {
-                        menu.extend(self.generate_folder_menu());
-                        menu.extend(self.generate_email_menu());
-                    }
-                    FocusedPane::AccountSwitcher => {
-                        menu.extend(self.generate_account_menu());
-                        menu.extend(self.generate_email_menu());
-                    }
-                    _ => {
-                        menu.extend(self.generate_email_menu());
-                    }
+            UIMode::Normal => match self.current_context.focused_pane {
+                FocusedPane::MessageList => {
+                    menu.extend(self.generate_email_menu());
+                    menu.extend(self.generate_view_menu());
                 }
-            }
+                FocusedPane::FolderTree => {
+                    menu.extend(self.generate_folder_menu());
+                    menu.extend(self.generate_email_menu());
+                }
+                FocusedPane::AccountSwitcher => {
+                    menu.extend(self.generate_account_menu());
+                    menu.extend(self.generate_email_menu());
+                }
+                _ => {
+                    menu.extend(self.generate_email_menu());
+                }
+            },
             UIMode::Calendar => {
                 menu.extend(self.generate_calendar_menu());
                 menu.extend(self.generate_view_menu());
@@ -274,7 +271,7 @@ impl ContextAwareMenu {
                 menu.extend(self.generate_general_menu());
             }
         }
-        
+
         // Always include navigation options
         menu.push(MenuItem {
             label: "Navigation".to_string(),
@@ -282,7 +279,7 @@ impl ContextAwareMenu {
             action: MenuAction::OpenSubmenu(self.generate_navigation_menu()),
             enabled: true,
         });
-        
+
         // Always include settings
         menu.push(MenuItem {
             label: "Settings & Help".to_string(),
@@ -290,21 +287,21 @@ impl ContextAwareMenu {
             action: MenuAction::OpenSubmenu(self.generate_settings_menu()),
             enabled: true,
         });
-        
+
         menu
     }
-    
+
     /// Generate email-specific menu items
     fn generate_email_menu(&self) -> Vec<MenuItem> {
         let mut menu = Vec::new();
-        
+
         menu.push(MenuItem {
             label: "Compose New Email".to_string(),
             description: "Create and send a new email message".to_string(),
             action: MenuAction::Execute(ContextAction::ComposeNew),
             enabled: true,
         });
-        
+
         if self.current_context.has_selected_message {
             menu.push(MenuItem {
                 label: "Message Actions".to_string(),
@@ -313,17 +310,17 @@ impl ContextAwareMenu {
                 enabled: true,
             });
         }
-        
+
         menu.push(MenuItem {
             label: "Show Drafts".to_string(),
             description: "View and manage draft messages".to_string(),
             action: MenuAction::Execute(ContextAction::ShowDrafts),
             enabled: true,
         });
-        
+
         menu
     }
-    
+
     /// Generate message actions submenu
     fn generate_message_actions_menu(&self) -> Vec<MenuItem> {
         vec![
@@ -371,11 +368,11 @@ impl ContextAwareMenu {
             },
         ]
     }
-    
+
     /// Generate folder-specific menu items
     fn generate_folder_menu(&self) -> Vec<MenuItem> {
         let mut menu = Vec::new();
-        
+
         menu.push(MenuItem {
             label: "Folder Actions".to_string(),
             description: "Manage folders and organization".to_string(),
@@ -407,10 +404,10 @@ impl ContextAwareMenu {
             ]),
             enabled: true,
         });
-        
+
         menu
     }
-    
+
     /// Generate calendar-specific menu items
     fn generate_calendar_menu(&self) -> Vec<MenuItem> {
         vec![
@@ -478,7 +475,7 @@ impl ContextAwareMenu {
             },
         ]
     }
-    
+
     /// Generate contacts-specific menu items
     fn generate_contacts_menu(&self) -> Vec<MenuItem> {
         vec![
@@ -496,7 +493,7 @@ impl ContextAwareMenu {
             },
         ]
     }
-    
+
     /// Generate email viewer specific menu items
     fn generate_email_viewer_menu(&self) -> Vec<MenuItem> {
         vec![
@@ -526,7 +523,7 @@ impl ContextAwareMenu {
             },
         ]
     }
-    
+
     /// Generate AI assistance menu items
     fn generate_ai_menu(&self) -> Vec<MenuItem> {
         vec![
@@ -556,7 +553,7 @@ impl ContextAwareMenu {
             },
         ]
     }
-    
+
     /// Generate account management menu items
     fn generate_account_menu(&self) -> Vec<MenuItem> {
         vec![
@@ -586,7 +583,7 @@ impl ContextAwareMenu {
             },
         ]
     }
-    
+
     /// Generate view management menu items
     fn generate_view_menu(&self) -> Vec<MenuItem> {
         vec![
@@ -604,7 +601,7 @@ impl ContextAwareMenu {
             },
         ]
     }
-    
+
     /// Generate navigation menu items
     fn generate_navigation_menu(&self) -> Vec<MenuItem> {
         vec![
@@ -628,7 +625,7 @@ impl ContextAwareMenu {
             },
         ]
     }
-    
+
     /// Generate settings and help menu items
     fn generate_settings_menu(&self) -> Vec<MenuItem> {
         vec![
@@ -646,7 +643,7 @@ impl ContextAwareMenu {
             },
         ]
     }
-    
+
     /// Generate general menu items (fallback)
     fn generate_general_menu(&self) -> Vec<MenuItem> {
         vec![
@@ -670,37 +667,37 @@ impl ContextAwareMenu {
             },
         ]
     }
-    
+
     /// Render the context menu
     pub fn render(&self, frame: &mut Frame, area: Rect, theme: &Theme) {
         if !self.visible {
             return;
         }
-        
+
         let current_menu = if let Some(menu) = self.menu_stack.last() {
             menu
         } else {
             return;
         };
-        
+
         // Calculate menu size based on content
         let menu_width = 50.min(area.width.saturating_sub(4));
         let menu_height = (current_menu.len() as u16 + 4).min(area.height.saturating_sub(2));
-        
+
         // Center the menu on screen
         let menu_x = (area.width.saturating_sub(menu_width)) / 2;
         let menu_y = (area.height.saturating_sub(menu_height)) / 2;
-        
+
         let menu_area = Rect {
             x: menu_x,
             y: menu_y,
             width: menu_width,
             height: menu_height,
         };
-        
+
         // Clear the background
         frame.render_widget(Clear, menu_area);
-        
+
         // Create menu items
         let items: Vec<ListItem> = current_menu
             .iter()
@@ -712,41 +709,39 @@ impl ContextAwareMenu {
                         .fg(theme.colors.palette.background)
                         .add_modifier(Modifier::BOLD)
                 } else if !item.enabled {
-                    Style::default()
-                        .fg(theme.colors.palette.text_muted)
+                    Style::default().fg(theme.colors.palette.text_muted)
                 } else {
-                    Style::default()
-                        .fg(theme.colors.palette.text_primary)
+                    Style::default().fg(theme.colors.palette.text_primary)
                 };
-                
+
                 let label = if item.enabled {
                     format!(" {} ", item.label)
                 } else {
                     format!(" {} (disabled) ", item.label)
                 };
-                
+
                 ListItem::new(Line::from(Span::styled(label, style)))
             })
             .collect();
-        
+
         // Create the list widget
         let title = if self.menu_stack.len() > 1 {
             "Actions (Esc: Back, Enter: Select)"
         } else {
             "Actions (Esc: Close, Enter: Select)"
         };
-        
+
         let list = List::new(items)
             .block(
                 Block::default()
                     .title(title)
                     .borders(Borders::ALL)
-                    .border_style(theme.colors.palette.border)
+                    .border_style(theme.colors.palette.border),
             )
             .style(Style::default().bg(theme.colors.palette.background));
-        
+
         frame.render_widget(list, menu_area);
-        
+
         // Show description for selected item
         if let Some(item) = current_menu.get(self.selected_index) {
             let desc_area = Rect {
@@ -755,22 +750,24 @@ impl ContextAwareMenu {
                 width: menu_area.width,
                 height: 3,
             };
-            
+
             if desc_area.y + desc_area.height <= area.height {
                 frame.render_widget(Clear, desc_area);
-                
+
                 let description = Paragraph::new(item.description.as_str())
                     .block(
                         Block::default()
                             .borders(Borders::ALL)
-                            .border_style(theme.colors.palette.border)
+                            .border_style(theme.colors.palette.border),
                     )
-                    .style(Style::default()
-                        .bg(theme.colors.palette.background)
-                        .fg(theme.colors.palette.text_secondary))
+                    .style(
+                        Style::default()
+                            .bg(theme.colors.palette.background)
+                            .fg(theme.colors.palette.text_secondary),
+                    )
                     .alignment(Alignment::Center)
                     .wrap(ratatui::widgets::Wrap { trim: true });
-                
+
                 frame.render_widget(description, desc_area);
             }
         }

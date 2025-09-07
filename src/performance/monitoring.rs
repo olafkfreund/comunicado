@@ -27,21 +27,31 @@ impl Default for SystemMonitor {
 }
 
 impl Default for AlertManager {
-    fn default() -> Self { Self }
+    fn default() -> Self {
+        Self
+    }
 }
 
 impl Default for ThresholdMonitor {
-    fn default() -> Self { Self }
+    fn default() -> Self {
+        Self
+    }
 }
 
 impl Default for MonitoringDashboard {
-    fn default() -> Self { Self }
+    fn default() -> Self {
+        Self
+    }
 }
 
 impl Default for SystemMetrics {
-    fn default() -> Self { Self }
+    fn default() -> Self {
+        Self
+    }
 }
 
 impl Default for ResourceTracker {
-    fn default() -> Self { Self }
+    fn default() -> Self {
+        Self
+    }
 }

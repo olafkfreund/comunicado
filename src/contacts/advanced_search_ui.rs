@@ -11,9 +11,7 @@ use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{
-        Block, Borders, Clear, List, ListItem, ListState, Paragraph, Tabs, Wrap,
-    },
+    widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Tabs, Wrap},
     Frame,
 };
 use std::sync::Arc;
@@ -22,14 +20,14 @@ use std::sync::Arc;
 #[allow(dead_code)]
 pub struct AdvancedSearchUI {
     manager: Arc<ContactsManager>,
-    
+
     // Search criteria
     criteria: AdvancedSearchCriteria,
-    
+
     // UI state
     current_tab: SearchTab,
     focused_field: SearchField,
-    
+
     // Form input values
     general_query: String,
     name_query: String,
@@ -37,28 +35,28 @@ pub struct AdvancedSearchUI {
     phone_query: String,
     company_query: String,
     notes_query: String,
-    
+
     // Filter states
     source_filters: Vec<bool>, // [Google, Outlook, Local]
     has_email_filter: Option<bool>,
     has_phone_filter: Option<bool>,
     has_company_filter: Option<bool>,
     has_notes_filter: Option<bool>,
-    
+
     // Options
     fuzzy_matching: bool,
     case_sensitive: bool,
     whole_word_only: bool,
-    
+
     // Results
     search_results: Vec<SearchResult>,
     results_list_state: ListState,
-    
+
     // UI flags
     is_searching: bool,
     search_in_progress: bool,
     show_help: bool,
-    
+
     // Pagination
     current_page: usize,
     results_per_page: usize,
@@ -191,7 +189,11 @@ impl AdvancedSearchUI {
 
         let header = Paragraph::new(title)
             .block(Block::default().borders(Borders::ALL))
-            .style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
+            .style(
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            )
             .alignment(Alignment::Center);
 
         frame.render_widget(header, area);
@@ -200,7 +202,7 @@ impl AdvancedSearchUI {
     /// Render tab bar
     fn render_tabs(&self, frame: &mut Frame, area: Rect) {
         let tab_titles = vec!["Basic Search", "Filters", "Options", "Results"];
-        
+
         let selected_index = match self.current_tab {
             SearchTab::BasicSearch => 0,
             SearchTab::Filters => 1,
@@ -379,7 +381,7 @@ impl AdvancedSearchUI {
         for (_i, (name, &enabled)) in source_names.iter().zip(&self.source_filters).enumerate() {
             let checkbox = if enabled { "☑" } else { "☐" };
             let color = if enabled { Color::Green } else { Color::Gray };
-            
+
             let line = Line::from(vec![
                 Span::styled(format!("{} ", checkbox), Style::default().fg(color)),
                 Span::styled(*name, Style::default().fg(Color::White)),
@@ -413,7 +415,10 @@ impl AdvancedSearchUI {
         } else {
             Color::White
         };
-        filter_lines.push(Line::from(Span::styled(email_text, Style::default().fg(email_color))));
+        filter_lines.push(Line::from(Span::styled(
+            email_text,
+            Style::default().fg(email_color),
+        )));
 
         // Phone filter
         let phone_text = match self.has_phone_filter {
@@ -426,7 +431,10 @@ impl AdvancedSearchUI {
         } else {
             Color::White
         };
-        filter_lines.push(Line::from(Span::styled(phone_text, Style::default().fg(phone_color))));
+        filter_lines.push(Line::from(Span::styled(
+            phone_text,
+            Style::default().fg(phone_color),
+        )));
 
         // Company filter
         let company_text = match self.has_company_filter {
@@ -439,7 +447,10 @@ impl AdvancedSearchUI {
         } else {
             Color::White
         };
-        filter_lines.push(Line::from(Span::styled(company_text, Style::default().fg(company_color))));
+        filter_lines.push(Line::from(Span::styled(
+            company_text,
+            Style::default().fg(company_color),
+        )));
 
         // Notes filter
         let notes_text = match self.has_notes_filter {
@@ -452,7 +463,10 @@ impl AdvancedSearchUI {
         } else {
             Color::White
         };
-        filter_lines.push(Line::from(Span::styled(notes_text, Style::default().fg(notes_color))));
+        filter_lines.push(Line::from(Span::styled(
+            notes_text,
+            Style::default().fg(notes_color),
+        )));
 
         let filters_list = Paragraph::new(filter_lines);
         frame.render_widget(filters_list, inner_area);
@@ -599,13 +613,20 @@ impl AdvancedSearchUI {
                 "Found {} contacts (showing {}-{} of {})",
                 self.total_results,
                 self.current_page * self.results_per_page + 1,
-                std::cmp::min((self.current_page + 1) * self.results_per_page, self.total_results),
+                std::cmp::min(
+                    (self.current_page + 1) * self.results_per_page,
+                    self.total_results
+                ),
                 self.total_results
             )
         };
 
         let summary = Paragraph::new(summary_text)
-            .block(Block::default().borders(Borders::ALL).title("Search Results"))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title("Search Results"),
+            )
             .style(Style::default().fg(Color::Cyan))
             .alignment(Alignment::Center);
         frame.render_widget(summary, chunks[0]);
@@ -630,13 +651,14 @@ impl AdvancedSearchUI {
 
     /// Render results list
     fn render_results_list(&mut self, frame: &mut Frame, area: Rect) {
-        let list_items: Vec<ListItem> = self.search_results
+        let list_items: Vec<ListItem> = self
+            .search_results
             .iter()
             .enumerate()
             .map(|(i, result)| {
                 let contact = &result.contact;
                 let relevance_bar = "█".repeat((result.relevance_score / 2.0) as usize);
-                
+
                 let email_text = contact
                     .primary_email()
                     .map(|e| format!(" <{}>", e.address))
@@ -649,10 +671,7 @@ impl AdvancedSearchUI {
                     .unwrap_or_default();
 
                 let line = Line::from(vec![
-                    Span::styled(
-                        format!("{:2}. ", i + 1),
-                        Style::default().fg(Color::Gray),
-                    ),
+                    Span::styled(format!("{:2}. ", i + 1), Style::default().fg(Color::Gray)),
                     Span::styled(
                         contact.display_name.clone(),
                         Style::default()
@@ -701,8 +720,7 @@ impl AdvancedSearchUI {
 
         let pagination_text = format!(
             "Page {} of {} | ← → Navigate | Enter View | Ctrl+E Export",
-            current_page,
-            total_pages
+            current_page, total_pages
         );
 
         let pagination = Paragraph::new(pagination_text)
@@ -716,7 +734,9 @@ impl AdvancedSearchUI {
     /// Render footer with shortcuts
     fn render_footer(&self, frame: &mut Frame, area: Rect) {
         let shortcuts = match self.current_tab {
-            SearchTab::BasicSearch => "Tab: Next Field | Ctrl+F: Search | Ctrl+C: Clear | F1: Help | Esc: Exit",
+            SearchTab::BasicSearch => {
+                "Tab: Next Field | Ctrl+F: Search | Ctrl+C: Clear | F1: Help | Esc: Exit"
+            }
             SearchTab::Filters => "↑↓: Navigate | Space: Toggle | Tab: Switch Tabs | F1: Help",
             SearchTab::Options => "↑↓: Navigate | Space: Toggle | Ctrl+F: Search | F1: Help",
             SearchTab::Results => "↑↓: Navigate | Enter: View | E: Edit | C: Compose | F1: Help",
@@ -800,7 +820,10 @@ impl AdvancedSearchUI {
     }
 
     /// Handle keyboard input
-    pub async fn handle_key(&mut self, key: crossterm::event::KeyCode) -> (bool, Option<SearchAction>) {
+    pub async fn handle_key(
+        &mut self,
+        key: crossterm::event::KeyCode,
+    ) -> (bool, Option<SearchAction>) {
         use crossterm::event::KeyCode;
 
         // Global shortcuts
@@ -831,19 +854,20 @@ impl AdvancedSearchUI {
     }
 
     /// Handle basic search tab input
-    async fn handle_basic_search_key(&mut self, key: crossterm::event::KeyCode) -> (bool, Option<SearchAction>) {
+    async fn handle_basic_search_key(
+        &mut self,
+        key: crossterm::event::KeyCode,
+    ) -> (bool, Option<SearchAction>) {
         use crossterm::event::KeyCode;
 
         match key {
             KeyCode::Up => self.previous_basic_field(),
             KeyCode::Down => self.next_basic_field(),
-            KeyCode::Char(c) => {
-                match c {
-                    'f' if self.is_ctrl() => return (true, Some(SearchAction::PerformSearch)),
-                    'c' if self.is_ctrl() => return (true, Some(SearchAction::ClearSearch)),
-                    _ => self.handle_text_input(c),
-                }
-            }
+            KeyCode::Char(c) => match c {
+                'f' if self.is_ctrl() => return (true, Some(SearchAction::PerformSearch)),
+                'c' if self.is_ctrl() => return (true, Some(SearchAction::ClearSearch)),
+                _ => self.handle_text_input(c),
+            },
             KeyCode::Backspace => self.handle_backspace(),
             KeyCode::Enter => return (true, Some(SearchAction::PerformSearch)),
             _ => {}
@@ -853,7 +877,10 @@ impl AdvancedSearchUI {
     }
 
     /// Handle filters tab input
-    async fn handle_filters_key(&mut self, key: crossterm::event::KeyCode) -> (bool, Option<SearchAction>) {
+    async fn handle_filters_key(
+        &mut self,
+        key: crossterm::event::KeyCode,
+    ) -> (bool, Option<SearchAction>) {
         use crossterm::event::KeyCode;
 
         match key {
@@ -868,7 +895,10 @@ impl AdvancedSearchUI {
     }
 
     /// Handle options tab input
-    async fn handle_options_key(&mut self, key: crossterm::event::KeyCode) -> (bool, Option<SearchAction>) {
+    async fn handle_options_key(
+        &mut self,
+        key: crossterm::event::KeyCode,
+    ) -> (bool, Option<SearchAction>) {
         use crossterm::event::KeyCode;
 
         match key {
@@ -876,13 +906,11 @@ impl AdvancedSearchUI {
             KeyCode::Down => self.next_option_field(),
             KeyCode::Char(' ') => self.toggle_current_option(),
             KeyCode::Enter => return self.activate_current_option().await,
-            KeyCode::Char(c) => {
-                match c {
-                    'f' if self.is_ctrl() => return (true, Some(SearchAction::PerformSearch)),
-                    'c' if self.is_ctrl() => return (true, Some(SearchAction::ClearSearch)),
-                    _ => {}
-                }
-            }
+            KeyCode::Char(c) => match c {
+                'f' if self.is_ctrl() => return (true, Some(SearchAction::PerformSearch)),
+                'c' if self.is_ctrl() => return (true, Some(SearchAction::ClearSearch)),
+                _ => {}
+            },
             _ => {}
         }
 
@@ -890,7 +918,10 @@ impl AdvancedSearchUI {
     }
 
     /// Handle results tab input
-    async fn handle_results_key(&mut self, key: crossterm::event::KeyCode) -> (bool, Option<SearchAction>) {
+    async fn handle_results_key(
+        &mut self,
+        key: crossterm::event::KeyCode,
+    ) -> (bool, Option<SearchAction>) {
         use crossterm::event::KeyCode;
 
         match key {
@@ -905,30 +936,31 @@ impl AdvancedSearchUI {
                     }
                 }
             }
-            KeyCode::Char(c) => {
-                match c {
-                    'e' => {
-                        if let Some(contact) = self.get_selected_contact() {
-                            if let Some(contact_id) = contact.id {
-                                return (true, Some(SearchAction::EditContact(contact_id)));
-                            }
+            KeyCode::Char(c) => match c {
+                'e' => {
+                    if let Some(contact) = self.get_selected_contact() {
+                        if let Some(contact_id) = contact.id {
+                            return (true, Some(SearchAction::EditContact(contact_id)));
                         }
                     }
-                    'c' => {
-                        if let Some(contact) = self.get_selected_contact() {
-                            if let Some(primary_email) = contact.primary_email() {
-                                return (true, Some(SearchAction::ComposeEmail {
+                }
+                'c' => {
+                    if let Some(contact) = self.get_selected_contact() {
+                        if let Some(primary_email) = contact.primary_email() {
+                            return (
+                                true,
+                                Some(SearchAction::ComposeEmail {
                                     to: primary_email.address.clone(),
                                     name: contact.display_name.clone(),
-                                }));
-                            }
+                                }),
+                            );
                         }
                     }
-                    'E' if self.is_ctrl() => return (true, Some(SearchAction::ExportResults)),
-                    'S' if self.is_ctrl() => return (true, Some(SearchAction::SaveSearch)),
-                    _ => {}
                 }
-            }
+                'E' if self.is_ctrl() => return (true, Some(SearchAction::ExportResults)),
+                'S' if self.is_ctrl() => return (true, Some(SearchAction::SaveSearch)),
+                _ => {}
+            },
             _ => {}
         }
 
@@ -1015,12 +1047,24 @@ impl AdvancedSearchUI {
     /// Handle backspace for current field
     fn handle_backspace(&mut self) {
         match self.focused_field {
-            SearchField::GeneralQuery => { self.general_query.pop(); }
-            SearchField::NameQuery => { self.name_query.pop(); }
-            SearchField::EmailQuery => { self.email_query.pop(); }
-            SearchField::PhoneQuery => { self.phone_query.pop(); }
-            SearchField::CompanyQuery => { self.company_query.pop(); }
-            SearchField::NotesQuery => { self.notes_query.pop(); }
+            SearchField::GeneralQuery => {
+                self.general_query.pop();
+            }
+            SearchField::NameQuery => {
+                self.name_query.pop();
+            }
+            SearchField::EmailQuery => {
+                self.email_query.pop();
+            }
+            SearchField::PhoneQuery => {
+                self.phone_query.pop();
+            }
+            SearchField::CompanyQuery => {
+                self.company_query.pop();
+            }
+            SearchField::NotesQuery => {
+                self.notes_query.pop();
+            }
             _ => {}
         }
     }
@@ -1035,20 +1079,33 @@ impl AdvancedSearchUI {
     }
 
     // Placeholder implementations for remaining methods
-    fn previous_filter_field(&mut self) { /* Implementation */ }
-    fn next_filter_field(&mut self) { /* Implementation */ }
-    fn navigate_filter_options(&mut self) { /* Implementation */ }
-    fn toggle_current_filter(&mut self) { /* Implementation */ }
-    
-    fn previous_option_field(&mut self) { /* Implementation */ }
-    fn next_option_field(&mut self) { /* Implementation */ }
-    fn toggle_current_option(&mut self) { /* Implementation */ }
-    async fn activate_current_option(&mut self) -> (bool, Option<SearchAction>) { (true, None) }
-    
-    fn previous_result(&mut self) { /* Implementation */ }
-    fn next_result(&mut self) { /* Implementation */ }
-    fn previous_page(&mut self) { /* Implementation */ }
-    fn next_page(&mut self) { /* Implementation */ }
+    fn previous_filter_field(&mut self) { /* Implementation */
+    }
+    fn next_filter_field(&mut self) { /* Implementation */
+    }
+    fn navigate_filter_options(&mut self) { /* Implementation */
+    }
+    fn toggle_current_filter(&mut self) { /* Implementation */
+    }
+
+    fn previous_option_field(&mut self) { /* Implementation */
+    }
+    fn next_option_field(&mut self) { /* Implementation */
+    }
+    fn toggle_current_option(&mut self) { /* Implementation */
+    }
+    async fn activate_current_option(&mut self) -> (bool, Option<SearchAction>) {
+        (true, None)
+    }
+
+    fn previous_result(&mut self) { /* Implementation */
+    }
+    fn next_result(&mut self) { /* Implementation */
+    }
+    fn previous_page(&mut self) { /* Implementation */
+    }
+    fn next_page(&mut self) { /* Implementation */
+    }
 
     /// Build search criteria from UI inputs
     pub fn build_search_criteria(&self) -> AdvancedSearchCriteria {
@@ -1074,10 +1131,14 @@ impl AdvancedSearchUI {
         // Set filters
         let mut sources = Vec::new();
         if self.source_filters[0] {
-            sources.push(ContactSource::Google { account_id: "default".to_string() });
+            sources.push(ContactSource::Google {
+                account_id: "default".to_string(),
+            });
         }
         if self.source_filters[1] {
-            sources.push(ContactSource::Outlook { account_id: "default".to_string() });
+            sources.push(ContactSource::Outlook {
+                account_id: "default".to_string(),
+            });
         }
         if self.source_filters[2] {
             sources.push(ContactSource::Local);
@@ -1112,24 +1173,32 @@ impl AdvancedSearchUI {
 
         // Use the basic search for now (in a real implementation, would use AdvancedContactSearch)
         let basic_criteria = criteria.to_basic_criteria();
-        
+
         match self.manager.search_contacts(&basic_criteria).await {
             Ok(contacts) => {
                 // Convert contacts to search results with mock relevance scores
-                self.search_results = contacts.into_iter().map(|contact| {
-                    SearchResult {
-                        relevance_score: 5.0, // Mock score
-                        matching_fields: vec!["display_name".to_string()],
-                        snippets: std::collections::HashMap::new(),
-                        contact,
-                    }
-                }).collect();
-                
+                self.search_results = contacts
+                    .into_iter()
+                    .map(|contact| {
+                        SearchResult {
+                            relevance_score: 5.0, // Mock score
+                            matching_fields: vec!["display_name".to_string()],
+                            snippets: std::collections::HashMap::new(),
+                            contact,
+                        }
+                    })
+                    .collect();
+
                 self.total_results = self.search_results.len();
                 self.current_page = 0;
                 self.current_tab = SearchTab::Results;
                 self.focused_field = SearchField::ResultsList;
-                self.results_list_state.select(if self.search_results.is_empty() { None } else { Some(0) });
+                self.results_list_state
+                    .select(if self.search_results.is_empty() {
+                        None
+                    } else {
+                        Some(0)
+                    });
             }
             Err(e) => {
                 tracing::error!("Search failed: {}", e);
@@ -1149,22 +1218,22 @@ impl AdvancedSearchUI {
         self.phone_query.clear();
         self.company_query.clear();
         self.notes_query.clear();
-        
+
         self.source_filters = vec![true, true, true];
         self.has_email_filter = None;
         self.has_phone_filter = None;
         self.has_company_filter = None;
         self.has_notes_filter = None;
-        
+
         self.fuzzy_matching = false;
         self.case_sensitive = false;
         self.whole_word_only = false;
-        
+
         self.search_results.clear();
         self.total_results = 0;
         self.current_page = 0;
         self.results_list_state.select(None);
-        
+
         self.current_tab = SearchTab::BasicSearch;
         self.focused_field = SearchField::GeneralQuery;
     }

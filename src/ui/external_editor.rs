@@ -49,7 +49,10 @@ impl ExternalEditor {
 
         // Check if editor exited successfully
         if !exit_status.success() {
-            return Err(anyhow!("Editor exited with error code: {:?}", exit_status.code()));
+            return Err(anyhow!(
+                "Editor exited with error code: {:?}",
+                exit_status.code()
+            ));
         }
 
         // Read the edited content back from file
@@ -62,7 +65,7 @@ impl ExternalEditor {
     pub async fn edit_email_body(&self, current_body: &str) -> Result<String> {
         let email_template = self.create_email_template(current_body);
         let edited_content = self.edit_content(&email_template).await?;
-        
+
         // Extract just the body content (remove template headers if any)
         self.extract_body_from_template(&edited_content)
     }
@@ -73,14 +76,14 @@ impl ExternalEditor {
         if let Ok(editor) = env::var("VISUAL") {
             return editor;
         }
-        
+
         if let Ok(editor) = env::var("EDITOR") {
             return editor;
         }
 
         // Check for common editors in order of preference
         let editors = ["nvim", "vim", "nano", "emacs", "code", "gedit"];
-        
+
         for editor in &editors {
             if Self::command_exists(editor) {
                 return editor.to_string();
@@ -126,8 +129,7 @@ impl ExternalEditor {
              #\n\
              \n\
              {}",
-            self.editor_command,
-            body
+            self.editor_command, body
         );
         template
     }
@@ -143,12 +145,12 @@ impl ExternalEditor {
                 // Skip comment lines
                 continue;
             }
-            
+
             // Once we hit the first non-comment line, we're in the body
             if !in_body && !line.trim().is_empty() {
                 in_body = true;
             }
-            
+
             if in_body || line.trim().is_empty() {
                 body_lines.push(line);
             }
@@ -177,33 +179,33 @@ impl ExternalEditor {
                 // For vim/nvim, ensure we start in insert mode for better UX
                 let mut cmd = Command::new(editor);
                 cmd.args(&args);
-                
+
                 // Add vim-specific options for email editing
                 if editor == "vim" || editor == "nvim" {
                     cmd.arg("-c").arg("set textwidth=72"); // Standard email line width
-                    cmd.arg("-c").arg("set spell");        // Enable spell checking
-                    cmd.arg("-c").arg("startinsert");      // Start in insert mode
+                    cmd.arg("-c").arg("set spell"); // Enable spell checking
+                    cmd.arg("-c").arg("startinsert"); // Start in insert mode
                 }
-                
+
                 let status = cmd.status()?;
                 Ok(status)
             }
             "nano" => {
                 // Nano options for better email editing
                 let mut cmd = Command::new("nano");
-                cmd.arg("-w");  // Don't wrap long lines automatically
-                cmd.arg("-T").arg("4");  // Set tab size to 4
+                cmd.arg("-w"); // Don't wrap long lines automatically
+                cmd.arg("-T").arg("4"); // Set tab size to 4
                 cmd.args(&args);
-                
+
                 let status = cmd.status()?;
                 Ok(status)
             }
             "emacs" => {
                 // Emacs in terminal mode
                 let mut cmd = Command::new("emacs");
-                cmd.arg("-nw");  // No window (terminal mode)
+                cmd.arg("-nw"); // No window (terminal mode)
                 cmd.args(&args);
-                
+
                 let status = cmd.status()?;
                 Ok(status)
             }
@@ -211,7 +213,7 @@ impl ExternalEditor {
                 // Generic editor launch
                 let mut cmd = Command::new(editor);
                 cmd.args(&args);
-                
+
                 let status = cmd.status()?;
                 Ok(status)
             }
@@ -227,7 +229,7 @@ impl ExternalEditor {
             crossterm::terminal::LeaveAlternateScreen,
             crossterm::cursor::Show
         )?;
-        
+
         Ok(())
     }
 
@@ -240,7 +242,7 @@ impl ExternalEditor {
             crossterm::terminal::EnterAlternateScreen,
             crossterm::cursor::Hide
         )?;
-        
+
         Ok(())
     }
 
@@ -343,7 +345,7 @@ mod tests {
         let editor = ExternalEditor::new().unwrap();
         let body = "Hello, this is a test email.";
         let template = editor.create_email_template(body);
-        
+
         assert!(template.contains("# Email Body"));
         assert!(template.contains(body));
     }
@@ -353,7 +355,7 @@ mod tests {
         let editor = ExternalEditor::new().unwrap();
         let template = "# This is a comment\n# Another comment\n\nHello world\nThis is the body.";
         let extracted = editor.extract_body_from_template(template).unwrap();
-        
+
         assert_eq!(extracted, "Hello world\nThis is the body.");
         assert!(!extracted.contains('#'));
     }
@@ -362,7 +364,7 @@ mod tests {
     fn test_command_exists() {
         // Test with a command that should exist on most systems
         assert!(ExternalEditor::command_exists("ls") || ExternalEditor::command_exists("dir"));
-        
+
         // Test with a command that shouldn't exist
         assert!(!ExternalEditor::command_exists("nonexistent_command_12345"));
     }
@@ -371,7 +373,7 @@ mod tests {
     fn test_editor_config() {
         let editor = ExternalEditor::new().unwrap();
         let config = editor.get_editor_config();
-        
+
         assert!(!config.name.is_empty());
         assert!(!config.features.is_empty());
     }

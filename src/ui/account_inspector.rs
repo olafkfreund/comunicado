@@ -28,7 +28,7 @@ impl AccountInspector {
             storage,
             theme: Theme::default(),
         };
-        
+
         inspector.refresh_accounts()?;
         Ok(inspector)
     }
@@ -36,7 +36,7 @@ impl AccountInspector {
     /// Refresh the list of accounts from storage
     pub fn refresh_accounts(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         self.accounts = self.storage.load_all_accounts()?;
-        
+
         // Update selection if needed
         if !self.accounts.is_empty() {
             self.selected_index = self.selected_index.min(self.accounts.len() - 1);
@@ -45,7 +45,7 @@ impl AccountInspector {
             self.selected_index = 0;
             self.list_state.select(None);
         }
-        
+
         Ok(())
     }
 
@@ -112,11 +112,15 @@ impl AccountInspector {
                 Line::from(""),
                 Line::from(Span::styled(
                     "comunicado setup-gmail",
-                    Style::default().fg(Color::Green).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(Color::Green)
+                        .add_modifier(Modifier::BOLD),
                 )),
                 Line::from(Span::styled(
                     "comunicado setup-outlook",
-                    Style::default().fg(Color::Green).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(Color::Green)
+                        .add_modifier(Modifier::BOLD),
                 )),
                 Line::from(""),
                 Line::from("Press 'q' to return to email view"),
@@ -291,12 +295,14 @@ impl AccountInspector {
             ]),
             Line::from(""),
             Line::from("To add new accounts:"),
-            Line::from(vec![
-                Span::styled("comunicado setup-gmail", Style::default().fg(Color::Green)),
-            ]),
-            Line::from(vec![
-                Span::styled("comunicado setup-outlook", Style::default().fg(Color::Green)),
-            ]),
+            Line::from(vec![Span::styled(
+                "comunicado setup-gmail",
+                Style::default().fg(Color::Green),
+            )]),
+            Line::from(vec![Span::styled(
+                "comunicado setup-outlook",
+                Style::default().fg(Color::Green),
+            )]),
         ];
 
         let help = Paragraph::new(help_lines)

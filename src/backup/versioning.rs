@@ -44,7 +44,8 @@ impl VersionManager {
     }
 
     pub fn create_version(&mut self, backup_config_id: Uuid, backup_id: Uuid) -> Version {
-        let history = self.histories
+        let history = self
+            .histories
             .entry(backup_config_id)
             .or_insert_with(|| VersionHistory {
                 backup_config_id,

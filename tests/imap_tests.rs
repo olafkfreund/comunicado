@@ -1,7 +1,7 @@
 use comunicado::imap::protocol::ImapProtocol;
 use comunicado::imap::{
-    FolderAttribute, ImapAuthMethod, ImapCapability, ImapClient, ImapConfig, ImapError, ImapFolder, ImapMessage,
-    MessageFlag, SearchCriteria,
+    FolderAttribute, ImapAuthMethod, ImapCapability, ImapClient, ImapConfig, ImapError, ImapFolder,
+    ImapMessage, MessageFlag, SearchCriteria,
 };
 
 #[test]

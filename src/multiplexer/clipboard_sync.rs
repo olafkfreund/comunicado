@@ -1,6 +1,6 @@
 //! Clipboard synchronization for multiplexers
 
-use super::{MultiplexerResult}; // MultiplexerError
+use super::MultiplexerResult; // MultiplexerError
 use serde::{Deserialize, Serialize};
 
 /// Clipboard synchronization manager

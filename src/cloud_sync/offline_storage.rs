@@ -4,7 +4,7 @@ use super::{CloudSyncError, CloudSyncResult, SyncDataType, SyncMetadata};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::{PathBuf}; // Path
+use std::path::PathBuf; // Path
 use tokio::fs;
 use uuid::Uuid;
 
@@ -102,7 +102,7 @@ pub struct FailedSyncEntry {
 impl OfflineCache {
     pub fn new() -> CloudSyncResult<Self> {
         let cache_dir = Self::get_cache_directory()?;
-        
+
         Ok(Self {
             cache_dir,
             cache_index: CacheIndex::new(),
@@ -114,7 +114,8 @@ impl OfflineCache {
     /// Initialize the offline cache
     pub async fn initialize(&mut self) -> CloudSyncResult<()> {
         // Create cache directory if it doesn't exist
-        fs::create_dir_all(&self.cache_dir).await
+        fs::create_dir_all(&self.cache_dir)
+            .await
             .map_err(|e| CloudSyncError::Io(e))?;
 
         // Load existing cache index
@@ -151,7 +152,8 @@ impl OfflineCache {
         let file_path = self.generate_cache_file_path(key, &data_type);
 
         // Write compressed data to file
-        fs::write(&file_path, &compressed_data).await
+        fs::write(&file_path, &compressed_data)
+            .await
             .map_err(|e| CloudSyncError::Io(e))?;
 
         // Create cache index entry
@@ -184,7 +186,7 @@ impl OfflineCache {
             let now = Utc::now();
             entry.last_accessed = now;
             entry.access_count += 1;
-            
+
             // Extract all needed info before borrowing self again
             let file_path = entry.file_path.clone();
             let compression_type = entry.compression_type.clone();
@@ -239,7 +241,8 @@ impl OfflineCache {
         if let Some(entry) = self.cache_index.get_entry(key) {
             // Delete file
             if entry.file_path.exists() {
-                fs::remove_file(&entry.file_path).await
+                fs::remove_file(&entry.file_path)
+                    .await
                     .map_err(|e| CloudSyncError::Io(e))?;
             }
 
@@ -278,13 +281,8 @@ impl OfflineCache {
         // Store failed sync info
         let key = format!("failed_sync_{}", failed_sync.id);
         let serialized = serde_json::to_vec(&failed_sync)?;
-        
-        self.cache_data(
-            &key,
-            &serialized,
-            data_type,
-            None,
-        ).await?;
+
+        self.cache_data(&key, &serialized, data_type, None).await?;
 
         Ok(())
     }
@@ -301,7 +299,9 @@ impl OfflineCache {
                         _ => self.decompress_data(&data, &entry.compression_type)?,
                     };
 
-                    if let Ok(failed_sync) = serde_json::from_slice::<FailedSyncEntry>(&decompressed_data) {
+                    if let Ok(failed_sync) =
+                        serde_json::from_slice::<FailedSyncEntry>(&decompressed_data)
+                    {
                         failed_syncs.push(failed_sync);
                     }
                 }
@@ -322,7 +322,8 @@ impl OfflineCache {
 
         // Remove expired entries
         let max_age = chrono::Duration::days(self.storage_limits.max_entry_age_days as i64);
-        let expired_keys: Vec<String> = entries.iter()
+        let expired_keys: Vec<String> = entries
+            .iter()
             .filter_map(|(key, entry)| {
                 if now.signed_duration_since(entry.created_at) > max_age {
                     Some((*key).clone())
@@ -346,11 +347,11 @@ impl OfflineCache {
 
             // Re-collect entries for size-based cleanup (cache may have changed)
             let entries_for_size: Vec<_> = self.cache_index.entries.iter().collect();
-            
+
             // Collect keys to remove based on size limits
             let mut current_size = self.cache_index.size_stats.total_compressed_bytes;
             let mut keys_to_remove = Vec::new();
-            
+
             for (key, entry) in entries_for_size.iter().rev() {
                 if current_size <= target_size_bytes {
                     break;
@@ -383,10 +384,12 @@ impl OfflineCache {
 
     fn get_cache_directory() -> CloudSyncResult<PathBuf> {
         let cache_dir = dirs::cache_dir()
-            .ok_or_else(|| CloudSyncError::Io(std::io::Error::new(
-                std::io::ErrorKind::NotFound,
-                "Cache directory not found"
-            )))?
+            .ok_or_else(|| {
+                CloudSyncError::Io(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    "Cache directory not found",
+                ))
+            })?
             .join("comunicado")
             .join("cloud_sync");
 
@@ -394,10 +397,17 @@ impl OfflineCache {
     }
 
     fn generate_cache_file_path(&self, key: &str, data_type: &SyncDataType) -> PathBuf {
-        let safe_key = key.chars()
-            .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+        let safe_key = key
+            .chars()
+            .map(|c| {
+                if c.is_alphanumeric() || c == '-' || c == '_' {
+                    c
+                } else {
+                    '_'
+                }
+            })
             .collect::<String>();
-        
+
         self.cache_dir
             .join(format!("{:?}", data_type).to_lowercase())
             .join(format!("{}.cache", safe_key))
@@ -405,13 +415,14 @@ impl OfflineCache {
 
     async fn load_cache_index(&mut self) -> CloudSyncResult<()> {
         let index_path = self.cache_dir.join("index.json");
-        
+
         if index_path.exists() {
-            let index_data = fs::read(&index_path).await
+            let index_data = fs::read(&index_path)
+                .await
                 .map_err(|e| CloudSyncError::Io(e))?;
-            
-            self.cache_index = serde_json::from_slice(&index_data)
-                .unwrap_or_else(|_| CacheIndex::new());
+
+            self.cache_index =
+                serde_json::from_slice(&index_data).unwrap_or_else(|_| CacheIndex::new());
         }
 
         Ok(())
@@ -420,8 +431,9 @@ impl OfflineCache {
     async fn save_cache_index(&self) -> CloudSyncResult<()> {
         let index_path = self.cache_dir.join("index.json");
         let index_data = serde_json::to_vec(&self.cache_index)?;
-        
-        fs::write(&index_path, &index_data).await
+
+        fs::write(&index_path, &index_data)
+            .await
             .map_err(|e| CloudSyncError::Io(e))?;
 
         Ok(())
@@ -429,11 +441,12 @@ impl OfflineCache {
 
     async fn should_cleanup(&self) -> bool {
         let current_size_mb = self.cache_index.size_stats.total_compressed_bytes / (1024 * 1024);
-        let threshold_size = (self.storage_limits.max_cache_size_mb as f32 * 
-                             self.storage_limits.cleanup_threshold_percentage) as u64;
+        let threshold_size = (self.storage_limits.max_cache_size_mb as f32
+            * self.storage_limits.cleanup_threshold_percentage) as u64;
 
-        current_size_mb > threshold_size ||
-        Utc::now().signed_duration_since(self.cache_index.last_cleanup) > chrono::Duration::hours(24)
+        current_size_mb > threshold_size
+            || Utc::now().signed_duration_since(self.cache_index.last_cleanup)
+                > chrono::Duration::hours(24)
     }
 
     async fn cleanup_if_needed(&mut self) -> CloudSyncResult<()> {
@@ -443,7 +456,11 @@ impl OfflineCache {
         Ok(())
     }
 
-    fn compress_data(&self, data: &[u8], compression_type: CompressionType) -> CloudSyncResult<Vec<u8>> {
+    fn compress_data(
+        &self,
+        data: &[u8],
+        compression_type: CompressionType,
+    ) -> CloudSyncResult<Vec<u8>> {
         match compression_type {
             CompressionType::None => Ok(data.to_vec()),
             CompressionType::Gzip => {
@@ -468,7 +485,11 @@ impl OfflineCache {
         }
     }
 
-    fn decompress_data(&self, compressed_data: &[u8], compression_type: &CompressionType) -> CloudSyncResult<Vec<u8>> {
+    fn decompress_data(
+        &self,
+        compressed_data: &[u8],
+        compression_type: &CompressionType,
+    ) -> CloudSyncResult<Vec<u8>> {
         match compression_type {
             CompressionType::None => Ok(compressed_data.to_vec()),
             CompressionType::Gzip => {
@@ -574,24 +595,31 @@ impl CacheSizeStats {
         self.total_entries += 1;
         self.total_original_bytes += entry.original_size;
         self.total_compressed_bytes += entry.compressed_size;
-        
-        *self.entries_by_type.entry(entry.data_type.clone()).or_insert(0) += 1;
-        
+
+        *self
+            .entries_by_type
+            .entry(entry.data_type.clone())
+            .or_insert(0) += 1;
+
         self.update_compression_ratio();
     }
 
     fn update_on_remove(&mut self, entry: &CacheIndexEntry) {
         self.total_entries = self.total_entries.saturating_sub(1);
-        self.total_original_bytes = self.total_original_bytes.saturating_sub(entry.original_size);
-        self.total_compressed_bytes = self.total_compressed_bytes.saturating_sub(entry.compressed_size);
-        
+        self.total_original_bytes = self
+            .total_original_bytes
+            .saturating_sub(entry.original_size);
+        self.total_compressed_bytes = self
+            .total_compressed_bytes
+            .saturating_sub(entry.compressed_size);
+
         if let Some(count) = self.entries_by_type.get_mut(&entry.data_type) {
             *count = count.saturating_sub(1);
             if *count == 0 {
                 self.entries_by_type.remove(&entry.data_type);
             }
         }
-        
+
         self.update_compression_ratio();
     }
 
@@ -607,7 +635,7 @@ impl CacheSizeStats {
 impl Default for StorageLimits {
     fn default() -> Self {
         Self {
-            max_cache_size_mb: 1024,    // 1GB
+            max_cache_size_mb: 1024, // 1GB
             max_entries_per_type: 1000,
             max_entry_age_days: 30,
             cleanup_threshold_percentage: 0.8, // Start cleanup at 80% of max size

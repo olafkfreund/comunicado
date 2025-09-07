@@ -280,15 +280,18 @@ impl FolderTree {
     fn initialize_sample_folders(&mut self) {
         // Initialize with empty folder list - real accounts will be loaded through load_folders()
         self.folders = Vec::new();
-        
+
         // Build filtered folders list (empty by default until real accounts are loaded)
         self.rebuild_filtered_list();
     }
 
     fn rebuild_filtered_list(&mut self) {
-        tracing::debug!("🔄 rebuild_filtered_list() called - folders: {}, filtered: {} (before clear)", 
-                       self.folders.len(), self.filtered_folders.len());
-        
+        tracing::debug!(
+            "🔄 rebuild_filtered_list() called - folders: {}, filtered: {} (before clear)",
+            self.folders.len(),
+            self.filtered_folders.len()
+        );
+
         // Clear the filtered list
         self.filtered_folders.clear();
 
@@ -302,7 +305,11 @@ impl FolderTree {
         for (index, folder) in self.folders.iter().enumerate() {
             // Defensive check for index consistency
             if index >= self.folders.len() {
-                tracing::error!("🚨 Index {} >= folders.len() {} during iteration", index, self.folders.len());
+                tracing::error!(
+                    "🚨 Index {} >= folders.len() {} during iteration",
+                    index,
+                    self.folders.len()
+                );
                 break;
             }
 
@@ -320,43 +327,58 @@ impl FolderTree {
             };
 
             let is_visible = folder.is_subscribed || self.show_unsubscribed;
-            
+
             // For account headers (depth 0), always show if subscribed
             let show_folder = if folder.depth == 0 {
                 matches_search && is_visible
             } else {
                 // For child folders, only show if parent account is expanded
                 // Wrap this in a defensive check too
-                let parent_expanded = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    self.is_parent_account_expanded(folder)
-                })) {
-                    Ok(result) => result,
-                    Err(_) => {
-                        tracing::error!("🚨 PANIC caught in is_parent_account_expanded for folder '{}'", folder.name);
-                        false // Default to not expanded
-                    }
-                };
+                let parent_expanded =
+                    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        self.is_parent_account_expanded(folder)
+                    })) {
+                        Ok(result) => result,
+                        Err(_) => {
+                            tracing::error!(
+                                "🚨 PANIC caught in is_parent_account_expanded for folder '{}'",
+                                folder.name
+                            );
+                            false // Default to not expanded
+                        }
+                    };
                 matches_search && is_visible && parent_expanded
             };
 
             if show_folder {
-                tracing::debug!("✅ Adding folder '{}' at index {} to filtered list", folder.name, index);
+                tracing::debug!(
+                    "✅ Adding folder '{}' at index {} to filtered list",
+                    folder.name,
+                    index
+                );
                 self.filtered_folders.push(index);
             }
         }
-        
-        tracing::debug!("✅ rebuild_filtered_list() completed - filtered: {} folders", self.filtered_folders.len());
+
+        tracing::debug!(
+            "✅ rebuild_filtered_list() completed - filtered: {} folders",
+            self.filtered_folders.len()
+        );
     }
-    
+
     /// Check if the parent account for this folder is expanded
     fn is_parent_account_expanded(&self, folder: &FolderItem) -> bool {
-        tracing::debug!("🔍 Checking parent expansion for folder: '{}' (depth: {})", folder.name, folder.depth);
-        
+        tracing::debug!(
+            "🔍 Checking parent expansion for folder: '{}' (depth: {})",
+            folder.name,
+            folder.depth
+        );
+
         if folder.depth == 0 {
             tracing::debug!("✅ Account header - always visible");
             return true; // Account headers are always visible
         }
-        
+
         // Find the account this folder belongs to
         let account_email = if let Some(slash_pos) = folder.path.find('/') {
             let email = &folder.path[..slash_pos];
@@ -366,22 +388,31 @@ impl FolderTree {
             tracing::debug!("⚠️ No slash in path '{}' - assuming no parent", folder.path);
             return true; // No parent, show it
         };
-        
+
         // Find the account folder and check if it's expanded
-        let result = self.folders.iter()
+        let result = self
+            .folders
+            .iter()
             .find(|f| {
                 let matches = f.depth == 0 && f.name == account_email;
                 if matches {
-                    tracing::debug!("✅ Found parent account '{}' - expanded: {}", f.name, f.is_expanded);
+                    tracing::debug!(
+                        "✅ Found parent account '{}' - expanded: {}",
+                        f.name,
+                        f.is_expanded
+                    );
                 }
                 matches
             })
             .map(|account| account.is_expanded)
             .unwrap_or_else(|| {
-                tracing::warn!("⚠️ Parent account '{}' not found - defaulting to expanded", account_email);
+                tracing::warn!(
+                    "⚠️ Parent account '{}' not found - defaulting to expanded",
+                    account_email
+                );
                 true
             });
-            
+
         tracing::debug!("🔍 Parent expansion check result: {}", result);
         result
     }
@@ -395,32 +426,51 @@ impl FolderTree {
         theme: &Theme,
     ) {
         let available_width = area.width.saturating_sub(4) as usize; // Account for borders and padding
-        
+
         let items: Vec<ListItem> = self
             .filtered_folders
             .iter()
             .enumerate()
             .filter_map(|(display_i, &folder_i)| {
                 // SAFE: Use get() instead of direct indexing to prevent panic
-                self.folders.get(folder_i).map(|folder| {
-                    let is_selected = self.state.selected() == Some(display_i);
+                self.folders
+                    .get(folder_i)
+                    .map(|folder| {
+                        let is_selected = self.state.selected() == Some(display_i);
 
-                    // Check if this is a top-level account folder (depth 0 and account path)
-                    let is_account_header = folder.depth == 0 && folder.path.starts_with("account:");
-                    
-                    if is_account_header {
-                        self.render_account_header(folder, is_selected, is_focused, theme, available_width)
-                    } else {
-                        self.render_folder_item(folder, is_selected, is_focused, theme, available_width)
-                    }
-                }).or_else(|| {
-                    // Log the error if folder index is out of bounds
-                    tracing::error!("🚨 RENDER PANIC PREVENTED: folder_i {} >= folders.len() {}", folder_i, self.folders.len());
-                    None
-                })
+                        // Check if this is a top-level account folder (depth 0 and account path)
+                        let is_account_header =
+                            folder.depth == 0 && folder.path.starts_with("account:");
+
+                        if is_account_header {
+                            self.render_account_header(
+                                folder,
+                                is_selected,
+                                is_focused,
+                                theme,
+                                available_width,
+                            )
+                        } else {
+                            self.render_folder_item(
+                                folder,
+                                is_selected,
+                                is_focused,
+                                theme,
+                                available_width,
+                            )
+                        }
+                    })
+                    .or_else(|| {
+                        // Log the error if folder index is out of bounds
+                        tracing::error!(
+                            "🚨 RENDER PANIC PREVENTED: folder_i {} >= folders.len() {}",
+                            folder_i,
+                            self.folders.len()
+                        );
+                        None
+                    })
             })
             .collect();
-
 
         let list = List::new(items)
             .block(block)
@@ -449,24 +499,22 @@ impl FolderTree {
         _available_width: usize,
     ) -> ListItem {
         // Expansion indicator for account
-        let expand_icon = if folder.is_expanded {
-            "▼ "
-        } else {
-            "▶ "
-        };
+        let expand_icon = if folder.is_expanded { "▼ " } else { "▶ " };
 
         // Extract account name from folder name (assuming format like "user@domain.com")
         let account_name = folder.name.clone();
-        
+
         // Calculate total unread across account (in a real implementation, this would aggregate child folders)
-        let total_unread = self.folders.iter()
+        let total_unread = self
+            .folders
+            .iter()
             .filter(|f| f.path.starts_with(&account_name) && f.depth > 0)
             .map(|f| f.unread_count)
             .sum::<usize>();
-        
+
         // Use calculated total unread count
         let _total_unread = total_unread;
-        
+
         // Account header style
         let header_style = if is_selected && is_focused {
             Style::default()
@@ -490,7 +538,7 @@ impl FolderTree {
             Span::styled("📧 ", Style::default().fg(theme.colors.palette.info)),
             Span::styled(account_name, header_style),
         ];
-        
+
         // Add account-level unread badge if there are unread messages
         if total_unread > 0 {
             spans.push(Span::raw(" "));
@@ -507,7 +555,7 @@ impl FolderTree {
                     .add_modifier(Modifier::BOLD),
             ));
         }
-        
+
         let line = Line::from(spans);
 
         ListItem::new(line)
@@ -538,7 +586,7 @@ impl FolderTree {
         // Type indicator with better icons that match your screenshot
         let type_indicator = match folder.folder_type {
             FolderType::Inbox => "📥 ",
-            FolderType::Sent => "📤 ", 
+            FolderType::Sent => "📤 ",
             FolderType::Drafts => "📝 ",
             FolderType::Trash => "🗑️ ",
             FolderType::Archive => "📦 ",
@@ -562,10 +610,9 @@ impl FolderTree {
 
         // Calculate available space for folder name
         let right_content_width = size_display.len() + unread_badge.len() + 5; // padding
-        let name_max_width = available_width.saturating_sub(
-            indent.len() + expand_icon.len() + 3 + right_content_width
-        );
-        
+        let name_max_width = available_width
+            .saturating_sub(indent.len() + expand_icon.len() + 3 + right_content_width);
+
         let folder_name = if folder.name.len() > name_max_width {
             // Use Unicode-safe string truncation to avoid byte boundary panics
             let max_chars = name_max_width.saturating_sub(3);
@@ -626,15 +673,19 @@ impl FolderTree {
         // Add size display aligned to the right
         if !size_display.is_empty() {
             // Calculate current content length
-            let current_content_len: usize = spans.iter().map(|s| {
-                // Handle the different content types in Span
-                match s.content {
-                    std::borrow::Cow::Borrowed(s) => s.len(),
-                    std::borrow::Cow::Owned(ref s) => s.len(),
-                }
-            }).sum();
-            
-            let padding_len = available_width.saturating_sub(current_content_len + size_display.len() + 2);
+            let current_content_len: usize = spans
+                .iter()
+                .map(|s| {
+                    // Handle the different content types in Span
+                    match s.content {
+                        std::borrow::Cow::Borrowed(s) => s.len(),
+                        std::borrow::Cow::Owned(ref s) => s.len(),
+                    }
+                })
+                .sum();
+
+            let padding_len =
+                available_width.saturating_sub(current_content_len + size_display.len() + 2);
             if padding_len > 0 {
                 spans.push(Span::raw(" ".repeat(padding_len)));
                 spans.push(Span::styled(
@@ -652,11 +703,14 @@ impl FolderTree {
         if total_count == 0 {
             return String::new();
         }
-        
+
         // Estimate size based on message count (rough estimate: 15KB per message average)
         let estimated_bytes = total_count * 15 * 1024; // 15KB per message
         let size_str = if estimated_bytes > 1024 * 1024 * 1024 {
-            format!("{:.1} GB", estimated_bytes as f64 / (1024.0 * 1024.0 * 1024.0))
+            format!(
+                "{:.1} GB",
+                estimated_bytes as f64 / (1024.0 * 1024.0 * 1024.0)
+            )
         } else if estimated_bytes > 1024 * 1024 {
             format!("{} MB", estimated_bytes / (1024 * 1024))
         } else if estimated_bytes > 1024 {
@@ -664,7 +718,7 @@ impl FolderTree {
         } else {
             format!("{} B", estimated_bytes)
         };
-        
+
         format!("{} • {}", total_count, size_str)
     }
 
@@ -821,7 +875,7 @@ impl FolderTree {
 
     pub fn handle_right(&mut self) {
         tracing::debug!("🔍 handle_right() called");
-        
+
         // Comprehensive safety check with extensive logging
         let selected = match self.state.selected() {
             Some(selected) => {
@@ -836,7 +890,11 @@ impl FolderTree {
 
         // Check filtered_folders bounds
         if selected >= self.filtered_folders.len() {
-            tracing::error!("🚨 Selected index {} >= filtered_folders.len() {}", selected, self.filtered_folders.len());
+            tracing::error!(
+                "🚨 Selected index {} >= filtered_folders.len() {}",
+                selected,
+                self.filtered_folders.len()
+            );
             return;
         }
 
@@ -847,25 +905,40 @@ impl FolderTree {
                 folder_i
             }
             None => {
-                tracing::error!("🚨 Failed to get folder index at filtered position {}", selected);
+                tracing::error!(
+                    "🚨 Failed to get folder index at filtered position {}",
+                    selected
+                );
                 return;
             }
         };
 
         // Check main folders bounds
         if folder_i >= self.folders.len() {
-            tracing::error!("🚨 Folder index {} >= folders.len() {}", folder_i, self.folders.len());
+            tracing::error!(
+                "🚨 Folder index {} >= folders.len() {}",
+                folder_i,
+                self.folders.len()
+            );
             return;
         }
 
         // Get mutable reference to folder
         let folder = match self.folders.get_mut(folder_i) {
             Some(folder) => {
-                tracing::debug!("✅ Got folder: {} (depth: {}, has_children: {})", folder.name, folder.depth, folder.has_children);
+                tracing::debug!(
+                    "✅ Got folder: {} (depth: {}, has_children: {})",
+                    folder.name,
+                    folder.depth,
+                    folder.has_children
+                );
                 folder
             }
             None => {
-                tracing::error!("🚨 Failed to get mutable folder reference at index {}", folder_i);
+                tracing::error!(
+                    "🚨 Failed to get mutable folder reference at index {}",
+                    folder_i
+                );
                 return;
             }
         };
@@ -879,7 +952,7 @@ impl FolderTree {
         // Set expansion state
         let was_expanded = folder.is_expanded;
         folder.is_expanded = true;
-        
+
         if !was_expanded {
             tracing::info!("📂 Expanded folder: '{}'", folder.name);
         } else {
@@ -894,7 +967,9 @@ impl FolderTree {
                 tracing::debug!("✅ rebuild_filtered_list() completed successfully");
             }
             Err(_) => {
-                tracing::error!("🚨 PANIC caught in rebuild_filtered_list()! Reverting expansion...");
+                tracing::error!(
+                    "🚨 PANIC caught in rebuild_filtered_list()! Reverting expansion..."
+                );
                 // Revert the expansion to prevent further issues
                 if let Some(folder) = self.folders.get_mut(folder_i) {
                     folder.is_expanded = was_expanded;
@@ -915,13 +990,24 @@ impl FolderTree {
                             }
                         }
                     } else {
-                        tracing::warn!("Folder index {} out of bounds (folders.len() = {})", folder_i, self.folders.len());
+                        tracing::warn!(
+                            "Folder index {} out of bounds (folders.len() = {})",
+                            folder_i,
+                            self.folders.len()
+                        );
                     }
                 } else {
-                    tracing::warn!("Failed to get folder index at selected position {}", selected);
+                    tracing::warn!(
+                        "Failed to get folder index at selected position {}",
+                        selected
+                    );
                 }
             } else {
-                tracing::warn!("Selected index {} out of bounds (filtered_folders.len() = {})", selected, self.filtered_folders.len());
+                tracing::warn!(
+                    "Selected index {} out of bounds (filtered_folders.len() = {})",
+                    selected,
+                    self.filtered_folders.len()
+                );
             }
         }
     }
@@ -949,15 +1035,26 @@ impl FolderTree {
                             None
                         }
                     } else {
-                        tracing::warn!("Folder index {} out of bounds (folders.len() = {}) in handle_enter", folder_i, self.folders.len());
+                        tracing::warn!(
+                            "Folder index {} out of bounds (folders.len() = {}) in handle_enter",
+                            folder_i,
+                            self.folders.len()
+                        );
                         None
                     }
                 } else {
-                    tracing::warn!("Failed to get folder index at selected position {} in handle_enter", selected);
+                    tracing::warn!(
+                        "Failed to get folder index at selected position {} in handle_enter",
+                        selected
+                    );
                     None
                 }
             } else {
-                tracing::warn!("Selected index {} out of bounds (filtered_folders.len() = {}) in handle_enter", selected, self.filtered_folders.len());
+                tracing::warn!(
+                    "Selected index {} out of bounds (filtered_folders.len() = {}) in handle_enter",
+                    selected,
+                    self.filtered_folders.len()
+                );
                 None
             }
         } else {
@@ -1185,7 +1282,9 @@ impl FolderTree {
             .position(|f| f.path == path)
             .ok_or("Folder not found")?;
 
-        let folder = self.folders.get(folder_index)
+        let folder = self
+            .folders
+            .get(folder_index)
             .ok_or("Folder index out of bounds after position lookup")?;
 
         // Check if it's deletable
@@ -1228,7 +1327,9 @@ impl FolderTree {
             .position(|f| f.path == old_path)
             .ok_or("Folder not found")?;
 
-        let folder = self.folders.get(folder_index)
+        let folder = self
+            .folders
+            .get(folder_index)
             .ok_or("Folder index out of bounds after position lookup")?;
 
         if !folder.is_renamable() {
@@ -1248,7 +1349,9 @@ impl FolderTree {
         }
 
         // Update the folder
-        let folder = self.folders.get_mut(folder_index)
+        let folder = self
+            .folders
+            .get_mut(folder_index)
             .ok_or("Folder index out of bounds during update")?;
         folder.name = new_name;
         folder.path = new_path.clone();

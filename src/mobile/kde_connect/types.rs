@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SmsMessage {
@@ -157,7 +157,8 @@ impl SmsConversation {
         self.participants
             .iter()
             .map(|contact| {
-                contact.display_name
+                contact
+                    .display_name
                     .clone()
                     .unwrap_or_else(|| contact.address.clone())
             })
@@ -198,8 +199,11 @@ impl ContactInfo {
     }
 
     pub fn is_phone_number(&self) -> bool {
-        self.address.starts_with('+') || 
-        self.address.chars().all(|c| c.is_ascii_digit() || c == '-' || c == ' ' || c == '(' || c == ')')
+        self.address.starts_with('+')
+            || self
+                .address
+                .chars()
+                .all(|c| c.is_ascii_digit() || c == '-' || c == ' ' || c == '(' || c == ')')
     }
 }
 
@@ -224,8 +228,7 @@ impl MobileNotification {
     }
 
     pub fn formatted_time(&self) -> String {
-        let datetime = DateTime::from_timestamp(self.time / 1000, 0)
-            .unwrap_or_else(|| Utc::now());
+        let datetime = DateTime::from_timestamp(self.time / 1000, 0).unwrap_or_else(|| Utc::now());
         datetime.format("%H:%M").to_string()
     }
 
@@ -261,7 +264,7 @@ impl DeviceInfo {
 
     pub fn capabilities(&self) -> Vec<&'static str> {
         let mut caps = Vec::new();
-        
+
         if self.has_sms_plugin {
             caps.push("SMS");
         }
@@ -271,7 +274,7 @@ impl DeviceInfo {
         if !self.is_reachable {
             caps.push("Offline");
         }
-        
+
         caps
     }
 
@@ -298,7 +301,13 @@ impl Attachment {
         }
     }
 
-    pub fn with_download_url(part_id: i64, mime_type: String, filename: String, download_url: String, file_size: i64) -> Self {
+    pub fn with_download_url(
+        part_id: i64,
+        mime_type: String,
+        filename: String,
+        download_url: String,
+        file_size: i64,
+    ) -> Self {
         Self {
             part_id,
             mime_type,
@@ -343,7 +352,7 @@ impl Attachment {
 
     pub fn size_formatted(&self) -> String {
         let size = self.size_bytes() as f64;
-        
+
         if size < 1024.0 {
             format!("{} B", size)
         } else if size < 1024.0 * 1024.0 {
@@ -401,7 +410,10 @@ mod tests {
             id: 1,
             thread_id: 1,
             display_name: "John Doe".to_string(),
-            participants: vec![ContactInfo::new("+1234567890".to_string(), Some("John Doe".to_string()))],
+            participants: vec![ContactInfo::new(
+                "+1234567890".to_string(),
+                Some("John Doe".to_string()),
+            )],
             message_count: 5,
             unread_count: 2,
             last_message_date: chrono::Utc::now(),
@@ -411,7 +423,10 @@ mod tests {
 
         assert!(conversation.has_unread());
         assert!(!conversation.is_group_conversation());
-        assert_eq!(conversation.participant_names(), vec!["John Doe".to_string()]);
+        assert_eq!(
+            conversation.participant_names(),
+            vec!["John Doe".to_string()]
+        );
 
         conversation.mark_all_read();
         assert!(!conversation.has_unread());

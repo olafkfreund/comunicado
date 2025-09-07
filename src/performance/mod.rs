@@ -1,50 +1,47 @@
 //! Performance optimization and monitoring system
 
-pub mod metrics;
 pub mod background_processor;
 pub mod cache;
 pub mod database;
 pub mod memory;
-pub mod network;
-pub mod profiling;
-pub mod optimization;
+pub mod metrics;
 pub mod monitoring;
+pub mod network;
+pub mod optimization;
+pub mod profiling;
 
-pub use metrics::{
-    PerformanceMetrics, MetricsCollector, MetricsRegistry, MetricType, 
-    PerformanceCounter, LatencyTracker, ThroughputTracker, MetricsStatistics
+pub use background_processor::{
+    BackgroundProcessor, BackgroundTask, BackgroundTaskType, CalendarDbOperationType,
+    CalendarSyncType, ProcessorSettings, TaskPriority, TaskResult, TaskResultData, TaskStatus,
 };
 pub use cache::{
-    PerformanceCache, CacheManager, CachePolicy, CacheStatistics, 
-    CacheLevel, CacheEvictionStrategy
+    CacheEvictionStrategy, CacheLevel, CacheManager, CachePolicy, CacheStatistics, PerformanceCache,
 };
 pub use database::{
-    DatabaseOptimizer, QueryOptimizer, ConnectionPool, IndexAnalyzer,
-    QueryStats, DatabaseMetrics, DatabaseStatistics
+    ConnectionPool, DatabaseMetrics, DatabaseOptimizer, DatabaseStatistics, IndexAnalyzer,
+    QueryOptimizer, QueryStats,
 };
 pub use memory::{
-    MemoryManager, MemoryProfiler, AllocationTracker, GarbageCollector,
-    MemoryStats, HeapAnalyzer, MemoryStatistics
+    AllocationTracker, GarbageCollector, HeapAnalyzer, MemoryManager, MemoryProfiler,
+    MemoryStatistics, MemoryStats,
 };
-pub use network::{
-    NetworkOptimizer, ConnectionManager, RequestBatcher, CircuitBreaker,
-    NetworkMetrics, BandwidthManager, NetworkStatistics
-};
-pub use profiling::{
-    Profiler, ProfileResult, FlameGraph, HotspotAnalyzer,
-    ProfilerConfig, ProfilingSession
-};
-pub use optimization::{
-    OptimizationEngine, OptimizationRule, PerformanceTuner, 
-    AutoOptimizer, OptimizationRecommendation
-};
-pub use background_processor::{
-    BackgroundProcessor, BackgroundTask, TaskResult, TaskStatus, TaskPriority,
-    BackgroundTaskType, TaskResultData, ProcessorSettings, CalendarSyncType, CalendarDbOperationType
+pub use metrics::{
+    LatencyTracker, MetricType, MetricsCollector, MetricsRegistry, MetricsStatistics,
+    PerformanceCounter, PerformanceMetrics, ThroughputTracker,
 };
 pub use monitoring::{
-    PerformanceMonitor, AlertManager, Threshold, Alert,
-    MonitoringDashboard, HealthCheck
+    Alert, AlertManager, HealthCheck, MonitoringDashboard, PerformanceMonitor, Threshold,
+};
+pub use network::{
+    BandwidthManager, CircuitBreaker, ConnectionManager, NetworkMetrics, NetworkOptimizer,
+    NetworkStatistics, RequestBatcher,
+};
+pub use optimization::{
+    AutoOptimizer, OptimizationEngine, OptimizationRecommendation, OptimizationRule,
+    PerformanceTuner,
+};
+pub use profiling::{
+    FlameGraph, HotspotAnalyzer, ProfileResult, Profiler, ProfilerConfig, ProfilingSession,
 };
 
 use serde::{Deserialize, Serialize};
@@ -94,25 +91,25 @@ pub struct OptimizationIntervals {
 pub enum PerformanceError {
     #[error("Metrics collection failed: {0}")]
     MetricsError(String),
-    
+
     #[error("Cache operation failed: {0}")]
     CacheError(String),
-    
+
     #[error("Database optimization failed: {0}")]
     DatabaseError(String),
-    
+
     #[error("Memory management failed: {0}")]
     MemoryError(String),
-    
+
     #[error("Network optimization failed: {0}")]
     NetworkError(String),
-    
+
     #[error("Profiling failed: {0}")]
     ProfilingError(String),
-    
+
     #[error("Configuration error: {0}")]
     ConfigurationError(String),
-    
+
     #[error("IO error: {0}")]
     IoError(#[from] std::io::Error),
 }

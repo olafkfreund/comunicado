@@ -202,9 +202,10 @@ impl DeviceManager {
     pub async fn register_device(&self, mut device_info: MobileDevice) -> Result<Uuid> {
         let devices = self.devices.read().await;
         if devices.len() >= self.max_devices {
-            return Err(MobileError::ConfigurationError(
-                format!("Maximum device limit ({}) reached", self.max_devices)
-            ));
+            return Err(MobileError::ConfigurationError(format!(
+                "Maximum device limit ({}) reached",
+                self.max_devices
+            )));
         }
         drop(devices);
 
@@ -228,7 +229,8 @@ impl DeviceManager {
     /// Get device by ID
     pub async fn get_device(&self, device_id: Uuid) -> Result<MobileDevice> {
         let devices = self.devices.read().await;
-        devices.get(&device_id)
+        devices
+            .get(&device_id)
             .cloned()
             .ok_or_else(|| MobileError::DeviceNotFound(device_id.to_string()))
     }
@@ -239,10 +241,10 @@ impl DeviceManager {
         if let Some(device) = devices.get_mut(&device_id) {
             device.status = status;
             device.last_seen = Utc::now();
-            
+
             // Update statistics
             self.update_device_stats().await;
-            
+
             Ok(())
         } else {
             Err(MobileError::DeviceNotFound(device_id.to_string()))
@@ -296,7 +298,8 @@ impl DeviceManager {
         sessions.insert(session_id, session);
 
         // Update device status to online
-        self.update_device_status(device_id, DeviceStatus::Online).await?;
+        self.update_device_status(device_id, DeviceStatus::Online)
+            .await?;
 
         Ok(session_id)
     }
@@ -306,26 +309,30 @@ impl DeviceManager {
         let mut sessions = self.device_sessions.write().await;
         if let Some(session) = sessions.remove(&session_id) {
             // Update device status to offline
-            self.update_device_status(session.device_id, DeviceStatus::Offline).await?;
-            
+            self.update_device_status(session.device_id, DeviceStatus::Offline)
+                .await?;
+
             // Update session statistics
             let mut stats = self.stats.write().await;
             stats.total_sessions += 1;
-            
+
             let session_duration = Utc::now().signed_duration_since(session.started_at);
             let duration_seconds = session_duration.num_seconds() as f64;
-            
+
             if stats.total_sessions == 1 {
                 stats.average_session_duration = duration_seconds;
             } else {
-                stats.average_session_duration = 
-                    (stats.average_session_duration * (stats.total_sessions - 1) as f64 + duration_seconds) 
+                stats.average_session_duration = (stats.average_session_duration
+                    * (stats.total_sessions - 1) as f64
+                    + duration_seconds)
                     / stats.total_sessions as f64;
             }
 
             Ok(())
         } else {
-            Err(MobileError::ConfigurationError("Session not found".to_string()))
+            Err(MobileError::ConfigurationError(
+                "Session not found".to_string(),
+            ))
         }
     }
 
@@ -336,7 +343,9 @@ impl DeviceManager {
             session.last_activity = Utc::now();
             Ok(())
         } else {
-            Err(MobileError::ConfigurationError("Session not found".to_string()))
+            Err(MobileError::ConfigurationError(
+                "Session not found".to_string(),
+            ))
         }
     }
 
@@ -349,7 +358,8 @@ impl DeviceManager {
     /// Get devices by status
     pub async fn get_devices_by_status(&self, status: DeviceStatus) -> Result<Vec<MobileDevice>> {
         let devices = self.devices.read().await;
-        Ok(devices.values()
+        Ok(devices
+            .values()
             .filter(|device| device.status == status)
             .cloned()
             .collect())
@@ -373,10 +383,10 @@ impl DeviceManager {
             // Remove any active sessions
             let mut sessions = self.device_sessions.write().await;
             sessions.retain(|_, session| session.device_id != device_id);
-            
+
             // Update statistics
             self.update_device_stats().await;
-            
+
             Ok(())
         } else {
             Err(MobileError::DeviceNotFound(device_id.to_string()))
@@ -393,14 +403,14 @@ impl DeviceManager {
     pub async fn cleanup_inactive_devices(&self, inactive_hours: u64) -> Result<u32> {
         let cutoff_time = Utc::now() - chrono::Duration::hours(inactive_hours as i64);
         let mut devices = self.devices.write().await;
-        
+
         let initial_count = devices.len();
         devices.retain(|_, device| {
             device.last_seen > cutoff_time || device.status == DeviceStatus::Online
         });
-        
+
         let removed_count = initial_count - devices.len();
-        
+
         if removed_count > 0 {
             // Update statistics
             self.update_device_stats().await;
@@ -416,24 +426,31 @@ impl DeviceManager {
 
         for device in devices.values() {
             let inactive_duration = Utc::now().signed_duration_since(device.last_seen);
-            
+
             // Check for inactive devices
             if inactive_duration.num_hours() > 24 && device.status == DeviceStatus::Online {
                 issues.push(DeviceIssue {
                     device_id: device.id,
                     issue_type: IssueType::StaleOnlineStatus,
-                    description: format!("Device {} shows online but hasn't been seen for {} hours", 
-                                       device.name, inactive_duration.num_hours()),
+                    description: format!(
+                        "Device {} shows online but hasn't been seen for {} hours",
+                        device.name,
+                        inactive_duration.num_hours()
+                    ),
                     severity: IssueSeverity::Medium,
                 });
             }
 
             // Check for devices without push capabilities
-            if !device.capabilities.push_notifications && device.device_type != DeviceType::Desktop {
+            if !device.capabilities.push_notifications && device.device_type != DeviceType::Desktop
+            {
                 issues.push(DeviceIssue {
                     device_id: device.id,
                     issue_type: IssueType::MissingCapability,
-                    description: format!("Device {} lacks push notification capability", device.name),
+                    description: format!(
+                        "Device {} lacks push notification capability",
+                        device.name
+                    ),
                     severity: IssueSeverity::Low,
                 });
             }
@@ -448,7 +465,8 @@ impl DeviceManager {
         let mut stats = self.stats.write().await;
 
         stats.total_devices = devices.len();
-        stats.online_devices = devices.values()
+        stats.online_devices = devices
+            .values()
             .filter(|device| device.status == DeviceStatus::Online)
             .count();
 

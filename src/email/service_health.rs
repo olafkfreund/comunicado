@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
-use tracing::{debug, warn, error, info};
+use tracing::{debug, error, info, warn};
 
 /// Health status of a service
 #[derive(Debug, Clone, PartialEq)]
@@ -24,7 +24,10 @@ pub enum ServiceHealth {
 
 impl ServiceHealth {
     pub fn is_available(&self) -> bool {
-        matches!(self, ServiceHealth::Healthy | ServiceHealth::Degraded { .. })
+        matches!(
+            self,
+            ServiceHealth::Healthy | ServiceHealth::Degraded { .. }
+        )
     }
 
     pub fn is_healthy(&self) -> bool {
@@ -112,10 +115,10 @@ impl ServiceHealthMonitor {
 
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(check_interval);
-            
+
             loop {
                 interval.tick().await;
-                
+
                 // Perform health checks for all registered services
                 let services = {
                     let status_map = health_status.read().await;
@@ -134,14 +137,17 @@ impl ServiceHealthMonitor {
     /// Register a service for health monitoring
     pub async fn register_service(&self, service: ServiceType) {
         let mut status_map = self.health_status.write().await;
-        status_map.insert(service.clone(), HealthCheckResult {
-            service: service.clone(),
-            health: ServiceHealth::Unknown,
-            response_time: Duration::from_millis(0),
-            timestamp: Instant::now(),
-            details: None,
-        });
-        
+        status_map.insert(
+            service.clone(),
+            HealthCheckResult {
+                service: service.clone(),
+                health: ServiceHealth::Unknown,
+                response_time: Duration::from_millis(0),
+                timestamp: Instant::now(),
+                details: None,
+            },
+        );
+
         debug!("Registered service for health monitoring: {}", service);
     }
 
@@ -154,7 +160,7 @@ impl ServiceHealthMonitor {
         details: Option<String>,
     ) {
         let mut status_map = self.health_status.write().await;
-        
+
         let result = HealthCheckResult {
             service: service.clone(),
             health: health.clone(),
@@ -168,8 +174,12 @@ impl ServiceHealthMonitor {
             if previous.health != health {
                 match &health {
                     ServiceHealth::Healthy => info!("Service {} recovered", service),
-                    ServiceHealth::Degraded { reason } => warn!("Service {} degraded: {}", service, reason),
-                    ServiceHealth::Unhealthy { reason, .. } => error!("Service {} became unhealthy: {}", service, reason),
+                    ServiceHealth::Degraded { reason } => {
+                        warn!("Service {} degraded: {}", service, reason)
+                    }
+                    ServiceHealth::Unhealthy { reason, .. } => {
+                        error!("Service {} became unhealthy: {}", service, reason)
+                    }
                     ServiceHealth::Unknown => debug!("Service {} status unknown", service),
                 }
             }
@@ -202,7 +212,8 @@ impl ServiceHealthMonitor {
     /// Get unhealthy services
     pub async fn get_unhealthy_services(&self) -> Vec<ServiceType> {
         let status_map = self.health_status.read().await;
-        status_map.values()
+        status_map
+            .values()
             .filter(|result| matches!(result.health, ServiceHealth::Unhealthy { .. }))
             .map(|result| result.service.clone())
             .collect()
@@ -214,7 +225,7 @@ impl ServiceHealthMonitor {
         service: &ServiceType,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let start_time = Instant::now();
-        
+
         // Perform service-specific health check
         let (health, details) = match service {
             ServiceType::Database => {
@@ -224,7 +235,10 @@ impl ServiceHealthMonitor {
             }
             ServiceType::EventBus => {
                 // Check event bus health
-                (ServiceHealth::Healthy, Some("Event bus operational".to_string()))
+                (
+                    ServiceHealth::Healthy,
+                    Some("Event bus operational".to_string()),
+                )
             }
             ServiceType::Notifications => {
                 // Check notification system
@@ -245,17 +259,20 @@ impl ServiceHealthMonitor {
         };
 
         let response_time = start_time.elapsed();
-        
+
         // Update health status
         {
             let mut status_map = health_status.write().await;
-            status_map.insert(service.clone(), HealthCheckResult {
-                service: service.clone(),
-                health,
-                response_time,
-                timestamp: Instant::now(),
-                details,
-            });
+            status_map.insert(
+                service.clone(),
+                HealthCheckResult {
+                    service: service.clone(),
+                    health,
+                    response_time,
+                    timestamp: Instant::now(),
+                    details,
+                },
+            );
         }
 
         Ok(())
@@ -278,42 +295,39 @@ impl GracefulDegradation {
         let database_service = ServiceType::Database;
 
         let imap_health = self.health_monitor.get_service_health(&imap_service).await;
-        let db_health = self.health_monitor.get_service_health(&database_service).await;
+        let db_health = self
+            .health_monitor
+            .get_service_health(&database_service)
+            .await;
 
         match (imap_health, db_health) {
             (Some(ServiceHealth::Healthy), Some(ServiceHealth::Healthy)) => {
                 DegradationDecision::Proceed
             }
             (Some(ServiceHealth::Degraded { .. }), Some(ServiceHealth::Healthy)) => {
-                DegradationDecision::ProceedWithCaution { 
+                DegradationDecision::ProceedWithCaution {
                     reason: "IMAP service is degraded".to_string(),
                     fallback_strategy: Some("Use cached data where possible".to_string()),
                 }
             }
             (Some(ServiceHealth::Healthy), Some(ServiceHealth::Degraded { .. })) => {
                 DegradationDecision::ProceedWithCaution {
-                    reason: "Database is degraded".to_string(), 
+                    reason: "Database is degraded".to_string(),
                     fallback_strategy: Some("Cache writes locally".to_string()),
                 }
             }
-            (Some(ServiceHealth::Unhealthy { .. }), _) => {
-                DegradationDecision::Fallback {
-                    reason: "IMAP service is unhealthy".to_string(),
-                    strategy: FallbackStrategy::CacheOnly,
-                }
-            }
-            (_, Some(ServiceHealth::Unhealthy { .. })) => {
-                DegradationDecision::Fallback {
-                    reason: "Database is unhealthy".to_string(),
-                    strategy: FallbackStrategy::ReadOnly,
-                }
-            }
-            _ => {
-                DegradationDecision::Fallback {
-                    reason: "Service status unknown".to_string(),
-                    strategy: FallbackStrategy::Minimal,
-                }
-            }
+            (Some(ServiceHealth::Unhealthy { .. }), _) => DegradationDecision::Fallback {
+                reason: "IMAP service is unhealthy".to_string(),
+                strategy: FallbackStrategy::CacheOnly,
+            },
+            (_, Some(ServiceHealth::Unhealthy { .. })) => DegradationDecision::Fallback {
+                reason: "Database is unhealthy".to_string(),
+                strategy: FallbackStrategy::ReadOnly,
+            },
+            _ => DegradationDecision::Fallback {
+                reason: "Service status unknown".to_string(),
+                strategy: FallbackStrategy::Minimal,
+            },
         }
     }
 
@@ -322,8 +336,14 @@ impl GracefulDegradation {
         let caldav_service = ServiceType::CalDav;
         let database_service = ServiceType::Database;
 
-        let caldav_health = self.health_monitor.get_service_health(&caldav_service).await;
-        let db_health = self.health_monitor.get_service_health(&database_service).await;
+        let caldav_health = self
+            .health_monitor
+            .get_service_health(&caldav_service)
+            .await;
+        let db_health = self
+            .health_monitor
+            .get_service_health(&database_service)
+            .await;
 
         match (caldav_health, db_health) {
             (Some(ServiceHealth::Healthy), Some(ServiceHealth::Healthy)) => {
@@ -335,24 +355,18 @@ impl GracefulDegradation {
                     fallback_strategy: Some("Show cached calendar data".to_string()),
                 }
             }
-            (Some(ServiceHealth::Unhealthy { .. }), _) => {
-                DegradationDecision::Fallback {
-                    reason: "CalDAV service is unhealthy".to_string(),
-                    strategy: FallbackStrategy::CacheOnly,
-                }
-            }
-            (_, Some(ServiceHealth::Unhealthy { .. })) => {
-                DegradationDecision::Fallback {
-                    reason: "Database is unhealthy".to_string(),
-                    strategy: FallbackStrategy::ReadOnly,
-                }
-            }
-            _ => {
-                DegradationDecision::Fallback {
-                    reason: "Service status unknown".to_string(),
-                    strategy: FallbackStrategy::CacheOnly,
-                }
-            }
+            (Some(ServiceHealth::Unhealthy { .. }), _) => DegradationDecision::Fallback {
+                reason: "CalDAV service is unhealthy".to_string(),
+                strategy: FallbackStrategy::CacheOnly,
+            },
+            (_, Some(ServiceHealth::Unhealthy { .. })) => DegradationDecision::Fallback {
+                reason: "Database is unhealthy".to_string(),
+                strategy: FallbackStrategy::ReadOnly,
+            },
+            _ => DegradationDecision::Fallback {
+                reason: "Service status unknown".to_string(),
+                strategy: FallbackStrategy::CacheOnly,
+            },
         }
     }
 
@@ -361,8 +375,14 @@ impl GracefulDegradation {
         let search_service = ServiceType::Search;
         let database_service = ServiceType::Database;
 
-        let search_health = self.health_monitor.get_service_health(&search_service).await;
-        let db_health = self.health_monitor.get_service_health(&database_service).await;
+        let search_health = self
+            .health_monitor
+            .get_service_health(&search_service)
+            .await;
+        let db_health = self
+            .health_monitor
+            .get_service_health(&database_service)
+            .await;
 
         match (search_health, db_health) {
             (Some(ServiceHealth::Healthy), Some(ServiceHealth::Healthy)) => {
@@ -374,24 +394,18 @@ impl GracefulDegradation {
                     fallback_strategy: Some("Basic text search only".to_string()),
                 }
             }
-            (Some(ServiceHealth::Unhealthy { .. }), _) => {
-                DegradationDecision::Fallback {
-                    reason: "Search service is unhealthy".to_string(),
-                    strategy: FallbackStrategy::BasicSearch,
-                }
-            }
-            (_, Some(ServiceHealth::Unhealthy { .. })) => {
-                DegradationDecision::Fallback {
-                    reason: "Database is unhealthy".to_string(),
-                    strategy: FallbackStrategy::Minimal,
-                }
-            }
-            _ => {
-                DegradationDecision::ProceedWithCaution {
-                    reason: "Service status unknown".to_string(),
-                    fallback_strategy: Some("Use simple search".to_string()),
-                }
-            }
+            (Some(ServiceHealth::Unhealthy { .. }), _) => DegradationDecision::Fallback {
+                reason: "Search service is unhealthy".to_string(),
+                strategy: FallbackStrategy::BasicSearch,
+            },
+            (_, Some(ServiceHealth::Unhealthy { .. })) => DegradationDecision::Fallback {
+                reason: "Database is unhealthy".to_string(),
+                strategy: FallbackStrategy::Minimal,
+            },
+            _ => DegradationDecision::ProceedWithCaution {
+                reason: "Service status unknown".to_string(),
+                fallback_strategy: Some("Use simple search".to_string()),
+            },
         }
     }
 }
@@ -428,27 +442,35 @@ pub enum FallbackStrategy {
 
 impl DegradationDecision {
     pub fn should_proceed(&self) -> bool {
-        matches!(self, DegradationDecision::Proceed | DegradationDecision::ProceedWithCaution { .. })
+        matches!(
+            self,
+            DegradationDecision::Proceed | DegradationDecision::ProceedWithCaution { .. }
+        )
     }
 
     pub fn get_user_message(&self) -> Option<String> {
         match self {
             DegradationDecision::Proceed => None,
-            DegradationDecision::ProceedWithCaution { reason, fallback_strategy } => {
+            DegradationDecision::ProceedWithCaution {
+                reason,
+                fallback_strategy,
+            } => {
                 let mut msg = format!("⚠️ {}", reason);
                 if let Some(strategy) = fallback_strategy {
                     msg.push_str(&format!(" ({})", strategy));
                 }
                 Some(msg)
             }
-            DegradationDecision::Fallback { reason, strategy } => {
-                Some(format!("⚠️ {}: Using {} mode", reason, match strategy {
+            DegradationDecision::Fallback { reason, strategy } => Some(format!(
+                "⚠️ {}: Using {} mode",
+                reason,
+                match strategy {
                     FallbackStrategy::CacheOnly => "offline",
                     FallbackStrategy::ReadOnly => "read-only",
                     FallbackStrategy::Minimal => "minimal",
                     FallbackStrategy::BasicSearch => "basic search",
-                }))
-            }
+                }
+            )),
         }
     }
 }
@@ -463,7 +485,7 @@ mod tests {
         let service = ServiceType::Database;
 
         monitor.register_service(service.clone()).await;
-        
+
         let health = monitor.get_service_health(&service).await;
         assert!(matches!(health, Some(ServiceHealth::Unknown)));
     }
@@ -474,12 +496,14 @@ mod tests {
         let service = ServiceType::Database;
 
         monitor.register_service(service.clone()).await;
-        monitor.update_service_health(
-            service.clone(),
-            ServiceHealth::Healthy,
-            Duration::from_millis(50),
-            Some("Database is responsive".to_string()),
-        ).await;
+        monitor
+            .update_service_health(
+                service.clone(),
+                ServiceHealth::Healthy,
+                Duration::from_millis(50),
+                Some("Database is responsive".to_string()),
+            )
+            .await;
 
         let health = monitor.get_service_health(&service).await;
         assert!(matches!(health, Some(ServiceHealth::Healthy)));
@@ -492,35 +516,52 @@ mod tests {
 
         // Register services
         monitor.register_service(ServiceType::Database).await;
-        monitor.register_service(ServiceType::Imap("test@example.com".to_string())).await;
+        monitor
+            .register_service(ServiceType::Imap("test@example.com".to_string()))
+            .await;
 
         // Test with healthy services
-        monitor.update_service_health(
-            ServiceType::Database,
-            ServiceHealth::Healthy,
-            Duration::from_millis(10),
-            None,
-        ).await;
+        monitor
+            .update_service_health(
+                ServiceType::Database,
+                ServiceHealth::Healthy,
+                Duration::from_millis(10),
+                None,
+            )
+            .await;
 
-        monitor.update_service_health(
-            ServiceType::Imap("test@example.com".to_string()),
-            ServiceHealth::Healthy,
-            Duration::from_millis(50),
-            None,
-        ).await;
+        monitor
+            .update_service_health(
+                ServiceType::Imap("test@example.com".to_string()),
+                ServiceHealth::Healthy,
+                Duration::from_millis(50),
+                None,
+            )
+            .await;
 
-        let decision = degradation.should_attempt_email_operation("test@example.com").await;
+        let decision = degradation
+            .should_attempt_email_operation("test@example.com")
+            .await;
         assert!(matches!(decision, DegradationDecision::Proceed));
 
         // Test with degraded service
-        monitor.update_service_health(
-            ServiceType::Imap("test@example.com".to_string()),
-            ServiceHealth::Degraded { reason: "Slow response".to_string() },
-            Duration::from_millis(2000),
-            None,
-        ).await;
+        monitor
+            .update_service_health(
+                ServiceType::Imap("test@example.com".to_string()),
+                ServiceHealth::Degraded {
+                    reason: "Slow response".to_string(),
+                },
+                Duration::from_millis(2000),
+                None,
+            )
+            .await;
 
-        let decision = degradation.should_attempt_email_operation("test@example.com").await;
-        assert!(matches!(decision, DegradationDecision::ProceedWithCaution { .. }));
+        let decision = degradation
+            .should_attempt_email_operation("test@example.com")
+            .await;
+        assert!(matches!(
+            decision,
+            DegradationDecision::ProceedWithCaution { .. }
+        ));
     }
 }

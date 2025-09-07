@@ -144,11 +144,18 @@ impl SyncEngine {
 
         // Get folder list
         let folders = client.list_folders("", "*").await?;
-        info!("🗂️  Found {} folders for account {}", folders.len(), account_id);
-        
+        info!(
+            "🗂️  Found {} folders for account {}",
+            folders.len(),
+            account_id
+        );
+
         // Log all folder names for debugging
         for folder in &folders {
-            info!("📁 Folder found: '{}' (messages: {:?})", folder.name, folder.exists);
+            info!(
+                "📁 Folder found: '{}' (messages: {:?})",
+                folder.name, folder.exists
+            );
         }
 
         // Sync each folder
@@ -280,13 +287,8 @@ impl SyncEngine {
                 .await?;
             }
             (false, SyncStrategy::FlagsOnly) => {
-                self.flags_only_sync_folder(
-                    &account_id,
-                    client,
-                    &selected_folder,
-                    &mut sync_state,
-                )
-                .await?;
+                self.flags_only_sync_folder(&account_id, client, &selected_folder, &mut sync_state)
+                    .await?;
             }
         }
 
@@ -329,9 +331,12 @@ impl SyncEngine {
             search_results.len(),
             folder.name
         );
-        
+
         if search_results.is_empty() {
-            info!("⚠️  No messages found in folder '{}' - skipping", folder.name);
+            info!(
+                "⚠️  No messages found in folder '{}' - skipping",
+                folder.name
+            );
             return Ok(());
         }
 
@@ -484,9 +489,12 @@ impl SyncEngine {
             search_results.len(),
             folder.name
         );
-        
+
         if search_results.is_empty() {
-            info!("⚠️  No messages found in folder '{}' during HeadersOnly sync", folder.name);
+            info!(
+                "⚠️  No messages found in folder '{}' during HeadersOnly sync",
+                folder.name
+            );
             return Ok(());
         }
 

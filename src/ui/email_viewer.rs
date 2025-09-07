@@ -8,10 +8,10 @@ use ratatui::{
 };
 
 use crate::email::StoredMessage;
+use crate::encryption::{types::SecureEmailContent, EncryptionManager};
+use crate::images::{extract_images_from_html, ImageManager};
 use crate::theme::Theme;
 use crate::ui::content_preview::{ContentType, EmailContent, EmailHeader, ViewMode};
-use crate::images::{ImageManager, extract_images_from_html};
-use crate::encryption::{EncryptionManager, types::SecureEmailContent};
 use std::sync::Arc;
 
 /// Email viewer actions
@@ -43,7 +43,7 @@ pub struct EmailViewer {
     actions: Vec<EmailViewerAction>,
     #[allow(dead_code)]
     image_manager: ImageManager,
-    
+
     // Encryption-related fields
     encryption_manager: Option<Arc<EncryptionManager>>,
     decrypted_content: Option<SecureEmailContent>,
@@ -100,57 +100,66 @@ impl EmailViewer {
         self.scroll_position = 0;
         self.show_actions = false;
         self.selected_action = 0;
-        
+
         // Check if email is encrypted
         self.analyze_encryption_status(&email_content);
     }
-    
+
     /// Set encryption manager for decryption operations
     pub fn set_encryption_manager(&mut self, encryption_manager: Arc<EncryptionManager>) {
         self.encryption_manager = Some(encryption_manager);
     }
-    
+
     /// Analyze if the email content is encrypted
     fn analyze_encryption_status(&mut self, email_content: &EmailContent) {
         // Check if the email body contains PGP encrypted content
-        self.is_encrypted = email_content.body.contains("-----BEGIN PGP MESSAGE-----") ||
-                           email_content.body.contains("-----BEGIN PGP ENCRYPTED MESSAGE-----");
-        
+        self.is_encrypted = email_content.body.contains("-----BEGIN PGP MESSAGE-----")
+            || email_content
+                .body
+                .contains("-----BEGIN PGP ENCRYPTED MESSAGE-----");
+
         if self.is_encrypted {
             self.decryption_status = DecryptionStatus::Encrypted;
         } else {
             self.decryption_status = DecryptionStatus::NotEncrypted;
         }
-        
+
         // Reset decrypted content when setting new email
         self.decrypted_content = None;
     }
-    
+
     /// Check if current email is encrypted
     pub fn is_encrypted(&self) -> bool {
         self.is_encrypted
     }
-    
+
     /// Get current decryption status
     pub fn decryption_status(&self) -> &DecryptionStatus {
         &self.decryption_status
     }
-    
+
     /// Attempt to decrypt the current email
     pub async fn decrypt_email(&mut self) -> Result<(), String> {
         if !self.is_encrypted {
             return Err("Email is not encrypted".to_string());
         }
-        
-        let encryption_manager = self.encryption_manager.as_ref()
+
+        let encryption_manager = self
+            .encryption_manager
+            .as_ref()
             .ok_or("Encryption manager not available")?;
-        
-        let current_content = self.email_content.as_ref()
+
+        let current_content = self
+            .email_content
+            .as_ref()
             .ok_or("No email content available")?;
-        
+
         self.decryption_status = DecryptionStatus::Decrypting;
-        
-        match encryption_manager.decrypt_email(&current_content.body).await {
+
+        match encryption_manager
+            .decrypt_email(&current_content.body)
+            .await
+        {
             Ok(secure_content) => {
                 self.decrypted_content = Some(secure_content);
                 self.decryption_status = DecryptionStatus::DecryptionSuccessful;
@@ -163,7 +172,7 @@ impl EmailViewer {
             }
         }
     }
-    
+
     /// Get decrypted content if available
     pub fn decrypted_content(&self) -> Option<&SecureEmailContent> {
         self.decrypted_content.as_ref()
@@ -202,12 +211,16 @@ impl EmailViewer {
 
     /// Get account ID from current message
     pub fn get_account_id(&self) -> Option<String> {
-        self.current_message.as_ref().map(|msg| msg.account_id.clone())
+        self.current_message
+            .as_ref()
+            .map(|msg| msg.account_id.clone())
     }
 
     /// Get folder name from current message
     pub fn get_folder_name(&self) -> Option<String> {
-        self.current_message.as_ref().map(|msg| msg.folder_name.clone())
+        self.current_message
+            .as_ref()
+            .map(|msg| msg.folder_name.clone())
     }
 
     /// Toggle view mode
@@ -482,14 +495,16 @@ impl EmailViewer {
         let lines = if let Some(decrypted_content) = decrypted_ref {
             // Show decrypted content if available
             let mut decrypted_lines = vec![];
-            
+
             // Add decryption success header
-            decrypted_lines.push(Line::from(vec![
-                Span::styled("✅ Successfully decrypted email", 
-                    Style::default().fg(ratatui::style::Color::Green).add_modifier(Modifier::BOLD))
-            ]));
+            decrypted_lines.push(Line::from(vec![Span::styled(
+                "✅ Successfully decrypted email",
+                Style::default()
+                    .fg(ratatui::style::Color::Green)
+                    .add_modifier(Modifier::BOLD),
+            )]));
             decrypted_lines.push(Line::from(""));
-            
+
             // Show decrypted body content
             if let Some(ref content) = decrypted_content.decrypted_content {
                 for line in content.as_str().lines() {
@@ -498,27 +513,29 @@ impl EmailViewer {
             } else {
                 decrypted_lines.push(Line::from("No decrypted content available"));
             }
-            
+
             decrypted_lines
         } else if matches!(decryption_status, DecryptionStatus::DecryptionFailed(_)) {
             // Show decryption error
             let mut error_lines = vec![];
-            error_lines.push(Line::from(vec![
-                Span::styled("❌ Decryption failed", 
-                    Style::default().fg(ratatui::style::Color::Red).add_modifier(Modifier::BOLD))
-            ]));
+            error_lines.push(Line::from(vec![Span::styled(
+                "❌ Decryption failed",
+                Style::default()
+                    .fg(ratatui::style::Color::Red)
+                    .add_modifier(Modifier::BOLD),
+            )]));
             if let DecryptionStatus::DecryptionFailed(err) = decryption_status {
                 error_lines.push(Line::from(format!("Error: {}", err)));
             }
             error_lines.push(Line::from(""));
             error_lines.push(Line::from("Showing original encrypted content:"));
             error_lines.push(Line::from(""));
-            
+
             // Show original encrypted content
             if let Some(email) = email_ref {
                 error_lines.extend(Self::render_formatted_email_static(email, theme));
             }
-            
+
             error_lines
         } else if let Some(email) = email_ref {
             // Show regular email content (encrypted or not)
@@ -738,9 +755,13 @@ impl EmailViewer {
 
     /// Render HTML email with embedded images and animations support
     #[allow(dead_code)]
-    async fn render_html_email_with_media<'a>(&self, email: &'a EmailContent, theme: &'a Theme) -> Vec<Line<'a>> {
+    async fn render_html_email_with_media<'a>(
+        &self,
+        email: &'a EmailContent,
+        theme: &'a Theme,
+    ) -> Vec<Line<'a>> {
         let mut lines = Vec::new();
-        
+
         // Headers
         lines.push(Line::from(vec![
             Span::styled("From: ", Style::default().fg(theme.colors.palette.accent)),
@@ -757,19 +778,17 @@ impl EmailViewer {
 
         // Get cleaned email body
         let cleaned_body = Self::filter_email_headers_and_metadata(&email.body);
-        
+
         // Check if terminal supports images
         if self.image_manager.supports_images() {
             // Extract and process images from HTML
             let image_refs = extract_images_from_html(&cleaned_body);
-            
+
             if !image_refs.is_empty() {
-                lines.push(Line::from(vec![
-                    Span::styled(
-                        "📷 Images detected - loading...",
-                        Style::default().fg(theme.colors.palette.text_secondary),
-                    ),
-                ]));
+                lines.push(Line::from(vec![Span::styled(
+                    "📷 Images detected - loading...",
+                    Style::default().fg(theme.colors.palette.text_secondary),
+                )]));
                 lines.push(Line::from(""));
             }
         }
@@ -778,7 +797,7 @@ impl EmailViewer {
         if email.content_type == ContentType::Html || crate::html::is_html_content(&cleaned_body) {
             let mut html_renderer = crate::html::HtmlRenderer::new(80);
             let rendered_text = html_renderer.render_html(&cleaned_body);
-            
+
             // Convert ratatui Text to Lines for display with image integration
             for line in rendered_text.lines {
                 let line_text = line
@@ -788,21 +807,17 @@ impl EmailViewer {
                     .collect::<String>();
 
                 // Filter out technical content that may have slipped through
-                if !line_text.trim().is_empty() 
-                    && !Self::is_line_technical_metadata(&line_text) {
-                    
+                if !line_text.trim().is_empty() && !Self::is_line_technical_metadata(&line_text) {
                     // Check if this line should be replaced with image content
                     if line_text.contains("[Image:") || line_text.contains("<img") {
                         // TODO: Replace with actual image terminal output
                         // For now, show a placeholder
-                        lines.push(Line::from(vec![
-                            Span::styled(
-                                "🖼️  [Image]",
-                                Style::default()
-                                    .fg(theme.colors.palette.accent)
-                                    .add_modifier(Modifier::BOLD),
-                            ),
-                        ]));
+                        lines.push(Line::from(vec![Span::styled(
+                            "🖼️  [Image]",
+                            Style::default()
+                                .fg(theme.colors.palette.accent)
+                                .add_modifier(Modifier::BOLD),
+                        )]));
                     } else {
                         lines.push(line);
                     }
@@ -824,7 +839,7 @@ impl EmailViewer {
     #[allow(dead_code)]
     fn is_line_technical_metadata(line: &str) -> bool {
         let line_lower = line.to_lowercase();
-        
+
         // Common patterns that indicate technical metadata
         line_lower.contains("message-id:")
             || line_lower.contains("x-")
@@ -836,12 +851,20 @@ impl EmailViewer {
             || line_lower.contains("content-transfer-encoding:")
             || line_lower.contains("mime-version:")
             || (line_lower.starts_with("http") && line_lower.contains("://"))
-            || line.trim().chars().all(|c| c.is_ascii_alphanumeric() || "+=/-_".contains(c))
+            || line
+                .trim()
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || "+=/-_".contains(c))
     }
 
     /// Render formatted email with contact information
     #[allow(dead_code)]
-    fn render_formatted_email_with_contact<'a>(&'a self, email: &'a EmailContent, _sender_contact: Option<&'a crate::contacts::Contact>, theme: &'a Theme) -> Vec<Line<'a>> {
+    fn render_formatted_email_with_contact<'a>(
+        &'a self,
+        email: &'a EmailContent,
+        _sender_contact: Option<&'a crate::contacts::Contact>,
+        theme: &'a Theme,
+    ) -> Vec<Line<'a>> {
         let mut lines = Vec::new();
 
         // Modern sender box with contact info
@@ -851,7 +874,10 @@ impl EmailViewer {
         // Subject
         if !email.headers.subject.is_empty() {
             lines.push(Line::from(vec![
-                Span::styled("Subject: ", Style::default().fg(theme.colors.palette.accent)),
+                Span::styled(
+                    "Subject: ",
+                    Style::default().fg(theme.colors.palette.accent),
+                ),
                 Span::styled(
                     &email.headers.subject,
                     Style::default()
@@ -865,7 +891,10 @@ impl EmailViewer {
         if !email.headers.date.is_empty() {
             lines.push(Line::from(vec![
                 Span::styled("Date: ", Style::default().fg(theme.colors.palette.accent)),
-                Span::styled(&email.headers.date, Style::default().fg(theme.colors.palette.text_secondary)),
+                Span::styled(
+                    &email.headers.date,
+                    Style::default().fg(theme.colors.palette.text_secondary),
+                ),
             ]));
         }
 
@@ -918,25 +947,37 @@ impl EmailViewer {
 
         // Headers with contact info
         lines.extend(self.render_sender_box(&email.headers, theme));
-        
+
         lines.push(Line::from(vec![
-            Span::styled("Subject: ", Style::default().fg(theme.colors.palette.accent)),
-            Span::styled(&email.headers.subject, Style::default().fg(theme.colors.palette.text_primary)),
+            Span::styled(
+                "Subject: ",
+                Style::default().fg(theme.colors.palette.accent),
+            ),
+            Span::styled(
+                &email.headers.subject,
+                Style::default().fg(theme.colors.palette.text_primary),
+            ),
         ]));
-        
+
         if !email.headers.to.is_empty() {
             let to_string = email.headers.to.join(", ");
             lines.push(Line::from(vec![
                 Span::styled("To: ", Style::default().fg(theme.colors.palette.accent)),
-                Span::styled(to_string, Style::default().fg(theme.colors.palette.text_secondary)),
+                Span::styled(
+                    to_string,
+                    Style::default().fg(theme.colors.palette.text_secondary),
+                ),
             ]));
         }
-        
+
         lines.push(Line::from(vec![
             Span::styled("Date: ", Style::default().fg(theme.colors.palette.accent)),
-            Span::styled(email.headers.date.clone(), Style::default().fg(theme.colors.palette.text_secondary)),
+            Span::styled(
+                email.headers.date.clone(),
+                Style::default().fg(theme.colors.palette.text_secondary),
+            ),
         ]));
-        
+
         lines.push(Line::from(""));
 
         // Render HTML content with enhanced rendering and header filtering
@@ -944,7 +985,7 @@ impl EmailViewer {
         if email.content_type == ContentType::Html || crate::html::is_html_content(&cleaned_body) {
             let mut html_renderer = crate::html::HtmlRenderer::new(80);
             let rendered_text = html_renderer.render_html(&cleaned_body);
-            
+
             // Process rendered lines and filter out any remaining headers or metadata
             for line in rendered_text.lines {
                 // Check if the rendered line contains actual content
@@ -975,7 +1016,11 @@ impl EmailViewer {
 
     /// Render sender box with contact information (non-static version)
     #[allow(dead_code)]
-    fn render_sender_box<'a>(&'a self, headers: &'a EmailHeader, theme: &'a Theme) -> Vec<Line<'a>> {
+    fn render_sender_box<'a>(
+        &'a self,
+        headers: &'a EmailHeader,
+        theme: &'a Theme,
+    ) -> Vec<Line<'a>> {
         let mut lines = Vec::new();
         let box_width = 70;
 
@@ -994,10 +1039,10 @@ impl EmailViewer {
             Span::styled(
                 title,
                 Style::default()
-                    .fg(if self.sender_contact.is_some() { 
-                        theme.colors.palette.success 
-                    } else { 
-                        theme.colors.palette.accent 
+                    .fg(if self.sender_contact.is_some() {
+                        theme.colors.palette.success
+                    } else {
+                        theme.colors.palette.accent
                     })
                     .add_modifier(Modifier::BOLD),
             ),
@@ -1195,23 +1240,23 @@ impl EmailViewer {
             let body = &content[body_start..];
             return Self::clean_email_body(body);
         }
-        
+
         // Method 2: MIME multipart parsing (for complex emails)
         if content.contains("boundary=") {
             if let Some(body) = Self::extract_mime_text_content(content) {
                 return Self::clean_email_body(&body);
             }
         }
-        
+
         // Method 3: Content-type aware parsing
         if let Some(body) = Self::extract_content_by_type(content) {
             return Self::clean_email_body(&body);
         }
-        
+
         // Method 4: Heuristic fallback with aggressive header filtering
         Self::heuristic_content_extraction(content)
     }
-    
+
     /// Find email body start according to RFC 5322 - blank line separates headers from body
     fn find_rfc_body_start(content: &str) -> Option<usize> {
         // Look for double newline (RFC standard separator)
@@ -1223,30 +1268,31 @@ impl EmailViewer {
         }
         None
     }
-    
+
     /// Extract text content from MIME multipart messages
     fn extract_mime_text_content(content: &str) -> Option<String> {
         // Find boundary parameter
         let boundary = Self::extract_mime_boundary(content)?;
-        
+
         // Split content by boundary
         let parts: Vec<&str> = content.split(&format!("--{}", boundary)).collect();
-        
+
         for part in &parts {
             // Look for text/plain or text/html parts
-            if part.contains("Content-Type: text/plain") || 
-               part.contains("content-type: text/plain") {
+            if part.contains("Content-Type: text/plain")
+                || part.contains("content-type: text/plain")
+            {
                 // Find the blank line and extract content
                 if let Some(content_start) = Self::find_rfc_body_start(part) {
                     return Some(part[content_start..].trim().to_string());
                 }
             }
         }
-        
+
         // Fallback to HTML parts if no plain text found
         for part in &parts {
-            if part.contains("Content-Type: text/html") || 
-               part.contains("content-type: text/html") {
+            if part.contains("Content-Type: text/html") || part.contains("content-type: text/html")
+            {
                 if let Some(content_start) = Self::find_rfc_body_start(part) {
                     let html_content = &part[content_start..];
                     // Convert HTML to plain text
@@ -1254,10 +1300,10 @@ impl EmailViewer {
                 }
             }
         }
-        
+
         None
     }
-    
+
     /// Extract MIME boundary from Content-Type header
     fn extract_mime_boundary(content: &str) -> Option<String> {
         for line in content.lines() {
@@ -1282,14 +1328,14 @@ impl EmailViewer {
         }
         None
     }
-    
+
     /// Extract content based on Content-Type analysis
     fn extract_content_by_type(content: &str) -> Option<String> {
         let lines: Vec<&str> = content.lines().collect();
         let mut content_type = String::new();
         let in_headers = true;
         let mut body_start_idx = 0;
-        
+
         // Parse headers to find Content-Type
         for (i, line) in lines.iter().enumerate() {
             if in_headers {
@@ -1297,45 +1343,44 @@ impl EmailViewer {
                     body_start_idx = i + 1;
                     break;
                 }
-                
+
                 let line_lower = line.to_lowercase();
                 if line_lower.starts_with("content-type:") {
                     content_type = line_lower;
                 }
             }
         }
-        
+
         if body_start_idx < lines.len() {
             let body_lines = &lines[body_start_idx..];
             let body_content = body_lines.join("\n");
-            
+
             if content_type.contains("text/html") {
                 return Some(Self::html_to_plain_text(&body_content));
             } else {
                 return Some(body_content);
             }
         }
-        
+
         None
     }
-    
+
     /// Heuristic content extraction as fallback
     fn heuristic_content_extraction(content: &str) -> String {
         let lines: Vec<&str> = content.lines().collect();
         let mut filtered_lines: Vec<&str> = Vec::new();
         let mut headers_ended = false;
         let mut consecutive_non_headers = 0;
-        
+
         for line in lines {
             let trimmed = line.trim();
-            
+
             // Check if this looks like a header (contains colon and matches header patterns)
-            let looks_like_header = trimmed.contains(':') && 
-                Self::is_likely_email_header(trimmed);
-            
+            let looks_like_header = trimmed.contains(':') && Self::is_likely_email_header(trimmed);
+
             // Check for technical metadata patterns
             let is_technical = Self::is_technical_metadata(trimmed);
-            
+
             if !headers_ended {
                 if !looks_like_header && !is_technical && !trimmed.is_empty() {
                     consecutive_non_headers += 1;
@@ -1355,63 +1400,95 @@ impl EmailViewer {
                 }
             }
         }
-        
+
         filtered_lines.join("\n")
     }
-    
+
     /// Check if a line is likely an email header
     fn is_likely_email_header(line: &str) -> bool {
         let line_lower = line.to_lowercase();
-        
+
         // Standard email headers
         let header_prefixes = [
-            "from:", "to:", "cc:", "bcc:", "subject:", "date:", "reply-to:",
-            "message-id:", "in-reply-to:", "references:", "mime-version:",
-            "content-type:", "content-transfer-encoding:", "content-disposition:",
-            "received:", "return-path:", "delivered-to:", "authentication-results:",
-            "dkim-signature:", "arc-", "x-", "list-", "sender:", "envelope-to:",
+            "from:",
+            "to:",
+            "cc:",
+            "bcc:",
+            "subject:",
+            "date:",
+            "reply-to:",
+            "message-id:",
+            "in-reply-to:",
+            "references:",
+            "mime-version:",
+            "content-type:",
+            "content-transfer-encoding:",
+            "content-disposition:",
+            "received:",
+            "return-path:",
+            "delivered-to:",
+            "authentication-results:",
+            "dkim-signature:",
+            "arc-",
+            "x-",
+            "list-",
+            "sender:",
+            "envelope-to:",
         ];
-        
-        header_prefixes.iter().any(|prefix| line_lower.starts_with(prefix))
+
+        header_prefixes
+            .iter()
+            .any(|prefix| line_lower.starts_with(prefix))
     }
-    
+
     /// Check if a line is technical metadata that should be filtered
     fn is_technical_metadata(line: &str) -> bool {
         let trimmed = line.trim();
-        
+
         // DKIM signature data patterns
-        if trimmed.len() > 40 && 
-           (trimmed.chars().all(|c| c.is_ascii_alphanumeric() || "=+/".contains(c)) ||
-            trimmed.starts_with("bh=") || 
-            trimmed.starts_with("b=") ||
-            trimmed.contains("d=") && trimmed.contains("s=")) {
+        if trimmed.len() > 40
+            && (trimmed
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || "=+/".contains(c))
+                || trimmed.starts_with("bh=")
+                || trimmed.starts_with("b=")
+                || trimmed.contains("d=") && trimmed.contains("s="))
+        {
             return true;
         }
-        
+
         // Long base64-like strings
-        if trimmed.len() > 60 && 
-           trimmed.chars().filter(|c| c.is_ascii_alphanumeric()).count() > trimmed.len() * 3 / 4 {
+        if trimmed.len() > 60
+            && trimmed
+                .chars()
+                .filter(|c| c.is_ascii_alphanumeric())
+                .count()
+                > trimmed.len() * 3 / 4
+        {
             return true;
         }
-        
+
         // Timestamp patterns
-        if regex::Regex::new(r"^\s*[0-9]{2}:[0-9]{2}:[0-9]{2}\s+[+-]\d{4}").unwrap().is_match(trimmed) {
+        if regex::Regex::new(r"^\s*[0-9]{2}:[0-9]{2}:[0-9]{2}\s+[+-]\d{4}")
+            .unwrap()
+            .is_match(trimmed)
+        {
             return true;
         }
-        
+
         false
     }
-    
+
     /// Clean email body content (remove remaining HTML tags, normalize whitespace)
     fn clean_email_body(body: &str) -> String {
         // Remove HTML tags but preserve content
         let cleaned = Self::html_to_plain_text(body);
-        
+
         // Normalize whitespace and remove excessive blank lines
         let lines: Vec<&str> = cleaned.lines().collect();
         let mut result_lines = Vec::new();
         let mut consecutive_empty = 0;
-        
+
         for line in lines {
             let trimmed = line.trim();
             if trimmed.is_empty() {
@@ -1425,10 +1502,10 @@ impl EmailViewer {
                 result_lines.push(line);
             }
         }
-        
+
         result_lines.join("\n").trim().to_string()
     }
-    
+
     /// Convert HTML to plain text (enhanced version)
     fn html_to_plain_text(html: &str) -> String {
         // Simple HTML to text conversion
@@ -1438,13 +1515,13 @@ impl EmailViewer {
         let mut in_script = false;
         let mut in_style = false;
         let mut tag_name = String::new();
-        
+
         let chars: Vec<char> = html.chars().collect();
         let mut i = 0;
-        
+
         while i < chars.len() {
             let ch = chars[i];
-            
+
             match ch {
                 '<' => {
                     // Check for script/style tags
@@ -1458,7 +1535,7 @@ impl EmailViewer {
                     } else if remaining.to_lowercase().starts_with("</style") {
                         in_style = false;
                     }
-                    
+
                     in_tag = true;
                     tag_name.clear();
                 }
@@ -1466,7 +1543,8 @@ impl EmailViewer {
                     in_tag = false;
                     // Add space after block-level tags
                     if ["div", "p", "br", "hr", "h1", "h2", "h3", "h4", "h5", "h6"]
-                        .contains(&tag_name.to_lowercase().as_str()) {
+                        .contains(&tag_name.to_lowercase().as_str())
+                    {
                         result.push('\n');
                     }
                 }
@@ -1480,14 +1558,13 @@ impl EmailViewer {
                 }
                 _ => {}
             }
-            
+
             i += 1;
         }
-        
+
         // Clean up whitespace
         result.split_whitespace().collect::<Vec<_>>().join(" ")
     }
-
 
     /// Check if a line contains actual email content (not headers or metadata) - enhanced version
     fn is_content_line(line: &str) -> bool {

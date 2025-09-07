@@ -1,6 +1,6 @@
 //! AI-powered email assistant for intelligent email management
 
-use crate::ai::{AIFactory, AIService, AIConfig, EmailCategory};
+use crate::ai::{AIConfig, AIFactory, AIService, EmailCategory};
 use crate::email::EmailMessage;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
@@ -94,7 +94,7 @@ impl AIEmailAssistant {
     pub async fn from_config(config: AIConfig) -> Result<Self> {
         let ai_service = Arc::new(AIFactory::create_ai_service(config.clone()).await?);
         let config = Arc::new(RwLock::new(config));
-        
+
         Ok(Self::new(ai_service, config))
     }
 
@@ -114,7 +114,10 @@ impl AIEmailAssistant {
         }
 
         // Get comprehensive email assistance from AI service
-        let assistance = self.ai_service.get_email_assistance(prompt, context).await
+        let assistance = self
+            .ai_service
+            .get_email_assistance(prompt, context)
+            .await
             .map_err(|e| anyhow::anyhow!("AI composition assistance failed: {}", e))?;
 
         Ok(EmailCompositionAssistance {
@@ -147,7 +150,8 @@ impl AIEmailAssistant {
         let user_context = context.unwrap_or("Professional email reply");
 
         // Get reply suggestions from AI service
-        let reply_suggestions = self.ai_service
+        let reply_suggestions = self
+            .ai_service
             .suggest_email_reply(&email_content, user_context)
             .await
             .map_err(|e| anyhow::anyhow!("AI reply assistance failed: {}", e))?;
@@ -157,14 +161,16 @@ impl AIEmailAssistant {
             "Analyze the tone of this email and suggest an appropriate reply tone: {}",
             email_content
         );
-        
-        let tone_analysis = self.ai_service
+
+        let tone_analysis = self
+            .ai_service
             .complete_text(&tone_analysis_prompt, None)
             .await
             .unwrap_or_else(|_| "Professional".to_string());
 
         // Generate context summary
-        let summary = self.ai_service
+        let summary = self
+            .ai_service
             .summarize_email(original_email.content(), Some(100))
             .await
             .unwrap_or_else(|_| "Unable to generate summary".to_string());
@@ -191,19 +197,22 @@ impl AIEmailAssistant {
         );
 
         // Generate summary
-        let summary = self.ai_service
+        let summary = self
+            .ai_service
             .summarize_email(&email_content, Some(200))
             .await
             .map_err(|e| anyhow::anyhow!("Email summarization failed: {}", e))?;
 
         // Extract key information
-        let key_points = self.ai_service
+        let key_points = self
+            .ai_service
             .extract_key_info(&email_content)
             .await
             .unwrap_or_else(|_| vec!["Unable to extract key points".to_string()]);
 
         // Categorize email
-        let category = self.ai_service
+        let category = self
+            .ai_service
             .categorize_email(&email_content)
             .await
             .unwrap_or(EmailCategory::Uncategorized);
@@ -238,7 +247,7 @@ impl AIEmailAssistant {
 
         // Process emails in batches to avoid overwhelming the AI service
         let chunks: Vec<_> = emails.chunks(max_concurrent).collect();
-        
+
         for chunk in chunks {
             let tasks: Vec<_> = chunk
                 .iter()
@@ -255,11 +264,13 @@ impl AIEmailAssistant {
                 .collect();
 
             let results = futures::future::join_all(tasks).await;
-            
+
             for result in results {
                 if let Some((message_id, summary)) = result {
                     // Update category distribution
-                    *category_distribution.entry(summary.category.clone()).or_insert(0) += 1;
+                    *category_distribution
+                        .entry(summary.category.clone())
+                        .or_insert(0) += 1;
                     summaries.insert(message_id, summary);
                     successful += 1;
                 } else {
@@ -271,7 +282,9 @@ impl AIEmailAssistant {
         let processing_time_ms = start_time.elapsed().as_millis() as u64;
 
         // Generate insights
-        let insights = self.generate_insights(&category_distribution, successful).await;
+        let insights = self
+            .generate_insights(&category_distribution, successful)
+            .await;
 
         Ok(BulkEmailAnalysis {
             summaries,
@@ -287,7 +300,10 @@ impl AIEmailAssistant {
     }
 
     /// Smart email categorization with confidence scoring
-    pub async fn categorize_email_smart(&self, email: &EmailMessage) -> Result<(EmailCategory, f32)> {
+    pub async fn categorize_email_smart(
+        &self,
+        email: &EmailMessage,
+    ) -> Result<(EmailCategory, f32)> {
         if !self.is_available().await {
             return Ok((EmailCategory::Uncategorized, 0.0));
         }
@@ -299,7 +315,8 @@ impl AIEmailAssistant {
             email.content()
         );
 
-        let category = self.ai_service
+        let category = self
+            .ai_service
             .categorize_email(&email_content)
             .await
             .map_err(|e| anyhow::anyhow!("Email categorization failed: {}", e))?;
@@ -324,13 +341,13 @@ impl AIEmailAssistant {
             .into_iter()
             .filter(|item| {
                 let item_lower = item.to_lowercase();
-                item_lower.contains("todo") || 
-                item_lower.contains("action") || 
-                item_lower.contains("task") ||
-                item_lower.contains("follow up") ||
-                item_lower.contains("deadline") ||
-                item_lower.contains("schedule") ||
-                item_lower.contains("meeting")
+                item_lower.contains("todo")
+                    || item_lower.contains("action")
+                    || item_lower.contains("task")
+                    || item_lower.contains("follow up")
+                    || item_lower.contains("deadline")
+                    || item_lower.contains("schedule")
+                    || item_lower.contains("meeting")
             })
             .collect()
     }
@@ -338,49 +355,68 @@ impl AIEmailAssistant {
     /// Extract tone information from analysis text
     fn extract_tone(&self, analysis: &str, _tone_type: &str) -> String {
         let analysis_lower = analysis.to_lowercase();
-        
-        let tones = ["professional", "friendly", "formal", "casual", "urgent", "polite", "direct"];
-        
+
+        let tones = [
+            "professional",
+            "friendly",
+            "formal",
+            "casual",
+            "urgent",
+            "polite",
+            "direct",
+        ];
+
         for tone in &tones {
-            if analysis_lower.contains(&format!("{} tone", tone)) || 
-               analysis_lower.contains(&format!("{} style", tone)) {
+            if analysis_lower.contains(&format!("{} tone", tone))
+                || analysis_lower.contains(&format!("{} style", tone))
+            {
                 return tone.to_string();
             }
         }
-        
+
         "Professional".to_string() // Default fallback
     }
 
     /// Calculate confidence score for email categorization
-    fn calculate_categorization_confidence(&self, email: &EmailMessage, category: &EmailCategory) -> f32 {
+    fn calculate_categorization_confidence(
+        &self,
+        email: &EmailMessage,
+        category: &EmailCategory,
+    ) -> f32 {
         let mut confidence: f32 = 0.5; // Base confidence
-        
+
         let subject = email.subject().to_lowercase();
         let sender = email.sender().to_lowercase();
         let content = email.content().to_lowercase();
-        
+
         // Increase confidence based on strong indicators
         match category {
             EmailCategory::Work => {
-                if subject.contains("meeting") || subject.contains("project") || 
-                   sender.contains("@company") || content.contains("deadline") {
+                if subject.contains("meeting")
+                    || subject.contains("project")
+                    || sender.contains("@company")
+                    || content.contains("deadline")
+                {
                     confidence += 0.3;
                 }
-            },
+            }
             EmailCategory::Promotional => {
-                if subject.contains("sale") || subject.contains("offer") || 
-                   content.contains("unsubscribe") || content.contains("discount") {
+                if subject.contains("sale")
+                    || subject.contains("offer")
+                    || content.contains("unsubscribe")
+                    || content.contains("discount")
+                {
                     confidence += 0.4;
                 }
-            },
+            }
             EmailCategory::Personal => {
                 if !sender.contains("noreply") && !content.contains("unsubscribe") {
                     confidence += 0.2;
                 }
-            },
+            }
             _ => {}
         }
-        
+
         // Cap confidence at 0.95
         confidence.min(0.95)
     }
@@ -392,16 +428,16 @@ impl AIEmailAssistant {
         total_successful: usize,
     ) -> Vec<String> {
         let mut insights = Vec::new();
-        
+
         if total_successful == 0 {
             insights.push("No emails were successfully analyzed".to_string());
             return insights;
         }
 
         // Find most common category
-        if let Some((most_common_category, count)) = category_distribution
-            .iter()
-            .max_by_key(|(_, &count)| count) {
+        if let Some((most_common_category, count)) =
+            category_distribution.iter().max_by_key(|(_, &count)| count)
+        {
             let percentage = (*count as f32 / total_successful as f32) * 100.0;
             insights.push(format!(
                 "Most common email type: {} ({:.1}% of emails)",
@@ -421,13 +457,21 @@ impl AIEmailAssistant {
         }
 
         // Check work-life balance
-        let work_count = category_distribution.get(&EmailCategory::Work).copied().unwrap_or(0);
-        let personal_count = category_distribution.get(&EmailCategory::Personal).copied().unwrap_or(0);
-        
+        let work_count = category_distribution
+            .get(&EmailCategory::Work)
+            .copied()
+            .unwrap_or(0);
+        let personal_count = category_distribution
+            .get(&EmailCategory::Personal)
+            .copied()
+            .unwrap_or(0);
+
         if work_count > 0 && personal_count > 0 {
             let work_ratio = work_count as f32 / (work_count + personal_count) as f32;
             if work_ratio > 0.8 {
-                insights.push("Work emails dominate your inbox - consider setting boundaries".to_string());
+                insights.push(
+                    "Work emails dominate your inbox - consider setting boundaries".to_string(),
+                );
             } else if work_ratio < 0.2 {
                 insights.push("Mostly personal emails - good work-life separation".to_string());
             }
@@ -459,12 +503,13 @@ mod tests {
     async fn test_categorization_confidence() {
         let config = AIConfig::default();
         let ai_service = Arc::new(AIFactory::create_ai_service(config.clone()).await.unwrap());
-        
+
         // Test is focused on the confidence calculation logic which doesn't require AI
         let assistant = AIEmailAssistant::new(ai_service, Arc::new(RwLock::new(config)));
         let email = create_test_email();
-        
-        let confidence = assistant.calculate_categorization_confidence(&email, &EmailCategory::Personal);
+
+        let confidence =
+            assistant.calculate_categorization_confidence(&email, &EmailCategory::Personal);
         assert!(confidence >= 0.5 && confidence <= 0.95);
     }
 
@@ -473,10 +518,11 @@ mod tests {
         let config = AIConfig::default();
         let ai_service = Arc::new(AIFactory::create_ai_service(config.clone()).await.unwrap());
         let assistant = AIEmailAssistant::new(ai_service, Arc::new(RwLock::new(config)));
-        
-        let analysis = "The original email has a professional tone, I suggest a friendly tone for the reply";
+
+        let analysis =
+            "The original email has a professional tone, I suggest a friendly tone for the reply";
         assert_eq!(assistant.extract_tone(analysis, "original"), "professional");
-        
+
         let analysis2 = "This message uses a casual style of communication";
         assert_eq!(assistant.extract_tone(analysis2, "casual"), "casual");
     }
@@ -486,12 +532,14 @@ mod tests {
         let config = AIConfig::default();
         let ai_service = Arc::new(AIFactory::create_ai_service(config.clone()).await.unwrap());
         let assistant = AIEmailAssistant::new(ai_service, Arc::new(RwLock::new(config)));
-        
+
         let mut category_distribution = HashMap::new();
         category_distribution.insert(EmailCategory::Work, 8);
         category_distribution.insert(EmailCategory::Personal, 2);
-        
-        let insights = assistant.generate_insights(&category_distribution, 10).await;
+
+        let insights = assistant
+            .generate_insights(&category_distribution, 10)
+            .await;
         assert!(!insights.is_empty());
         assert!(insights[0].contains("Most common email type: Work"));
     }

@@ -8,11 +8,11 @@ use tokio::time::Duration;
 
 use crate::email::{DatabaseStats, EmailDatabase};
 use crate::imap::ImapAccountManager;
+use crate::integrations::KdeConnectIntegration;
 use crate::keyboard::{KeyboardAction, KeyboardConfig, KeyboardManager, KeyboardShortcut};
 use crate::maildir::{Maildir, MaildirUtils};
 use crate::oauth2::{AccountConfig, SecureStorage, TokenManager};
-use crate::integrations::KdeConnectIntegration;
-use crate::plugins::notes::{NoteStorage, NoteConversionService};
+use crate::plugins::notes::{NoteConversionService, NoteStorage};
 
 /// Comunicado - Modern terminal email and calendar client
 #[derive(Parser)]
@@ -106,15 +106,15 @@ pub enum Commands {
         /// Google OAuth2 client secret JSON file path
         #[arg(long)]
         client_secret: Option<PathBuf>,
-        
+
         /// Gmail email address
         #[arg(long)]
         email: Option<String>,
-        
+
         /// Display name for the account
         #[arg(long)]
         name: Option<String>,
-        
+
         /// Skip browser opening (show URL only)
         #[arg(long)]
         no_browser: bool,
@@ -125,11 +125,11 @@ pub enum Commands {
         /// Microsoft OAuth2 client secret JSON file path
         #[arg(long)]
         client_secret: Option<PathBuf>,
-        
+
         /// Display name for the account
         #[arg(long)]
         name: Option<String>,
-        
+
         /// Skip browser opening (show URL only)
         #[arg(long)]
         no_browser: bool,
@@ -160,7 +160,7 @@ pub enum Commands {
 
     /// KDE Connect integration setup and management
     KdeConnect(KdeConnectArgs),
-    
+
     /// Notes plugin management and operations
     Notes(NotesArgs),
 }
@@ -588,30 +588,30 @@ pub enum OfflineCommands {
         /// Path to export directory
         #[arg(short, long)]
         path: PathBuf,
-        
+
         /// Include calendars in export
         #[arg(long, default_value_t = true)]
         calendars: bool,
-        
+
         /// Include contacts in export
         #[arg(long, default_value_t = true)]
         contacts: bool,
     },
-    
+
     /// Import calendars and contacts from offline storage
     Import {
         /// Path to import directory
         #[arg(short, long)]
         path: PathBuf,
-        
+
         /// Overwrite existing data
         #[arg(long)]
         force: bool,
     },
-    
+
     /// Show offline storage statistics
     Stats,
-    
+
     /// Sync online services with offline storage
     Sync {
         /// Force full sync (ignore timestamps)
@@ -633,74 +633,74 @@ pub enum SyncCommands {
         /// Include folder sync (list folders from IMAP)
         #[arg(long, default_value_t = true)]
         folders: bool,
-        
+
         /// Include message sync (download new emails)
         #[arg(long, default_value_t = true)]
         messages: bool,
-        
+
         /// Maximum number of recent messages to sync per folder
         #[arg(long, default_value_t = 100)]
         max_messages: u32,
-        
+
         /// Show detailed sync progress
         #[arg(short, long)]
         verbose: bool,
-        
+
         /// Force full sync (ignore last sync time)
         #[arg(long)]
         force: bool,
     },
-    
+
     /// Sync specific account by name or email
     Account {
         /// Account name or email address
         account: String,
-        
+
         /// Include folder sync (list folders from IMAP)
         #[arg(long, default_value_t = true)]
         folders: bool,
-        
+
         /// Include message sync (download new emails)
         #[arg(long, default_value_t = true)]
         messages: bool,
-        
+
         /// Maximum number of recent messages to sync per folder
         #[arg(long, default_value_t = 100)]
         max_messages: u32,
-        
+
         /// Show detailed sync progress
         #[arg(short, long)]
         verbose: bool,
-        
+
         /// Force full sync (ignore last sync time)
         #[arg(long)]
         force: bool,
     },
-    
+
     /// Sync specific folder for an account
     Folder {
         /// Account name or email address
         account: String,
-        
+
         /// Folder name (e.g., "INBOX", "Sent")
         folder: String,
-        
+
         /// Maximum number of messages to sync
         #[arg(long, default_value_t = 100)]
         max_messages: u32,
-        
+
         /// Show detailed sync progress
         #[arg(short, long)]
         verbose: bool,
-        
+
         /// Force full sync (ignore last sync time)
         #[arg(long)]
         force: bool,
     },
-    
+
     /// List available accounts for sync
     List,
-    
+
     /// Show sync status and statistics
     Status {
         /// Account name or email address (optional, shows all if not specified)
@@ -721,46 +721,46 @@ pub enum CalendarSyncCommands {
         /// Show detailed sync progress
         #[arg(short, long)]
         verbose: bool,
-        
+
         /// Force full sync (ignore last sync time)
         #[arg(long)]
         force: bool,
     },
-    
+
     /// Sync calendars for a specific account
     Account {
         /// Account name or email address
         account: String,
-        
+
         /// Show detailed sync progress
         #[arg(short, long)]
         verbose: bool,
-        
+
         /// Force full sync (ignore last sync time)
         #[arg(long)]
         force: bool,
     },
-    
+
     /// Sync a specific calendar
     Calendar {
         /// Account name or email address
         account: String,
-        
+
         /// Calendar name or ID
         calendar: String,
-        
+
         /// Show detailed sync progress
         #[arg(short, long)]
         verbose: bool,
-        
+
         /// Force full sync (ignore last sync time)
         #[arg(long)]
         force: bool,
     },
-    
+
     /// List available calendars for sync
     List,
-    
+
     /// Show calendar sync status and statistics
     Status {
         /// Account name or email address (optional, shows all if not specified)
@@ -781,29 +781,29 @@ pub enum ContactsSyncCommands {
         /// Show detailed sync progress
         #[arg(short, long)]
         verbose: bool,
-        
+
         /// Force full sync (ignore last sync time)
         #[arg(long)]
         force: bool,
     },
-    
+
     /// Sync contacts for a specific account
     Account {
         /// Account name or email address
         account: String,
-        
+
         /// Show detailed sync progress
         #[arg(short, long)]
         verbose: bool,
-        
+
         /// Force full sync (ignore last sync time)
         #[arg(long)]
         force: bool,
     },
-    
+
     /// List available contacts sources for sync
     List,
-    
+
     /// Show contacts sync status and statistics
     Status {
         /// Account name or email address (optional, shows all if not specified)
@@ -823,41 +823,41 @@ pub enum FoldersCommands {
     List {
         /// Account name or email address (optional, shows all accounts if not specified)
         account: Option<String>,
-        
+
         /// Show message counts for each folder
         #[arg(short, long)]
         counts: bool,
-        
+
         /// Show detailed folder information (attributes, etc.)
         #[arg(short, long)]
         verbose: bool,
-        
+
         /// Output format (table, json, csv)
         #[arg(long, default_value = "table")]
         format: String,
     },
-    
+
     /// Test folder access and operations
     Test {
         /// Account name or email address
         account: String,
-        
+
         /// Specific folder to test (optional, tests INBOX if not specified)
         folder: Option<String>,
-        
+
         /// Show verbose test output
         #[arg(short, long)]
         verbose: bool,
     },
-    
+
     /// Get detailed statistics for a specific folder
     Stats {
         /// Account name or email address
         account: String,
-        
+
         /// Folder name to analyze
         folder: String,
-        
+
         /// Include message flags statistics
         #[arg(long)]
         flags: bool,
@@ -878,30 +878,30 @@ pub enum OAuth2Commands {
         #[arg(short, long)]
         verbose: bool,
     },
-    
+
     /// Refresh expired or expiring OAuth2 tokens
     Refresh {
         /// Account name or email address (optional, refreshes all accounts if not specified)
         account: Option<String>,
-        
+
         /// Force refresh even if token is not expired
         #[arg(short, long)]
         force: bool,
-        
+
         /// Show detailed refresh process
         #[arg(short, long)]
         verbose: bool,
     },
-    
+
     /// Re-authenticate an account (full OAuth2 flow)
     Reauth {
         /// Account name or email address
         account: String,
-        
+
         /// Skip browser opening (show URL only)
         #[arg(long)]
         no_browser: bool,
-        
+
         /// Show detailed authentication process
         #[arg(short, long)]
         verbose: bool,
@@ -932,8 +932,9 @@ impl CliHandler {
 
         // Ensure parent directory exists before creating database
         if let Some(parent) = db_path.parent() {
-            std::fs::create_dir_all(parent)
-                .with_context(|| format!("Failed to create database directory: {}", parent.display()))?;
+            std::fs::create_dir_all(parent).with_context(|| {
+                format!("Failed to create database directory: {}", parent.display())
+            })?;
         }
 
         let database = Arc::new(EmailDatabase::new(db_path.to_str().unwrap()).await?);
@@ -962,11 +963,22 @@ impl CliHandler {
             Commands::Database(args) => self.handle_database(args, dry_run).await,
             Commands::Config(args) => self.handle_config(args, dry_run).await,
             Commands::Account(args) => self.handle_account(args, dry_run).await,
-            Commands::SetupGmail { client_secret, email, name, no_browser } => {
-                self.handle_setup_gmail(client_secret, email, name, no_browser, dry_run).await
+            Commands::SetupGmail {
+                client_secret,
+                email,
+                name,
+                no_browser,
+            } => {
+                self.handle_setup_gmail(client_secret, email, name, no_browser, dry_run)
+                    .await
             }
-            Commands::SetupOutlook { client_secret, name, no_browser } => {
-                self.handle_setup_outlook(client_secret, name, no_browser, dry_run).await
+            Commands::SetupOutlook {
+                client_secret,
+                name,
+                no_browser,
+            } => {
+                self.handle_setup_outlook(client_secret, name, no_browser, dry_run)
+                    .await
             }
             Commands::Keyboard(args) => self.handle_keyboard(args, dry_run).await,
             Commands::Maildir(args) => self.handle_maildir(args, dry_run).await,
@@ -1007,7 +1019,7 @@ impl CliHandler {
         println!("====================================\n");
 
         let accounts = self.storage.list_accounts()?;
-        
+
         // Ensure accounts exist in database before testing
         {
             for account in &accounts {
@@ -1225,11 +1237,15 @@ impl CliHandler {
         let mut imap_manager = if let Some(token_manager) = &self.token_manager {
             ImapAccountManager::new_with_oauth2(token_manager.clone())?
         } else {
-            return Err(anyhow!("Token manager not available for OAuth2 authentication"));
+            return Err(anyhow!(
+                "Token manager not available for OAuth2 authentication"
+            ));
         };
-        
+
         // Load accounts from storage
-        imap_manager.load_accounts().await
+        imap_manager
+            .load_accounts()
+            .await
             .map_err(|e| anyhow!("Failed to load accounts: {}", e))?;
 
         // Get client for the account
@@ -1895,46 +1911,60 @@ impl CliHandler {
         match crate::config::AppConfig::load() {
             Ok(config) => {
                 println!("✅ Configuration loaded successfully\n");
-                
+
                 // General settings
                 println!("🔧 General Settings:");
                 println!("   Auto-sync: {}", config.general.auto_sync);
-                println!("   Sync interval: {} minutes", config.general.sync_interval_minutes);
+                println!(
+                    "   Sync interval: {} minutes",
+                    config.general.sync_interval_minutes
+                );
                 println!("   Fetch on startup: {}", config.general.fetch_on_startup);
-                println!("   Max concurrent syncs: {}", config.general.max_concurrent_syncs);
-                
+                println!(
+                    "   Max concurrent syncs: {}",
+                    config.general.max_concurrent_syncs
+                );
+
                 // UI settings
                 println!("\n🎨 UI Settings:");
                 println!("   Theme: {}", config.ui.theme);
                 println!("   Show sidebar: {}", config.ui.show_sidebar);
                 println!("   Font size: {}", config.ui.font_size);
                 println!("   Animations: {}", config.ui.animations);
-                
+
                 // Performance settings
                 println!("\n⚡ Performance Settings:");
                 println!("   Cache size: {} MB", config.performance.cache_size_mb);
                 println!("   Preload images: {}", config.performance.preload_images);
-                println!("   Max concurrent operations: {}", config.performance.max_concurrent_operations);
+                println!(
+                    "   Max concurrent operations: {}",
+                    config.performance.max_concurrent_operations
+                );
                 println!("   Background sync: {}", config.performance.background_sync);
-                
+
                 // Privacy settings
                 println!("\n🔒 Privacy Settings:");
                 println!("   External images: {}", config.privacy.external_images);
-                println!("   Tracking protection: {}", config.privacy.tracking_protection);
+                println!(
+                    "   Tracking protection: {}",
+                    config.privacy.tracking_protection
+                );
                 println!("   Analytics: {}", config.privacy.analytics);
-                
+
                 // Keyboard settings
                 println!("\n⌨️  Keyboard Settings:");
                 println!("   Vim mode: {}", config.keyboard.vim_mode);
-                println!("   Custom bindings: {}", config.keyboard.custom_bindings.len());
+                println!(
+                    "   Custom bindings: {}",
+                    config.keyboard.custom_bindings.len()
+                );
                 println!("   Repeat delay: {} ms", config.keyboard.repeat_delay);
-                
+
                 // AI settings
                 println!("\n🤖 AI Settings:");
                 println!("   Provider: {}", config.ai.provider);
                 println!("   Model: {}", config.ai.model);
                 println!("   Cache responses: {}", config.ai.cache_responses);
-                
             }
             Err(e) => {
                 println!("❌ Failed to load configuration: {}", e);
@@ -1959,44 +1989,49 @@ impl CliHandler {
         match crate::config::AppConfig::load() {
             Ok(config) => {
                 println!("✅ Main configuration file is valid");
-                
+
                 // Validate specific sections
-                if let Err(e) = crate::config::validation::validate_general_config(&config.general) {
+                if let Err(e) = crate::config::validation::validate_general_config(&config.general)
+                {
                     println!("❌ General settings validation failed: {}", e);
                 } else {
                     println!("✅ General settings are valid");
                 }
-                
+
                 if let Err(e) = crate::config::validation::validate_ui_config(&config.ui) {
                     println!("❌ UI settings validation failed: {}", e);
                 } else {
                     println!("✅ UI settings are valid");
                 }
-                
-                if let Err(e) = crate::config::validation::validate_performance_config(&config.performance) {
+
+                if let Err(e) =
+                    crate::config::validation::validate_performance_config(&config.performance)
+                {
                     println!("❌ Performance settings validation failed: {}", e);
                 } else {
                     println!("✅ Performance settings are valid");
                 }
-                
-                if let Err(e) = crate::config::validation::validate_privacy_config(&config.privacy) {
+
+                if let Err(e) = crate::config::validation::validate_privacy_config(&config.privacy)
+                {
                     println!("❌ Privacy settings validation failed: {}", e);
                 } else {
                     println!("✅ Privacy settings are valid");
                 }
-                
-                if let Err(e) = crate::config::validation::validate_keyboard_config(&config.keyboard) {
+
+                if let Err(e) =
+                    crate::config::validation::validate_keyboard_config(&config.keyboard)
+                {
                     println!("❌ Keyboard settings validation failed: {}", e);
                 } else {
                     println!("✅ Keyboard settings are valid");
                 }
-                
+
                 if let Err(e) = crate::config::validation::validate_ai_config(&config.ai) {
                     println!("❌ AI settings validation failed: {}", e);
                 } else {
                     println!("✅ AI settings are valid");
                 }
-                
             }
             Err(e) => {
                 println!("❌ Configuration file validation failed: {}", e);
@@ -2022,16 +2057,22 @@ impl CliHandler {
         let config_dir = dirs::config_dir()
             .unwrap_or_else(|| std::path::PathBuf::from("."))
             .join("comunicado");
-        
+
         println!("🏠 Configuration Directory:");
         println!("   {}", config_dir.display());
-        
+
         println!("\n📄 Configuration Files:");
-        println!("   Main config: {}", config_dir.join("config.toml").display());
-        println!("   Accounts: {}", config_dir.join("accounts.toml").display());
+        println!(
+            "   Main config: {}",
+            config_dir.join("config.toml").display()
+        );
+        println!(
+            "   Accounts: {}",
+            config_dir.join("accounts.toml").display()
+        );
         println!("   Cache: {}", config_dir.join("cache/").display());
         println!("   Logs: {}", config_dir.join("logs/").display());
-        
+
         println!("\n🔍 File Status:");
         let config_file = config_dir.join("config.toml");
         if config_file.exists() {
@@ -2084,15 +2125,16 @@ impl CliHandler {
 
         println!("⚠️  This will reset all settings to defaults!");
         println!("   💾 Current configuration will be backed up");
-        
+
         // Create backup first
         let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S").to_string();
         let backup_name = format!("config_backup_{}.toml", timestamp);
-        self.export_config(&std::path::PathBuf::from(&backup_name), false).await?;
-        
+        self.export_config(&std::path::PathBuf::from(&backup_name), false)
+            .await?;
+
         // Create default config
         let default_config = crate::config::AppConfig::default();
-        
+
         if let Err(e) = default_config.save() {
             println!("❌ Failed to save default configuration: {}", e);
         } else {
@@ -2103,25 +2145,28 @@ impl CliHandler {
         Ok(())
     }
 
-
     /// Export configuration to file
     async fn export_config(&self, export_path: &std::path::PathBuf, dry_run: bool) -> Result<()> {
         println!("📤 Export Configuration");
         println!("=======================\n");
-        
+
         if dry_run {
-            println!("🔍 DRY RUN: Would export configuration to {}", export_path.display());
+            println!(
+                "🔍 DRY RUN: Would export configuration to {}",
+                export_path.display()
+            );
             return Ok(());
         }
-        
+
         match crate::config::AppConfig::load() {
             Ok(config) => {
                 let config_toml = toml::to_string_pretty(&config)
                     .map_err(|e| anyhow::anyhow!("Failed to serialize config: {}", e))?;
-                
-                tokio::fs::write(export_path, config_toml.clone()).await
+
+                tokio::fs::write(export_path, config_toml.clone())
+                    .await
                     .map_err(|e| anyhow::anyhow!("Failed to write export file: {}", e))?;
-                
+
                 println!("✅ Configuration exported successfully");
                 println!("   📁 Export file: {}", export_path.display());
                 println!("   📊 Size: {} bytes", config_toml.len());
@@ -2131,7 +2176,7 @@ impl CliHandler {
                 return Err(anyhow::anyhow!("Export failed: {}", e));
             }
         }
-        
+
         Ok(())
     }
 
@@ -2139,45 +2184,49 @@ impl CliHandler {
     async fn import_config(&self, import_path: &std::path::PathBuf, dry_run: bool) -> Result<()> {
         println!("📥 Import Configuration");
         println!("=======================\n");
-        
+
         if dry_run {
-            println!("🔍 DRY RUN: Would import configuration from {}", import_path.display());
+            println!(
+                "🔍 DRY RUN: Would import configuration from {}",
+                import_path.display()
+            );
             return Ok(());
         }
-        
+
         // Check if import file exists
         if !tokio::fs::try_exists(import_path).await.unwrap_or(false) {
             println!("❌ Import file not found: {}", import_path.display());
             return Err(anyhow::anyhow!("Import file does not exist"));
         }
-        
+
         // Read and parse import file
-        let import_content = tokio::fs::read_to_string(import_path).await
+        let import_content = tokio::fs::read_to_string(import_path)
+            .await
             .map_err(|e| anyhow::anyhow!("Failed to read import file: {}", e))?;
-        
+
         let imported_config: crate::config::AppConfig = toml::from_str(&import_content)
             .map_err(|e| anyhow::anyhow!("Failed to parse import file: {}", e))?;
-        
+
         println!("✅ Import file parsed successfully");
         println!("   📁 Source: {}", import_path.display());
         println!("   📊 Size: {} bytes", import_content.len());
-        
+
         // Backup current config before importing
         if let Ok(current_config) = crate::config::AppConfig::load() {
             let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
             let backup_name = format!("config_backup_{}.toml", timestamp);
             let backup_path = std::path::PathBuf::from(&backup_name);
-            
+
             let backup_toml = toml::to_string_pretty(&current_config)
                 .map_err(|e| anyhow::anyhow!("Failed to serialize backup: {}", e))?;
-            
+
             if let Err(e) = tokio::fs::write(&backup_path, backup_toml).await {
                 println!("⚠️  Warning: Failed to create backup: {}", e);
             } else {
                 println!("💾 Current configuration backed up to: {}", backup_name);
             }
         }
-        
+
         // Save imported configuration
         match imported_config.save() {
             Ok(_) => {
@@ -2189,7 +2238,7 @@ impl CliHandler {
                 return Err(anyhow::anyhow!("Import failed: {}", e));
             }
         }
-        
+
         Ok(())
     }
 
@@ -2203,17 +2252,36 @@ impl CliHandler {
         }
 
         match args.command {
-            AccountCommands::List { detailed, show_credentials } => {
-                self.handle_account_list(detailed, show_credentials, dry_run).await?;
+            AccountCommands::List {
+                detailed,
+                show_credentials,
+            } => {
+                self.handle_account_list(detailed, show_credentials, dry_run)
+                    .await?;
             }
-            AccountCommands::Add { name, email, oauth2 } => {
-                self.handle_account_add(name, email, oauth2, dry_run).await?;
+            AccountCommands::Add {
+                name,
+                email,
+                oauth2,
+            } => {
+                self.handle_account_add(name, email, oauth2, dry_run)
+                    .await?;
             }
-            AccountCommands::Remove { name, force, keep_data } => {
-                self.handle_account_remove(name, force, keep_data, dry_run).await?;
+            AccountCommands::Remove {
+                name,
+                force,
+                keep_data,
+            } => {
+                self.handle_account_remove(name, force, keep_data, dry_run)
+                    .await?;
             }
-            AccountCommands::Update { name, password, reauth } => {
-                self.handle_account_update(name, password, reauth, dry_run).await?;
+            AccountCommands::Update {
+                name,
+                password,
+                reauth,
+            } => {
+                self.handle_account_update(name, password, reauth, dry_run)
+                    .await?;
             }
         }
 
@@ -2221,7 +2289,12 @@ impl CliHandler {
     }
 
     /// List configured accounts
-    async fn handle_account_list(&self, detailed: bool, show_credentials: bool, dry_run: bool) -> Result<()> {
+    async fn handle_account_list(
+        &self,
+        detailed: bool,
+        show_credentials: bool,
+        dry_run: bool,
+    ) -> Result<()> {
         println!("📋 Account List");
         println!("===============\n");
 
@@ -2246,25 +2319,36 @@ impl CliHandler {
                     println!("   📧 Email: {}", account.email_address);
                     println!("   🏷️  Account ID: {}", account.account_id);
                     println!("   🔐 Auth Type: {:?}", account.auth_type);
-                    
+
                     if detailed {
-                        println!("   🌐 IMAP Server: {}:{}", account.imap_server, account.imap_port);
-                        println!("   📤 SMTP Server: {}:{}", account.smtp_server, account.smtp_port);
+                        println!(
+                            "   🌐 IMAP Server: {}:{}",
+                            account.imap_server, account.imap_port
+                        );
+                        println!(
+                            "   📤 SMTP Server: {}:{}",
+                            account.smtp_server, account.smtp_port
+                        );
                         println!("   🔒 Encryption: STARTTLS");
-                        
+
                         if show_credentials {
                             println!("   ⚠️  CREDENTIALS (use carefully):");
                             match account.auth_type {
                                 crate::oauth2::AuthType::OAuth2 => {
-                                    println!("      Access Token: {}...", &account.access_token[..20.min(account.access_token.len())]);
+                                    println!(
+                                        "      Access Token: {}...",
+                                        &account.access_token[..20.min(account.access_token.len())]
+                                    );
                                 }
                                 crate::oauth2::AuthType::Password => {
-                                    println!("      Authentication: Password-based (stored securely)");
+                                    println!(
+                                        "      Authentication: Password-based (stored securely)"
+                                    );
                                 }
                             }
                         }
                     }
-                    
+
                     println!();
                 }
             }
@@ -2278,14 +2362,24 @@ impl CliHandler {
     }
 
     /// Add new account interactively
-    async fn handle_account_add(&self, name: Option<String>, email: Option<String>, oauth2: bool, dry_run: bool) -> Result<()> {
+    async fn handle_account_add(
+        &self,
+        name: Option<String>,
+        email: Option<String>,
+        oauth2: bool,
+        dry_run: bool,
+    ) -> Result<()> {
         println!("➕ Add Account");
         println!("==============\n");
 
         if dry_run {
             println!("🔍 DRY RUN: Would add new account");
-            if let Some(ref n) = name { println!("   Name: {}", n); }
-            if let Some(ref e) = email { println!("   Email: {}", e); }
+            if let Some(ref n) = name {
+                println!("   Name: {}", n);
+            }
+            if let Some(ref e) = email {
+                println!("   Email: {}", e);
+            }
             println!("   OAuth2: {}", oauth2);
             return Ok(());
         }
@@ -2337,7 +2431,13 @@ impl CliHandler {
     }
 
     /// Remove account
-    async fn handle_account_remove(&self, name: String, force: bool, keep_data: bool, dry_run: bool) -> Result<()> {
+    async fn handle_account_remove(
+        &self,
+        name: String,
+        force: bool,
+        keep_data: bool,
+        dry_run: bool,
+    ) -> Result<()> {
         println!("🗑️  Remove Account");
         println!("=================\n");
 
@@ -2350,7 +2450,8 @@ impl CliHandler {
 
         // Find account
         let accounts = self.storage.list_accounts()?;
-        let account = accounts.iter()
+        let account = accounts
+            .iter()
             .find(|a| a.display_name == name || a.email_address == name)
             .ok_or_else(|| anyhow::anyhow!("Account '{}' not found", name))?;
 
@@ -2373,7 +2474,7 @@ impl CliHandler {
         match self.storage.remove_account(&account.account_id) {
             Ok(_) => {
                 println!("✅ Account removed from credential storage");
-                
+
                 if !keep_data {
                     // TODO: Remove email data from database
                     println!("💾 Email data preserved (database cleanup not yet implemented)");
@@ -2392,7 +2493,13 @@ impl CliHandler {
     }
 
     /// Update account settings
-    async fn handle_account_update(&self, name: String, password: bool, reauth: bool, dry_run: bool) -> Result<()> {
+    async fn handle_account_update(
+        &self,
+        name: String,
+        password: bool,
+        reauth: bool,
+        dry_run: bool,
+    ) -> Result<()> {
         println!("🔄 Update Account");
         println!("================\n");
 
@@ -2405,7 +2512,8 @@ impl CliHandler {
 
         // Find account
         let accounts = self.storage.list_accounts()?;
-        let account = accounts.iter()
+        let account = accounts
+            .iter()
             .find(|a| a.display_name == name || a.email_address == name)
             .ok_or_else(|| anyhow::anyhow!("Account '{}' not found", name))?;
 
@@ -2425,8 +2533,13 @@ impl CliHandler {
                 println!("🔐 OAuth2 Re-authentication");
                 println!("   💡 Use the appropriate setup command:");
                 if account.email_address.contains("gmail") {
-                    println!("      comunicado setup-gmail --email {}", account.email_address);
-                } else if account.email_address.contains("outlook") || account.email_address.contains("hotmail") {
+                    println!(
+                        "      comunicado setup-gmail --email {}",
+                        account.email_address
+                    );
+                } else if account.email_address.contains("outlook")
+                    || account.email_address.contains("hotmail")
+                {
                     println!("      comunicado setup-outlook");
                 }
             } else {
@@ -2503,7 +2616,10 @@ impl CliHandler {
             }
         };
 
-        println!("✅ Found client secret file: {}", client_secret_path.display());
+        println!(
+            "✅ Found client secret file: {}",
+            client_secret_path.display()
+        );
 
         // Read and parse client secret
         let client_data = std::fs::read_to_string(&client_secret_path)
@@ -2531,7 +2647,7 @@ impl CliHandler {
         } else {
             print!("📧 Enter your Gmail address: ");
             std::io::stdout().flush()?;
-            
+
             let mut input_email = String::new();
             std::io::stdin().read_line(&mut input_email)?;
             let input_email = input_email.trim().to_string();
@@ -2545,9 +2661,8 @@ impl CliHandler {
         println!("   Email: {}", email);
 
         // Use provided name or default
-        let display_name = name.unwrap_or_else(|| {
-            email.split('@').next().unwrap_or("Gmail User").to_string()
-        });
+        let display_name =
+            name.unwrap_or_else(|| email.split('@').next().unwrap_or("Gmail User").to_string());
 
         println!("   Display name: {}", display_name);
 
@@ -2561,15 +2676,18 @@ impl CliHandler {
 
         // Run OAuth2 flow
         println!("\n🚀 Starting OAuth2 authorization...");
-        
-        match self.run_oauth2_flow(
-            &email,
-            &display_name,
-            client_id,
-            client_secret_value,
-            "gmail",
-            no_browser,
-        ).await {
+
+        match self
+            .run_oauth2_flow(
+                &email,
+                &display_name,
+                client_id,
+                client_secret_value,
+                "gmail",
+                no_browser,
+            )
+            .await
+        {
             Ok(()) => {
                 println!("\n🎉 Gmail account setup complete!");
                 println!("   Account: {} ({})", display_name, email);
@@ -2607,9 +2725,13 @@ impl CliHandler {
             path
         } else {
             println!("❓ Client Secret Required");
-            println!("   💡 To set up Outlook OAuth2, you need a Microsoft Azure app client secret.");
+            println!(
+                "   💡 To set up Outlook OAuth2, you need a Microsoft Azure app client secret."
+            );
             println!("   💡 Create an Azure app at: https://portal.azure.com");
-            println!("   💡 Then run: comunicado setup-outlook --client-secret /path/to/secret.json");
+            println!(
+                "   💡 Then run: comunicado setup-outlook --client-secret /path/to/secret.json"
+            );
             println!();
             println!("📋 Azure App Configuration:");
             println!("   1. Go to Azure Portal > App registrations");
@@ -2627,8 +2749,14 @@ impl CliHandler {
         };
 
         // Read client secret
-        if !tokio::fs::try_exists(&client_secret_path).await.unwrap_or(false) {
-            println!("❌ Client secret file not found: {}", client_secret_path.display());
+        if !tokio::fs::try_exists(&client_secret_path)
+            .await
+            .unwrap_or(false)
+        {
+            println!(
+                "❌ Client secret file not found: {}",
+                client_secret_path.display()
+            );
             return Err(anyhow::anyhow!("Client secret file does not exist"));
         }
 
@@ -2640,7 +2768,7 @@ impl CliHandler {
             .as_str()
             .ok_or_else(|| anyhow::anyhow!("Missing 'client_id' in secret file"))?
             .to_string();
-        
+
         let _client_secret_value = secret_json["client_secret"]
             .as_str()
             .ok_or_else(|| anyhow::anyhow!("Missing 'client_secret' in secret file"))?
@@ -3392,8 +3520,9 @@ impl CliHandler {
         println!("❌ Offline storage functionality has been removed.");
         println!("💡 This feature was deprecated as part of code cleanup and simplification.");
         println!("💡 Email data is managed directly through the main application database.");
-        return Err(anyhow::anyhow!("Offline integration functionality is no longer available"));
-
+        return Err(anyhow::anyhow!(
+            "Offline integration functionality is no longer available"
+        ));
     }
 
     /// Run OAuth2 authorization flow for account setup
@@ -3409,8 +3538,8 @@ impl CliHandler {
         use std::collections::HashMap;
         use std::sync::{Arc, Mutex};
         use std::time::Duration;
-        use tokio::net::TcpListener;
         use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+        use tokio::net::TcpListener;
 
         const REDIRECT_PORT: u16 = 8181;
         const REDIRECT_URI: &str = "http://localhost:8181/oauth/callback";
@@ -3426,13 +3555,13 @@ impl CliHandler {
                     ("access_type", "offline"),
                     ("prompt", "consent"),
                 ];
-                
+
                 let query: String = auth_params
                     .iter()
                     .map(|(k, v)| format!("{}={}", k, urlencoding::encode(v)))
                     .collect::<Vec<_>>()
                     .join("&");
-                
+
                 let auth_url = format!("https://accounts.google.com/o/oauth2/auth?{}", query);
                 let token_url = "https://oauth2.googleapis.com/token";
                 (auth_url, token_url)
@@ -3449,7 +3578,7 @@ impl CliHandler {
         // Store the authorization code
         let auth_code: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
         let server_running = Arc::new(Mutex::new(true));
-        
+
         let auth_code_clone = Arc::clone(&auth_code);
         let server_running_clone = Arc::clone(&server_running);
 
@@ -3470,19 +3599,27 @@ impl CliHandler {
                     Ok(Ok((mut stream, _))) => {
                         let mut reader = BufReader::new(&mut stream);
                         let mut request_line = String::new();
-                        
+
                         if reader.read_line(&mut request_line).await.is_ok() {
                             if request_line.contains("/oauth/callback") {
                                 // Parse the callback URL
                                 if let Some(query_start) = request_line.find('?') {
                                     if let Some(query_end) = request_line[query_start..].find(' ') {
-                                        let query = &request_line[query_start + 1..query_start + query_end];
+                                        let query =
+                                            &request_line[query_start + 1..query_start + query_end];
                                         let params: HashMap<String, String> = query
                                             .split('&')
                                             .filter_map(|param| {
                                                 let mut parts = param.split('=');
-                                                if let (Some(key), Some(value)) = (parts.next(), parts.next()) {
-                                                    Some((key.to_string(), urlencoding::decode(value).unwrap_or_default().to_string()))
+                                                if let (Some(key), Some(value)) =
+                                                    (parts.next(), parts.next())
+                                                {
+                                                    Some((
+                                                        key.to_string(),
+                                                        urlencoding::decode(value)
+                                                            .unwrap_or_default()
+                                                            .to_string(),
+                                                    ))
                                                 } else {
                                                     None
                                                 }
@@ -3491,7 +3628,7 @@ impl CliHandler {
 
                                         if let Some(code) = params.get("code") {
                                             *auth_code_clone.lock().unwrap() = Some(code.clone());
-                                            
+
                                             // Send success response
                                             let response = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n\
                                                 <html><head><title>Authorization Successful</title></head>\
@@ -3514,7 +3651,7 @@ impl CliHandler {
                                             );
                                             let _ = stream.write_all(response.as_bytes()).await;
                                         }
-                                        
+
                                         *server_running_clone.lock().unwrap() = false;
                                     }
                                 }
@@ -3549,7 +3686,10 @@ impl CliHandler {
 
         loop {
             if let Some(code) = auth_code.lock().unwrap().clone() {
-                println!("✅ Got authorization code: {}...", &code[..10.min(code.len())]);
+                println!(
+                    "✅ Got authorization code: {}...",
+                    &code[..10.min(code.len())]
+                );
                 break;
             }
 
@@ -3591,7 +3731,11 @@ impl CliHandler {
         if !response.status().is_success() {
             let status = response.status();
             let error_text = response.text().await.unwrap_or_default();
-            return Err(anyhow!("Token exchange failed: HTTP {} - {}", status, error_text));
+            return Err(anyhow!(
+                "Token exchange failed: HTTP {} - {}",
+                status,
+                error_text
+            ));
         }
 
         let token_response: serde_json::Value = response
@@ -3611,16 +3755,15 @@ impl CliHandler {
             .as_str()
             .ok_or_else(|| anyhow!("Missing access_token in response"))?;
 
-        let refresh_token = token_response
-            .get("refresh_token")
-            .and_then(|v| v.as_str());
+        let refresh_token = token_response.get("refresh_token").and_then(|v| v.as_str());
 
-        let expires_in = token_response["expires_in"]
-            .as_u64()
-            .unwrap_or(3600);
+        let expires_in = token_response["expires_in"].as_u64().unwrap_or(3600);
 
         println!("✅ Got OAuth2 tokens successfully!");
-        println!("   Access token: {}...", &access_token[..20.min(access_token.len())]);
+        println!(
+            "   Access token: {}...",
+            &access_token[..20.min(access_token.len())]
+        );
         if let Some(refresh) = refresh_token {
             println!("   Refresh token: {}...", &refresh[..20.min(refresh.len())]);
         }
@@ -3685,22 +3828,24 @@ impl CliHandler {
             .map_err(|e| anyhow!("Failed to create secure storage: {}", e))?;
 
         // Store OAuth2 credentials
-        if let Err(e) = account_storage.store_oauth_credentials(&account_id, client_id, client_secret) {
+        if let Err(e) =
+            account_storage.store_oauth_credentials(&account_id, client_id, client_secret)
+        {
             println!("⚠️  Failed to store OAuth2 credentials: {}", e);
             println!("   Falling back to file storage...");
-            
+
             // Fallback to file storage
             let client_id_encoded = base64::prelude::BASE64_STANDARD.encode(client_id);
             let client_secret_encoded = base64::prelude::BASE64_STANDARD.encode(client_secret);
-            
+
             let client_id_path = config_dir.join(format!("{}.client_id.cred", account_id));
             let client_secret_path = config_dir.join(format!("{}.client_secret.cred", account_id));
-            
+
             std::fs::write(&client_id_path, client_id_encoded)
                 .map_err(|e| anyhow!("Failed to write client ID file: {}", e))?;
             std::fs::write(&client_secret_path, client_secret_encoded)
                 .map_err(|e| anyhow!("Failed to write client secret file: {}", e))?;
-            
+
             // Set proper permissions
             #[cfg(unix)]
             {
@@ -3711,7 +3856,7 @@ impl CliHandler {
                     std::fs::set_permissions(path, perms)?;
                 }
             }
-            
+
             println!("✅ OAuth2 credentials stored securely");
         } else {
             println!("✅ OAuth2 credentials stored in system keyring");
@@ -3722,7 +3867,7 @@ impl CliHandler {
         let access_token_path = config_dir.join(format!("{}.access.token", account_id));
         std::fs::write(&access_token_path, access_token_encoded)
             .map_err(|e| anyhow!("Failed to write access token file: {}", e))?;
-        
+
         // Set proper permissions
         #[cfg(unix)]
         {
@@ -3731,8 +3876,11 @@ impl CliHandler {
             perms.set_mode(0o600);
             std::fs::set_permissions(&access_token_path, perms)?;
         }
-        
-        println!("✅ Access token written to: {}", access_token_path.display());
+
+        println!(
+            "✅ Access token written to: {}",
+            access_token_path.display()
+        );
 
         // Store refresh token if available
         if let Some(refresh_token) = refresh_token {
@@ -3740,7 +3888,7 @@ impl CliHandler {
             let refresh_token_path = config_dir.join(format!("{}.refresh.token", account_id));
             std::fs::write(&refresh_token_path, refresh_token_encoded)
                 .map_err(|e| anyhow!("Failed to write refresh token file: {}", e))?;
-            
+
             // Set proper permissions
             #[cfg(unix)]
             {
@@ -3749,8 +3897,11 @@ impl CliHandler {
                 perms.set_mode(0o600);
                 std::fs::set_permissions(&refresh_token_path, perms)?;
             }
-            
-            println!("✅ Refresh token written to: {}", refresh_token_path.display());
+
+            println!(
+                "✅ Refresh token written to: {}",
+                refresh_token_path.display()
+            );
         }
 
         Ok(())
@@ -3759,34 +3910,70 @@ impl CliHandler {
     /// Handle sync commands
     async fn handle_sync(&self, args: SyncArgs, dry_run: bool) -> Result<()> {
         match args.command {
-            SyncCommands::All { folders, messages, max_messages, verbose, force } => {
-                self.handle_sync_all(folders, messages, max_messages, verbose, force, dry_run).await
+            SyncCommands::All {
+                folders,
+                messages,
+                max_messages,
+                verbose,
+                force,
+            } => {
+                self.handle_sync_all(folders, messages, max_messages, verbose, force, dry_run)
+                    .await
             }
-            SyncCommands::Account { account, folders, messages, max_messages, verbose, force } => {
-                self.handle_sync_account(account, folders, messages, max_messages, verbose, force, dry_run).await
+            SyncCommands::Account {
+                account,
+                folders,
+                messages,
+                max_messages,
+                verbose,
+                force,
+            } => {
+                self.handle_sync_account(
+                    account,
+                    folders,
+                    messages,
+                    max_messages,
+                    verbose,
+                    force,
+                    dry_run,
+                )
+                .await
             }
-            SyncCommands::Folder { account, folder, max_messages, verbose, force } => {
-                self.handle_sync_folder(account, folder, max_messages, verbose, force, dry_run).await
+            SyncCommands::Folder {
+                account,
+                folder,
+                max_messages,
+                verbose,
+                force,
+            } => {
+                self.handle_sync_folder(account, folder, max_messages, verbose, force, dry_run)
+                    .await
             }
-            SyncCommands::List => {
-                self.handle_sync_list(dry_run).await
-            }
-            SyncCommands::Status { account } => {
-                self.handle_sync_status(account, dry_run).await
-            }
+            SyncCommands::List => self.handle_sync_list(dry_run).await,
+            SyncCommands::Status { account } => self.handle_sync_status(account, dry_run).await,
         }
     }
 
     /// Sync all configured accounts
-    async fn handle_sync_all(&self, folders: bool, messages: bool, max_messages: u32, verbose: bool, force: bool, dry_run: bool) -> Result<()> {
+    async fn handle_sync_all(
+        &self,
+        folders: bool,
+        messages: bool,
+        max_messages: u32,
+        verbose: bool,
+        force: bool,
+        dry_run: bool,
+    ) -> Result<()> {
         println!("🔄 Syncing all accounts...");
-        
+
         if dry_run {
             println!("💨 Dry run mode - no changes will be made");
         }
 
         // Get all accounts
-        let account_ids = self.storage.list_account_ids()
+        let account_ids = self
+            .storage
+            .list_account_ids()
             .map_err(|e| anyhow!("Failed to list accounts: {}", e))?;
 
         if account_ids.is_empty() {
@@ -3798,40 +3985,82 @@ impl CliHandler {
 
         // For now, this is a placeholder - the full sync implementation would:
         println!("📋 Sync plan:");
-        println!("   📁 Folders: {}", if folders { "✅ Enabled" } else { "❌ Disabled" });
-        println!("   📧 Messages: {}", if messages { "✅ Enabled" } else { "❌ Disabled" });
+        println!(
+            "   📁 Folders: {}",
+            if folders {
+                "✅ Enabled"
+            } else {
+                "❌ Disabled"
+            }
+        );
+        println!(
+            "   📧 Messages: {}",
+            if messages {
+                "✅ Enabled"
+            } else {
+                "❌ Disabled"
+            }
+        );
         println!("   📊 Max messages per folder: {}", max_messages);
-        println!("   🔄 Force full sync: {}", if force { "✅ Yes" } else { "❌ No" });
+        println!(
+            "   🔄 Force full sync: {}",
+            if force { "✅ Yes" } else { "❌ No" }
+        );
 
         for account_id in &account_ids {
             if let Ok(Some(config)) = self.storage.load_account(account_id) {
-                let display_name = if config.display_name.is_empty() { "Unknown".to_string() } else { config.display_name.clone() };
-                if dry_run {
-                    println!("💨 Would sync: {} ({}) - {}", display_name, config.email_address, config.provider);
+                let display_name = if config.display_name.is_empty() {
+                    "Unknown".to_string()
                 } else {
-                    println!("🔄 Would sync: {} ({}) - {} (implementation needed)", display_name, config.email_address, config.provider);
+                    config.display_name.clone()
+                };
+                if dry_run {
+                    println!(
+                        "💨 Would sync: {} ({}) - {}",
+                        display_name, config.email_address, config.provider
+                    );
+                } else {
+                    println!(
+                        "🔄 Would sync: {} ({}) - {} (implementation needed)",
+                        display_name, config.email_address, config.provider
+                    );
                 }
             }
         }
 
         if !dry_run {
             println!("\n🚀 Starting sync for {} accounts...", account_ids.len());
-            
+
             // Create OAuth2 token manager and IMAP account manager
             let token_manager = TokenManager::new_with_storage(Arc::new(self.storage.clone()));
-            
+
             let mut imap_manager = ImapAccountManager::new_with_oauth2(token_manager)?;
             imap_manager.load_accounts().await?;
             let imap_manager = Arc::new(imap_manager);
-            
+
             let mut total_accounts_synced = 0;
             let mut total_accounts_failed = 0;
-            
+
             for account_id in &account_ids {
                 if let Ok(Some(config)) = self.storage.load_account(account_id) {
-                    println!("\n📧 Syncing account: {} ({})", config.display_name, config.email_address);
-                    
-                    match self.sync_single_account(&imap_manager, account_id, folders, messages, max_messages, verbose, force, false).await {
+                    println!(
+                        "\n📧 Syncing account: {} ({})",
+                        config.display_name, config.email_address
+                    );
+
+                    match self
+                        .sync_single_account(
+                            &imap_manager,
+                            account_id,
+                            folders,
+                            messages,
+                            max_messages,
+                            verbose,
+                            force,
+                            false,
+                        )
+                        .await
+                    {
                         Ok(()) => {
                             println!("   ✅ Sync completed successfully");
                             total_accounts_synced += 1;
@@ -3843,7 +4072,7 @@ impl CliHandler {
                     }
                 }
             }
-            
+
             // Final summary
             println!("\n🎯 Sync Summary:");
             println!("   ✅ Accounts synced: {}", total_accounts_synced);
@@ -3859,7 +4088,16 @@ impl CliHandler {
     }
 
     /// Sync specific account
-    async fn handle_sync_account(&self, account: String, folders: bool, messages: bool, max_messages: u32, _verbose: bool, force: bool, dry_run: bool) -> Result<()> {
+    async fn handle_sync_account(
+        &self,
+        account: String,
+        folders: bool,
+        messages: bool,
+        max_messages: u32,
+        _verbose: bool,
+        force: bool,
+        dry_run: bool,
+    ) -> Result<()> {
         println!("🔄 Syncing account: {}", account);
 
         if dry_run {
@@ -3870,27 +4108,63 @@ impl CliHandler {
         let account_id = self.find_account_id(&account)?;
 
         if let Ok(Some(config)) = self.storage.load_account(&account_id) {
-            let display_name = if config.display_name.is_empty() { "Unknown".to_string() } else { config.display_name.clone() };
-            
-            println!("📋 Sync plan for: {} ({}) - {}", display_name, config.email_address, config.provider);
-            println!("   📁 Folders: {}", if folders { "✅ Enabled" } else { "❌ Disabled" });
-            println!("   📧 Messages: {}", if messages { "✅ Enabled" } else { "❌ Disabled" });
+            let display_name = if config.display_name.is_empty() {
+                "Unknown".to_string()
+            } else {
+                config.display_name.clone()
+            };
+
+            println!(
+                "📋 Sync plan for: {} ({}) - {}",
+                display_name, config.email_address, config.provider
+            );
+            println!(
+                "   📁 Folders: {}",
+                if folders {
+                    "✅ Enabled"
+                } else {
+                    "❌ Disabled"
+                }
+            );
+            println!(
+                "   📧 Messages: {}",
+                if messages {
+                    "✅ Enabled"
+                } else {
+                    "❌ Disabled"
+                }
+            );
             println!("   📊 Max messages per folder: {}", max_messages);
-            println!("   🔄 Force full sync: {}", if force { "✅ Yes" } else { "❌ No" });
+            println!(
+                "   🔄 Force full sync: {}",
+                if force { "✅ Yes" } else { "❌ No" }
+            );
 
             if dry_run {
                 println!("💨 Would sync account: {}", account);
             } else {
                 println!("🚀 Starting sync for account: {}", account);
-                
+
                 // Create OAuth2 token manager and IMAP account manager
                 let token_manager = TokenManager::new_with_storage(Arc::new(self.storage.clone()));
-                
+
                 let mut imap_manager = ImapAccountManager::new_with_oauth2(token_manager)?;
                 imap_manager.load_accounts().await?;
                 let imap_manager = Arc::new(imap_manager);
 
-                match self.sync_single_account(&imap_manager, &account_id, folders, messages, max_messages, _verbose, force, false).await {
+                match self
+                    .sync_single_account(
+                        &imap_manager,
+                        &account_id,
+                        folders,
+                        messages,
+                        max_messages,
+                        _verbose,
+                        force,
+                        false,
+                    )
+                    .await
+                {
                     Ok(()) => {
                         println!("✅ Account sync completed successfully");
                     }
@@ -3908,7 +4182,15 @@ impl CliHandler {
     }
 
     /// Sync specific folder for an account
-    async fn handle_sync_folder(&self, account: String, folder: String, max_messages: u32, _verbose: bool, force: bool, dry_run: bool) -> Result<()> {
+    async fn handle_sync_folder(
+        &self,
+        account: String,
+        folder: String,
+        max_messages: u32,
+        _verbose: bool,
+        force: bool,
+        dry_run: bool,
+    ) -> Result<()> {
         println!("🔄 Syncing folder '{}' for account: {}", folder, account);
 
         if dry_run {
@@ -3919,29 +4201,55 @@ impl CliHandler {
         let account_id = self.find_account_id(&account)?;
 
         if let Ok(Some(config)) = self.storage.load_account(&account_id) {
-            let display_name = if config.display_name.is_empty() { "Unknown".to_string() } else { config.display_name.clone() };
-            
+            let display_name = if config.display_name.is_empty() {
+                "Unknown".to_string()
+            } else {
+                config.display_name.clone()
+            };
+
             println!("📋 Folder sync plan:");
-            println!("   📧 Account: {} ({}) - {}", display_name, config.email_address, config.provider);
+            println!(
+                "   📧 Account: {} ({}) - {}",
+                display_name, config.email_address, config.provider
+            );
             println!("   📁 Folder: {}", folder);
             println!("   📊 Max messages: {}", max_messages);
-            println!("   🔄 Force full sync: {}", if force { "✅ Yes" } else { "❌ No" });
+            println!(
+                "   🔄 Force full sync: {}",
+                if force { "✅ Yes" } else { "❌ No" }
+            );
 
             if dry_run {
-                println!("💨 Would sync folder '{}' with up to {} messages", folder, max_messages);
+                println!(
+                    "💨 Would sync folder '{}' with up to {} messages",
+                    folder, max_messages
+                );
             } else {
                 println!("🚀 Starting sync for folder: {}", folder);
-                
+
                 // Create OAuth2 token manager and IMAP account manager
                 let token_manager = TokenManager::new_with_storage(Arc::new(self.storage.clone()));
-                
+
                 let mut imap_manager = ImapAccountManager::new_with_oauth2(token_manager)?;
                 imap_manager.load_accounts().await?;
                 let imap_manager = Arc::new(imap_manager);
 
-                match self.sync_single_folder(&imap_manager, &account_id, &folder, max_messages, _verbose, force).await {
+                match self
+                    .sync_single_folder(
+                        &imap_manager,
+                        &account_id,
+                        &folder,
+                        max_messages,
+                        _verbose,
+                        force,
+                    )
+                    .await
+                {
                     Ok(synced_count) => {
-                        println!("✅ Folder sync completed successfully - {} messages synced", synced_count);
+                        println!(
+                            "✅ Folder sync completed successfully - {} messages synced",
+                            synced_count
+                        );
                     }
                     Err(e) => {
                         println!("❌ Folder sync failed: {}", e);
@@ -3960,7 +4268,9 @@ impl CliHandler {
     async fn handle_sync_list(&self, _dry_run: bool) -> Result<()> {
         println!("📋 Available accounts for sync:");
 
-        let account_ids = self.storage.list_account_ids()
+        let account_ids = self
+            .storage
+            .list_account_ids()
             .map_err(|e| anyhow!("Failed to list accounts: {}", e))?;
 
         if account_ids.is_empty() {
@@ -3971,9 +4281,16 @@ impl CliHandler {
         for account_id in &account_ids {
             match self.storage.load_account(account_id) {
                 Ok(Some(config)) => {
-                    let display_name = if config.display_name.is_empty() { "Unknown".to_string() } else { config.display_name.clone() };
-                    println!("  📧 {} ({}) - {}", display_name, config.email_address, config.provider);
-                    
+                    let display_name = if config.display_name.is_empty() {
+                        "Unknown".to_string()
+                    } else {
+                        config.display_name.clone()
+                    };
+                    println!(
+                        "  📧 {} ({}) - {}",
+                        display_name, config.email_address, config.provider
+                    );
+
                     // Authentication status check would be implemented here
                     println!("      ℹ️  Authentication: Status check not implemented");
                 }
@@ -4002,8 +4319,10 @@ impl CliHandler {
             self.show_account_sync_status(&account_id).await?;
         } else {
             println!("📊 Sync status for all accounts:");
-            
-            let account_ids = self.storage.list_account_ids()
+
+            let account_ids = self
+                .storage
+                .list_account_ids()
                 .map_err(|e| anyhow!("Failed to list accounts: {}", e))?;
 
             if account_ids.is_empty() {
@@ -4022,7 +4341,9 @@ impl CliHandler {
 
     /// Helper: Find account ID by name or email
     fn find_account_id(&self, account: &str) -> Result<String> {
-        let account_ids = self.storage.list_account_ids()
+        let account_ids = self
+            .storage
+            .list_account_ids()
             .map_err(|e| anyhow!("Failed to list accounts: {}", e))?;
 
         // First try exact match on account ID
@@ -4044,19 +4365,24 @@ impl CliHandler {
             }
         }
 
-        Err(anyhow!("Account '{}' not found. Use 'comunicado sync list' to see available accounts.", account))
+        Err(anyhow!(
+            "Account '{}' not found. Use 'comunicado sync list' to see available accounts.",
+            account
+        ))
     }
 
     /// Find account by name or email address (returns Option)
     fn find_account_by_name_or_email(&self, identifier: &str) -> Result<Option<String>> {
-        let account_ids = self.storage.list_account_ids()
+        let account_ids = self
+            .storage
+            .list_account_ids()
             .map_err(|e| anyhow!("Failed to list accounts: {}", e))?;
-        
+
         // First try exact match on account ID
         if account_ids.contains(&identifier.to_string()) {
             return Ok(Some(identifier.to_string()));
         }
-        
+
         // Then try matching by display name or email
         for account_id in account_ids {
             if let Ok(Some(config)) = self.storage.load_account(&account_id) {
@@ -4065,12 +4391,22 @@ impl CliHandler {
                 }
             }
         }
-        
+
         Ok(None)
     }
 
     /// Helper: Sync single account
-    async fn sync_single_account(&self, imap_manager: &Arc<ImapAccountManager>, account_id: &str, folders: bool, messages: bool, max_messages: u32, verbose: bool, force: bool, dry_run: bool) -> Result<()> {
+    async fn sync_single_account(
+        &self,
+        imap_manager: &Arc<ImapAccountManager>,
+        account_id: &str,
+        folders: bool,
+        messages: bool,
+        max_messages: u32,
+        verbose: bool,
+        force: bool,
+        dry_run: bool,
+    ) -> Result<()> {
         if verbose {
             println!("🔄 Starting sync for account: {}", account_id);
         }
@@ -4080,8 +4416,11 @@ impl CliHandler {
             if verbose {
                 println!("📁 Syncing folders for: {}", account_id);
             }
-            
-            match self.sync_folders_for_account(imap_manager, account_id, verbose).await {
+
+            match self
+                .sync_folders_for_account(imap_manager, account_id, verbose)
+                .await
+            {
                 Ok(folder_count) => {
                     if verbose {
                         println!("✅ Synced {} folders for: {}", folder_count, account_id);
@@ -4099,7 +4438,10 @@ impl CliHandler {
                 println!("📧 Syncing messages for: {}", account_id);
             }
 
-            match self.sync_messages_for_account(imap_manager, account_id, max_messages, verbose, force).await {
+            match self
+                .sync_messages_for_account(imap_manager, account_id, max_messages, verbose, force)
+                .await
+            {
                 Ok(message_count) => {
                     if verbose {
                         println!("✅ Synced {} messages for: {}", message_count, account_id);
@@ -4112,19 +4454,26 @@ impl CliHandler {
         }
 
         if dry_run {
-            println!("💨 Would sync account: {} (folders: {}, messages: {})", account_id, folders, messages);
+            println!(
+                "💨 Would sync account: {} (folders: {}, messages: {})",
+                account_id, folders, messages
+            );
         }
 
         Ok(())
     }
 
     /// Helper: Sync folders for account
-    async fn sync_folders_for_account(&self, imap_manager: &Arc<ImapAccountManager>, account_id: &str, verbose: bool) -> Result<usize> {
+    async fn sync_folders_for_account(
+        &self,
+        imap_manager: &Arc<ImapAccountManager>,
+        account_id: &str,
+        verbose: bool,
+    ) -> Result<usize> {
         // Get IMAP client with timeout
-        let client_result = tokio::time::timeout(
-            Duration::from_secs(10),
-            imap_manager.get_client(account_id)
-        ).await;
+        let client_result =
+            tokio::time::timeout(Duration::from_secs(10), imap_manager.get_client(account_id))
+                .await;
 
         let client_arc = match client_result {
             Ok(Ok(client)) => client,
@@ -4135,32 +4484,40 @@ impl CliHandler {
         let mut client = client_arc.lock().await;
 
         // List folders from IMAP
-        let folders = client.list_folders("", "*").await
+        let folders = client
+            .list_folders("", "*")
+            .await
             .map_err(|e| anyhow!("Failed to list folders: {}", e))?;
 
         if verbose {
             println!("📁 Found {} folders to sync", folders.len());
         }
 
-        // Store folders in database  
+        // Store folders in database
         for folder in &folders {
             if verbose {
                 println!("  📁 {}", folder.name);
             }
-            
+
             // Convert ImapFolder to StoredFolder and store in database
             let stored_folder = crate::email::database::StoredFolder {
                 account_id: account_id.to_string(),
                 name: folder.name.clone(),
                 full_name: folder.full_name.clone(),
                 delimiter: folder.delimiter.clone(),
-                attributes: folder.attributes.iter().map(|attr| format!("{:?}", attr)).collect(),
+                attributes: folder
+                    .attributes
+                    .iter()
+                    .map(|attr| format!("{:?}", attr))
+                    .collect(),
                 created_at: chrono::Utc::now(),
                 updated_at: chrono::Utc::now(),
             };
-            
+
             // Store folder in database using upsert (insert or update)
-            self.database.store_folder(&stored_folder).await
+            self.database
+                .store_folder(&stored_folder)
+                .await
                 .map_err(|e| anyhow!("Failed to store folder {}: {}", folder.name, e))?;
         }
 
@@ -4168,13 +4525,24 @@ impl CliHandler {
     }
 
     /// Helper: Sync messages for account  
-    async fn sync_messages_for_account(&self, imap_manager: &Arc<ImapAccountManager>, account_id: &str, max_messages: u32, verbose: bool, _force: bool) -> Result<usize> {
+    async fn sync_messages_for_account(
+        &self,
+        imap_manager: &Arc<ImapAccountManager>,
+        account_id: &str,
+        max_messages: u32,
+        verbose: bool,
+        _force: bool,
+    ) -> Result<usize> {
         // Get folders directly from IMAP server (more reliable than database)
-        let client_arc = imap_manager.get_client(account_id).await
+        let client_arc = imap_manager
+            .get_client(account_id)
+            .await
             .map_err(|e| anyhow!("Failed to get IMAP client: {}", e))?;
 
         let mut client = client_arc.lock().await;
-        let folders = client.list_folders("", "*").await
+        let folders = client
+            .list_folders("", "*")
+            .await
             .map_err(|e| anyhow!("Failed to list folders from IMAP: {}", e))?;
 
         if folders.is_empty() {
@@ -4185,16 +4553,16 @@ impl CliHandler {
 
         // Priority folders to sync first (based on actual folder names from IMAP)
         let priority_folders = [
-            "INBOX", 
-            "All Mail",        // Gmail's main archive
-            "Sent Mail",       // Gmail's sent items  
-            "Important",       // Gmail's important folder
-            "Drafts",          // Gmail's drafts
-            "Privat",          // Personal folder
-            "Google invoice",  // Invoice folder
-            "Starred",         // Gmail starred
-            "Sent",            // Standard sent (fallback)
-            "Bin",             // Gmail trash/bin
+            "INBOX",
+            "All Mail",       // Gmail's main archive
+            "Sent Mail",      // Gmail's sent items
+            "Important",      // Gmail's important folder
+            "Drafts",         // Gmail's drafts
+            "Privat",         // Personal folder
+            "Google invoice", // Invoice folder
+            "Starred",        // Gmail starred
+            "Sent",           // Standard sent (fallback)
+            "Bin",            // Gmail trash/bin
         ];
         let mut priority_found = Vec::new();
         let mut other_folders = Vec::new();
@@ -4212,12 +4580,20 @@ impl CliHandler {
             if verbose {
                 println!("📧 Syncing priority folder: {}", folder.name);
             }
-            
+
             let sync_result = tokio::time::timeout(
                 Duration::from_secs(30),
-                self.sync_single_folder(imap_manager, account_id, &folder.name, max_messages, verbose, false)
-            ).await;
-            
+                self.sync_single_folder(
+                    imap_manager,
+                    account_id,
+                    &folder.name,
+                    max_messages,
+                    verbose,
+                    false,
+                ),
+            )
+            .await;
+
             match sync_result {
                 Ok(Ok(count)) => {
                     total_messages += count;
@@ -4245,7 +4621,17 @@ impl CliHandler {
                 println!("📧 Syncing folder: {}", folder.name);
             }
 
-            match self.sync_single_folder(imap_manager, account_id, &folder.name, max_messages / 2, verbose, false).await {
+            match self
+                .sync_single_folder(
+                    imap_manager,
+                    account_id,
+                    &folder.name,
+                    max_messages / 2,
+                    verbose,
+                    false,
+                )
+                .await
+            {
                 Ok(count) => {
                     total_messages += count;
                     if verbose {
@@ -4264,33 +4650,50 @@ impl CliHandler {
     }
 
     /// Helper: Sync single folder
-    async fn sync_single_folder(&self, imap_manager: &Arc<ImapAccountManager>, account_id: &str, folder_name: &str, max_messages: u32, verbose: bool, _force: bool) -> Result<usize> {
+    async fn sync_single_folder(
+        &self,
+        imap_manager: &Arc<ImapAccountManager>,
+        account_id: &str,
+        folder_name: &str,
+        max_messages: u32,
+        verbose: bool,
+        _force: bool,
+    ) -> Result<usize> {
         // Get IMAP client
-        let client_arc = imap_manager.get_client(account_id).await
+        let client_arc = imap_manager
+            .get_client(account_id)
+            .await
             .map_err(|e| anyhow!("Failed to get IMAP client: {}", e))?;
 
         let mut client = client_arc.lock().await;
 
         // Select folder
-        client.select_folder(folder_name).await
+        client
+            .select_folder(folder_name)
+            .await
             .map_err(|e| anyhow!("Failed to select folder {}: {}", folder_name, e))?;
 
         // Get message count
         // Get message count using SEARCH (more reliable than STATUS)
         use crate::imap::SearchCriteria;
-        let message_uids = client.search(&SearchCriteria::All).await
+        let message_uids = client
+            .search(&SearchCriteria::All)
+            .await
             .map_err(|e| anyhow!("Failed to search for messages: {}", e))?;
         let message_count = message_uids.len() as u32;
-        
+
         if message_count == 0 {
             if verbose {
                 println!("📭 Folder {} is empty", folder_name);
             }
             return Ok(0);
         }
-        
+
         if verbose {
-            println!("📊 Found {} messages in folder {}", message_count, folder_name);
+            println!(
+                "📊 Found {} messages in folder {}",
+                message_count, folder_name
+            );
         }
 
         // Calculate range to fetch (most recent messages)
@@ -4302,8 +4705,10 @@ impl CliHandler {
         };
 
         if verbose {
-            println!("📧 Fetching {} messages from {} (UIDs {}-{})", 
-                fetch_count, folder_name, start_uid, message_count);
+            println!(
+                "📧 Fetching {} messages from {} (UIDs {}-{})",
+                fetch_count, folder_name, start_uid, message_count
+            );
         }
 
         // Fetch messages with proper sequence range
@@ -4312,31 +4717,42 @@ impl CliHandler {
         } else {
             format!("{}:{}", start_uid, message_count)
         };
-        
-        let messages = client.fetch_messages(&sequence_range, &["UID", "ENVELOPE", "FLAGS", "INTERNALDATE", "RFC822.SIZE"]).await
+
+        let messages = client
+            .fetch_messages(
+                &sequence_range,
+                &["UID", "ENVELOPE", "FLAGS", "INTERNALDATE", "RFC822.SIZE"],
+            )
+            .await
             .map_err(|e| anyhow!("Failed to fetch messages: {}", e))?;
 
         // Process and store messages in database with improved error handling
         let mut stored_count = 0;
         let total_messages = messages.len();
-        
+
         if verbose && total_messages > 0 {
             println!("  📧 Processing {} messages...", total_messages);
         }
-        
+
         for (index, message) in messages.into_iter().enumerate() {
             // Extract data from envelope if available
-            let (subject, from_addr, message_id, date_str) = 
+            let (subject, from_addr, message_id, date_str) =
                 if let Some(ref envelope) = message.envelope {
                     (
                         envelope.subject.clone().unwrap_or_default(),
-                        envelope.from.first()
-                            .map(|addr| format!("{}@{}", 
-                                addr.mailbox.as_deref().unwrap_or("unknown"), 
-                                addr.host.as_deref().unwrap_or("unknown")))
+                        envelope
+                            .from
+                            .first()
+                            .map(|addr| {
+                                format!(
+                                    "{}@{}",
+                                    addr.mailbox.as_deref().unwrap_or("unknown"),
+                                    addr.host.as_deref().unwrap_or("unknown")
+                                )
+                            })
                             .unwrap_or_default(),
                         envelope.message_id.clone(),
-                        envelope.date.clone().unwrap_or_default()
+                        envelope.date.clone().unwrap_or_default(),
                     )
                 } else {
                     ("No subject".to_string(), String::new(), None, String::new())
@@ -4361,7 +4777,7 @@ impl CliHandler {
                 thread_id: None,
                 in_reply_to: None, // Simplified for CLI sync
                 references: Vec::new(),
-                
+
                 subject: subject.clone(),
                 from_addr,
                 from_name: None,
@@ -4370,16 +4786,16 @@ impl CliHandler {
                 bcc_addrs: Vec::new(),
                 reply_to: None,
                 date: parsed_date,
-                
+
                 body_text: None, // Body not fetched in CLI sync for performance
                 body_html: None,
                 attachments: Vec::new(),
-                
+
                 flags: message.flags.iter().map(|f| format!("{:?}", f)).collect(),
                 labels: Vec::new(),
                 size: message.size,
                 priority: None,
-                
+
                 created_at: chrono::Utc::now(),
                 updated_at: chrono::Utc::now(),
                 last_synced: chrono::Utc::now(),
@@ -4387,15 +4803,18 @@ impl CliHandler {
                 is_draft: message.is_draft(),
                 is_deleted: message.is_deleted(),
             };
-            
+
             // Store with improved error handling (no timeout to prevent premature failures)
             match self.database.store_message(&stored_message).await {
                 Ok(()) => {
                     stored_count += 1;
                     if verbose {
                         let progress = format!("({}/{})", index + 1, total_messages);
-                        println!("  ✅ Stored {}: {}", progress, 
-                            subject.chars().take(40).collect::<String>());
+                        println!(
+                            "  ✅ Stored {}: {}",
+                            progress,
+                            subject.chars().take(40).collect::<String>()
+                        );
                     }
                 }
                 Err(e) => {
@@ -4408,11 +4827,17 @@ impl CliHandler {
 
         if verbose {
             if stored_count > 0 {
-                println!("  💾 Successfully stored {} messages from {}", stored_count, folder_name);
+                println!(
+                    "  💾 Successfully stored {} messages from {}",
+                    stored_count, folder_name
+                );
             } else if total_messages == 0 {
                 println!("  📭 Folder {} is empty", folder_name);
             } else {
-                println!("  ⚠️  Found {} messages but none were stored", total_messages);
+                println!(
+                    "  ⚠️  Found {} messages but none were stored",
+                    total_messages
+                );
             }
         }
 
@@ -4423,14 +4848,21 @@ impl CliHandler {
     async fn show_account_sync_status(&self, account_id: &str) -> Result<()> {
         match self.storage.load_account(account_id) {
             Ok(Some(config)) => {
-                let display_name = if config.display_name.is_empty() { "Unknown".to_string() } else { config.display_name.clone() };
-                println!("📧 {} ({}) - {}", display_name, config.email_address, config.provider);
+                let display_name = if config.display_name.is_empty() {
+                    "Unknown".to_string()
+                } else {
+                    config.display_name.clone()
+                };
+                println!(
+                    "📧 {} ({}) - {}",
+                    display_name, config.email_address, config.provider
+                );
 
                 // Database stats would be implemented here
                 println!("  📁 Folders: Stats not implemented");
                 println!("  📧 Messages: Stats not implemented");
                 println!("  🕐 Last sync: Stats not implemented");
-                
+
                 // Authentication status would be implemented here
                 println!("  🔐 Authentication: Status check not implemented");
             }
@@ -4448,20 +4880,43 @@ impl CliHandler {
     /// Handle folders commands
     async fn handle_folders(&self, args: FoldersArgs, dry_run: bool) -> Result<()> {
         match args.command {
-            FoldersCommands::List { account, counts, verbose, format } => {
-                self.handle_folders_list(account, counts, verbose, format, dry_run).await
+            FoldersCommands::List {
+                account,
+                counts,
+                verbose,
+                format,
+            } => {
+                self.handle_folders_list(account, counts, verbose, format, dry_run)
+                    .await
             }
-            FoldersCommands::Test { account, folder, verbose } => {
-                self.handle_folders_test(account, folder, verbose, dry_run).await
+            FoldersCommands::Test {
+                account,
+                folder,
+                verbose,
+            } => {
+                self.handle_folders_test(account, folder, verbose, dry_run)
+                    .await
             }
-            FoldersCommands::Stats { account, folder, flags } => {
-                self.handle_folders_stats(account, folder, flags, dry_run).await
+            FoldersCommands::Stats {
+                account,
+                folder,
+                flags,
+            } => {
+                self.handle_folders_stats(account, folder, flags, dry_run)
+                    .await
             }
         }
     }
 
     /// Handle folders list command
-    async fn handle_folders_list(&self, account: Option<String>, counts: bool, verbose: bool, format: String, dry_run: bool) -> Result<()> {
+    async fn handle_folders_list(
+        &self,
+        account: Option<String>,
+        counts: bool,
+        verbose: bool,
+        format: String,
+        dry_run: bool,
+    ) -> Result<()> {
         if dry_run {
             println!("🔍 Dry run: Would list folders");
             if let Some(ref acc) = account {
@@ -4481,8 +4936,11 @@ impl CliHandler {
         // Get accounts to process
         let accounts_to_process = if let Some(account_filter) = &account {
             if let Some(account_id) = self.find_account_by_name_or_email(account_filter)? {
-                if let Some(account_config) = self.storage.load_account(&account_id)
-                    .map_err(|e| anyhow!("Failed to load account: {}", e))? {
+                if let Some(account_config) = self
+                    .storage
+                    .load_account(&account_id)
+                    .map_err(|e| anyhow!("Failed to load account: {}", e))?
+                {
                     vec![account_config]
                 } else {
                     return Err(anyhow!("Account '{}' not found", account_filter));
@@ -4491,7 +4949,8 @@ impl CliHandler {
                 return Err(anyhow!("Account '{}' not found", account_filter));
             }
         } else {
-            self.storage.load_all_accounts()
+            self.storage
+                .load_all_accounts()
                 .map_err(|e| anyhow!("Failed to load accounts: {}", e))?
         };
 
@@ -4502,17 +4961,29 @@ impl CliHandler {
 
         // Process each account
         for account_config in accounts_to_process {
-            println!("🔐 Account: {} ({})", account_config.display_name, account_config.account_id);
-            
+            println!(
+                "🔐 Account: {} ({})",
+                account_config.display_name, account_config.account_id
+            );
+
             // Create IMAP manager for this account
             let token_manager = TokenManager::new_with_storage(Arc::new(self.storage.clone()));
             let mut imap_manager = ImapAccountManager::new_with_oauth2(token_manager)?;
             imap_manager.load_accounts().await?;
-            
+
             // Get IMAP client
             match imap_manager.get_client(&account_config.account_id).await {
                 Ok(client_arc) => {
-                    match self.list_folders_for_account(&client_arc, &account_config.account_id, counts, verbose, &format).await {
+                    match self
+                        .list_folders_for_account(
+                            &client_arc,
+                            &account_config.account_id,
+                            counts,
+                            verbose,
+                            &format,
+                        )
+                        .await
+                    {
                         Ok(folder_count) => {
                             println!("✅ Found {} folders\n", folder_count);
                         }
@@ -4531,10 +5002,19 @@ impl CliHandler {
     }
 
     /// List folders for a specific account
-    async fn list_folders_for_account(&self, client_arc: &Arc<tokio::sync::Mutex<crate::imap::ImapClient>>, account_id: &str, counts: bool, verbose: bool, format: &str) -> Result<usize> {
+    async fn list_folders_for_account(
+        &self,
+        client_arc: &Arc<tokio::sync::Mutex<crate::imap::ImapClient>>,
+        account_id: &str,
+        counts: bool,
+        verbose: bool,
+        format: &str,
+    ) -> Result<usize> {
         // Get folders from IMAP server
         let mut client = client_arc.lock().await;
-        let folders = client.list_folders("", "*").await
+        let folders = client
+            .list_folders("", "*")
+            .await
             .map_err(|e| anyhow!("Failed to list folders: {}", e))?;
 
         if folders.is_empty() {
@@ -4549,21 +5029,39 @@ impl CliHandler {
                 println!("  \"folders\": [");
                 for (i, folder) in folders.iter().enumerate() {
                     let comma = if i < folders.len() - 1 { "," } else { "" };
-                    
+
                     if counts {
                         let mut client = client_arc.lock().await;
                         match client.select_folder(&folder.full_name).await {
                             Ok(_) => {
-                                match client.get_folder_status(&folder.full_name, &["MESSAGES", "UNSEEN", "RECENT"]).await {
+                                match client
+                                    .get_folder_status(
+                                        &folder.full_name,
+                                        &["MESSAGES", "UNSEEN", "RECENT"],
+                                    )
+                                    .await
+                                {
                                     Ok(status) => {
                                         println!("    {{");
                                         println!("      \"name\": \"{}\",", folder.name);
                                         println!("      \"full_name\": \"{}\",", folder.full_name);
-                                        println!("      \"message_count\": {},", status.exists.unwrap_or(0));
-                                        println!("      \"recent_count\": {},", status.recent.unwrap_or(0));
-                                        println!("      \"unseen_count\": {}", status.unseen.unwrap_or(0));
+                                        println!(
+                                            "      \"message_count\": {},",
+                                            status.exists.unwrap_or(0)
+                                        );
+                                        println!(
+                                            "      \"recent_count\": {},",
+                                            status.recent.unwrap_or(0)
+                                        );
+                                        println!(
+                                            "      \"unseen_count\": {}",
+                                            status.unseen.unwrap_or(0)
+                                        );
                                         if verbose {
-                                            println!("      \"attributes\": {:?}", folder.attributes);
+                                            println!(
+                                                "      \"attributes\": {:?}",
+                                                folder.attributes
+                                            );
                                         }
                                         println!("    }}{}", comma);
                                     }
@@ -4603,16 +5101,23 @@ impl CliHandler {
                 } else {
                     println!("Name,Full Name");
                 }
-                
+
                 for folder in folders.iter() {
                     if counts {
                         let mut client = client_arc.lock().await;
                         match client.select_folder(&folder.full_name).await {
                             Ok(_) => {
-                                match client.get_folder_status(&folder.full_name, &["MESSAGES", "UNSEEN", "RECENT"]).await {
+                                match client
+                                    .get_folder_status(
+                                        &folder.full_name,
+                                        &["MESSAGES", "UNSEEN", "RECENT"],
+                                    )
+                                    .await
+                                {
                                     Ok(status) => {
-                                        println!("{},{},{},{},{}", 
-                                            folder.name, 
+                                        println!(
+                                            "{},{},{},{},{}",
+                                            folder.name,
                                             folder.full_name,
                                             status.exists.unwrap_or(0),
                                             status.recent.unwrap_or(0),
@@ -4620,7 +5125,10 @@ impl CliHandler {
                                         );
                                     }
                                     Err(_) => {
-                                        println!("{},{},Error,Error,Error", folder.name, folder.full_name);
+                                        println!(
+                                            "{},{},Error,Error,Error",
+                                            folder.name, folder.full_name
+                                        );
                                     }
                                 }
                             }
@@ -4633,34 +5141,48 @@ impl CliHandler {
                     }
                 }
             }
-            _ => { // Default table format
+            _ => {
+                // Default table format
                 if counts {
-                    println!("   {:<25} {:<35} {:>8} {:>8} {:>8}", "Name", "Full Name", "Messages", "Recent", "Unseen");
+                    println!(
+                        "   {:<25} {:<35} {:>8} {:>8} {:>8}",
+                        "Name", "Full Name", "Messages", "Recent", "Unseen"
+                    );
                     println!("   {}", "-".repeat(85));
-                    
+
                     for folder in folders.iter() {
                         let mut client = client_arc.lock().await;
                         match client.select_folder(&folder.full_name).await {
                             Ok(_) => {
-                                match client.get_folder_status(&folder.full_name, &["MESSAGES", "UNSEEN", "RECENT"]).await {
+                                match client
+                                    .get_folder_status(
+                                        &folder.full_name,
+                                        &["MESSAGES", "UNSEEN", "RECENT"],
+                                    )
+                                    .await
+                                {
                                     Ok(status) => {
-                                        println!("   {:<25} {:<35} {:>8} {:>8} {:>8}", 
+                                        println!(
+                                            "   {:<25} {:<35} {:>8} {:>8} {:>8}",
                                             folder.name.chars().take(25).collect::<String>(),
                                             folder.full_name.chars().take(35).collect::<String>(),
                                             status.exists.unwrap_or(0),
                                             status.recent.unwrap_or(0),
                                             status.unseen.unwrap_or(0)
                                         );
-                                        
+
                                         if verbose {
                                             println!("      Attributes: {:?}", folder.attributes);
                                         }
                                     }
                                     Err(e) => {
-                                        println!("   {:<25} {:<35} {:>8} {:>8} {:>8}", 
+                                        println!(
+                                            "   {:<25} {:<35} {:>8} {:>8} {:>8}",
                                             folder.name.chars().take(25).collect::<String>(),
                                             folder.full_name.chars().take(35).collect::<String>(),
-                                            "Error", "Error", "Error"
+                                            "Error",
+                                            "Error",
+                                            "Error"
                                         );
                                         if verbose {
                                             println!("      Error: {}", e);
@@ -4669,10 +5191,13 @@ impl CliHandler {
                                 }
                             }
                             Err(e) => {
-                                println!("   {:<25} {:<35} {:>8} {:>8} {:>8}", 
+                                println!(
+                                    "   {:<25} {:<35} {:>8} {:>8} {:>8}",
                                     folder.name.chars().take(25).collect::<String>(),
                                     folder.full_name.chars().take(35).collect::<String>(),
-                                    "Error", "Error", "Error"
+                                    "Error",
+                                    "Error",
+                                    "Error"
                                 );
                                 if verbose {
                                     println!("      Error selecting folder: {}", e);
@@ -4683,13 +5208,14 @@ impl CliHandler {
                 } else {
                     println!("   {:<25} {:<35}", "Name", "Full Name");
                     println!("   {}", "-".repeat(62));
-                    
+
                     for folder in folders.iter() {
-                        println!("   {:<25} {:<35}", 
+                        println!(
+                            "   {:<25} {:<35}",
                             folder.name.chars().take(25).collect::<String>(),
                             folder.full_name.chars().take(35).collect::<String>()
                         );
-                        
+
                         if verbose {
                             println!("      Attributes: {:?}", folder.attributes);
                         }
@@ -4702,7 +5228,13 @@ impl CliHandler {
     }
 
     /// Handle folders test command
-    async fn handle_folders_test(&self, account: String, folder: Option<String>, verbose: bool, dry_run: bool) -> Result<()> {
+    async fn handle_folders_test(
+        &self,
+        account: String,
+        folder: Option<String>,
+        verbose: bool,
+        dry_run: bool,
+    ) -> Result<()> {
         if dry_run {
             println!("🔍 Dry run: Would test folder access");
             println!("   • Account: {}", account);
@@ -4712,35 +5244,44 @@ impl CliHandler {
         }
 
         let folder_name = folder.as_deref().unwrap_or("INBOX");
-        
+
         println!("🧪 Testing Folder Access");
         println!("=======================\n");
         println!("Account: {}", account);
         println!("Folder: {}\n", folder_name);
 
         // Find account
-        let account_id = self.find_account_by_name_or_email(&account)?
+        let account_id = self
+            .find_account_by_name_or_email(&account)?
             .ok_or_else(|| anyhow!("Account '{}' not found", account))?;
-        let account_config = self.storage.load_account(&account_id)
+        let account_config = self
+            .storage
+            .load_account(&account_id)
             .map_err(|e| anyhow!("Failed to load account: {}", e))?
             .ok_or_else(|| anyhow!("Account '{}' not found", account))?;
-        
+
         // Create IMAP manager
         let token_manager = TokenManager::new_with_storage(Arc::new(self.storage.clone()));
         let mut imap_manager = ImapAccountManager::new_with_oauth2(token_manager)?;
         imap_manager.load_accounts().await?;
-        
+
         // Test folder access
-        let client_arc = imap_manager.get_client(&account_config.account_id).await
+        let client_arc = imap_manager
+            .get_client(&account_config.account_id)
+            .await
             .map_err(|e| anyhow!("Failed to get IMAP client: {}", e))?;
 
         // Test 1: List folders to see if target folder exists
         print!("1. Checking if folder exists... ");
         let mut client = client_arc.lock().await;
-        let folders = client.list_folders("", "*").await
+        let folders = client
+            .list_folders("", "*")
+            .await
             .map_err(|e| anyhow!("Failed to list folders: {}", e))?;
-        
-        let folder_exists = folders.iter().any(|f| f.full_name == folder_name || f.name == folder_name);
+
+        let folder_exists = folders
+            .iter()
+            .any(|f| f.full_name == folder_name || f.name == folder_name);
         if folder_exists {
             println!("✅ Found");
         } else {
@@ -4769,7 +5310,10 @@ impl CliHandler {
 
         // Test 3: Get folder status
         print!("3. Getting folder status... ");
-        match client.get_folder_status(folder_name, &["MESSAGES", "UNSEEN", "RECENT"]).await {
+        match client
+            .get_folder_status(folder_name, &["MESSAGES", "UNSEEN", "RECENT"])
+            .await
+        {
             Ok(status) => {
                 println!("✅ Success");
                 if verbose {
@@ -4792,7 +5336,10 @@ impl CliHandler {
             Ok(uids) => {
                 println!("✅ Found {} messages", uids.len());
                 if verbose && !uids.is_empty() {
-                    println!("   • Message UIDs: {:?}", uids.iter().take(10).collect::<Vec<_>>());
+                    println!(
+                        "   • Message UIDs: {:?}",
+                        uids.iter().take(10).collect::<Vec<_>>()
+                    );
                     if uids.len() > 10 {
                         println!("   ... and {} more", uids.len() - 10);
                     }
@@ -4808,7 +5355,13 @@ impl CliHandler {
     }
 
     /// Handle folders stats command
-    async fn handle_folders_stats(&self, account: String, folder: String, flags: bool, dry_run: bool) -> Result<()> {
+    async fn handle_folders_stats(
+        &self,
+        account: String,
+        folder: String,
+        flags: bool,
+        dry_run: bool,
+    ) -> Result<()> {
         if dry_run {
             println!("🔍 Dry run: Would show folder statistics");
             println!("   • Account: {}", account);
@@ -4823,27 +5376,37 @@ impl CliHandler {
         println!("Folder: {}\n", folder);
 
         // Find account
-        let account_id = self.find_account_by_name_or_email(&account)?
+        let account_id = self
+            .find_account_by_name_or_email(&account)?
             .ok_or_else(|| anyhow!("Account '{}' not found", account))?;
-        let account_config = self.storage.load_account(&account_id)
+        let account_config = self
+            .storage
+            .load_account(&account_id)
             .map_err(|e| anyhow!("Failed to load account: {}", e))?
             .ok_or_else(|| anyhow!("Account '{}' not found", account))?;
-        
+
         // Create IMAP manager
         let token_manager = TokenManager::new_with_storage(Arc::new(self.storage.clone()));
         let mut imap_manager = ImapAccountManager::new_with_oauth2(token_manager)?;
         imap_manager.load_accounts().await?;
-        
-        let client_arc = imap_manager.get_client(&account_config.account_id).await
+
+        let client_arc = imap_manager
+            .get_client(&account_config.account_id)
+            .await
             .map_err(|e| anyhow!("Failed to get IMAP client: {}", e))?;
 
         // Select folder and get basic stats
         let mut client = client_arc.lock().await;
-        client.select_folder(&folder).await
+        client
+            .select_folder(&folder)
+            .await
             .map_err(|e| anyhow!("Failed to select folder: {}", e))?;
 
         // Get basic stats
-        match client.get_folder_status(&folder, &["MESSAGES", "UNSEEN", "RECENT"]).await {
+        match client
+            .get_folder_status(&folder, &["MESSAGES", "UNSEEN", "RECENT"])
+            .await
+        {
             Ok(status) => {
                 println!("📈 Basic Statistics:");
                 println!("   • Total messages: {}", status.exists.unwrap_or(0));
@@ -4860,7 +5423,7 @@ impl CliHandler {
 
         if flags {
             println!("\n🏷️  Flag Statistics:");
-            
+
             // Get message flags statistics
             use crate::imap::SearchCriteria;
             for (flag_name, search_criteria) in &[
@@ -4890,14 +5453,19 @@ impl CliHandler {
     /// Handle OAuth2 token management commands
     async fn handle_oauth2(&self, args: OAuth2Args, _dry_run: bool) -> Result<()> {
         match args.command {
-            OAuth2Commands::Status { verbose } => {
-                self.handle_oauth2_status(verbose).await
-            }
-            OAuth2Commands::Refresh { account, force, verbose } => {
-                self.handle_oauth2_refresh(account, force, verbose).await
-            }
-            OAuth2Commands::Reauth { account, no_browser, verbose } => {
-                self.handle_oauth2_reauth(account, no_browser, verbose).await
+            OAuth2Commands::Status { verbose } => self.handle_oauth2_status(verbose).await,
+            OAuth2Commands::Refresh {
+                account,
+                force,
+                verbose,
+            } => self.handle_oauth2_refresh(account, force, verbose).await,
+            OAuth2Commands::Reauth {
+                account,
+                no_browser,
+                verbose,
+            } => {
+                self.handle_oauth2_reauth(account, no_browser, verbose)
+                    .await
             }
         }
     }
@@ -4908,7 +5476,9 @@ impl CliHandler {
         println!("======================");
 
         // Load all accounts from storage
-        let accounts = self.storage.load_all_accounts()
+        let accounts = self
+            .storage
+            .load_all_accounts()
             .map_err(|e| anyhow!("Failed to load accounts: {}", e))?;
 
         if accounts.is_empty() {
@@ -4917,48 +5487,71 @@ impl CliHandler {
         }
 
         for account in &accounts {
-            println!("\n📧 Account: {} ({})", account.display_name, account.email_address);
+            println!(
+                "\n📧 Account: {} ({})",
+                account.display_name, account.email_address
+            );
             println!("   Provider: {}", account.provider);
-            
+
             // Check token expiration
             let now = chrono::Utc::now();
             match account.token_expires_at {
                 Some(expires_at) => {
                     let is_expired = expires_at < now;
                     let expires_in = expires_at.signed_duration_since(now);
-                    
+
                     if is_expired {
-                        println!("   Status: ❌ Expired ({} ago)", format_duration(expires_in.abs()));
+                        println!(
+                            "   Status: ❌ Expired ({} ago)",
+                            format_duration(expires_in.abs())
+                        );
                     } else if expires_in.num_minutes() < 60 {
-                        println!("   Status: ⚠️  Expires soon (in {})", format_duration(expires_in));
+                        println!(
+                            "   Status: ⚠️  Expires soon (in {})",
+                            format_duration(expires_in)
+                        );
                     } else {
-                        println!("   Status: ✅ Valid (expires in {})", format_duration(expires_in));
+                        println!(
+                            "   Status: ✅ Valid (expires in {})",
+                            format_duration(expires_in)
+                        );
                     }
-                    
+
                     if verbose {
-                        println!("   Expires at: {}", expires_at.format("%Y-%m-%d %H:%M:%S UTC"));
+                        println!(
+                            "   Expires at: {}",
+                            expires_at.format("%Y-%m-%d %H:%M:%S UTC")
+                        );
                     }
                 }
                 None => {
                     println!("   Status: ❓ No expiration info");
                 }
             }
-            
+
             if verbose {
                 println!("   Account ID: {}", account.account_id);
-                println!("   IMAP Server: {}:{}", account.imap_server, account.imap_port);
+                println!(
+                    "   IMAP Server: {}:{}",
+                    account.imap_server, account.imap_port
+                );
                 println!("   Scopes: {}", account.scopes.join(", "));
             }
         }
 
         println!("\n💡 Use 'comunicado oauth2 refresh' to refresh expired tokens");
         println!("💡 Use 'comunicado oauth2 reauth <account>' to re-authenticate an account");
-        
+
         Ok(())
     }
 
     /// Refresh OAuth2 tokens for accounts
-    async fn handle_oauth2_refresh(&self, account: Option<String>, _force: bool, verbose: bool) -> Result<()> {
+    async fn handle_oauth2_refresh(
+        &self,
+        account: Option<String>,
+        _force: bool,
+        verbose: bool,
+    ) -> Result<()> {
         println!("🔄 OAuth2 Token Refresh");
         println!("=======================");
 
@@ -4967,12 +5560,15 @@ impl CliHandler {
                 Some(account_id) => {
                     // Refresh specific account
                     println!("\n🔄 Refreshing token for account: {}", account_id);
-                    
+
                     // First, ensure the token is loaded from storage into the TokenManager cache
                     // This is necessary because refresh_access_token() expects tokens to be in memory
                     match token_manager.get_valid_access_token(&account_id).await {
                         Ok(Some(_)) => {
-                            tracing::debug!("Token loaded from storage for account: {}", account_id);
+                            tracing::debug!(
+                                "Token loaded from storage for account: {}",
+                                account_id
+                            );
                         }
                         Ok(None) => {
                             println!("❌ No valid token found for account {} - re-authentication required", account_id);
@@ -4984,15 +5580,22 @@ impl CliHandler {
                             return Ok(());
                         }
                     }
-                    
+
                     // Now perform the actual refresh using the loaded token
                     match token_manager.refresh_access_token(&account_id).await {
                         Ok(token) => {
-                            println!("✅ Token refreshed successfully for account: {}", account_id);
+                            println!(
+                                "✅ Token refreshed successfully for account: {}",
+                                account_id
+                            );
                             if verbose {
-                                println!("   New token expires: {}", 
-                                    token.expires_at.map(|exp| exp.format("%Y-%m-%d %H:%M:%S UTC").to_string())
-                                        .unwrap_or_else(|| "No expiration".to_string()));
+                                println!(
+                                    "   New token expires: {}",
+                                    token
+                                        .expires_at
+                                        .map(|exp| exp.format("%Y-%m-%d %H:%M:%S UTC").to_string())
+                                        .unwrap_or_else(|| "No expiration".to_string())
+                                );
                             }
                         }
                         Err(e) => {
@@ -5005,17 +5608,28 @@ impl CliHandler {
                 None => {
                     // Refresh all accounts
                     println!("\n🔄 Refreshing tokens for all accounts...");
-                    
-                    let accounts = self.storage.load_all_accounts()
+
+                    let accounts = self
+                        .storage
+                        .load_all_accounts()
                         .map_err(|e| anyhow!("Failed to load accounts: {}", e))?;
-                    
+
                     for account in &accounts {
-                        println!("\n🔄 Refreshing: {} ({})", account.display_name, account.email_address);
-                        
+                        println!(
+                            "\n🔄 Refreshing: {} ({})",
+                            account.display_name, account.email_address
+                        );
+
                         // First, ensure the token is loaded from storage into the TokenManager cache
-                        match token_manager.get_valid_access_token(&account.account_id).await {
+                        match token_manager
+                            .get_valid_access_token(&account.account_id)
+                            .await
+                        {
                             Ok(Some(_)) => {
-                                tracing::debug!("Token loaded from storage for account: {}", account.account_id);
+                                tracing::debug!(
+                                    "Token loaded from storage for account: {}",
+                                    account.account_id
+                                );
                             }
                             Ok(None) => {
                                 println!("   ❌ No valid token - re-authentication required");
@@ -5026,9 +5640,12 @@ impl CliHandler {
                                 continue;
                             }
                         }
-                        
+
                         // Now perform the actual refresh using the loaded token
-                        match token_manager.refresh_access_token(&account.account_id).await {
+                        match token_manager
+                            .refresh_access_token(&account.account_id)
+                            .await
+                        {
                             Ok(_) => {
                                 println!("   ✅ Success");
                             }
@@ -5047,48 +5664,49 @@ impl CliHandler {
     }
 
     /// Re-authenticate an OAuth2 account
-    async fn handle_oauth2_reauth(&self, account: String, _no_browser: bool, _verbose: bool) -> Result<()> {
+    async fn handle_oauth2_reauth(
+        &self,
+        account: String,
+        _no_browser: bool,
+        _verbose: bool,
+    ) -> Result<()> {
         println!("🔐 OAuth2 Re-authentication");
         println!("============================");
         println!("\n🔄 Re-authenticating account: {}", account);
-        
+
         // This would trigger the full OAuth2 flow
         println!("❌ Re-authentication flow not yet implemented in CLI");
         println!("   Please use the TUI interface to re-authenticate:");
         println!("   1. Run: comunicado");
         println!("   2. Navigate to Account Management");
         println!("   3. Select 'Re-authenticate' for the account");
-        
+
         Ok(())
     }
 
     /// Handle KDE Connect commands
     async fn handle_kde_connect(&self, args: KdeConnectArgs, dry_run: bool) -> Result<()> {
         match args.command {
-            KdeConnectCommand::Status => {
-                self.handle_kde_connect_status().await
+            KdeConnectCommand::Status => self.handle_kde_connect_status().await,
+            KdeConnectCommand::List => self.handle_kde_connect_list().await,
+            KdeConnectCommand::Enable {
+                device_id,
+                notifications,
+                auto_pair,
+            } => {
+                self.handle_kde_connect_enable(device_id, notifications, auto_pair, dry_run)
+                    .await
             }
-            KdeConnectCommand::List => {
-                self.handle_kde_connect_list().await
-            }
-            KdeConnectCommand::Enable { device_id, notifications, auto_pair } => {
-                self.handle_kde_connect_enable(device_id, notifications, auto_pair, dry_run).await
-            }
-            KdeConnectCommand::Disable => {
-                self.handle_kde_connect_disable(dry_run).await
-            }
-            KdeConnectCommand::Test { notification, find_phone } => {
-                self.handle_kde_connect_test(notification, find_phone).await
-            }
-            KdeConnectCommand::Pair { device_id } => {
-                self.handle_kde_connect_pair(device_id).await
-            }
+            KdeConnectCommand::Disable => self.handle_kde_connect_disable(dry_run).await,
+            KdeConnectCommand::Test {
+                notification,
+                find_phone,
+            } => self.handle_kde_connect_test(notification, find_phone).await,
+            KdeConnectCommand::Pair { device_id } => self.handle_kde_connect_pair(device_id).await,
             KdeConnectCommand::Unpair { device_id } => {
                 self.handle_kde_connect_unpair(device_id).await
             }
-            KdeConnectCommand::Setup => {
-                self.handle_kde_connect_setup().await
-            }
+            KdeConnectCommand::Setup => self.handle_kde_connect_setup().await,
         }
     }
 
@@ -5120,28 +5738,37 @@ impl CliHandler {
                 ));
             }
         };
-        
+
         let kde_config = &config.kde_connect;
-        
+
         println!("\n📱 Integration Status:");
         if kde_config.enabled {
             println!("✅ KDE Connect integration is ENABLED");
-            
+
             if let Some(ref device_id) = kde_config.device_id {
                 println!("   Device ID: {}", device_id);
                 if let Some(ref device_name) = kde_config.device_name {
                     println!("   Device Name: {}", device_name);
                 }
-                
+
                 // Check if device is currently available
                 let _integration = KdeConnectIntegration::new(kde_config.clone());
                 let devices = KdeConnectIntegration::list_devices().await?;
                 let current_device = devices.iter().find(|d| d.id == *device_id);
-                
+
                 if let Some(device) = current_device {
-                    println!("   Status: {} {}",
-                        if device.paired { "✅ Paired" } else { "❌ Not Paired" },
-                        if device.reachable { "✅ Reachable" } else { "❌ Not Reachable" }
+                    println!(
+                        "   Status: {} {}",
+                        if device.paired {
+                            "✅ Paired"
+                        } else {
+                            "❌ Not Paired"
+                        },
+                        if device.reachable {
+                            "✅ Reachable"
+                        } else {
+                            "❌ Not Reachable"
+                        }
                     );
                 } else {
                     println!("   Status: ❌ Device not found");
@@ -5149,10 +5776,27 @@ impl CliHandler {
             } else {
                 println!("   ⚠️  No device configured");
             }
-            
-            println!("   Auto-pair: {}", if kde_config.auto_pair { "✅ Enabled" } else { "❌ Disabled" });
-            println!("   Sound: {}", if kde_config.sound_enabled { "✅ Enabled" } else { "❌ Disabled" });
-            println!("   Notification Types: {}", kde_config.notification_types.join(", "));
+
+            println!(
+                "   Auto-pair: {}",
+                if kde_config.auto_pair {
+                    "✅ Enabled"
+                } else {
+                    "❌ Disabled"
+                }
+            );
+            println!(
+                "   Sound: {}",
+                if kde_config.sound_enabled {
+                    "✅ Enabled"
+                } else {
+                    "❌ Disabled"
+                }
+            );
+            println!(
+                "   Notification Types: {}",
+                kde_config.notification_types.join(", ")
+            );
         } else {
             println!("❌ KDE Connect integration is DISABLED");
             println!("   Run: comunicado kde-connect enable --help");
@@ -5172,21 +5816,32 @@ impl CliHandler {
         }
 
         let devices = KdeConnectIntegration::list_devices().await?;
-        
+
         if devices.is_empty() {
             println!("❌ No devices found");
-            println!("   Make sure your device has KDE Connect installed and is on the same network");
+            println!(
+                "   Make sure your device has KDE Connect installed and is on the same network"
+            );
             return Ok(());
         }
 
         for (i, device) in devices.iter().enumerate() {
             println!("\n{}. {}", i + 1, device.name);
             println!("   ID: {}", device.id);
-            println!("   Status: {} {}",
-                if device.paired { "✅ Paired" } else { "❌ Not Paired" },
-                if device.reachable { "✅ Reachable" } else { "❌ Not Reachable" }
+            println!(
+                "   Status: {} {}",
+                if device.paired {
+                    "✅ Paired"
+                } else {
+                    "❌ Not Paired"
+                },
+                if device.reachable {
+                    "✅ Reachable"
+                } else {
+                    "❌ Not Reachable"
+                }
             );
-            
+
             if !device.paired {
                 println!("   To pair: comunicado kde-connect pair {}", device.id);
             }
@@ -5196,7 +5851,13 @@ impl CliHandler {
     }
 
     /// Enable KDE Connect integration
-    async fn handle_kde_connect_enable(&self, device_id: Option<String>, notifications: Option<Vec<String>>, auto_pair: bool, dry_run: bool) -> Result<()> {
+    async fn handle_kde_connect_enable(
+        &self,
+        device_id: Option<String>,
+        notifications: Option<Vec<String>>,
+        auto_pair: bool,
+        dry_run: bool,
+    ) -> Result<()> {
         println!("🔗 Enabling KDE Connect Integration");
         println!("===================================");
 
@@ -5230,7 +5891,7 @@ impl CliHandler {
                     ));
                 }
             };
-            
+
             if devices.is_empty() {
                 println!("❌ No devices found. Make sure your device is on the same network.");
                 return Ok(());
@@ -5238,18 +5899,28 @@ impl CliHandler {
 
             println!("\nAvailable devices:");
             for (i, device) in devices.iter().enumerate() {
-                println!("{}. {} ({}) - {} {}",
+                println!(
+                    "{}. {} ({}) - {} {}",
                     i + 1,
                     device.name,
                     device.id,
-                    if device.paired { "Paired" } else { "Not Paired" },
-                    if device.reachable { "Reachable" } else { "Not Reachable" }
+                    if device.paired {
+                        "Paired"
+                    } else {
+                        "Not Paired"
+                    },
+                    if device.reachable {
+                        "Reachable"
+                    } else {
+                        "Not Reachable"
+                    }
                 );
             }
 
             // For now, just use the first paired and reachable device
             // In a real CLI, you'd prompt the user to select
-            let suitable_device = devices.iter()
+            let suitable_device = devices
+                .iter()
                 .find(|d| d.paired && d.reachable)
                 .or_else(|| devices.first());
 
@@ -5265,10 +5936,13 @@ impl CliHandler {
         // Verify device exists and get its info
         let devices = KdeConnectIntegration::list_devices().await?;
         let selected_device = devices.iter().find(|d| d.id == selected_device_id);
-        
+
         let device_name = if let Some(device) = selected_device {
             if !device.paired {
-                println!("⚠️  Device {} is not paired. Attempting to pair...", device.name);
+                println!(
+                    "⚠️  Device {} is not paired. Attempting to pair...",
+                    device.name
+                );
                 if !dry_run {
                     match KdeConnectIntegration::pair_device(&device.id).await {
                         Ok(_) => {
@@ -5285,7 +5959,10 @@ impl CliHandler {
             }
             device.name.clone()
         } else {
-            println!("⚠️  Device ID {} not found in available devices", selected_device_id);
+            println!(
+                "⚠️  Device ID {} not found in available devices",
+                selected_device_id
+            );
             "Unknown Device".to_string()
         };
 
@@ -5304,16 +5981,23 @@ impl CliHandler {
             println!("   kde_connect.enabled = true");
             println!("   kde_connect.device_id = {}", selected_device_id);
             println!("   kde_connect.auto_pair = {}", auto_pair);
-            println!("   kde_connect.notification_types = {:?}", config.kde_connect.notification_types);
+            println!(
+                "   kde_connect.notification_types = {:?}",
+                config.kde_connect.notification_types
+            );
         } else {
             // Save configuration
-            self.storage.save_config(&config)
+            self.storage
+                .save_config(&config)
                 .map_err(|e| anyhow!("Failed to save configuration: {}", e))?;
 
             println!("✅ KDE Connect integration enabled");
             println!("   Device: {}", selected_device_id);
             println!("   Auto-pair: {}", auto_pair);
-            println!("   Notification types: {}", config.kde_connect.notification_types.join(", "));
+            println!(
+                "   Notification types: {}",
+                config.kde_connect.notification_types.join(", ")
+            );
             println!("\n🔄 Restart the application to activate KDE Connect integration");
         }
 
@@ -5325,7 +6009,9 @@ impl CliHandler {
         println!("🔗 Disabling KDE Connect Integration");
         println!("====================================");
 
-        let mut config = self.storage.load_config()
+        let mut config = self
+            .storage
+            .load_config()
             .map_err(|e| anyhow!("Failed to load configuration: {}", e))?;
 
         if !config.kde_connect.enabled {
@@ -5337,8 +6023,9 @@ impl CliHandler {
             println!("🔍 DRY RUN - Would disable KDE Connect integration");
         } else {
             config.kde_connect.enabled = false;
-            
-            self.storage.save_config(&config)
+
+            self.storage
+                .save_config(&config)
                 .map_err(|e| anyhow!("Failed to save configuration: {}", e))?;
 
             println!("✅ KDE Connect integration disabled");
@@ -5358,7 +6045,9 @@ impl CliHandler {
             return Ok(());
         }
 
-        let config = self.storage.load_config()
+        let config = self
+            .storage
+            .load_config()
             .map_err(|e| anyhow!("Failed to load configuration: {}", e))?;
 
         if !config.kde_connect.enabled {
@@ -5371,7 +6060,13 @@ impl CliHandler {
 
         if notification {
             println!("\n📱 Testing notification...");
-            match integration.send_notification("Test from Comunicado", "If you see this, KDE Connect is working! 🎉").await {
+            match integration
+                .send_notification(
+                    "Test from Comunicado",
+                    "If you see this, KDE Connect is working! 🎉",
+                )
+                .await
+            {
                 Ok(()) => println!("✅ Test notification sent successfully"),
                 Err(e) => println!("❌ Failed to send notification: {}", e),
             }
@@ -5388,7 +6083,13 @@ impl CliHandler {
         if !notification && !find_phone {
             // Default test - send a notification
             println!("\n📱 Sending test notification...");
-            match integration.send_notification("Test from Comunicado", "KDE Connect integration is working! 🎉").await {
+            match integration
+                .send_notification(
+                    "Test from Comunicado",
+                    "KDE Connect integration is working! 🎉",
+                )
+                .await
+            {
                 Ok(()) => println!("✅ Test notification sent successfully"),
                 Err(e) => println!("❌ Failed to send notification: {}", e),
             }
@@ -5408,7 +6109,7 @@ impl CliHandler {
         }
 
         println!("📱 Sending pairing request to device: {}", device_id);
-        
+
         match KdeConnectIntegration::pair_device(&device_id).await {
             Ok(()) => {
                 println!("✅ Pairing request sent successfully");
@@ -5433,7 +6134,7 @@ impl CliHandler {
         }
 
         println!("📱 Unpairing from device: {}", device_id);
-        
+
         match KdeConnectIntegration::unpair_device(&device_id).await {
             Ok(()) => {
                 println!("✅ Successfully unpaired from device");
@@ -5478,37 +6179,54 @@ impl CliHandler {
         println!("\n📱 Found {} device(s):", devices.len());
         for (i, device) in devices.iter().enumerate() {
             println!("{}. {} ({})", i + 1, device.name, device.id);
-            println!("   Status: {} {}",
-                if device.paired { "✅ Paired" } else { "❌ Not Paired" },
-                if device.reachable { "✅ Reachable" } else { "❌ Not Reachable" }
+            println!(
+                "   Status: {} {}",
+                if device.paired {
+                    "✅ Paired"
+                } else {
+                    "❌ Not Paired"
+                },
+                if device.reachable {
+                    "✅ Reachable"
+                } else {
+                    "❌ Not Reachable"
+                }
             );
         }
 
         // Find best device to use
-        let selected_device = devices.iter()
+        let selected_device = devices
+            .iter()
             .find(|d| d.paired && d.reachable)
             .or_else(|| devices.iter().find(|d| d.reachable))
             .or_else(|| devices.first());
 
         if let Some(device) = selected_device {
             println!("\n🎯 Recommended device: {} ({})", device.name, device.id);
-            
+
             if !device.paired {
                 println!("📱 Device is not paired. Attempting to pair...");
                 KdeConnectIntegration::pair_device(&device.id).await?;
                 println!("✅ Pairing request sent. Please accept on your device.");
-                println!("   Wait a moment, then run: comunicado kde-connect enable --device-id {}", device.id);
+                println!(
+                    "   Wait a moment, then run: comunicado kde-connect enable --device-id {}",
+                    device.id
+                );
             } else {
                 println!("✅ Device is already paired!");
                 println!("\n🔧 Enabling KDE Connect integration...");
-                
+
                 // Enable integration with this device
                 self.handle_kde_connect_enable(
                     Some(device.id.clone()),
-                    Some(vec!["new_email".to_string(), "calendar_reminder".to_string()]),
+                    Some(vec![
+                        "new_email".to_string(),
+                        "calendar_reminder".to_string(),
+                    ]),
                     false, // auto_pair
-                    false  // dry_run
-                ).await?;
+                    false, // dry_run
+                )
+                .await?;
             }
         } else {
             println!("❌ No suitable device found for setup");
@@ -5520,48 +6238,89 @@ impl CliHandler {
     /// Handle Notes plugin commands
     async fn handle_notes(&self, args: NotesArgs, dry_run: bool) -> Result<()> {
         match args.command {
-            NotesCommand::Status => {
-                self.handle_notes_status().await
+            NotesCommand::Status => self.handle_notes_status().await,
+            NotesCommand::Create {
+                title,
+                content,
+                tags,
+                template,
+            } => {
+                self.handle_notes_create(title, content, tags, template, dry_run)
+                    .await
             }
-            NotesCommand::Create { title, content, tags, template } => {
-                self.handle_notes_create(title, content, tags, template, dry_run).await
+            NotesCommand::Search {
+                query,
+                limit,
+                category,
+                titles_only,
+            } => {
+                self.handle_notes_search(query, limit, category, titles_only)
+                    .await
             }
-            NotesCommand::Search { query, limit, category, titles_only } => {
-                self.handle_notes_search(query, limit, category, titles_only).await
-            }
-            NotesCommand::List { detailed, tags, limit } => {
-                self.handle_notes_list(detailed, tags, limit).await
-            }
-            NotesCommand::Show { note, raw } => {
-                self.handle_notes_show(note, raw).await
-            }
-            NotesCommand::Edit { note, editor } => {
-                self.handle_notes_edit(note, editor).await
-            }
+            NotesCommand::List {
+                detailed,
+                tags,
+                limit,
+            } => self.handle_notes_list(detailed, tags, limit).await,
+            NotesCommand::Show { note, raw } => self.handle_notes_show(note, raw).await,
+            NotesCommand::Edit { note, editor } => self.handle_notes_edit(note, editor).await,
             NotesCommand::Delete { note, force } => {
                 self.handle_notes_delete(note, force, dry_run).await
             }
             NotesCommand::Reindex { force, verbose } => {
                 self.handle_notes_reindex(force, verbose, dry_run).await
             }
-            NotesCommand::Config { set_directory, add_watch, remove_watch, auto_index, show } => {
-                self.handle_notes_config(set_directory, add_watch, remove_watch, auto_index, show, dry_run).await
+            NotesCommand::Config {
+                set_directory,
+                add_watch,
+                remove_watch,
+                auto_index,
+                show,
+            } => {
+                self.handle_notes_config(
+                    set_directory,
+                    add_watch,
+                    remove_watch,
+                    auto_index,
+                    show,
+                    dry_run,
+                )
+                .await
             }
-            NotesCommand::Tui { search, open } => {
-                self.handle_notes_tui(search, open).await
+            NotesCommand::Tui { search, open } => self.handle_notes_tui(search, open).await,
+            NotesCommand::Import {
+                format,
+                source,
+                preserve_structure,
+                dry_run: import_dry_run,
+            } => {
+                self.handle_notes_import(
+                    format,
+                    source,
+                    preserve_structure,
+                    import_dry_run || dry_run,
+                )
+                .await
             }
-            NotesCommand::Import { format, source, preserve_structure, dry_run: import_dry_run } => {
-                self.handle_notes_import(format, source, preserve_structure, import_dry_run || dry_run).await
+            NotesCommand::Export {
+                format,
+                output,
+                tags,
+                include_linked,
+            } => {
+                self.handle_notes_export(format, output, tags, include_linked, dry_run)
+                    .await
             }
-            NotesCommand::Export { format, output, tags, include_linked } => {
-                self.handle_notes_export(format, output, tags, include_linked, dry_run).await
-            }
-            NotesCommand::Stats { detailed, links, index } => {
-                self.handle_notes_stats(detailed, links, index).await
-            }
-            NotesCommand::Quick { content, title, tags } => {
-                self.handle_notes_quick(content, title, tags, dry_run).await
-            }
+            NotesCommand::Stats {
+                detailed,
+                links,
+                index,
+            } => self.handle_notes_stats(detailed, links, index).await,
+            NotesCommand::Quick {
+                content,
+                title,
+                tags,
+            } => self.handle_notes_quick(content, title, tags, dry_run).await,
             NotesCommand::Clipboard { title, tags } => {
                 self.handle_notes_clipboard(title, tags, dry_run).await
             }
@@ -5580,30 +6339,55 @@ impl CliHandler {
         println!("====================");
 
         // Load current configuration
-        let config = self.storage.load_config()
+        let config = self
+            .storage
+            .load_config()
             .map_err(|e| anyhow!("Failed to load configuration: {}", e))?;
-        
+
         let notes_config = &config.notes;
-        
+
         println!("📁 Configuration:");
-        println!("   Default Directory: {}", notes_config.default_directory.display());
-        println!("   Auto-indexing: {}", if notes_config.auto_index { "✅ Enabled" } else { "❌ Disabled" });
-        println!("   Vim Mode: {}", if notes_config.vim_mode { "✅ Enabled" } else { "❌ Disabled" });
+        println!(
+            "   Default Directory: {}",
+            notes_config.default_directory.display()
+        );
+        println!(
+            "   Auto-indexing: {}",
+            if notes_config.auto_index {
+                "✅ Enabled"
+            } else {
+                "❌ Disabled"
+            }
+        );
+        println!(
+            "   Vim Mode: {}",
+            if notes_config.vim_mode {
+                "✅ Enabled"
+            } else {
+                "❌ Disabled"
+            }
+        );
         println!("   Max Search Results: {}", notes_config.max_search_results);
-        
+
         // Check if directory exists
         if notes_config.default_directory.exists() {
             println!("   Directory Status: ✅ Exists");
         } else {
             println!("   Directory Status: ⚠️  Does not exist");
         }
-        
-        println!("\n📂 Watched Directories: {}", notes_config.watched_directories.len());
+
+        println!(
+            "\n📂 Watched Directories: {}",
+            notes_config.watched_directories.len()
+        );
         for dir in &notes_config.watched_directories {
             println!("   - {} ({})", dir.name, dir.path.display());
         }
-        
-        println!("\n🚫 Ignore Patterns: {}", notes_config.ignore_patterns.len());
+
+        println!(
+            "\n🚫 Ignore Patterns: {}",
+            notes_config.ignore_patterns.len()
+        );
         for pattern in &notes_config.ignore_patterns {
             println!("   - {}", pattern);
         }
@@ -5624,15 +6408,22 @@ impl CliHandler {
     }
 
     /// Create a new note
-    async fn handle_notes_create(&self, title: String, content: Option<String>, tags: Option<Vec<String>>, _template: Option<String>, dry_run: bool) -> Result<()> {
+    async fn handle_notes_create(
+        &self,
+        title: String,
+        content: Option<String>,
+        tags: Option<Vec<String>>,
+        _template: Option<String>,
+        dry_run: bool,
+    ) -> Result<()> {
         println!("📝 Creating New Note");
         println!("===================");
         println!("Title: {}", title);
-        
+
         if let Some(ref tags_list) = tags {
             println!("Tags: {}", tags_list.join(", "));
         }
-        
+
         if dry_run {
             println!("🔍 DRY RUN - Note would be created but not saved");
             if let Some(ref content_text) = content {
@@ -5653,7 +6444,7 @@ impl CliHandler {
                 ));
             }
         };
-        
+
         // Initialize storage with helpful error messages
         let _storage = match NoteStorage::new(&config.notes.default_directory).await {
             Ok(storage) => storage,
@@ -5686,12 +6477,18 @@ impl CliHandler {
     }
 
     /// Search notes
-    async fn handle_notes_search(&self, query: String, limit: usize, category: Option<String>, _titles_only: bool) -> Result<()> {
+    async fn handle_notes_search(
+        &self,
+        query: String,
+        limit: usize,
+        category: Option<String>,
+        _titles_only: bool,
+    ) -> Result<()> {
         println!("🔍 Searching Notes");
         println!("=================");
         println!("Query: {}", query);
         println!("Limit: {}", limit);
-        
+
         if let Some(ref cat) = category {
             println!("Category: {}", cat);
         }
@@ -5706,7 +6503,7 @@ impl CliHandler {
                 ));
             }
         };
-        
+
         // Initialize storage with error guidance
         let _storage = match NoteStorage::new(&config.notes.default_directory).await {
             Ok(storage) => storage,
@@ -5723,20 +6520,28 @@ impl CliHandler {
 
         // TODO: Perform search using AdvancedSearchEngine
         println!("⚠️  Search functionality not yet fully implemented");
-        println!("   Use 'comunicado notes tui --search \"{}\"' for interactive search", query);
+        println!(
+            "   Use 'comunicado notes tui --search \"{}\"' for interactive search",
+            query
+        );
 
         Ok(())
     }
 
     /// List all notes
-    async fn handle_notes_list(&self, _detailed: bool, tags: Option<Vec<String>>, limit: Option<usize>) -> Result<()> {
+    async fn handle_notes_list(
+        &self,
+        _detailed: bool,
+        tags: Option<Vec<String>>,
+        limit: Option<usize>,
+    ) -> Result<()> {
         println!("📋 Listing Notes");
         println!("================");
-        
+
         if let Some(ref tag_list) = tags {
             println!("Filtered by tags: {}", tag_list.join(", "));
         }
-        
+
         if let Some(max) = limit {
             println!("Limit: {}", max);
         }
@@ -5751,7 +6556,7 @@ impl CliHandler {
                 ));
             }
         };
-        
+
         // Initialize storage with error guidance
         let _storage = match NoteStorage::new(&config.notes.default_directory).await {
             Ok(storage) => storage,
@@ -5777,14 +6582,14 @@ impl CliHandler {
     async fn handle_notes_show(&self, note: String, raw: bool) -> Result<()> {
         println!("📄 Showing Note: {}", note);
         println!("================");
-        
+
         if raw {
             println!("Mode: Raw markdown");
         }
 
         // TODO: Implement note display
         println!("⚠️  Show functionality not yet fully implemented");
-        
+
         Ok(())
     }
 
@@ -5792,15 +6597,18 @@ impl CliHandler {
     async fn handle_notes_edit(&self, note: String, editor: Option<String>) -> Result<()> {
         println!("✏️  Editing Note: {}", note);
         println!("================");
-        
+
         if let Some(ref ed) = editor {
             println!("Editor: {}", ed);
         }
 
         // TODO: Implement note editing
         println!("⚠️  Edit functionality not yet fully implemented");
-        println!("   Use 'comunicado notes tui --open \"{}\"' for interactive editing", note);
-        
+        println!(
+            "   Use 'comunicado notes tui --open \"{}\"' for interactive editing",
+            note
+        );
+
         Ok(())
     }
 
@@ -5808,7 +6616,7 @@ impl CliHandler {
     async fn handle_notes_delete(&self, note: String, force: bool, dry_run: bool) -> Result<()> {
         println!("🗑️  Deleting Note: {}", note);
         println!("==================");
-        
+
         if dry_run {
             println!("🔍 DRY RUN - Note would be deleted but not actually removed");
             return Ok(());
@@ -5821,7 +6629,7 @@ impl CliHandler {
 
         // TODO: Implement note deletion
         println!("⚠️  Delete functionality not yet fully implemented");
-        
+
         Ok(())
     }
 
@@ -5829,46 +6637,65 @@ impl CliHandler {
     async fn handle_notes_reindex(&self, force: bool, _verbose: bool, dry_run: bool) -> Result<()> {
         println!("🔄 Reindexing Notes");
         println!("==================");
-        
+
         if force {
             println!("Mode: Force full reindex");
         }
-        
+
         if dry_run {
             println!("🔍 DRY RUN - Would reindex notes but not actually update");
             return Ok(());
         }
 
         // Load configuration
-        let config = self.storage.load_config()
+        let config = self
+            .storage
+            .load_config()
             .map_err(|e| anyhow!("Failed to load configuration: {}", e))?;
-        
+
         // Initialize storage
-        let _storage = NoteStorage::new(&config.notes.default_directory).await
+        let _storage = NoteStorage::new(&config.notes.default_directory)
+            .await
             .map_err(|e| anyhow!("Failed to initialize notes storage: {}", e))?;
 
         println!("🔍 Starting reindex...");
         // TODO: Implement reindexing
         println!("✅ Reindex completed");
-        
+
         Ok(())
     }
 
     /// Configure notes plugin
-    async fn handle_notes_config(&self, set_directory: Option<String>, add_watch: Option<String>, remove_watch: Option<String>, auto_index: Option<bool>, show: bool, dry_run: bool) -> Result<()> {
+    async fn handle_notes_config(
+        &self,
+        set_directory: Option<String>,
+        add_watch: Option<String>,
+        remove_watch: Option<String>,
+        auto_index: Option<bool>,
+        show: bool,
+        dry_run: bool,
+    ) -> Result<()> {
         println!("⚙️  Notes Configuration");
         println!("======================");
 
-        let mut config = self.storage.load_config()
+        let mut config = self
+            .storage
+            .load_config()
             .map_err(|e| anyhow!("Failed to load configuration: {}", e))?;
 
         if show {
             println!("Current configuration:");
-            println!("  Default Directory: {}", config.notes.default_directory.display());
+            println!(
+                "  Default Directory: {}",
+                config.notes.default_directory.display()
+            );
             println!("  Auto-indexing: {}", config.notes.auto_index);
             println!("  Vim Mode: {}", config.notes.vim_mode);
             println!("  Max Search Results: {}", config.notes.max_search_results);
-            println!("  Watched Directories: {}", config.notes.watched_directories.len());
+            println!(
+                "  Watched Directories: {}",
+                config.notes.watched_directories.len()
+            );
             return Ok(());
         }
 
@@ -5902,7 +6729,8 @@ impl CliHandler {
             if dry_run {
                 println!("🔍 DRY RUN - Configuration changes would be saved");
             } else {
-                self.storage.save_config(&config)
+                self.storage
+                    .save_config(&config)
                     .map_err(|e| anyhow!("Failed to save configuration: {}", e))?;
                 println!("✅ Configuration saved");
             }
@@ -5917,63 +6745,81 @@ impl CliHandler {
     async fn handle_notes_tui(&self, search: Option<String>, open: Option<String>) -> Result<()> {
         println!("🖥️  Launching Notes TUI");
         println!("======================");
-        
+
         if let Some(ref query) = search {
             println!("Starting with search: {}", query);
         }
-        
+
         if let Some(ref note) = open {
             println!("Opening note: {}", note);
         }
 
         // Load configuration
-        let config = self.storage.load_config()
+        let config = self
+            .storage
+            .load_config()
             .map_err(|e| anyhow!("Failed to load configuration: {}", e))?;
 
         println!("⚠️  TUI interface not yet fully implemented");
-        println!("   Configuration loaded from: {}", config.notes.default_directory.display());
-        
+        println!(
+            "   Configuration loaded from: {}",
+            config.notes.default_directory.display()
+        );
+
         Ok(())
     }
 
     /// Import notes from external sources
-    async fn handle_notes_import(&self, format: String, source: String, preserve_structure: bool, dry_run: bool) -> Result<()> {
+    async fn handle_notes_import(
+        &self,
+        format: String,
+        source: String,
+        preserve_structure: bool,
+        dry_run: bool,
+    ) -> Result<()> {
         println!("📥 Importing Notes");
         println!("=================");
         println!("Format: {}", format);
         println!("Source: {}", source);
         println!("Preserve structure: {}", preserve_structure);
-        
+
         if dry_run {
             println!("🔍 DRY RUN - Would import notes but not actually save them");
         }
 
         // TODO: Implement import functionality
         println!("⚠️  Import functionality not yet fully implemented");
-        
+
         Ok(())
     }
 
     /// Export notes to various formats
-    async fn handle_notes_export(&self, format: String, output: String, tags: Option<Vec<String>>, include_linked: bool, dry_run: bool) -> Result<()> {
+    async fn handle_notes_export(
+        &self,
+        format: String,
+        output: String,
+        tags: Option<Vec<String>>,
+        include_linked: bool,
+        dry_run: bool,
+    ) -> Result<()> {
         println!("📤 Exporting Notes");
         println!("=================");
         println!("Format: {}", format);
         println!("Output: {}", output);
-        
+
         if let Some(ref tag_list) = tags {
             println!("Tags filter: {}", tag_list.join(", "));
         }
-        
+
         println!("Include linked: {}", include_linked);
-        
+
         if dry_run {
             println!("🔍 DRY RUN - Would export notes but not actually write files");
         }
 
         // TODO: Implement export functionality
         println!("⚠️  Export functionality not yet fully implemented");
-        
+
         Ok(())
     }
 
@@ -5981,40 +6827,49 @@ impl CliHandler {
     async fn handle_notes_stats(&self, detailed: bool, links: bool, index: bool) -> Result<()> {
         println!("📊 Notes Statistics");
         println!("==================");
-        
+
         // Load configuration
-        let config = self.storage.load_config()
+        let config = self
+            .storage
+            .load_config()
             .map_err(|e| anyhow!("Failed to load configuration: {}", e))?;
-        
+
         // Initialize storage
-        let _storage = NoteStorage::new(&config.notes.default_directory).await
+        let _storage = NoteStorage::new(&config.notes.default_directory)
+            .await
             .map_err(|e| anyhow!("Failed to initialize notes storage: {}", e))?;
 
         println!("📁 Directory: {}", config.notes.default_directory.display());
-        
+
         // TODO: Implement comprehensive statistics
         if detailed {
             println!("📋 Detailed Statistics:");
             // Show detailed stats
         }
-        
+
         if links {
             println!("🔗 Link Analysis:");
             // Show link statistics
         }
-        
+
         if index {
             println!("🔍 Search Index Stats:");
             // Show index statistics
         }
 
         println!("⚠️  Statistics functionality not yet fully implemented");
-        
+
         Ok(())
     }
 
     /// Handle quick note creation
-    async fn handle_notes_quick(&self, content: String, title: Option<String>, tags: Option<Vec<String>>, dry_run: bool) -> Result<()> {
+    async fn handle_notes_quick(
+        &self,
+        content: String,
+        title: Option<String>,
+        tags: Option<Vec<String>>,
+        dry_run: bool,
+    ) -> Result<()> {
         if dry_run {
             println!("🔍 Dry run: Would create quick note");
             println!("   • Content: {}", content);
@@ -6028,35 +6883,49 @@ impl CliHandler {
         }
 
         // Load configuration
-        let config = self.storage.load_config()
+        let config = self
+            .storage
+            .load_config()
             .map_err(|e| anyhow!("Failed to load configuration: {}", e))?;
 
         // Initialize storage and conversion service
-        let storage = Arc::new(NoteStorage::new(&config.notes.default_directory).await
-            .map_err(|e| anyhow!("Failed to initialize notes storage: {}", e))?);
-        
+        let storage = Arc::new(
+            NoteStorage::new(&config.notes.default_directory)
+                .await
+                .map_err(|e| anyhow!("Failed to initialize notes storage: {}", e))?,
+        );
+
         let conversion_service = NoteConversionService::new(storage.clone());
-        
+
         // Get default directory
-        let directory_id = conversion_service.get_default_directory().await
+        let directory_id = conversion_service
+            .get_default_directory()
+            .await
             .map_err(|e| anyhow!("Failed to get default directory: {}", e))?;
 
         // Create the note
         let note_title = title.unwrap_or_else(|| "Quick Note".to_string());
         let note_tags = tags.unwrap_or_else(|| vec!["quick".to_string()]);
-        
-        let note = conversion_service.create_quick_note(&note_title, &content, note_tags, directory_id).await
+
+        let note = conversion_service
+            .create_quick_note(&note_title, &content, note_tags, directory_id)
+            .await
             .map_err(|e| anyhow!("Failed to create quick note: {}", e))?;
 
         println!("✅ Created quick note: {}", note.title);
         println!("   📝 ID: {}", note.id);
         println!("   📁 Path: {}", note.path.display());
-        
+
         Ok(())
     }
 
     /// Handle clipboard note creation
-    async fn handle_notes_clipboard(&self, title: Option<String>, tags: Option<Vec<String>>, dry_run: bool) -> Result<()> {
+    async fn handle_notes_clipboard(
+        &self,
+        title: Option<String>,
+        tags: Option<Vec<String>>,
+        dry_run: bool,
+    ) -> Result<()> {
         if dry_run {
             println!("🔍 Dry run: Would create note from clipboard");
             if let Some(ref t) = title {
@@ -6069,32 +6938,46 @@ impl CliHandler {
         }
 
         // Load configuration
-        let config = self.storage.load_config()
+        let config = self
+            .storage
+            .load_config()
             .map_err(|e| anyhow!("Failed to load configuration: {}", e))?;
 
         // Initialize storage and conversion service
-        let storage = Arc::new(NoteStorage::new(&config.notes.default_directory).await
-            .map_err(|e| anyhow!("Failed to initialize notes storage: {}", e))?);
-        
+        let storage = Arc::new(
+            NoteStorage::new(&config.notes.default_directory)
+                .await
+                .map_err(|e| anyhow!("Failed to initialize notes storage: {}", e))?,
+        );
+
         let conversion_service = NoteConversionService::new(storage.clone());
-        
+
         // Get default directory
-        let directory_id = conversion_service.get_default_directory().await
+        let directory_id = conversion_service
+            .get_default_directory()
+            .await
             .map_err(|e| anyhow!("Failed to get default directory: {}", e))?;
 
         // For now, create a placeholder note (clipboard integration would require platform-specific code)
-        let note_title = title.unwrap_or_else(|| format!("Clipboard Note - {}", chrono::Utc::now().format("%Y-%m-%d %H:%M")));
+        let note_title = title.unwrap_or_else(|| {
+            format!(
+                "Clipboard Note - {}",
+                chrono::Utc::now().format("%Y-%m-%d %H:%M")
+            )
+        });
         let note_tags = tags.unwrap_or_else(|| vec!["clipboard".to_string()]);
         let content = "# Clipboard Content\n\n*Paste your clipboard content here...*";
-        
-        let note = conversion_service.create_quick_note(&note_title, content, note_tags, directory_id).await
+
+        let note = conversion_service
+            .create_quick_note(&note_title, content, note_tags, directory_id)
+            .await
             .map_err(|e| anyhow!("Failed to create clipboard note: {}", e))?;
 
         println!("✅ Created clipboard note: {}", note.title);
         println!("   📝 ID: {}", note.id);
         println!("   📁 Path: {}", note.path.display());
         println!("   ℹ️  Clipboard integration is placeholder - paste your content into the created note");
-        
+
         Ok(())
     }
 
@@ -6109,7 +6992,7 @@ impl CliHandler {
         println!("⚠️  Email to note conversion requires TUI context");
         println!("   This command is intended to be used within the Comunicado TUI application");
         println!("   Use Ctrl+N while viewing an email to convert it to a note");
-        
+
         Ok(())
     }
 
@@ -6124,7 +7007,7 @@ impl CliHandler {
         println!("⚠️  Event to note conversion requires TUI context");
         println!("   This command is intended to be used within the Comunicado TUI application");
         println!("   Use Ctrl+N while viewing a calendar event to convert it to a note");
-        
+
         Ok(())
     }
 
@@ -6134,15 +7017,24 @@ impl CliHandler {
             CalendarSyncCommands::All { verbose, force } => {
                 self.handle_calendar_sync_all(verbose, force, dry_run).await
             }
-            CalendarSyncCommands::Account { account, verbose, force } => {
-                self.handle_calendar_sync_account(account, verbose, force, dry_run).await
+            CalendarSyncCommands::Account {
+                account,
+                verbose,
+                force,
+            } => {
+                self.handle_calendar_sync_account(account, verbose, force, dry_run)
+                    .await
             }
-            CalendarSyncCommands::Calendar { account, calendar, verbose, force } => {
-                self.handle_calendar_sync_calendar(account, calendar, verbose, force, dry_run).await
+            CalendarSyncCommands::Calendar {
+                account,
+                calendar,
+                verbose,
+                force,
+            } => {
+                self.handle_calendar_sync_calendar(account, calendar, verbose, force, dry_run)
+                    .await
             }
-            CalendarSyncCommands::List => {
-                self.handle_calendar_sync_list(dry_run).await
-            }
+            CalendarSyncCommands::List => self.handle_calendar_sync_list(dry_run).await,
             CalendarSyncCommands::Status { account } => {
                 self.handle_calendar_sync_status(account, dry_run).await
             }
@@ -6150,15 +7042,22 @@ impl CliHandler {
     }
 
     /// Sync all calendars from all accounts
-    async fn handle_calendar_sync_all(&self, verbose: bool, force: bool, dry_run: bool) -> Result<()> {
+    async fn handle_calendar_sync_all(
+        &self,
+        verbose: bool,
+        force: bool,
+        dry_run: bool,
+    ) -> Result<()> {
         println!("📅 Syncing all calendars...");
-        
+
         if dry_run {
             println!("💨 Dry run mode - no changes will be made");
         }
 
         // Get all accounts
-        let account_ids = self.storage.list_account_ids()
+        let account_ids = self
+            .storage
+            .list_account_ids()
             .map_err(|e| anyhow!("Failed to list accounts: {}", e))?;
 
         if account_ids.is_empty() {
@@ -6166,45 +7065,67 @@ impl CliHandler {
             return Ok(());
         }
 
-        println!("📧 Found {} account(s) to sync calendars for", account_ids.len());
-        
+        println!(
+            "📧 Found {} account(s) to sync calendars for",
+            account_ids.len()
+        );
+
         if verbose {
             println!("📋 Calendar sync plan:");
-            println!("   🔄 Force full sync: {}", if force { "✅ Yes" } else { "❌ No" });
+            println!(
+                "   🔄 Force full sync: {}",
+                if force { "✅ Yes" } else { "❌ No" }
+            );
         }
 
         if dry_run {
             for account_id in &account_ids {
                 if let Ok(Some(config)) = self.storage.load_account(account_id) {
-                    let display_name = if config.display_name.is_empty() { "Unknown".to_string() } else { config.display_name.clone() };
-                    println!("💨 Would sync calendars for: {} ({}) - {}", display_name, config.email_address, config.provider);
+                    let display_name = if config.display_name.is_empty() {
+                        "Unknown".to_string()
+                    } else {
+                        config.display_name.clone()
+                    };
+                    println!(
+                        "💨 Would sync calendars for: {} ({}) - {}",
+                        display_name, config.email_address, config.provider
+                    );
                 }
             }
         } else {
             println!("🚀 Starting calendar sync...");
-            
+
             // Initialize calendar manager
             match self.create_calendar_manager().await {
                 Ok(calendar_manager) => {
                     if verbose {
                         println!("✅ Calendar manager initialized");
                     }
-                    
+
                     // Perform the actual sync
                     match calendar_manager.sync_calendars().await {
                         Ok(_) => {
                             println!("✅ Calendar sync completed successfully");
-                            
+
                             // Show statistics if verbose
                             if verbose {
                                 match calendar_manager.get_stats().await {
                                     Ok(stats) => {
                                         println!("📊 Sync statistics:");
-                                        println!("   📅 Total calendars: {}", stats.total_calendars);
+                                        println!(
+                                            "   📅 Total calendars: {}",
+                                            stats.total_calendars
+                                        );
                                         println!("   📍 Total events: {}", stats.total_events);
-                                        println!("   📈 Upcoming events: {}", stats.upcoming_events);
+                                        println!(
+                                            "   📈 Upcoming events: {}",
+                                            stats.upcoming_events
+                                        );
                                         if let Some(last_sync) = stats.last_sync {
-                                            println!("   🕒 Last sync: {}", last_sync.format("%Y-%m-%d %H:%M:%S UTC"));
+                                            println!(
+                                                "   🕒 Last sync: {}",
+                                                last_sync.format("%Y-%m-%d %H:%M:%S UTC")
+                                            );
                                         }
                                     }
                                     Err(e) => {
@@ -6225,47 +7146,71 @@ impl CliHandler {
                 }
             }
         }
-        
+
         Ok(())
     }
 
     /// Sync calendars for a specific account
-    async fn handle_calendar_sync_account(&self, account: String, verbose: bool, force: bool, dry_run: bool) -> Result<()> {
+    async fn handle_calendar_sync_account(
+        &self,
+        account: String,
+        verbose: bool,
+        force: bool,
+        dry_run: bool,
+    ) -> Result<()> {
         println!("📅 Syncing calendars for account: {}", account);
-        
+
         if dry_run {
             println!("💨 Dry run mode - no changes will be made");
         }
 
         // Find account by name or email
         let account_id = self.find_account_id(&account)?;
-        
+
         if let Ok(Some(config)) = self.storage.load_account(&account_id) {
-            let display_name = if config.display_name.is_empty() { "Unknown".to_string() } else { config.display_name.clone() };
-            
-            println!("📋 Calendar sync plan for: {} ({}) - {}", display_name, config.email_address, config.provider);
-            
+            let display_name = if config.display_name.is_empty() {
+                "Unknown".to_string()
+            } else {
+                config.display_name.clone()
+            };
+
+            println!(
+                "📋 Calendar sync plan for: {} ({}) - {}",
+                display_name, config.email_address, config.provider
+            );
+
             if verbose {
-                println!("   🔄 Force full sync: {}", if force { "✅ Yes" } else { "❌ No" });
+                println!(
+                    "   🔄 Force full sync: {}",
+                    if force { "✅ Yes" } else { "❌ No" }
+                );
             }
 
             if dry_run {
                 println!("💨 Would sync calendars for account: {}", account);
             } else {
                 println!("🚀 Starting calendar sync for account: {}", account);
-                
+
                 // Initialize calendar manager
                 match self.create_calendar_manager().await {
                     Ok(calendar_manager) => {
                         if verbose {
                             println!("✅ Calendar manager initialized");
                         }
-                        
+
                         // For Google accounts, try to add/sync Google calendars
-                        if config.provider.to_lowercase().contains("google") || config.provider.to_lowercase().contains("gmail") {
-                            match calendar_manager.add_google_calendars(account_id.clone()).await {
+                        if config.provider.to_lowercase().contains("google")
+                            || config.provider.to_lowercase().contains("gmail")
+                        {
+                            match calendar_manager
+                                .add_google_calendars(account_id.clone())
+                                .await
+                            {
                                 Ok(calendars) => {
-                                    println!("✅ Added/updated {} Google calendars", calendars.len());
+                                    println!(
+                                        "✅ Added/updated {} Google calendars",
+                                        calendars.len()
+                                    );
                                     if verbose {
                                         for calendar in &calendars {
                                             println!("   📅 {}", calendar.name);
@@ -6277,7 +7222,7 @@ impl CliHandler {
                                 }
                             }
                         }
-                        
+
                         // Perform general calendar sync
                         match calendar_manager.sync_calendars().await {
                             Ok(_) => {
@@ -6298,54 +7243,77 @@ impl CliHandler {
         } else {
             return Err(anyhow!("Account '{}' not found", account));
         }
-        
+
         Ok(())
     }
 
     /// Sync a specific calendar
-    async fn handle_calendar_sync_calendar(&self, account: String, calendar: String, verbose: bool, force: bool, dry_run: bool) -> Result<()> {
-        println!("📅 Syncing calendar '{}' for account: {}", calendar, account);
-        
+    async fn handle_calendar_sync_calendar(
+        &self,
+        account: String,
+        calendar: String,
+        verbose: bool,
+        force: bool,
+        dry_run: bool,
+    ) -> Result<()> {
+        println!(
+            "📅 Syncing calendar '{}' for account: {}",
+            calendar, account
+        );
+
         if dry_run {
             println!("💨 Dry run mode - no changes will be made");
         }
 
         // Find account by name or email
         let account_id = self.find_account_id(&account)?;
-        
+
         if let Ok(Some(config)) = self.storage.load_account(&account_id) {
-            let display_name = if config.display_name.is_empty() { "Unknown".to_string() } else { config.display_name.clone() };
-            
+            let display_name = if config.display_name.is_empty() {
+                "Unknown".to_string()
+            } else {
+                config.display_name.clone()
+            };
+
             println!("📋 Calendar sync plan:");
-            println!("   📧 Account: {} ({}) - {}", display_name, config.email_address, config.provider);
+            println!(
+                "   📧 Account: {} ({}) - {}",
+                display_name, config.email_address, config.provider
+            );
             println!("   📅 Calendar: {}", calendar);
-            
+
             if verbose {
-                println!("   🔄 Force full sync: {}", if force { "✅ Yes" } else { "❌ No" });
+                println!(
+                    "   🔄 Force full sync: {}",
+                    if force { "✅ Yes" } else { "❌ No" }
+                );
             }
 
             if dry_run {
-                println!("💨 Would sync calendar '{}' for account '{}'", calendar, account);
+                println!(
+                    "💨 Would sync calendar '{}' for account '{}'",
+                    calendar, account
+                );
             } else {
                 println!("🚀 Starting sync for calendar: {}", calendar);
-                
+
                 // Initialize calendar manager
                 match self.create_calendar_manager().await {
                     Ok(calendar_manager) => {
                         if verbose {
                             println!("✅ Calendar manager initialized");
                         }
-                        
+
                         // Get all calendars and find the requested one
                         let calendars = calendar_manager.get_calendars().await;
-                        let target_calendar = calendars.iter().find(|c| 
-                            c.name.eq_ignore_ascii_case(&calendar) || c.id == calendar
-                        );
-                        
+                        let target_calendar = calendars
+                            .iter()
+                            .find(|c| c.name.eq_ignore_ascii_case(&calendar) || c.id == calendar);
+
                         match target_calendar {
                             Some(cal) => {
                                 println!("✅ Found calendar: {} ({})", cal.name, cal.id);
-                                
+
                                 // Perform sync for this specific calendar
                                 // Note: The sync_calendars method syncs all calendars
                                 // In a full implementation, we'd have a sync_specific_calendar method
@@ -6354,13 +7322,19 @@ impl CliHandler {
                                         println!("✅ Calendar sync completed for: {}", calendar);
                                     }
                                     Err(e) => {
-                                        println!("❌ Calendar sync failed for '{}': {}", calendar, e);
+                                        println!(
+                                            "❌ Calendar sync failed for '{}': {}",
+                                            calendar, e
+                                        );
                                         return Err(anyhow!("Calendar sync failed: {}", e));
                                     }
                                 }
                             }
                             None => {
-                                println!("❌ Calendar '{}' not found for account '{}'", calendar, account);
+                                println!(
+                                    "❌ Calendar '{}' not found for account '{}'",
+                                    calendar, account
+                                );
                                 println!("💡 Use 'comunicado calendar-sync list' to see available calendars");
                                 return Err(anyhow!("Calendar '{}' not found", calendar));
                             }
@@ -6375,29 +7349,31 @@ impl CliHandler {
         } else {
             return Err(anyhow!("Account '{}' not found", account));
         }
-        
+
         Ok(())
     }
 
     /// List available calendars for sync
     async fn handle_calendar_sync_list(&self, _dry_run: bool) -> Result<()> {
         println!("📅 Available calendars for sync:");
-        
+
         // Initialize calendar manager
         match self.create_calendar_manager().await {
             Ok(calendar_manager) => {
                 let calendars = calendar_manager.get_calendars().await;
-                
+
                 if calendars.is_empty() {
                     println!("⚠️  No calendars found.");
                     println!("💡 Add calendars by running:");
-                    println!("   • comunicado calendar-sync account <account> (for Google calendars)");
+                    println!(
+                        "   • comunicado calendar-sync account <account> (for Google calendars)"
+                    );
                     println!("   • Use the TUI interface to add CalDAV calendars");
                     return Ok(());
                 }
-                
+
                 println!("Found {} calendar(s):", calendars.len());
-                
+
                 for calendar in &calendars {
                     println!("\n📅 {} (ID: {})", calendar.name, calendar.id);
                     println!("   Source: {:?}", calendar.source);
@@ -6410,12 +7386,15 @@ impl CliHandler {
                         println!("   Access: ✏️  Read-write");
                     }
                     if let Some(last_synced) = calendar.last_synced {
-                        println!("   Last synced: {}", last_synced.format("%Y-%m-%d %H:%M:%S UTC"));
+                        println!(
+                            "   Last synced: {}",
+                            last_synced.format("%Y-%m-%d %H:%M:%S UTC")
+                        );
                     } else {
                         println!("   Last synced: Never");
                     }
                 }
-                
+
                 println!("\n💡 Usage:");
                 println!("  comunicado calendar-sync all                     # Sync all calendars");
                 println!("  comunicado calendar-sync account <account>       # Sync calendars for specific account");
@@ -6426,92 +7405,107 @@ impl CliHandler {
                 return Err(anyhow!("Calendar manager initialization failed: {}", e));
             }
         }
-        
+
         Ok(())
     }
 
     /// Show calendar sync status and statistics
-    async fn handle_calendar_sync_status(&self, account: Option<String>, _dry_run: bool) -> Result<()> {
+    async fn handle_calendar_sync_status(
+        &self,
+        account: Option<String>,
+        _dry_run: bool,
+    ) -> Result<()> {
         if let Some(account_name) = account {
             println!("📊 Calendar sync status for account: {}", account_name);
             // For now, we show general calendar info since we don't have per-account calendar stats
         } else {
             println!("📊 Calendar sync status for all calendars:");
         }
-        
+
         // Initialize calendar manager
         match self.create_calendar_manager().await {
-            Ok(calendar_manager) => {
-                match calendar_manager.get_stats().await {
-                    Ok(stats) => {
-                        println!("\n📊 Calendar Statistics:");
-                        println!("   📅 Total calendars: {}", stats.total_calendars);
-                        println!("   🌐 Google calendars: {}", stats.google_calendars);
-                        println!("   📍 CalDAV calendars: {}", stats.caldav_calendars);
-                        println!("   🏠 Local calendars: {}", stats.local_calendars);
-                        println!("   📍 Total events: {}", stats.total_events);
-                        println!("   📈 Upcoming events: {}", stats.upcoming_events);
-                        if stats.overdue_events > 0 {
-                            println!("   ⏰ Overdue events: {}", stats.overdue_events);
-                        }
-                        
-                        if let Some(last_sync) = stats.last_sync {
-                            let now = chrono::Utc::now();
-                            let time_since_sync = now.signed_duration_since(last_sync);
-                            println!("   🕒 Last sync: {} ({})", 
-                                last_sync.format("%Y-%m-%d %H:%M:%S UTC"),
-                                format_duration(time_since_sync)
-                            );
-                        } else {
-                            println!("   🕒 Last sync: Never");
-                        }
+            Ok(calendar_manager) => match calendar_manager.get_stats().await {
+                Ok(stats) => {
+                    println!("\n📊 Calendar Statistics:");
+                    println!("   📅 Total calendars: {}", stats.total_calendars);
+                    println!("   🌐 Google calendars: {}", stats.google_calendars);
+                    println!("   📍 CalDAV calendars: {}", stats.caldav_calendars);
+                    println!("   🏠 Local calendars: {}", stats.local_calendars);
+                    println!("   📍 Total events: {}", stats.total_events);
+                    println!("   📈 Upcoming events: {}", stats.upcoming_events);
+                    if stats.overdue_events > 0 {
+                        println!("   ⏰ Overdue events: {}", stats.overdue_events);
                     }
-                    Err(e) => {
-                        println!("❌ Failed to get calendar statistics: {}", e);
-                        return Err(anyhow!("Failed to get calendar statistics: {}", e));
+
+                    if let Some(last_sync) = stats.last_sync {
+                        let now = chrono::Utc::now();
+                        let time_since_sync = now.signed_duration_since(last_sync);
+                        println!(
+                            "   🕒 Last sync: {} ({})",
+                            last_sync.format("%Y-%m-%d %H:%M:%S UTC"),
+                            format_duration(time_since_sync)
+                        );
+                    } else {
+                        println!("   🕒 Last sync: Never");
                     }
                 }
-            }
+                Err(e) => {
+                    println!("❌ Failed to get calendar statistics: {}", e);
+                    return Err(anyhow!("Failed to get calendar statistics: {}", e));
+                }
+            },
             Err(e) => {
                 println!("❌ Failed to initialize calendar manager: {}", e);
                 return Err(anyhow!("Calendar manager initialization failed: {}", e));
             }
         }
-        
+
         Ok(())
     }
 
     /// Helper: Create a calendar manager instance
-    async fn create_calendar_manager(&self) -> Result<Arc<crate::calendar::manager::CalendarManager>> {
+    async fn create_calendar_manager(
+        &self,
+    ) -> Result<Arc<crate::calendar::manager::CalendarManager>> {
         // Get or create calendar database path using the same pattern as email database
         let calendar_db_path = dirs::config_dir()
             .ok_or_else(|| anyhow!("Cannot find config directory"))?
             .join("comunicado")
             .join("calendar.db");
-        
+
         // Ensure parent directory exists
         if let Some(parent) = calendar_db_path.parent() {
             std::fs::create_dir_all(parent)
                 .map_err(|e| anyhow!("Failed to create calendar database directory: {}", e))?;
         }
-        
+
         // Initialize database
-        let database = Arc::new(crate::calendar::database::CalendarDatabase::new(
-            calendar_db_path.to_str().ok_or_else(|| anyhow!("Invalid calendar database path"))?
-        ).await
-            .map_err(|e| anyhow!("Failed to initialize calendar database: {}", e))?);
-        
+        let database = Arc::new(
+            crate::calendar::database::CalendarDatabase::new(
+                calendar_db_path
+                    .to_str()
+                    .ok_or_else(|| anyhow!("Invalid calendar database path"))?,
+            )
+            .await
+            .map_err(|e| anyhow!("Failed to initialize calendar database: {}", e))?,
+        );
+
         // Use existing token manager or create a new one
         let token_manager = if let Some(ref tm) = self.token_manager {
             Arc::new(tm.clone())
         } else {
-            Arc::new(TokenManager::new_with_storage(Arc::new(self.storage.clone())))
+            Arc::new(TokenManager::new_with_storage(Arc::new(
+                self.storage.clone(),
+            )))
         };
-        
+
         // Create calendar manager
-        let calendar_manager = Arc::new(crate::calendar::manager::CalendarManager::new(database, token_manager).await
-            .map_err(|e| anyhow!("Failed to create calendar manager: {}", e))?);
-        
+        let calendar_manager = Arc::new(
+            crate::calendar::manager::CalendarManager::new(database, token_manager)
+                .await
+                .map_err(|e| anyhow!("Failed to create calendar manager: {}", e))?,
+        );
+
         Ok(calendar_manager)
     }
 
@@ -6521,12 +7515,15 @@ impl CliHandler {
             ContactsSyncCommands::All { verbose, force } => {
                 self.handle_contacts_sync_all(verbose, force, dry_run).await
             }
-            ContactsSyncCommands::Account { account, verbose, force } => {
-                self.handle_contacts_sync_account(account, verbose, force, dry_run).await
+            ContactsSyncCommands::Account {
+                account,
+                verbose,
+                force,
+            } => {
+                self.handle_contacts_sync_account(account, verbose, force, dry_run)
+                    .await
             }
-            ContactsSyncCommands::List => {
-                self.handle_contacts_sync_list(dry_run).await
-            }
+            ContactsSyncCommands::List => self.handle_contacts_sync_list(dry_run).await,
             ContactsSyncCommands::Status { account } => {
                 self.handle_contacts_sync_status(account, dry_run).await
             }
@@ -6534,15 +7531,22 @@ impl CliHandler {
     }
 
     /// Sync all contacts from all accounts
-    async fn handle_contacts_sync_all(&self, verbose: bool, force: bool, dry_run: bool) -> Result<()> {
+    async fn handle_contacts_sync_all(
+        &self,
+        verbose: bool,
+        force: bool,
+        dry_run: bool,
+    ) -> Result<()> {
         println!("📞 Syncing all contacts...");
-        
+
         if dry_run {
             println!("💨 Dry run mode - no changes will be made");
         }
 
         // Get all accounts
-        let account_ids = self.storage.list_account_ids()
+        let account_ids = self
+            .storage
+            .list_account_ids()
             .map_err(|e| anyhow!("Failed to list accounts: {}", e))?;
 
         if account_ids.is_empty() {
@@ -6550,35 +7554,48 @@ impl CliHandler {
             return Ok(());
         }
 
-        println!("📧 Found {} account(s) to sync contacts for", account_ids.len());
-        
+        println!(
+            "📧 Found {} account(s) to sync contacts for",
+            account_ids.len()
+        );
+
         if verbose {
             println!("📋 Contacts sync plan:");
-            println!("   🔄 Force full sync: {}", if force { "✅ Yes" } else { "❌ No" });
+            println!(
+                "   🔄 Force full sync: {}",
+                if force { "✅ Yes" } else { "❌ No" }
+            );
         }
 
         if dry_run {
             for account_id in &account_ids {
                 if let Ok(Some(config)) = self.storage.load_account(account_id) {
-                    let display_name = if config.display_name.is_empty() { "Unknown".to_string() } else { config.display_name.clone() };
-                    println!("💨 Would sync contacts for: {} ({}) - {}", display_name, config.email_address, config.provider);
+                    let display_name = if config.display_name.is_empty() {
+                        "Unknown".to_string()
+                    } else {
+                        config.display_name.clone()
+                    };
+                    println!(
+                        "💨 Would sync contacts for: {} ({}) - {}",
+                        display_name, config.email_address, config.provider
+                    );
                 }
             }
         } else {
             println!("🚀 Starting contacts sync...");
-            
+
             // Initialize contacts manager
             match self.create_contacts_manager().await {
                 Ok(contacts_manager) => {
                     if verbose {
                         println!("✅ Contacts manager initialized");
                     }
-                    
+
                     // Perform the actual sync
                     match contacts_manager.sync_all_contacts().await {
                         Ok(summary) => {
                             println!("✅ Contacts sync completed successfully");
-                            
+
                             // Show statistics if verbose
                             if verbose {
                                 println!("📊 Sync statistics:");
@@ -6606,56 +7623,82 @@ impl CliHandler {
                 }
             }
         }
-        
+
         Ok(())
     }
 
     /// Sync contacts for a specific account
-    async fn handle_contacts_sync_account(&self, account: String, verbose: bool, force: bool, dry_run: bool) -> Result<()> {
+    async fn handle_contacts_sync_account(
+        &self,
+        account: String,
+        verbose: bool,
+        force: bool,
+        dry_run: bool,
+    ) -> Result<()> {
         println!("📞 Syncing contacts for account: {}", account);
-        
+
         if dry_run {
             println!("💨 Dry run mode - no changes will be made");
         }
 
         // Find account by name or email
         let account_id = self.find_account_id(&account)?;
-        
+
         if let Ok(Some(config)) = self.storage.load_account(&account_id) {
-            let display_name = if config.display_name.is_empty() { "Unknown".to_string() } else { config.display_name.clone() };
-            
-            println!("📋 Contacts sync plan for: {} ({}) - {}", display_name, config.email_address, config.provider);
-            
+            let display_name = if config.display_name.is_empty() {
+                "Unknown".to_string()
+            } else {
+                config.display_name.clone()
+            };
+
+            println!(
+                "📋 Contacts sync plan for: {} ({}) - {}",
+                display_name, config.email_address, config.provider
+            );
+
             if verbose {
-                println!("   🔄 Force full sync: {}", if force { "✅ Yes" } else { "❌ No" });
+                println!(
+                    "   🔄 Force full sync: {}",
+                    if force { "✅ Yes" } else { "❌ No" }
+                );
             }
 
             if dry_run {
                 println!("💨 Would sync contacts for account: {}", account);
             } else {
                 println!("🚀 Starting contacts sync for account: {}", account);
-                
+
                 // Initialize contacts manager
                 match self.create_contacts_manager().await {
                     Ok(contacts_manager) => {
                         if verbose {
                             println!("✅ Contacts manager initialized");
                         }
-                        
+
                         // Determine provider type
-                        let provider_type = if config.provider.to_lowercase().contains("google") || config.provider.to_lowercase().contains("gmail") {
+                        let provider_type = if config.provider.to_lowercase().contains("google")
+                            || config.provider.to_lowercase().contains("gmail")
+                        {
                             "google"
-                        } else if config.provider.to_lowercase().contains("outlook") || config.provider.to_lowercase().contains("microsoft") {
+                        } else if config.provider.to_lowercase().contains("outlook")
+                            || config.provider.to_lowercase().contains("microsoft")
+                        {
                             "outlook"
                         } else {
-                            return Err(anyhow!("Unsupported provider for contacts sync: {}", config.provider));
+                            return Err(anyhow!(
+                                "Unsupported provider for contacts sync: {}",
+                                config.provider
+                            ));
                         };
-                        
+
                         // Perform account-specific sync
-                        match contacts_manager.sync_account_contacts(&account_id, provider_type).await {
+                        match contacts_manager
+                            .sync_account_contacts(&account_id, provider_type)
+                            .await
+                        {
                             Ok(summary) => {
                                 println!("✅ Contacts sync completed for account: {}", account);
-                                
+
                                 if verbose {
                                     println!("📊 Sync statistics:");
                                     println!("   📞 Contacts fetched: {}", summary.fetched_count);
@@ -6685,14 +7728,14 @@ impl CliHandler {
         } else {
             return Err(anyhow!("Account '{}' not found", account));
         }
-        
+
         Ok(())
     }
 
     /// List available contacts sources for sync
     async fn handle_contacts_sync_list(&self, _dry_run: bool) -> Result<()> {
         println!("📞 Available contacts sources for sync:");
-        
+
         // Initialize contacts manager
         match self.create_contacts_manager().await {
             Ok(contacts_manager) => {
@@ -6704,23 +7747,32 @@ impl CliHandler {
                             println!("   • comunicado contacts-sync account <account> (for Google/Outlook contacts)");
                             return Ok(());
                         }
-                        
+
                         println!("Found {} contact(s):", stats.total_contacts);
-                        
+
                         // Get accounts to show contact sources
-                        let account_ids = self.storage.list_account_ids()
+                        let account_ids = self
+                            .storage
+                            .list_account_ids()
                             .map_err(|e| anyhow!("Failed to list accounts: {}", e))?;
-                            
+
                         for account_id in &account_ids {
                             if let Ok(Some(config)) = self.storage.load_account(account_id) {
-                                let display_name = if config.display_name.is_empty() { "Unknown".to_string() } else { config.display_name.clone() };
-                                
+                                let display_name = if config.display_name.is_empty() {
+                                    "Unknown".to_string()
+                                } else {
+                                    config.display_name.clone()
+                                };
+
                                 // Check if this account has contacts scope
-                                let has_contacts_scope = config.scopes.iter().any(|scope| 
+                                let has_contacts_scope = config.scopes.iter().any(|scope| {
                                     scope.contains("contacts") || scope.contains("Contacts")
+                                });
+
+                                println!(
+                                    "\n📧 {} ({}) - {}",
+                                    display_name, config.email_address, config.provider
                                 );
-                                
-                                println!("\n📧 {} ({}) - {}", display_name, config.email_address, config.provider);
                                 if has_contacts_scope {
                                     println!("   Status: ✅ Contacts sync available");
                                 } else {
@@ -6741,56 +7793,59 @@ impl CliHandler {
                 return Err(anyhow!("Contacts manager initialization failed: {}", e));
             }
         }
-        
+
         println!("\n💡 Usage:");
         println!("  comunicado contacts-sync all                     # Sync all contacts");
         println!("  comunicado contacts-sync account <account>       # Sync contacts for specific account");
-        
+
         Ok(())
     }
 
     /// Show contacts sync status and statistics
-    async fn handle_contacts_sync_status(&self, account: Option<String>, _dry_run: bool) -> Result<()> {
+    async fn handle_contacts_sync_status(
+        &self,
+        account: Option<String>,
+        _dry_run: bool,
+    ) -> Result<()> {
         if let Some(account_name) = account {
             println!("📊 Contacts sync status for account: {}", account_name);
         } else {
             println!("📊 Contacts sync status for all accounts:");
         }
-        
+
         // Initialize contacts manager
         match self.create_contacts_manager().await {
-            Ok(contacts_manager) => {
-                match contacts_manager.get_stats().await {
-                    Ok(stats) => {
-                        println!("\n📊 Contacts Statistics:");
-                        println!("   📞 Total contacts: {}", stats.total_contacts);
-                        println!("   📧 Contacts with email: {}", stats.contacts_with_email);
-                        println!("   📱 Contacts with phone: {}", stats.contacts_with_phone);
-                        println!("   🏢 Groups: {}", stats.groups_count);
-                        
-                        if let Some(last_sync) = stats.last_sync {
-                            let now = chrono::Utc::now();
-                            let time_since_sync = now.signed_duration_since(last_sync);
-                            println!("   🕒 Last sync: {} ({})", 
-                                last_sync.format("%Y-%m-%d %H:%M:%S UTC"),
-                                format_duration(time_since_sync)
-                            );
-                        } else {
-                            println!("   🕒 Last sync: Never");
-                        }
-                    }
-                    Err(e) => {
-                        println!("❌ Failed to get contacts statistics: {}", e);
-                        return Err(anyhow!("Failed to get contacts statistics: {}", e));
+            Ok(contacts_manager) => match contacts_manager.get_stats().await {
+                Ok(stats) => {
+                    println!("\n📊 Contacts Statistics:");
+                    println!("   📞 Total contacts: {}", stats.total_contacts);
+                    println!("   📧 Contacts with email: {}", stats.contacts_with_email);
+                    println!("   📱 Contacts with phone: {}", stats.contacts_with_phone);
+                    println!("   🏢 Groups: {}", stats.groups_count);
+
+                    if let Some(last_sync) = stats.last_sync {
+                        let now = chrono::Utc::now();
+                        let time_since_sync = now.signed_duration_since(last_sync);
+                        println!(
+                            "   🕒 Last sync: {} ({})",
+                            last_sync.format("%Y-%m-%d %H:%M:%S UTC"),
+                            format_duration(time_since_sync)
+                        );
+                    } else {
+                        println!("   🕒 Last sync: Never");
                     }
                 }
-            }
+                Err(e) => {
+                    println!("❌ Failed to get contacts statistics: {}", e);
+                    return Err(anyhow!("Failed to get contacts statistics: {}", e));
+                }
+            },
             Err(e) => {
                 println!("❌ Failed to initialize contacts manager: {}", e);
                 return Err(anyhow!("Contacts manager initialization failed: {}", e));
             }
         }
-        
+
         Ok(())
     }
 
@@ -6801,30 +7856,34 @@ impl CliHandler {
             .ok_or_else(|| anyhow!("Cannot find config directory"))?
             .join("comunicado")
             .join("contacts.db");
-        
+
         // Ensure parent directory exists
         if let Some(parent) = contacts_db_path.parent() {
             std::fs::create_dir_all(parent)
                 .map_err(|e| anyhow!("Failed to create contacts database directory: {}", e))?;
         }
-        
+
         // Initialize database with sqlite: URL format and connection options
         let database_url = format!("sqlite:{}?mode=rwc", contacts_db_path.display());
-        
-        let database = crate::contacts::ContactsDatabase::new(&database_url).await
+
+        let database = crate::contacts::ContactsDatabase::new(&database_url)
+            .await
             .map_err(|e| anyhow!("Failed to initialize contacts database: {}", e))?;
-        
+
         // Use existing token manager or create a new one
         let token_manager = if let Some(ref tm) = self.token_manager {
             tm.clone()
         } else {
             TokenManager::new_with_storage(Arc::new(self.storage.clone()))
         };
-        
+
         // Create contacts manager
-        let contacts_manager = Arc::new(crate::contacts::ContactsManager::new(database, token_manager).await
-            .map_err(|e| anyhow!("Failed to create contacts manager: {}", e))?);
-        
+        let contacts_manager = Arc::new(
+            crate::contacts::ContactsManager::new(database, token_manager)
+                .await
+                .map_err(|e| anyhow!("Failed to create contacts manager: {}", e))?,
+        );
+
         Ok(contacts_manager)
     }
 }
@@ -6839,51 +7898,51 @@ pub struct KdeConnectArgs {
 pub enum KdeConnectCommand {
     /// Check KDE Connect availability and status
     Status,
-    
+
     /// List available devices
     List,
-    
+
     /// Enable KDE Connect integration
     Enable {
         /// Device ID to connect to
         #[arg(short, long)]
         device_id: Option<String>,
-        
+
         /// Enable specific notification types
         #[arg(long, value_delimiter = ',')]
         notifications: Option<Vec<String>>,
-        
+
         /// Enable auto-pairing with new devices
         #[arg(long)]
         auto_pair: bool,
     },
-    
+
     /// Disable KDE Connect integration
     Disable,
-    
+
     /// Test KDE Connect functionality
     Test {
         /// Send test notification
         #[arg(long)]
         notification: bool,
-        
+
         /// Test find phone functionality
         #[arg(long)]
         find_phone: bool,
     },
-    
+
     /// Pair with a device
     Pair {
         /// Device ID to pair with
         device_id: String,
     },
-    
+
     /// Unpair from a device
     Unpair {
         /// Device ID to unpair from
         device_id: String,
     },
-    
+
     /// Setup wizard for KDE Connect
     Setup,
 }
@@ -6898,185 +7957,185 @@ pub struct NotesArgs {
 pub enum NotesCommand {
     /// Check notes plugin status and configuration
     Status,
-    
+
     /// Create a new note
     Create {
         /// Note title
         title: String,
-        
+
         /// Note content (optional, opens editor if not provided)
         #[arg(short, long)]
         content: Option<String>,
-        
+
         /// Tags to add to the note
         #[arg(short, long, value_delimiter = ',')]
         tags: Option<Vec<String>>,
-        
+
         /// Template to use for the note
         #[arg(long)]
         template: Option<String>,
     },
-    
+
     /// Search notes
     Search {
         /// Search query
         query: String,
-        
+
         /// Maximum number of results
         #[arg(short, long, default_value = "10")]
         limit: usize,
-        
+
         /// Search in specific category
         #[arg(short, long)]
         category: Option<String>,
-        
+
         /// Show only titles
         #[arg(long)]
         titles_only: bool,
     },
-    
+
     /// List all notes
     List {
         /// Show detailed information
         #[arg(short, long)]
         detailed: bool,
-        
+
         /// Filter by tags
         #[arg(short, long, value_delimiter = ',')]
         tags: Option<Vec<String>>,
-        
+
         /// Maximum number of notes to show
         #[arg(short, long)]
         limit: Option<usize>,
     },
-    
+
     /// Show note content
     Show {
         /// Note title or ID
         note: String,
-        
+
         /// Show raw markdown content
         #[arg(short, long)]
         raw: bool,
     },
-    
+
     /// Edit an existing note
     Edit {
         /// Note title or ID
         note: String,
-        
+
         /// Editor to use (defaults to $EDITOR)
         #[arg(long)]
         editor: Option<String>,
     },
-    
+
     /// Delete a note
     Delete {
         /// Note title or ID
         note: String,
-        
+
         /// Skip confirmation prompt
         #[arg(short, long)]
         force: bool,
     },
-    
+
     /// Reindex all notes for search
     Reindex {
         /// Force full reindex even if up to date
         #[arg(short, long)]
         force: bool,
-        
+
         /// Show progress information
         #[arg(short, long)]
         verbose: bool,
     },
-    
+
     /// Configure notes plugin
     Config {
         /// Set default notes directory
         #[arg(long)]
         set_directory: Option<String>,
-        
+
         /// Add directory to watch list
         #[arg(long)]
         add_watch: Option<String>,
-        
+
         /// Remove directory from watch list
         #[arg(long)]
         remove_watch: Option<String>,
-        
+
         /// Enable/disable auto-indexing
         #[arg(long)]
         auto_index: Option<bool>,
-        
+
         /// Show current configuration
         #[arg(long)]
         show: bool,
     },
-    
+
     /// Launch notes TUI interface
     Tui {
         /// Start in search mode
         #[arg(short, long)]
         search: Option<String>,
-        
+
         /// Open specific note
         #[arg(short, long)]
         open: Option<String>,
     },
-    
+
     /// Import notes from external sources
     Import {
         /// Source format (markdown, txt, json)
         #[arg(short, long, default_value = "markdown")]
         format: String,
-        
+
         /// Source directory or file
         source: String,
-        
+
         /// Preserve directory structure
         #[arg(long)]
         preserve_structure: bool,
-        
+
         /// Dry run (show what would be imported)
         #[arg(long)]
         dry_run: bool,
     },
-    
+
     /// Export notes to various formats
     Export {
         /// Output format (markdown, html, json)
         #[arg(short, long, default_value = "markdown")]
         format: String,
-        
+
         /// Output directory
         #[arg(short, long)]
         output: String,
-        
+
         /// Filter by tags
         #[arg(short, long, value_delimiter = ',')]
         tags: Option<Vec<String>>,
-        
+
         /// Include linked notes
         #[arg(long)]
         include_linked: bool,
     },
-    
+
     /// Analyze note statistics and health
     Stats {
         /// Show detailed statistics
         #[arg(short, long)]
         detailed: bool,
-        
+
         /// Include link analysis
         #[arg(long)]
         links: bool,
-        
+
         /// Include search index stats
         #[arg(long)]
         index: bool,
     },
-    
+
     /// Create a quick note from command line
     Quick {
         /// Note content (title will be auto-generated if not provided)
@@ -7088,7 +8147,7 @@ pub enum NotesCommand {
         #[arg(long, value_delimiter = ',')]
         tags: Option<Vec<String>>,
     },
-    
+
     /// Create a note from clipboard content
     Clipboard {
         /// Optional title for the note (auto-generated if not provided)
@@ -7098,13 +8157,13 @@ pub enum NotesCommand {
         #[arg(long, value_delimiter = ',')]
         tags: Option<Vec<String>>,
     },
-    
+
     /// Convert current email to note (when used within TUI)
     EmailToNote {
         /// Email message ID
         email_id: String,
     },
-    
+
     /// Convert current event to note (when used within TUI)
     EventToNote {
         /// Event ID
@@ -7118,7 +8177,7 @@ fn format_duration(duration: chrono::Duration) -> String {
     let days = total_seconds / 86400;
     let hours = (total_seconds % 86400) / 3600;
     let minutes = (total_seconds % 3600) / 60;
-    
+
     if days > 0 {
         format!("{}d {}h {}m", days, hours, minutes)
     } else if hours > 0 {

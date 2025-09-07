@@ -8,24 +8,30 @@
 //! - Cross-device settings and data synchronization
 //! - Real-time collaboration features
 
-pub mod providers;
-pub mod encryption;
-pub mod conflict_resolution;
-pub mod sync_engine;
-pub mod offline_storage;
-pub mod real_time;
 pub mod collaboration;
+pub mod conflict_resolution;
+pub mod encryption;
+pub mod offline_storage;
+pub mod providers;
+pub mod real_time;
+pub mod sync_engine;
 
-pub use providers::{
-    CloudProvider, CloudProviderType, DropboxProvider, GoogleDriveProvider,
-    OneDriveProvider, S3Provider, WebDAVProvider,
+pub use collaboration::{
+    CollaborationManager, Permission, ResourcePermission, SharedResource, SharingSettings,
 };
-pub use encryption::{CloudEncryption, EncryptionKey, EncryptionResult, EncryptionAlgorithm};
-pub use conflict_resolution::{ConflictResolver, ConflictStrategy, MergeResult, ConflictInfo, ConflictType};
-pub use sync_engine::{SyncEngine, SyncConfig, SyncResult, SyncStatus, SyncPriority, SyncOperation};
-pub use offline_storage::{OfflineCache, CacheEntry, CacheResult, StorageLimits};
-pub use real_time::{RealTimeSync, WebSocketClient, ChangeStream, ChangeEvent, ChangeEventType};
-pub use collaboration::{CollaborationManager, SharedResource, Permission, ResourcePermission, SharingSettings};
+pub use conflict_resolution::{
+    ConflictInfo, ConflictResolver, ConflictStrategy, ConflictType, MergeResult,
+};
+pub use encryption::{CloudEncryption, EncryptionAlgorithm, EncryptionKey, EncryptionResult};
+pub use offline_storage::{CacheEntry, CacheResult, OfflineCache, StorageLimits};
+pub use providers::{
+    CloudProvider, CloudProviderType, DropboxProvider, GoogleDriveProvider, OneDriveProvider,
+    S3Provider, WebDAVProvider,
+};
+pub use real_time::{ChangeEvent, ChangeEventType, ChangeStream, RealTimeSync, WebSocketClient};
+pub use sync_engine::{
+    SyncConfig, SyncEngine, SyncOperation, SyncPriority, SyncResult, SyncStatus,
+};
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -39,34 +45,34 @@ use uuid::Uuid;
 pub enum CloudSyncError {
     #[error("Provider error: {0}")]
     Provider(String),
-    
+
     #[error("Network error: {0}")]
     Network(String),
-    
+
     #[error("Authentication failed: {0}")]
     Authentication(String),
-    
+
     #[error("Encryption error: {0}")]
     Encryption(String),
-    
+
     #[error("Conflict resolution failed: {0}")]
     ConflictResolution(String),
-    
+
     #[error("Storage quota exceeded")]
     QuotaExceeded,
-    
+
     #[error("File not found: {0}")]
     FileNotFound(String),
-    
+
     #[error("Permission denied: {0}")]
     PermissionDenied(String),
-    
+
     #[error("Sync in progress")]
     SyncInProgress,
-    
+
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
-    
+
     #[error("Serialization error: {0}")]
     Serialization(#[from] serde_json::Error),
 }
@@ -160,7 +166,7 @@ impl CloudSyncManager {
     pub fn new(config: CloudSyncConfig) -> CloudSyncResult<Self> {
         let provider = Self::create_provider(&config.provider)?;
         let device_info = Self::generate_device_info()?;
-        
+
         Ok(Self {
             encryption: CloudEncryption::new(config.encryption_enabled)?,
             sync_engine: SyncEngine::new()?,
@@ -179,22 +185,22 @@ impl CloudSyncManager {
     pub async fn initialize(&mut self) -> CloudSyncResult<()> {
         // Authenticate with cloud provider
         self.provider.authenticate().await?;
-        
+
         // Initialize encryption if enabled
         if self.config.encryption_enabled {
             self.encryption.initialize().await?;
         }
-        
+
         // Set up real-time sync if supported
         if self.provider.supports_real_time() {
             self.real_time_sync = Some(RealTimeSync::new(self.provider.as_ref()).await?);
         }
-        
+
         // Initial sync if configured
         if self.config.sync_on_startup {
             self.sync_all().await?;
         }
-        
+
         Ok(())
     }
 
@@ -215,9 +221,9 @@ impl CloudSyncManager {
         self.active_syncs.insert(data_type.clone(), Utc::now());
 
         let result = self.perform_sync(data_type.clone()).await;
-        
+
         self.active_syncs.remove(&data_type);
-        
+
         match result {
             Ok(status) => Ok(status),
             Err(e) => {
@@ -231,21 +237,29 @@ impl CloudSyncManager {
     /// Synchronize all enabled data types
     pub async fn sync_all(&mut self) -> CloudSyncResult<HashMap<SyncDataType, SyncStatus>> {
         let mut results = HashMap::new();
-        
+
         // Collect enabled data types first to avoid borrowing conflicts
-        let enabled_types: Vec<SyncDataType> = self.config.selective_sync
+        let enabled_types: Vec<SyncDataType> = self
+            .config
+            .selective_sync
             .iter()
             .filter_map(|(data_type, enabled)| {
-                if *enabled { Some(data_type.clone()) } else { None }
+                if *enabled {
+                    Some(data_type.clone())
+                } else {
+                    None
+                }
             })
             .collect();
-        
+
         for data_type in enabled_types {
-            let status = self.sync_data(data_type.clone()).await
+            let status = self
+                .sync_data(data_type.clone())
+                .await
                 .unwrap_or(SyncStatus::Failed);
             results.insert(data_type, status);
         }
-        
+
         Ok(results)
     }
 
@@ -256,7 +270,7 @@ impl CloudSyncManager {
         data: &T,
     ) -> CloudSyncResult<SyncMetadata> {
         let serialized = serde_json::to_vec(data)?;
-        
+
         // Encrypt if enabled
         let (final_data, encrypted) = if self.config.encryption_enabled {
             let encrypted_data = self.encryption.encrypt(&serialized).await?;
@@ -280,12 +294,12 @@ impl CloudSyncManager {
         // Upload to cloud provider
         let file_path = self.get_cloud_path(&data_type, &metadata.id);
         self.provider.upload(&file_path, &final_data).await?;
-        
+
         // Upload metadata
         let metadata_path = self.get_metadata_path(&data_type, &metadata.id);
         let metadata_json = serde_json::to_vec(&metadata)?;
         self.provider.upload(&metadata_path, &metadata_json).await?;
-        
+
         Ok(metadata)
     }
 
@@ -299,33 +313,36 @@ impl CloudSyncManager {
         let metadata_path = self.get_metadata_path(&data_type, &metadata_id);
         let metadata_bytes = self.provider.download(&metadata_path).await?;
         let metadata: SyncMetadata = serde_json::from_slice(&metadata_bytes)?;
-        
+
         // Download data
         let file_path = self.get_cloud_path(&data_type, &metadata_id);
         let data_bytes = self.provider.download(&file_path).await?;
-        
+
         // Verify checksum
         let calculated_checksum = self.calculate_checksum(&data_bytes);
         if calculated_checksum != metadata.checksum {
             return Err(CloudSyncError::Provider("Checksum mismatch".to_string()));
         }
-        
+
         // Decrypt if needed
         let final_data = if metadata.encrypted {
             self.encryption.decrypt(&data_bytes).await?
         } else {
             data_bytes
         };
-        
+
         let deserialized: T = serde_json::from_slice(&final_data)?;
         Ok(deserialized)
     }
 
     /// List available synchronized data
-    pub async fn list_synchronized_data(&self, data_type: SyncDataType) -> CloudSyncResult<Vec<SyncMetadata>> {
+    pub async fn list_synchronized_data(
+        &self,
+        data_type: SyncDataType,
+    ) -> CloudSyncResult<Vec<SyncMetadata>> {
         let pattern = format!("comunicado/metadata/{:?}/", data_type);
         let files = self.provider.list_files(&pattern).await?;
-        
+
         let mut metadata_list = Vec::new();
         for file in files {
             if let Ok(metadata_bytes) = self.provider.download(&file).await {
@@ -334,10 +351,10 @@ impl CloudSyncManager {
                 }
             }
         }
-        
+
         // Sort by update time
         metadata_list.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
-        
+
         Ok(metadata_list)
     }
 
@@ -356,17 +373,17 @@ impl CloudSyncManager {
     /// Get sync status for all data types
     pub async fn get_sync_status(&self) -> CloudSyncResult<HashMap<SyncDataType, SyncStatus>> {
         let mut status_map = HashMap::new();
-        
+
         for data_type in SyncDataType::all() {
             let status = if self.is_data_type_enabled(&data_type) {
                 self.get_data_sync_status(data_type.clone()).await?
             } else {
                 SyncStatus::Disabled
             };
-            
+
             status_map.insert(data_type, status);
         }
-        
+
         Ok(status_map)
     }
 
@@ -379,7 +396,9 @@ impl CloudSyncManager {
     }
 
     // Private helper methods
-    fn create_provider(provider_type: &CloudProviderType) -> CloudSyncResult<Box<dyn CloudProvider>> {
+    fn create_provider(
+        provider_type: &CloudProviderType,
+    ) -> CloudSyncResult<Box<dyn CloudProvider>> {
         match provider_type {
             CloudProviderType::Dropbox => Ok(Box::new(DropboxProvider::new()?)),
             CloudProviderType::GoogleDrive => Ok(Box::new(GoogleDriveProvider::new()?)),
@@ -396,11 +415,13 @@ impl CloudSyncManager {
         let hostname = std::env::var("HOSTNAME")
             .or_else(|_| std::env::var("COMPUTERNAME"))
             .unwrap_or_else(|_| "unknown".to_string());
-        
+
         let mut hasher = DefaultHasher::new();
         hostname.hash(&mut hasher);
-        std::env::var("USER").unwrap_or_else(|_| "user".to_string()).hash(&mut hasher);
-        
+        std::env::var("USER")
+            .unwrap_or_else(|_| "user".to_string())
+            .hash(&mut hasher);
+
         Ok(DeviceInfo {
             id: format!("{:x}", hasher.finish()),
             name: hostname,
@@ -412,7 +433,11 @@ impl CloudSyncManager {
     }
 
     fn is_data_type_enabled(&self, data_type: &SyncDataType) -> bool {
-        self.config.selective_sync.get(data_type).copied().unwrap_or(true)
+        self.config
+            .selective_sync
+            .get(data_type)
+            .copied()
+            .unwrap_or(true)
     }
 
     async fn perform_sync(&mut self, _data_type: SyncDataType) -> CloudSyncResult<SyncStatus> {
@@ -428,7 +453,7 @@ impl CloudSyncManager {
     fn calculate_checksum(&self, data: &[u8]) -> String {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
-        
+
         let mut hasher = DefaultHasher::new();
         data.hash(&mut hasher);
         format!("{:x}", hasher.finish())

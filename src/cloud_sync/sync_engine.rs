@@ -169,7 +169,7 @@ impl SyncEngine {
     ) -> CloudSyncResult<Uuid> {
         let task_id = Uuid::new_v4();
         let now = Utc::now();
-        
+
         let task = SyncTask {
             id: task_id,
             data_type: data_type.clone(),
@@ -183,10 +183,11 @@ impl SyncEngine {
         {
             let mut queue = self.sync_queue.write().await;
             queue.push(task);
-            
+
             // Sort by priority and scheduled time
             queue.sort_by(|a, b| {
-                b.priority.partial_cmp(&a.priority)
+                b.priority
+                    .partial_cmp(&a.priority)
                     .unwrap_or(std::cmp::Ordering::Equal)
                     .then_with(|| a.scheduled_at.cmp(&b.scheduled_at))
             });
@@ -199,25 +200,25 @@ impl SyncEngine {
     pub async fn process_queue(&self) -> CloudSyncResult<Vec<SyncResult>> {
         let mut results = Vec::new();
         let max_parallel = self.config.parallel_syncs;
-        
+
         // Get tasks to process
         let tasks_to_process = {
             let mut queue = self.sync_queue.write().await;
             let available_count = max_parallel.saturating_sub(self.active_syncs.read().await.len());
             let mut tasks = Vec::new();
-            
+
             for _ in 0..available_count.min(queue.len()) {
                 if let Some(task) = queue.drain(0..1).next() {
                     tasks.push(task);
                 }
             }
-            
+
             tasks
         };
 
         // Process tasks concurrently
         let mut task_handles = Vec::new();
-        
+
         for task in tasks_to_process {
             let task_handle = self.process_sync_task(task);
             task_handles.push(task_handle);
@@ -243,7 +244,7 @@ impl SyncEngine {
     /// Process a single sync task
     async fn process_sync_task(&self, mut task: SyncTask) -> CloudSyncResult<SyncResult> {
         let start_time = Utc::now();
-        
+
         // Create progress tracker
         let progress = SyncProgress {
             task_id: task.id,
@@ -289,11 +290,11 @@ impl SyncEngine {
                 // Handle retry logic
                 if task.retry_count < self.config.max_retry_attempts {
                     task.retry_count += 1;
-                    task.scheduled_at = Utc::now() + 
-                        chrono::Duration::milliseconds(
-                            (self.config.retry_backoff_ms * (1 << task.retry_count) as u64) as i64
+                    task.scheduled_at = Utc::now()
+                        + chrono::Duration::milliseconds(
+                            (self.config.retry_backoff_ms * (1 << task.retry_count) as u64) as i64,
                         );
-                    
+
                     // Re-queue the task
                     let mut queue = self.sync_queue.write().await;
                     queue.push(task.clone());
@@ -317,7 +318,7 @@ impl SyncEngine {
         {
             let mut history = self.sync_history.write().await;
             history.push(sync_result.clone());
-            
+
             // Keep only recent history (last 1000 results)
             if history.len() > 1000 {
                 history.drain(0..100);
@@ -332,89 +333,114 @@ impl SyncEngine {
         &self,
         task: &mut SyncTask,
     ) -> CloudSyncResult<(SyncStatus, Option<SyncMetadata>, u32, u64, u32)> {
-        self.update_progress(task.data_type.clone(), SyncPhase::CheckingLocalChanges, 10.0).await;
+        self.update_progress(
+            task.data_type.clone(),
+            SyncPhase::CheckingLocalChanges,
+            10.0,
+        )
+        .await;
 
         match &task.operation {
             SyncOperation::Upload { local_data } => {
-                self.update_progress(task.data_type.clone(), SyncPhase::Uploading, 50.0).await;
-                
+                self.update_progress(task.data_type.clone(), SyncPhase::Uploading, 50.0)
+                    .await;
+
                 // Simulate upload operation
                 tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
                 let bytes_transferred = local_data.len() as u64;
-                
-                self.update_progress(task.data_type.clone(), SyncPhase::Complete, 100.0).await;
-                
+
+                self.update_progress(task.data_type.clone(), SyncPhase::Complete, 100.0)
+                    .await;
+
                 Ok((SyncStatus::Success, None, 1, bytes_transferred, 0))
             }
             SyncOperation::Download { remote_metadata } => {
-                self.update_progress(task.data_type.clone(), SyncPhase::Downloading, 50.0).await;
-                
+                self.update_progress(task.data_type.clone(), SyncPhase::Downloading, 50.0)
+                    .await;
+
                 // Simulate download operation
                 tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
                 let bytes_transferred = remote_metadata.size_bytes;
-                
-                self.update_progress(task.data_type.clone(), SyncPhase::Complete, 100.0).await;
-                
-                Ok((SyncStatus::Success, Some(remote_metadata.clone()), 1, bytes_transferred, 0))
+
+                self.update_progress(task.data_type.clone(), SyncPhase::Complete, 100.0)
+                    .await;
+
+                Ok((
+                    SyncStatus::Success,
+                    Some(remote_metadata.clone()),
+                    1,
+                    bytes_transferred,
+                    0,
+                ))
             }
             SyncOperation::Bidirectional => {
-                self.update_progress(task.data_type.clone(), SyncPhase::CheckingRemoteChanges, 25.0).await;
-                self.update_progress(task.data_type.clone(), SyncPhase::ComparingVersions, 40.0).await;
-                
+                self.update_progress(
+                    task.data_type.clone(),
+                    SyncPhase::CheckingRemoteChanges,
+                    25.0,
+                )
+                .await;
+                self.update_progress(task.data_type.clone(), SyncPhase::ComparingVersions, 40.0)
+                    .await;
+
                 // Check for conflicts
                 let has_conflicts = self.detect_conflicts(task.data_type.clone()).await?;
-                
+
                 if has_conflicts {
-                    self.update_progress(task.data_type.clone(), SyncPhase::ResolvingConflicts, 60.0).await;
-                    
+                    self.update_progress(
+                        task.data_type.clone(),
+                        SyncPhase::ResolvingConflicts,
+                        60.0,
+                    )
+                    .await;
+
                     // Simulate conflict resolution
                     tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
-                    
-                    self.update_progress(task.data_type.clone(), SyncPhase::Complete, 100.0).await;
-                    
+
+                    self.update_progress(task.data_type.clone(), SyncPhase::Complete, 100.0)
+                        .await;
+
                     Ok((SyncStatus::Success, None, 1, 1024, 1))
                 } else {
-                    self.update_progress(task.data_type.clone(), SyncPhase::Complete, 100.0).await;
-                    
+                    self.update_progress(task.data_type.clone(), SyncPhase::Complete, 100.0)
+                        .await;
+
                     Ok((SyncStatus::Skipped, None, 0, 0, 0))
                 }
             }
             SyncOperation::FullRefresh => {
-                self.update_progress(task.data_type.clone(), SyncPhase::Downloading, 30.0).await;
-                self.update_progress(task.data_type.clone(), SyncPhase::Finalizing, 80.0).await;
-                
+                self.update_progress(task.data_type.clone(), SyncPhase::Downloading, 30.0)
+                    .await;
+                self.update_progress(task.data_type.clone(), SyncPhase::Finalizing, 80.0)
+                    .await;
+
                 // Simulate full refresh
                 tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
-                
-                self.update_progress(task.data_type.clone(), SyncPhase::Complete, 100.0).await;
-                
+
+                self.update_progress(task.data_type.clone(), SyncPhase::Complete, 100.0)
+                    .await;
+
                 Ok((SyncStatus::Success, None, 5, 5120, 0))
             }
         }
     }
 
     /// Update sync progress
-    async fn update_progress(
-        &self,
-        data_type: SyncDataType,
-        phase: SyncPhase,
-        progress: f32,
-    ) {
+    async fn update_progress(&self, data_type: SyncDataType, phase: SyncPhase, progress: f32) {
         let mut active_syncs = self.active_syncs.write().await;
         if let Some(sync_progress) = active_syncs.get_mut(&data_type) {
             sync_progress.current_phase = phase;
             sync_progress.progress_percentage = progress;
-            
+
             // Estimate completion time based on progress
             if progress > 0.0 && progress < 100.0 {
                 let elapsed = Utc::now().signed_duration_since(sync_progress.started_at);
                 let total_estimated = elapsed.num_milliseconds() as f32 * (100.0 / progress);
                 let remaining_ms = total_estimated - elapsed.num_milliseconds() as f32;
-                
+
                 if remaining_ms > 0.0 {
-                    sync_progress.estimated_completion = Some(
-                        Utc::now() + chrono::Duration::milliseconds(remaining_ms as i64)
-                    );
+                    sync_progress.estimated_completion =
+                        Some(Utc::now() + chrono::Duration::milliseconds(remaining_ms as i64));
                 }
             }
         }
@@ -431,23 +457,24 @@ impl SyncEngine {
     pub async fn get_sync_status(&self) -> HashMap<SyncDataType, SyncStatus> {
         let mut status_map = HashMap::new();
         let active_syncs = self.active_syncs.read().await;
-        
+
         for data_type in SyncDataType::all() {
             let status = if active_syncs.contains_key(&data_type) {
                 SyncStatus::InProgress
             } else {
                 // Get last status from history
                 let history = self.sync_history.read().await;
-                history.iter()
+                history
+                    .iter()
                     .filter(|result| result.data_type == data_type)
                     .last()
                     .map(|result| result.status.clone())
                     .unwrap_or(SyncStatus::Pending)
             };
-            
+
             status_map.insert(data_type, status);
         }
-        
+
         status_map
     }
 
@@ -460,12 +487,8 @@ impl SyncEngine {
     pub async fn get_sync_history(&self, limit: Option<usize>) -> Vec<SyncResult> {
         let history = self.sync_history.read().await;
         let limit = limit.unwrap_or(100);
-        
-        history.iter()
-            .rev()
-            .take(limit)
-            .cloned()
-            .collect()
+
+        history.iter().rev().take(limit).cloned().collect()
     }
 
     /// Get synchronization statistics
@@ -476,10 +499,10 @@ impl SyncEngine {
     /// Update statistics based on completed syncs
     async fn update_statistics(&self, results: &[SyncResult]) {
         let mut stats = self.statistics.write().await;
-        
+
         for result in results {
             stats.total_syncs += 1;
-            
+
             match result.status {
                 SyncStatus::Success | SyncStatus::Skipped => {
                     stats.successful_syncs += 1;
@@ -489,44 +512,51 @@ impl SyncEngine {
                 }
                 _ => {}
             }
-            
+
             stats.total_bytes_transferred += result.bytes_transferred;
-            
+
             if let Some(completed_at) = result.completed_at {
                 let sync_time = completed_at.signed_duration_since(result.started_at);
                 let sync_time_ms = sync_time.num_milliseconds().max(0) as u64;
-                
+
                 // Update average sync time
                 if stats.total_syncs > 1 {
-                    stats.average_sync_time_ms = 
-                        (stats.average_sync_time_ms * (stats.total_syncs - 1) + sync_time_ms) / stats.total_syncs;
+                    stats.average_sync_time_ms =
+                        (stats.average_sync_time_ms * (stats.total_syncs - 1) + sync_time_ms)
+                            / stats.total_syncs;
                 } else {
                     stats.average_sync_time_ms = sync_time_ms;
                 }
-                
+
                 stats.last_sync_time = Some(completed_at);
             }
-            
-            *stats.sync_frequency.entry(result.data_type.clone()).or_insert(0) += 1;
+
+            *stats
+                .sync_frequency
+                .entry(result.data_type.clone())
+                .or_insert(0) += 1;
         }
     }
 
     /// Schedule automatic sync for a data type
     pub async fn schedule_auto_sync(&self, data_type: SyncDataType) -> CloudSyncResult<()> {
         if self.scheduler.auto_sync_enabled {
-            let next_sync = Utc::now() + 
-                chrono::Duration::seconds(self.config.sync_interval_seconds as i64);
-            
-            self.scheduler.schedule_sync(data_type.clone(), next_sync).await;
-            
+            let next_sync =
+                Utc::now() + chrono::Duration::seconds(self.config.sync_interval_seconds as i64);
+
+            self.scheduler
+                .schedule_sync(data_type.clone(), next_sync)
+                .await;
+
             // Queue the sync task
             self.queue_sync(
                 data_type,
                 SyncOperation::Bidirectional,
                 SyncPriority::Normal,
-            ).await?;
+            )
+            .await?;
         }
-        
+
         Ok(())
     }
 }
@@ -571,7 +601,7 @@ impl Default for SyncConfig {
             sync_interval_seconds: 300, // 5 minutes
             batch_size: 10,
             max_retry_attempts: 3,
-            retry_backoff_ms: 1000, // 1 second base
+            retry_backoff_ms: 1000,                // 1 second base
             conflict_resolution_timeout_ms: 30000, // 30 seconds
             parallel_syncs: 3,
         }

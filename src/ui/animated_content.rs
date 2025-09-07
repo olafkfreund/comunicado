@@ -3,8 +3,8 @@
 //! This module integrates the animation system with email content rendering,
 //! allowing GIFs and other animated content in emails to be displayed properly.
 
-use crate::ui::animation::{AnimationManager, AnimationSettings, AnimationError, AnimationFormat};
-use crate::ui::graphics::{ImageRenderer, RenderConfig, GraphicsProtocol};
+use crate::ui::animation::{AnimationError, AnimationFormat, AnimationManager, AnimationSettings};
+use crate::ui::graphics::{GraphicsProtocol, ImageRenderer, RenderConfig};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -19,16 +19,16 @@ use uuid::Uuid;
 pub enum AnimatedContentError {
     #[error("Animation error: {0}")]
     Animation(#[from] AnimationError),
-    
+
     #[error("Content extraction failed: {0}")]
     ContentExtraction(String),
-    
+
     #[error("Unsupported content type: {0}")]
     UnsupportedContentType(String),
-    
+
     #[error("Email attachment not found: {0}")]
     AttachmentNotFound(String),
-    
+
     #[error("Terminal not compatible with animation")]
     TerminalNotCompatible,
 }
@@ -98,25 +98,25 @@ impl AnimatedContentManager {
             max_file_size: 10 * 1024 * 1024, // 10MB
         }
     }
-    
+
     /// Create with auto-detected graphics support
     pub fn auto(settings: AnimationSettings) -> AnimatedContentResult<Self> {
         let render_config = RenderConfig::default();
         let renderer = Arc::new(ImageRenderer::new(render_config));
-        
+
         // Check if terminal supports animation
         if !renderer.supports_animation() {
             return Err(AnimatedContentError::TerminalNotCompatible);
         }
-        
+
         let animation_manager = Arc::new(AnimationManager::new(
             Arc::clone(&renderer),
             settings.clone(),
         ));
-        
+
         Ok(Self::new(animation_manager, renderer, settings))
     }
-    
+
     /// Process email content and extract animated elements
     pub async fn process_email_content(
         &self,
@@ -126,29 +126,29 @@ impl AnimatedContentManager {
     ) -> AnimatedContentResult<AnimatedEmailContent> {
         let mut animated_attachments = Vec::new();
         let mut inline_animations = HashMap::new();
-        
+
         // Process attachments for animated content
         for attachment in attachments {
             if self.is_animated_content(&attachment.content_type) {
                 let animated_attachment = self.process_animated_attachment(attachment).await?;
-                
+
                 // Check if this is an inline attachment (has cid)
                 if let Some(ref cid) = attachment.content_id {
                     if let Some(animation_id) = animated_attachment.animation_id {
                         inline_animations.insert(cid.clone(), animation_id);
                     }
                 }
-                
+
                 animated_attachments.push(animated_attachment);
             }
         }
-        
+
         // Create email animation state
         let active_animations = animated_attachments
             .iter()
             .filter_map(|a| a.animation_id)
             .collect();
-        
+
         let email_state = EmailAnimationState {
             email_id,
             active_animations,
@@ -156,9 +156,12 @@ impl AnimatedContentManager {
             settings: self.settings.clone(),
             last_updated: Utc::now(),
         };
-        
-        self.email_states.write().await.insert(email_id, email_state);
-        
+
+        self.email_states
+            .write()
+            .await
+            .insert(email_id, email_state);
+
         Ok(AnimatedEmailContent {
             text_content: String::new(), // Will be filled by caller
             html_content: html_content.map(String::from),
@@ -166,7 +169,7 @@ impl AnimatedContentManager {
             inline_animations,
         })
     }
-    
+
     /// Process a single animated attachment
     async fn process_animated_attachment(
         &self,
@@ -174,23 +177,33 @@ impl AnimatedContentManager {
     ) -> AnimatedContentResult<AnimatedAttachment> {
         // Validate file size
         if u64::from(attachment.size) > self.max_file_size {
-            return Err(AnimatedContentError::ContentExtraction(
-                format!("File too large: {} bytes", attachment.size)
-            ));
+            return Err(AnimatedContentError::ContentExtraction(format!(
+                "File too large: {} bytes",
+                attachment.size
+            )));
         }
-        
+
         // Determine animation format
-        let format = self.detect_animation_format(&attachment.content_type, &attachment.filename)?;
-        
+        let format =
+            self.detect_animation_format(&attachment.content_type, &attachment.filename)?;
+
         // Load and decode animation
         let animation_id = if let Some(ref file_path) = attachment.file_path {
-            Some(self.animation_manager.load_animation(std::path::Path::new(file_path)).await?)
+            Some(
+                self.animation_manager
+                    .load_animation(std::path::Path::new(file_path))
+                    .await?,
+            )
         } else if let Some(ref data) = attachment.data {
-            Some(self.animation_manager.load_animation_from_bytes(data, format.clone()).await?)
+            Some(
+                self.animation_manager
+                    .load_animation_from_bytes(data, format.clone())
+                    .await?,
+            )
         } else {
             None
         };
-        
+
         // Get animation metadata if loaded
         let (width, height, duration_ms, frame_count) = if let Some(animation_id) = animation_id {
             if let Some(metadata) = self.animation_manager.get_metadata(animation_id) {
@@ -206,7 +219,7 @@ impl AnimatedContentManager {
         } else {
             (None, None, None, None)
         };
-        
+
         Ok(AnimatedAttachment {
             id: Uuid::new_v4(),
             filename: attachment.filename.clone(),
@@ -222,7 +235,7 @@ impl AnimatedContentManager {
             created_at: Utc::now(),
         })
     }
-    
+
     /// Check if content type represents animated content
     fn is_animated_content(&self, content_type: &str) -> bool {
         match content_type.to_lowercase().as_str() {
@@ -233,7 +246,7 @@ impl AnimatedContentManager {
             _ => false,
         }
     }
-    
+
     /// Detect animation format from content type and filename
     fn detect_animation_format(
         &self,
@@ -248,20 +261,22 @@ impl AnimatedContentManager {
             "image/avif" => Some(AnimationFormat::Avif),
             _ => None,
         };
-        
+
         if let Some(format) = format {
             return Ok(format);
         }
-        
+
         // Try filename extension
         let path = PathBuf::from(filename);
         if let Some(format) = AnimationFormat::from_extension(&path) {
             return Ok(format);
         }
-        
-        Err(AnimatedContentError::UnsupportedContentType(content_type.to_string()))
+
+        Err(AnimatedContentError::UnsupportedContentType(
+            content_type.to_string(),
+        ))
     }
-    
+
     /// Render animated content for current frame
     pub async fn render_animation(
         &self,
@@ -269,22 +284,25 @@ impl AnimatedContentManager {
         width: u32,
         height: u32,
     ) -> AnimatedContentResult<Option<Vec<u8>>> {
-        Ok(self.animation_manager.render_animation(animation_id, width, height).await?)
+        Ok(self
+            .animation_manager
+            .render_animation(animation_id, width, height)
+            .await?)
     }
-    
+
     /// Control animation playback
     pub fn play_animation(&self, animation_id: Uuid) -> bool {
         self.animation_manager.play_animation(animation_id)
     }
-    
+
     pub fn pause_animation(&self, animation_id: Uuid) -> bool {
         self.animation_manager.pause_animation(animation_id)
     }
-    
+
     pub fn stop_animation(&self, animation_id: Uuid) -> bool {
         self.animation_manager.stop_animation(animation_id)
     }
-    
+
     /// Control all animations in an email
     pub async fn play_email_animations(&self, email_id: Uuid) {
         if let Some(state) = self.email_states.read().await.get(&email_id) {
@@ -293,7 +311,7 @@ impl AnimatedContentManager {
             }
         }
     }
-    
+
     pub async fn pause_email_animations(&self, email_id: Uuid) {
         if let Some(state) = self.email_states.read().await.get(&email_id) {
             for &animation_id in &state.active_animations {
@@ -301,7 +319,7 @@ impl AnimatedContentManager {
             }
         }
     }
-    
+
     pub async fn stop_email_animations(&self, email_id: Uuid) {
         if let Some(state) = self.email_states.read().await.get(&email_id) {
             for &animation_id in &state.active_animations {
@@ -309,7 +327,7 @@ impl AnimatedContentManager {
             }
         }
     }
-    
+
     /// Clean up animations for an email when no longer needed
     pub async fn cleanup_email_animations(&self, email_id: Uuid) {
         if let Some(state) = self.email_states.write().await.remove(&email_id) {
@@ -318,17 +336,17 @@ impl AnimatedContentManager {
             }
         }
     }
-    
+
     /// Get current protocol support
     pub fn graphics_protocol(&self) -> GraphicsProtocol {
         self.renderer.protocol()
     }
-    
+
     /// Check if animations are supported
     pub fn supports_animation(&self) -> bool {
         self.renderer.supports_animation()
     }
-    
+
     /// Get animation statistics
     pub async fn get_email_animation_stats(&self, email_id: Uuid) -> Option<EmailAnimationStats> {
         let states = self.email_states.read().await;
@@ -337,18 +355,18 @@ impl AnimatedContentManager {
             let mut playing_animations = 0;
             let mut total_frames = 0;
             let mut total_duration = 0;
-            
+
             for &animation_id in &state.active_animations {
                 if let Some(metadata) = self.animation_manager.get_metadata(animation_id) {
                     total_animations += 1;
                     total_frames += metadata.frame_count;
                     total_duration += metadata.duration_ms;
-                    
+
                     // Check if playing (simplified check)
                     playing_animations += 1;
                 }
             }
-            
+
             Some(EmailAnimationStats {
                 email_id,
                 total_animations,
@@ -362,11 +380,11 @@ impl AnimatedContentManager {
             None
         }
     }
-    
+
     /// Estimate memory usage for animations
     async fn estimate_memory_usage(&self, animation_ids: &[Uuid]) -> u64 {
         let mut total_usage = 0;
-        
+
         for &animation_id in animation_ids {
             if let Some(metadata) = self.animation_manager.get_metadata(animation_id) {
                 // Rough estimate: width * height * 4 (RGBA) * frame_count
@@ -374,17 +392,17 @@ impl AnimatedContentManager {
                 total_usage += frame_size * metadata.frame_count as u64;
             }
         }
-        
+
         total_usage
     }
-    
+
     /// Update animation settings
     pub fn update_settings(&mut self, settings: AnimationSettings) {
         self.settings = settings;
         // Note: Cannot update animation manager settings through Arc
         // This would need to be redesigned with interior mutability
     }
-    
+
     /// Get list of active animations
     pub fn list_active_animations(&self) -> Vec<crate::ui::animation::AnimationMetadata> {
         self.animation_manager.list_animations()
@@ -420,19 +438,19 @@ impl AnimationControlWidget {
             show_controls,
         }
     }
-    
+
     /// Toggle controls visibility
     pub fn toggle_controls(&mut self) {
         self.show_controls = !self.show_controls;
     }
-    
+
     /// Navigate animations
     pub fn next_animation(&mut self) {
         if !self.animations.is_empty() {
             self.selected_index = (self.selected_index + 1) % self.animations.len();
         }
     }
-    
+
     pub fn previous_animation(&mut self) {
         if !self.animations.is_empty() {
             self.selected_index = if self.selected_index == 0 {
@@ -442,17 +460,17 @@ impl AnimationControlWidget {
             };
         }
     }
-    
+
     /// Get currently selected animation
     pub fn selected_animation(&self) -> Option<&AnimatedAttachment> {
         self.animations.get(self.selected_index)
     }
-    
+
     /// Check if controls should be shown
     pub fn should_show_controls(&self) -> bool {
         self.show_controls && !self.animations.is_empty()
     }
-    
+
     /// Get animation count
     pub fn animation_count(&self) -> usize {
         self.animations.len()
@@ -462,7 +480,6 @@ impl AnimationControlWidget {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
 
     #[test]
     fn test_animated_attachment_creation() {
@@ -501,7 +518,8 @@ mod tests {
 
         for (content_type, expected) in content_types {
             // Simple check for animated content types
-            let is_animated = matches!(content_type, 
+            let is_animated = matches!(
+                content_type,
                 "image/gif" | "image/webp" | "image/png" | "image/avif"
             );
             assert_eq!(is_animated, expected, "Failed for {}", content_type);

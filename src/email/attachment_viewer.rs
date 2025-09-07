@@ -683,7 +683,7 @@ impl AttachmentViewer {
         if let Some(parent) = save_path.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        
+
         std::fs::write(save_path, data)?;
         Ok(())
     }

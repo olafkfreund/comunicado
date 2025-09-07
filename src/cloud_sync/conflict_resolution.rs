@@ -150,16 +150,18 @@ impl ConflictResolver {
             ConflictStrategy::LocalWins => Ok(local_data.to_vec()),
             ConflictStrategy::RemoteWins => Ok(remote_data.to_vec()),
             ConflictStrategy::Merge => {
-                self.resolve_by_merge(local_data, remote_data, data_type.clone()).await
+                self.resolve_by_merge(local_data, remote_data, data_type.clone())
+                    .await
             }
             ConflictStrategy::Manual => {
                 // Return special result indicating manual resolution needed
                 return Err(CloudSyncError::ConflictResolution(
-                    "Manual conflict resolution required".to_string()
+                    "Manual conflict resolution required".to_string(),
                 ));
             }
             ConflictStrategy::PerType(strategies) => {
-                let strategy = strategies.get(&data_type)
+                let strategy = strategies
+                    .get(&data_type)
                     .unwrap_or(&ConflictStrategy::LastModified);
                 match strategy {
                     ConflictStrategy::LastModified => {
@@ -168,7 +170,8 @@ impl ConflictResolver {
                     ConflictStrategy::LocalWins => Ok(local_data.to_vec()),
                     ConflictStrategy::RemoteWins => Ok(remote_data.to_vec()),
                     ConflictStrategy::Merge => {
-                        self.resolve_by_merge(local_data, remote_data, data_type.clone()).await
+                        self.resolve_by_merge(local_data, remote_data, data_type.clone())
+                            .await
                     }
                     _ => Ok(local_data.to_vec()), // Fallback to local
                 }
@@ -306,7 +309,8 @@ impl ConflictResolver {
         match (local, remote) {
             (serde_json::Value::Object(local_obj), serde_json::Value::Object(remote_obj)) => {
                 // Compare all keys from both objects
-                let mut all_keys: std::collections::HashSet<&String> = std::collections::HashSet::new();
+                let mut all_keys: std::collections::HashSet<&String> =
+                    std::collections::HashSet::new();
                 all_keys.extend(local_obj.keys());
                 all_keys.extend(remote_obj.keys());
 
@@ -320,7 +324,12 @@ impl ConflictResolver {
                     match (local_obj.get(key), remote_obj.get(key)) {
                         (Some(local_val), Some(remote_val)) => {
                             if local_val != remote_val {
-                                self.compare_json_objects(local_val, remote_val, &new_path, affected_fields);
+                                self.compare_json_objects(
+                                    local_val,
+                                    remote_val,
+                                    &new_path,
+                                    affected_fields,
+                                );
                             }
                         }
                         (Some(_), None) | (None, Some(_)) => {
@@ -342,11 +351,17 @@ impl ConflictResolver {
 impl DataMerger {
     fn new() -> CloudSyncResult<Self> {
         let mut merge_strategies: HashMap<SyncDataType, Box<dyn MergeStrategy>> = HashMap::new();
-        
+
         // Register merge strategies for each data type
         merge_strategies.insert(SyncDataType::Settings, Box::new(SettingsMergeStrategy));
-        merge_strategies.insert(SyncDataType::EmailAccounts, Box::new(EmailAccountsMergeStrategy));
-        merge_strategies.insert(SyncDataType::KeyboardShortcuts, Box::new(KeyboardShortcutsMergeStrategy));
+        merge_strategies.insert(
+            SyncDataType::EmailAccounts,
+            Box::new(EmailAccountsMergeStrategy),
+        );
+        merge_strategies.insert(
+            SyncDataType::KeyboardShortcuts,
+            Box::new(KeyboardShortcutsMergeStrategy),
+        );
         // Add more strategies as needed
 
         Ok(Self { merge_strategies })
@@ -364,7 +379,7 @@ impl DataMerger {
             } else {
                 // Fallback to timestamp-based resolution
                 Err(CloudSyncError::ConflictResolution(
-                    "Automatic merge not possible".to_string()
+                    "Automatic merge not possible".to_string(),
                 ))
             }
         } else {
@@ -373,18 +388,25 @@ impl DataMerger {
         }
     }
 
-    fn generic_json_merge(&self, local_data: &[u8], remote_data: &[u8]) -> CloudSyncResult<Vec<u8>> {
+    fn generic_json_merge(
+        &self,
+        local_data: &[u8],
+        remote_data: &[u8],
+    ) -> CloudSyncResult<Vec<u8>> {
         // Parse both as JSON
-        let local_json: serde_json::Value = serde_json::from_slice(local_data)
-            .map_err(|e| CloudSyncError::ConflictResolution(format!("Failed to parse local JSON: {}", e)))?;
-        let remote_json: serde_json::Value = serde_json::from_slice(remote_data)
-            .map_err(|e| CloudSyncError::ConflictResolution(format!("Failed to parse remote JSON: {}", e)))?;
+        let local_json: serde_json::Value = serde_json::from_slice(local_data).map_err(|e| {
+            CloudSyncError::ConflictResolution(format!("Failed to parse local JSON: {}", e))
+        })?;
+        let remote_json: serde_json::Value = serde_json::from_slice(remote_data).map_err(|e| {
+            CloudSyncError::ConflictResolution(format!("Failed to parse remote JSON: {}", e))
+        })?;
 
         // Perform deep merge
         let merged = self.merge_json_values(&local_json, &remote_json);
-        
-        serde_json::to_vec(&merged)
-            .map_err(|e| CloudSyncError::ConflictResolution(format!("Failed to serialize merged JSON: {}", e)))
+
+        serde_json::to_vec(&merged).map_err(|e| {
+            CloudSyncError::ConflictResolution(format!("Failed to serialize merged JSON: {}", e))
+        })
     }
 
     fn merge_json_values(
@@ -395,23 +417,26 @@ impl DataMerger {
         match (local, remote) {
             (serde_json::Value::Object(local_obj), serde_json::Value::Object(remote_obj)) => {
                 let mut merged = serde_json::Map::new();
-                
+
                 // Add all local keys
                 for (key, value) in local_obj {
                     merged.insert(key.clone(), value.clone());
                 }
-                
+
                 // Merge remote keys
                 for (key, remote_value) in remote_obj {
                     if let Some(local_value) = local_obj.get(key) {
                         // Merge if both exist
-                        merged.insert(key.clone(), self.merge_json_values(local_value, remote_value));
+                        merged.insert(
+                            key.clone(),
+                            self.merge_json_values(local_value, remote_value),
+                        );
                     } else {
                         // Use remote value if not in local
                         merged.insert(key.clone(), remote_value.clone());
                     }
                 }
-                
+
                 serde_json::Value::Object(merged)
             }
             (serde_json::Value::Array(local_arr), serde_json::Value::Array(remote_arr)) => {
@@ -440,7 +465,7 @@ impl ConflictHistory {
 
     fn record_resolution(&mut self, conflict: ResolvedConflict) {
         self.resolved_conflicts.push(conflict);
-        
+
         // Keep only recent conflicts (last 1000)
         if self.resolved_conflicts.len() > 1000 {
             self.resolved_conflicts.drain(0..100);
@@ -450,23 +475,29 @@ impl ConflictHistory {
     fn get_statistics(&self) -> ConflictResolutionStats {
         let total_conflicts = self.resolved_conflicts.len();
         let avg_resolution_time = if total_conflicts > 0 {
-            self.resolved_conflicts.iter()
+            self.resolved_conflicts
+                .iter()
                 .map(|c| c.resolution_time_ms)
-                .sum::<u64>() / total_conflicts as u64
+                .sum::<u64>()
+                / total_conflicts as u64
         } else {
             0
         };
 
         let mut by_strategy = HashMap::new();
         for conflict in &self.resolved_conflicts {
-            *by_strategy.entry(format!("{:?}", conflict.strategy_used)).or_insert(0) += 1;
+            *by_strategy
+                .entry(format!("{:?}", conflict.strategy_used))
+                .or_insert(0) += 1;
         }
 
         ConflictResolutionStats {
             total_conflicts,
             avg_resolution_time_ms: avg_resolution_time,
             conflicts_by_strategy: by_strategy,
-            manual_resolutions_pending: self.manual_resolutions.iter()
+            manual_resolutions_pending: self
+                .manual_resolutions
+                .iter()
                 .filter(|r| r.resolved_at.is_none())
                 .count(),
         }
@@ -489,8 +520,8 @@ struct KeyboardShortcutsMergeStrategy;
 impl MergeStrategy for SettingsMergeStrategy {
     fn can_merge(&self, local: &[u8], remote: &[u8]) -> bool {
         // Settings can usually be merged
-        serde_json::from_slice::<serde_json::Value>(local).is_ok() &&
-        serde_json::from_slice::<serde_json::Value>(remote).is_ok()
+        serde_json::from_slice::<serde_json::Value>(local).is_ok()
+            && serde_json::from_slice::<serde_json::Value>(remote).is_ok()
     }
 
     fn merge(&self, local: &[u8], remote: &[u8]) -> CloudSyncResult<Vec<u8>> {
@@ -520,8 +551,8 @@ impl MergeStrategy for SettingsMergeStrategy {
 impl MergeStrategy for EmailAccountsMergeStrategy {
     fn can_merge(&self, local: &[u8], remote: &[u8]) -> bool {
         // Email accounts should be merged by account ID
-        serde_json::from_slice::<serde_json::Value>(local).is_ok() &&
-        serde_json::from_slice::<serde_json::Value>(remote).is_ok()
+        serde_json::from_slice::<serde_json::Value>(local).is_ok()
+            && serde_json::from_slice::<serde_json::Value>(remote).is_ok()
     }
 
     fn merge(&self, local: &[u8], remote: &[u8]) -> CloudSyncResult<Vec<u8>> {
@@ -534,21 +565,22 @@ impl MergeStrategy for EmailAccountsMergeStrategy {
         match (local_accounts, remote_accounts) {
             (serde_json::Value::Array(local_arr), serde_json::Value::Array(remote_arr)) => {
                 let mut merged = local_arr.clone();
-                
+
                 // Add or update remote accounts
                 for remote_account in remote_arr {
                     if let Some(remote_id) = remote_account.get("id") {
                         // Find and replace or add
-                        if let Some(pos) = merged.iter().position(|local_account| {
-                            local_account.get("id") == Some(remote_id)
-                        }) {
+                        if let Some(pos) = merged
+                            .iter()
+                            .position(|local_account| local_account.get("id") == Some(remote_id))
+                        {
                             merged[pos] = remote_account;
                         } else {
                             merged.push(remote_account);
                         }
                     }
                 }
-                
+
                 Ok(serde_json::to_vec(&serde_json::Value::Array(merged))?)
             }
             (_, remote) => Ok(serde_json::to_vec(&remote)?), // Fallback
@@ -562,8 +594,8 @@ impl MergeStrategy for EmailAccountsMergeStrategy {
 
 impl MergeStrategy for KeyboardShortcutsMergeStrategy {
     fn can_merge(&self, local: &[u8], remote: &[u8]) -> bool {
-        serde_json::from_slice::<serde_json::Value>(local).is_ok() &&
-        serde_json::from_slice::<serde_json::Value>(remote).is_ok()
+        serde_json::from_slice::<serde_json::Value>(local).is_ok()
+            && serde_json::from_slice::<serde_json::Value>(remote).is_ok()
     }
 
     fn merge(&self, local: &[u8], _remote: &[u8]) -> CloudSyncResult<Vec<u8>> {

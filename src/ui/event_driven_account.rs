@@ -3,10 +3,8 @@
 //! This module provides event-driven implementations for account management operations,
 //! replacing direct method calls with event publishing to decouple components.
 
+use crate::events::types::{AccountEvent, AccountEventData};
 use crate::events::{publish, EventError};
-use crate::events::types::{
-    AccountEvent, AccountEventData
-};
 use std::time::Instant;
 
 /// Event-driven account operations handler
@@ -32,7 +30,7 @@ impl EventDrivenAccountHandler {
     pub fn set_selected_provider(&mut self, provider: String) {
         self.selected_provider = Some(provider);
     }
-    
+
     /// Update the status for an account (placeholder implementation)
     pub fn update_status(&mut self, account_id: String, _status: String) {
         // Placeholder implementation for future account status tracking
@@ -45,10 +43,14 @@ impl EventDrivenAccountHandler {
             account_id: account_id.clone(),
             provider: provider.clone(),
         });
-        
+
         publish(event)?;
-        
-        tracing::info!("Published account addition for account {} (provider: {})", account_id, provider);
+
+        tracing::info!(
+            "Published account addition for account {} (provider: {})",
+            account_id,
+            provider
+        );
         Ok(())
     }
 
@@ -57,9 +59,9 @@ impl EventDrivenAccountHandler {
         let event = AccountEventData::new(AccountEvent::AccountRemoved {
             account_id: account_id.clone(),
         });
-        
+
         publish(event)?;
-        
+
         tracing::info!("Published account removal for account {}", account_id);
         Ok(())
     }
@@ -77,9 +79,9 @@ impl EventDrivenAccountHandler {
         let event = AccountEventData::new(AccountEvent::AccountUpdated {
             account_id: account_id.clone(),
         });
-        
+
         publish(event)?;
-        
+
         tracing::info!("Published account update for account {}", account_id);
         Ok(())
     }
@@ -89,9 +91,9 @@ impl EventDrivenAccountHandler {
         let event = AccountEventData::new(AccountEvent::AccountConnected {
             account_id: account_id.clone(),
         });
-        
+
         publish(event)?;
-        
+
         tracing::info!("Published account connection for account {}", account_id);
         Ok(())
     }
@@ -101,9 +103,9 @@ impl EventDrivenAccountHandler {
         let event = AccountEventData::new(AccountEvent::AccountDisconnected {
             account_id: account_id.clone(),
         });
-        
+
         publish(event)?;
-        
+
         tracing::info!("Published account disconnection for account {}", account_id);
         Ok(())
     }
@@ -113,24 +115,32 @@ impl EventDrivenAccountHandler {
         let event = AccountEventData::new(AccountEvent::AccountSyncStarted {
             account_id: account_id.clone(),
         });
-        
+
         publish(event)?;
-        
+
         tracing::info!("Published account sync start for account {}", account_id);
         Ok(())
     }
 
     /// Complete account sync using events
-    pub fn complete_account_sync(&self, account_id: String, start_time: Instant) -> Result<(), EventError> {
+    pub fn complete_account_sync(
+        &self,
+        account_id: String,
+        start_time: Instant,
+    ) -> Result<(), EventError> {
         let duration_ms = start_time.elapsed().as_millis() as u64;
         let event = AccountEventData::new(AccountEvent::AccountSyncCompleted {
             account_id: account_id.clone(),
             duration_ms,
         });
-        
+
         publish(event)?;
-        
-        tracing::info!("Published account sync completion for account {} ({}ms)", account_id, duration_ms);
+
+        tracing::info!(
+            "Published account sync completion for account {} ({}ms)",
+            account_id,
+            duration_ms
+        );
         Ok(())
     }
 
@@ -140,10 +150,14 @@ impl EventDrivenAccountHandler {
             account_id: account_id.clone(),
             error: error.clone(),
         });
-        
+
         publish(event)?;
-        
-        tracing::warn!("Published account sync failure for account {}: {}", account_id, error);
+
+        tracing::warn!(
+            "Published account sync failure for account {}: {}",
+            account_id,
+            error
+        );
         Ok(())
     }
 
@@ -152,9 +166,9 @@ impl EventDrivenAccountHandler {
         let event = AccountEventData::new(AccountEvent::AccountAuthRefreshed {
             account_id: account_id.clone(),
         });
-        
+
         publish(event)?;
-        
+
         tracing::info!("Published auth refresh for account {}", account_id);
         Ok(())
     }
@@ -165,10 +179,14 @@ impl EventDrivenAccountHandler {
             account_id: account_id.clone(),
             error: error.clone(),
         });
-        
+
         publish(event)?;
-        
-        tracing::warn!("Published auth failure for account {}: {}", account_id, error);
+
+        tracing::warn!(
+            "Published auth failure for account {}: {}",
+            account_id,
+            error
+        );
         Ok(())
     }
 }
@@ -196,7 +214,7 @@ impl EventDrivenAccountState {
         tracing::debug!("Changed current account to: {}", account_id);
         Ok(())
     }
-    
+
     /// Set the active account (simpler interface for the change_current_account method)
     pub fn set_active_account(&mut self, account_id: String) {
         self.current_account = Some(account_id);
@@ -263,14 +281,31 @@ impl EventDrivenAccountState {
 /// Account action types for command processing migration
 #[derive(Debug, Clone)]
 pub enum AccountAction {
-    AddAccount { account_id: String, provider: String },
-    RemoveAccount { account_id: String },
-    UpdateAccount { account_id: String },
-    ConnectAccount { account_id: String },
-    DisconnectAccount { account_id: String },
-    SyncAccount { account_id: String },
-    RefreshAuth { account_id: String },
-    SwitchAccount { account_id: String },
+    AddAccount {
+        account_id: String,
+        provider: String,
+    },
+    RemoveAccount {
+        account_id: String,
+    },
+    UpdateAccount {
+        account_id: String,
+    },
+    ConnectAccount {
+        account_id: String,
+    },
+    DisconnectAccount {
+        account_id: String,
+    },
+    SyncAccount {
+        account_id: String,
+    },
+    RefreshAuth {
+        account_id: String,
+    },
+    SwitchAccount {
+        account_id: String,
+    },
 }
 
 /// Migration helper for account command actions
@@ -284,7 +319,10 @@ impl AccountMigrationHelper {
         account_state: &mut EventDrivenAccountState,
     ) -> Result<(), EventError> {
         match action {
-            AccountAction::AddAccount { account_id, provider } => {
+            AccountAction::AddAccount {
+                account_id,
+                provider,
+            } => {
                 account_handler.add_account(account_id.clone(), provider.clone())?;
             }
             AccountAction::RemoveAccount { account_id } => {
@@ -325,18 +363,20 @@ mod tests {
     #[test]
     fn test_event_driven_account_handler() {
         let _bus = initialize_event_bus();
-        
+
         let handler = EventDrivenAccountHandler::new();
-        
+
         // Test account addition
-        assert!(handler.add_account("acc1".to_string(), "gmail".to_string()).is_ok());
-        
+        assert!(handler
+            .add_account("acc1".to_string(), "gmail".to_string())
+            .is_ok());
+
         // Test account connection
         assert!(handler.connect_account("acc1".to_string()).is_ok());
-        
+
         // Test account sync
         assert!(handler.start_account_sync("acc1".to_string()).is_ok());
-        
+
         // Test account removal
         assert!(handler.remove_account("acc1".to_string()).is_ok());
     }
@@ -344,15 +384,15 @@ mod tests {
     #[test]
     fn test_event_driven_account_state() {
         let mut state = EventDrivenAccountState::new();
-        
+
         assert!(state.current_account().is_none());
-        
+
         assert!(state.change_current_account("acc1".to_string()).is_ok());
         assert_eq!(state.current_account(), &Some("acc1".to_string()));
-        
+
         assert!(state.mark_account_connected("acc1".to_string()).is_ok());
         assert!(state.is_account_connected("acc1"));
-        
+
         assert!(state.mark_account_syncing("acc1".to_string()).is_ok());
         assert!(state.is_account_syncing("acc1"));
     }

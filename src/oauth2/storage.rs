@@ -1,5 +1,5 @@
-use crate::oauth2::{AccountConfig, OAuth2Error, OAuth2Result};
 use crate::integrations::KdeConnectConfig;
+use crate::oauth2::{AccountConfig, OAuth2Error, OAuth2Result};
 use crate::plugins::notes::NotesConfig;
 use base64::prelude::*;
 use keyring::Entry;
@@ -13,11 +13,11 @@ pub struct AppConfig {
     /// KDE Connect integration configuration
     #[serde(default)]
     pub kde_connect: KdeConnectConfig,
-    
+
     /// Notes plugin configuration
     #[serde(default)]
     pub notes: NotesConfig,
-    
+
     /// Application version (for migration purposes)
     #[serde(default = "default_version")]
     pub version: String,
@@ -182,7 +182,12 @@ impl SecureStorage {
 
         let config_without_tokens: AccountConfigForStorage = serde_json::from_str(&config_json)
             .map_err(|e| {
-                tracing::error!("Failed to parse account config for {}: {}. Config content: {}", account_id, e, config_json);
+                tracing::error!(
+                    "Failed to parse account config for {}: {}. Config content: {}",
+                    account_id,
+                    e,
+                    config_json
+                );
                 OAuth2Error::StorageError(format!("Failed to parse account config: {}", e))
             })?;
 
@@ -192,14 +197,15 @@ impl SecureStorage {
 
         // Check if tokens are missing or expired
         let has_tokens = !access_token.is_empty() || refresh_token.is_some();
-        let is_expired = config_without_tokens.token_expires_at
+        let is_expired = config_without_tokens
+            .token_expires_at
             .map(|expires| expires < chrono::Utc::now())
             .unwrap_or(false);
 
         // Enhanced debug logging for token loading
         tracing::debug!(
             "Account {} token status: access_token_len={}, has_refresh_token={}, expires_at={:?}, is_expired={}, has_tokens={}",
-            account_id, 
+            account_id,
             access_token.len(),
             refresh_token.is_some(),
             config_without_tokens.token_expires_at,
@@ -238,11 +244,17 @@ impl SecureStorage {
     pub fn load_all_accounts(&self) -> OAuth2Result<Vec<AccountConfig>> {
         let mut accounts = Vec::new();
 
-        tracing::debug!("Loading accounts from config directory: {:?}", self.config_dir);
+        tracing::debug!(
+            "Loading accounts from config directory: {:?}",
+            self.config_dir
+        );
 
         // Read all .json files in config directory
         let entries = fs::read_dir(&self.config_dir).map_err(|e| {
-            OAuth2Error::StorageError(format!("Failed to read config directory {:?}: {}", self.config_dir, e))
+            OAuth2Error::StorageError(format!(
+                "Failed to read config directory {:?}: {}",
+                self.config_dir, e
+            ))
         })?;
 
         for entry in entries {
@@ -252,20 +264,31 @@ impl SecureStorage {
 
             let path = entry.path();
             tracing::debug!("Processing entry: {:?}", path);
-            
+
             if path.extension().and_then(|s| s.to_str()) == Some("json") {
                 if let Some(account_id) = path.file_stem().and_then(|s| s.to_str()) {
-                    tracing::debug!("Loading account from file: {} (account_id: {})", path.display(), account_id);
+                    tracing::debug!(
+                        "Loading account from file: {} (account_id: {})",
+                        path.display(),
+                        account_id
+                    );
                     match self.load_account(account_id) {
                         Ok(Some(account)) => {
                             tracing::debug!("Successfully loaded account: {}", account.account_id);
                             accounts.push(account);
                         }
                         Ok(None) => {
-                            tracing::debug!("Account config file exists but load_account returned None for {}", account_id);
+                            tracing::debug!(
+                                "Account config file exists but load_account returned None for {}",
+                                account_id
+                            );
                         }
                         Err(e) => {
-                            tracing::warn!("Failed to load account {}: {}. Account will be skipped.", account_id, e);
+                            tracing::warn!(
+                                "Failed to load account {}: {}. Account will be skipped.",
+                                account_id,
+                                e
+                            );
                         }
                     }
                 } else {
@@ -276,7 +299,10 @@ impl SecureStorage {
             }
         }
 
-        tracing::debug!("Finished loading accounts. Total loaded: {}", accounts.len());
+        tracing::debug!(
+            "Finished loading accounts. Total loaded: {}",
+            accounts.len()
+        );
         for account in &accounts {
             tracing::debug!(
                 "Loaded account: {} ({}) - access_token_len={}, has_refresh={}, expires_at={:?}",
@@ -395,28 +421,45 @@ impl SecureStorage {
     /// Load access token from keyring or file fallback
     fn load_access_token(&self, account_id: &str) -> Option<String> {
         tracing::debug!("Loading access token for account: {}", account_id);
-        
+
         // Try keyring first, but catch all keyring-related errors gracefully
         let service = format!("{}-access-token", self.app_name);
         match Entry::new(&service, account_id) {
             Ok(entry) => {
                 if let Ok(token) = entry.get_password() {
-                    tracing::debug!("Successfully loaded access token from keyring for {}", account_id);
+                    tracing::debug!(
+                        "Successfully loaded access token from keyring for {}",
+                        account_id
+                    );
                     return Some(token);
                 } else {
-                    tracing::debug!("No access token found in keyring for {}, trying file fallback", account_id);
+                    tracing::debug!(
+                        "No access token found in keyring for {}, trying file fallback",
+                        account_id
+                    );
                 }
             }
             Err(e) => {
-                tracing::debug!("Keyring Entry::new failed for {} ({}), trying file fallback", account_id, e);
+                tracing::debug!(
+                    "Keyring Entry::new failed for {} ({}), trying file fallback",
+                    account_id,
+                    e
+                );
             }
         }
 
         // Fallback to file storage
-        tracing::debug!("Attempting to load access token from file for {}", account_id);
+        tracing::debug!(
+            "Attempting to load access token from file for {}",
+            account_id
+        );
         let token = self.load_token_from_file(account_id, "access");
         match &token {
-            Some(t) => tracing::debug!("File token load successful for {}, token starts with: {}...", account_id, &t[..10.min(t.len())]),
+            Some(t) => tracing::debug!(
+                "File token load successful for {}, token starts with: {}...",
+                account_id,
+                &t[..10.min(t.len())]
+            ),
             None => tracing::debug!("File token load failed for {}", account_id),
         }
         token
@@ -613,21 +656,33 @@ impl SecureStorage {
         }
 
         let encoded_token = fs::read_to_string(&token_file).ok()?;
-        tracing::debug!("Loading {} token for {}, file size: {} bytes", token_type, account_id, encoded_token.len());
-        
+        tracing::debug!(
+            "Loading {} token for {}, file size: {} bytes",
+            token_type,
+            account_id,
+            encoded_token.len()
+        );
+
         match base64::prelude::BASE64_STANDARD.decode(encoded_token.trim()) {
-            Ok(decoded) => {
-                match String::from_utf8(decoded) {
-                    Ok(token) => {
-                        tracing::debug!("Successfully decoded {} token for {}, token length: {}", token_type, account_id, token.len());
-                        Some(token)
-                    }
-                    Err(e) => {
-                        tracing::error!("Failed to convert decoded token to UTF-8 for {}: {}", account_id, e);
-                        None
-                    }
+            Ok(decoded) => match String::from_utf8(decoded) {
+                Ok(token) => {
+                    tracing::debug!(
+                        "Successfully decoded {} token for {}, token length: {}",
+                        token_type,
+                        account_id,
+                        token.len()
+                    );
+                    Some(token)
                 }
-            }
+                Err(e) => {
+                    tracing::error!(
+                        "Failed to convert decoded token to UTF-8 for {}: {}",
+                        account_id,
+                        e
+                    );
+                    None
+                }
+            },
             Err(e) => {
                 tracing::error!("Failed to decode base64 token for {}: {}", account_id, e);
                 None
@@ -880,24 +935,26 @@ impl SecureStorage {
     pub fn load_config(&self) -> OAuth2Result<AppConfig> {
         let new_config_path = self.config_dir.join("app-config.toml");
         let old_config_path = self.config_dir.join("config.toml");
-        
+
         // Try to load new format first
         if new_config_path.exists() {
-            let content = fs::read_to_string(&new_config_path)
-                .map_err(|e| OAuth2Error::StorageError(format!("Failed to read app config file: {}", e)))?;
-            
-            let config: AppConfig = toml::from_str(&content)
-                .map_err(|e| OAuth2Error::StorageError(format!("Failed to parse app config file: {}", e)))?;
-            
+            let content = fs::read_to_string(&new_config_path).map_err(|e| {
+                OAuth2Error::StorageError(format!("Failed to read app config file: {}", e))
+            })?;
+
+            let config: AppConfig = toml::from_str(&content).map_err(|e| {
+                OAuth2Error::StorageError(format!("Failed to parse app config file: {}", e))
+            })?;
+
             return Ok(config);
         }
-        
+
         // If old config exists, return default for new features
         if old_config_path.exists() {
             tracing::debug!("Using legacy config file, new features will use defaults");
             return Ok(AppConfig::default());
         }
-        
+
         // No config file exists, return defaults
         Ok(AppConfig::default())
     }
@@ -905,13 +962,14 @@ impl SecureStorage {
     /// Save main application configuration
     pub fn save_config(&self, config: &AppConfig) -> OAuth2Result<()> {
         let config_path = self.config_dir.join("app-config.toml");
-        
+
         let content = toml::to_string_pretty(config)
             .map_err(|e| OAuth2Error::StorageError(format!("Failed to serialize config: {}", e)))?;
-        
-        fs::write(&config_path, content)
-            .map_err(|e| OAuth2Error::StorageError(format!("Failed to write config file: {}", e)))?;
-        
+
+        fs::write(&config_path, content).map_err(|e| {
+            OAuth2Error::StorageError(format!("Failed to write config file: {}", e))
+        })?;
+
         tracing::debug!("Saved application config to: {:?}", config_path);
         Ok(())
     }
@@ -993,20 +1051,20 @@ mod tests {
             r#"{{"account_id":"gmail_test","display_name":"Test User","email_address":"test@gmail.com","provider":"gmail","imap_server":"imap.gmail.com","imap_port":993,"smtp_server":"smtp.gmail.com","smtp_port":587,"token_expires_at":"{}","scopes":[]}}"#,
             expired_time.to_rfc3339()
         );
-        
+
         let test_path = storage.get_account_config_path("gmail_test");
         fs::write(&test_path, config_json).unwrap();
 
         // Account should load even with missing tokens
         let account = storage.load_account("gmail_test").unwrap();
         assert!(account.is_some());
-        
+
         let account = account.unwrap();
         assert_eq!(account.account_id, "gmail_test");
         assert_eq!(account.email_address, "test@gmail.com");
         assert!(account.access_token.is_empty()); // No tokens stored
         assert!(account.is_token_expired()); // Should be considered expired
-        
+
         // Should appear in load_all_accounts
         let all_accounts = storage.load_all_accounts().unwrap();
         assert_eq!(all_accounts.len(), 1);

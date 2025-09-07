@@ -19,25 +19,25 @@ use uuid::Uuid;
 pub enum SharingError {
     #[error("CalDAV error: {0}")]
     CalDAV(#[from] CalDAVError),
-    
+
     #[error("Calendar error: {0}")]
     Calendar(#[from] CalendarError),
-    
+
     #[error("Permission denied: {0}")]
     PermissionDenied(String),
-    
+
     #[error("User not found: {0}")]
     UserNotFound(String),
-    
+
     #[error("Share not found: {0}")]
     ShareNotFound(String),
-    
+
     #[error("Invalid invitation: {0}")]
     InvalidInvitation(String),
-    
+
     #[error("Network error: {0}")]
     Network(String),
-    
+
     #[error("Authentication error: {0}")]
     Authentication(String),
 }
@@ -75,11 +75,20 @@ impl CalendarPermission {
     }
 
     pub fn can_write(&self) -> bool {
-        matches!(self, CalendarPermission::Write | CalendarPermission::EditAll | CalendarPermission::Admin | CalendarPermission::Owner)
+        matches!(
+            self,
+            CalendarPermission::Write
+                | CalendarPermission::EditAll
+                | CalendarPermission::Admin
+                | CalendarPermission::Owner
+        )
     }
 
     pub fn can_edit_all(&self) -> bool {
-        matches!(self, CalendarPermission::EditAll | CalendarPermission::Admin | CalendarPermission::Owner)
+        matches!(
+            self,
+            CalendarPermission::EditAll | CalendarPermission::Admin | CalendarPermission::Owner
+        )
     }
 
     pub fn can_admin(&self) -> bool {
@@ -198,16 +207,18 @@ impl CalendarSharingManager {
         message: Option<String>,
     ) -> SharingResult<Vec<Uuid>> {
         let mut invitation_ids = Vec::new();
-        
+
         for (email, permission) in invitations {
-            let invitation_id = self.create_invitation(
-                calendar_id,
-                calendar_name.clone(),
-                email,
-                permission,
-                message.clone(),
-            ).await?;
-            
+            let invitation_id = self
+                .create_invitation(
+                    calendar_id,
+                    calendar_name.clone(),
+                    email,
+                    permission,
+                    message.clone(),
+                )
+                .await?;
+
             invitation_ids.push(invitation_id);
         }
 
@@ -252,20 +263,27 @@ impl CalendarSharingManager {
     pub async fn accept_invitation(&mut self, invitation_token: String) -> SharingResult<Uuid> {
         // Extract invitation details first
         let (calendar_id, to_email, permission, created_at, calendar_name, from_user, from_email) = {
-            let invitation = self.invitations
+            let invitation = self
+                .invitations
                 .values_mut()
                 .find(|inv| inv.invitation_token == invitation_token)
-                .ok_or_else(|| SharingError::InvalidInvitation("Invalid invitation token".to_string()))?;
+                .ok_or_else(|| {
+                    SharingError::InvalidInvitation("Invalid invitation token".to_string())
+                })?;
 
             // Check if invitation is still valid
             if let Some(expires_at) = invitation.expires_at {
                 if Utc::now() > expires_at {
-                    return Err(SharingError::InvalidInvitation("Invitation has expired".to_string()));
+                    return Err(SharingError::InvalidInvitation(
+                        "Invitation has expired".to_string(),
+                    ));
                 }
             }
 
             if invitation.accepted.is_some() {
-                return Err(SharingError::InvalidInvitation("Invitation already processed".to_string()));
+                return Err(SharingError::InvalidInvitation(
+                    "Invitation already processed".to_string(),
+                ));
             }
 
             // Mark invitation as accepted
@@ -273,9 +291,15 @@ impl CalendarSharingManager {
             invitation.accepted_at = Some(Utc::now());
 
             // Extract needed data
-            (invitation.calendar_id, invitation.to_email.clone(), invitation.permission.clone(),
-             invitation.created_at, invitation.calendar_name.clone(), invitation.from_user.clone(),
-             invitation.from_email.clone())
+            (
+                invitation.calendar_id,
+                invitation.to_email.clone(),
+                invitation.permission.clone(),
+                invitation.created_at,
+                invitation.calendar_name.clone(),
+                invitation.from_user.clone(),
+                invitation.from_email.clone(),
+            )
         };
 
         // Create shared user
@@ -291,40 +315,49 @@ impl CalendarSharingManager {
         };
 
         // Get or create calendar share
-        let share = self.shares.entry(calendar_id).or_insert_with(|| CalendarShare {
-            id: Uuid::new_v4(),
-            calendar_id,
-            calendar_name,
-            owner_id: from_user,
-            owner_email: from_email,
-            shared_with: HashMap::new(),
-            public_url: None,
-            is_public: false,
-            allow_discovery: true,
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
-            caldav_url: format!("calendars/{}", calendar_id),
-            sync_token: None,
-        });
+        let share = self
+            .shares
+            .entry(calendar_id)
+            .or_insert_with(|| CalendarShare {
+                id: Uuid::new_v4(),
+                calendar_id,
+                calendar_name,
+                owner_id: from_user,
+                owner_email: from_email,
+                shared_with: HashMap::new(),
+                public_url: None,
+                is_public: false,
+                allow_discovery: true,
+                created_at: Utc::now(),
+                updated_at: Utc::now(),
+                caldav_url: format!("calendars/{}", calendar_id),
+                sync_token: None,
+            });
 
         share.shared_with.insert(to_email.clone(), shared_user);
         share.updated_at = Utc::now();
 
         // Configure CalDAV sharing permissions
-        self.configure_caldav_permissions(calendar_id, &to_email, &permission).await?;
+        self.configure_caldav_permissions(calendar_id, &to_email, &permission)
+            .await?;
 
         Ok(calendar_id)
     }
 
     /// Decline a calendar sharing invitation
     pub async fn decline_invitation(&mut self, invitation_token: String) -> SharingResult<()> {
-        let invitation = self.invitations
+        let invitation = self
+            .invitations
             .values_mut()
             .find(|inv| inv.invitation_token == invitation_token)
-            .ok_or_else(|| SharingError::InvalidInvitation("Invalid invitation token".to_string()))?;
+            .ok_or_else(|| {
+                SharingError::InvalidInvitation("Invalid invitation token".to_string())
+            })?;
 
         if invitation.accepted.is_some() {
-            return Err(SharingError::InvalidInvitation("Invitation already processed".to_string()));
+            return Err(SharingError::InvalidInvitation(
+                "Invitation already processed".to_string(),
+            ));
         }
 
         invitation.accepted = Some(false);
@@ -334,18 +367,27 @@ impl CalendarSharingManager {
     }
 
     /// Remove a user from a shared calendar
-    pub async fn revoke_access(&mut self, calendar_id: Uuid, user_email: &str) -> SharingResult<()> {
-        let share = self.shares.get_mut(&calendar_id)
+    pub async fn revoke_access(
+        &mut self,
+        calendar_id: Uuid,
+        user_email: &str,
+    ) -> SharingResult<()> {
+        let share = self
+            .shares
+            .get_mut(&calendar_id)
             .ok_or_else(|| SharingError::ShareNotFound("Calendar share not found".to_string()))?;
 
         if share.shared_with.remove(user_email).is_none() {
-            return Err(SharingError::UserNotFound("User not found in share".to_string()));
+            return Err(SharingError::UserNotFound(
+                "User not found in share".to_string(),
+            ));
         }
 
         share.updated_at = Utc::now();
 
         // Remove CalDAV permissions
-        self.remove_caldav_permissions(calendar_id, user_email).await?;
+        self.remove_caldav_permissions(calendar_id, user_email)
+            .await?;
 
         Ok(())
     }
@@ -357,28 +399,39 @@ impl CalendarSharingManager {
         user_email: &str,
         new_permission: CalendarPermission,
     ) -> SharingResult<()> {
-        let share = self.shares.get_mut(&calendar_id)
+        let share = self
+            .shares
+            .get_mut(&calendar_id)
             .ok_or_else(|| SharingError::ShareNotFound("Calendar share not found".to_string()))?;
 
-        let user = share.shared_with.get_mut(user_email)
+        let user = share
+            .shared_with
+            .get_mut(user_email)
             .ok_or_else(|| SharingError::UserNotFound("User not found in share".to_string()))?;
 
         user.permission = new_permission.clone();
         share.updated_at = Utc::now();
 
         // Update CalDAV permissions
-        self.configure_caldav_permissions(calendar_id, user_email, &new_permission).await?;
+        self.configure_caldav_permissions(calendar_id, user_email, &new_permission)
+            .await?;
 
         Ok(())
     }
 
     /// Enable public sharing for a calendar
-    pub async fn enable_public_sharing(&mut self, calendar_id: Uuid, allow_discovery: bool) -> SharingResult<String> {
-        let share = self.shares.get_mut(&calendar_id)
+    pub async fn enable_public_sharing(
+        &mut self,
+        calendar_id: Uuid,
+        allow_discovery: bool,
+    ) -> SharingResult<String> {
+        let share = self
+            .shares
+            .get_mut(&calendar_id)
             .ok_or_else(|| SharingError::ShareNotFound("Calendar share not found".to_string()))?;
 
         let public_url = format!("https://calendars.comunicado.app/public/{}", calendar_id);
-        
+
         share.is_public = true;
         share.public_url = Some(public_url.clone());
         share.allow_discovery = allow_discovery;
@@ -392,7 +445,9 @@ impl CalendarSharingManager {
 
     /// Disable public sharing for a calendar
     pub async fn disable_public_sharing(&mut self, calendar_id: Uuid) -> SharingResult<()> {
-        let share = self.shares.get_mut(&calendar_id)
+        let share = self
+            .shares
+            .get_mut(&calendar_id)
             .ok_or_else(|| SharingError::ShareNotFound("Calendar share not found".to_string()))?;
 
         share.is_public = false;
@@ -407,25 +462,45 @@ impl CalendarSharingManager {
     }
 
     /// Get Linux desktop integration URLs for shared calendars
-    pub fn get_desktop_integration_urls(&self, calendar_id: Uuid) -> SharingResult<HashMap<DesktopIntegrationType, String>> {
-        let share = self.shares.get(&calendar_id)
+    pub fn get_desktop_integration_urls(
+        &self,
+        calendar_id: Uuid,
+    ) -> SharingResult<HashMap<DesktopIntegrationType, String>> {
+        let share = self
+            .shares
+            .get(&calendar_id)
             .ok_or_else(|| SharingError::ShareNotFound("Calendar share not found".to_string()))?;
 
         let base_caldav_url = &share.caldav_url;
         let mut integration_urls = HashMap::new();
 
-        integration_urls.insert(DesktopIntegrationType::GenericCalDAV, base_caldav_url.clone());
-        integration_urls.insert(DesktopIntegrationType::Evolution, format!("evolution:addcalendar:{}", base_caldav_url));
-        integration_urls.insert(DesktopIntegrationType::Kontact, format!("korganizer:import:{}", base_caldav_url));
-        integration_urls.insert(DesktopIntegrationType::Thunderbird, format!("thunderbird:addcalendar:{}", base_caldav_url));
+        integration_urls.insert(
+            DesktopIntegrationType::GenericCalDAV,
+            base_caldav_url.clone(),
+        );
+        integration_urls.insert(
+            DesktopIntegrationType::Evolution,
+            format!("evolution:addcalendar:{}", base_caldav_url),
+        );
+        integration_urls.insert(
+            DesktopIntegrationType::Kontact,
+            format!("korganizer:import:{}", base_caldav_url),
+        );
+        integration_urls.insert(
+            DesktopIntegrationType::Thunderbird,
+            format!("thunderbird:addcalendar:{}", base_caldav_url),
+        );
 
         Ok(integration_urls)
     }
 
     /// Enable specific desktop integration
-    pub async fn enable_desktop_integration(&mut self, integration_type: DesktopIntegrationType) -> SharingResult<()> {
+    pub async fn enable_desktop_integration(
+        &mut self,
+        integration_type: DesktopIntegrationType,
+    ) -> SharingResult<()> {
         self.desktop_integrations.insert(integration_type.clone());
-        
+
         match integration_type {
             DesktopIntegrationType::DBusCalendar => {
                 self.setup_dbus_calendar_service().await?;
@@ -448,7 +523,7 @@ impl CalendarSharingManager {
 
         // Query CalDAV server for shared calendars
         // This would integrate with the CalDAV client to discover available calendars
-        
+
         Ok(discovered_calendars)
     }
 
@@ -459,7 +534,8 @@ impl CalendarSharingManager {
 
     /// Get all pending invitations
     pub fn get_pending_invitations(&self) -> Vec<&SharingInvitation> {
-        self.invitations.values()
+        self.invitations
+            .values()
             .filter(|inv| inv.accepted.is_none())
             .collect()
     }
@@ -474,12 +550,21 @@ impl CalendarSharingManager {
         Ok(())
     }
 
-    async fn configure_caldav_permissions(&self, _calendar_id: Uuid, _user_email: &str, _permission: &CalendarPermission) -> SharingResult<()> {
+    async fn configure_caldav_permissions(
+        &self,
+        _calendar_id: Uuid,
+        _user_email: &str,
+        _permission: &CalendarPermission,
+    ) -> SharingResult<()> {
         // Configure CalDAV server permissions
         Ok(())
     }
 
-    async fn remove_caldav_permissions(&self, _calendar_id: Uuid, _user_email: &str) -> SharingResult<()> {
+    async fn remove_caldav_permissions(
+        &self,
+        _calendar_id: Uuid,
+        _user_email: &str,
+    ) -> SharingResult<()> {
         // Remove CalDAV server permissions
         Ok(())
     }
@@ -513,7 +598,12 @@ impl CalendarSharingManager {
 impl Default for CalendarSharingManager {
     fn default() -> Self {
         Self::new(
-            CalDAVClient::new("http://localhost:8080", "user".to_string(), "pass".to_string()).unwrap(),
+            CalDAVClient::new(
+                "http://localhost:8080",
+                "user".to_string(),
+                "pass".to_string(),
+            )
+            .unwrap(),
             "user@example.com".to_string(),
         )
     }

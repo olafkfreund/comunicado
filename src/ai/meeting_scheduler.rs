@@ -1,11 +1,15 @@
 //! AI-powered meeting scheduling from email content
-//! 
+//!
 //! This module provides intelligent parsing of meeting requests from emails
 //! and automatic calendar event creation with user confirmation.
 
-use crate::ai::{AIResult, EnhancedAIService, EnhancedAIRequest, AIOperationType};
+use crate::ai::{AIOperationType, AIResult, EnhancedAIRequest, EnhancedAIService};
+use crate::calendar::event::{
+    AttendeeRole as CalendarAttendeeRole, AttendeeStatus as CalendarAttendeeStatus, Event,
+    EventAttendee, EventPriority, EventRecurrence, EventStatus, RecurrenceDay,
+    RecurrenceFrequency as CalendarRecurrenceFrequency,
+};
 use crate::calendar::manager::CalendarManager;
-use crate::calendar::event::{Event, EventAttendee, EventStatus, EventPriority, EventRecurrence, RecurrenceFrequency as CalendarRecurrenceFrequency, RecurrenceDay, AttendeeStatus as CalendarAttendeeStatus, AttendeeRole as CalendarAttendeeRole};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -336,11 +340,7 @@ impl MeetingSchedulerService {
             return Ok(None);
         }
 
-        let parsing_prompt = self.build_parsing_prompt(
-            email_content,
-            sender_email,
-            email_subject,
-        );
+        let parsing_prompt = self.build_parsing_prompt(email_content, sender_email, email_subject);
 
         let ai_request = EnhancedAIRequest::high_priority(AIOperationType::Custom {
             operation_name: "meeting_parsing".to_string(),
@@ -351,20 +351,20 @@ impl MeetingSchedulerService {
         drop(config);
 
         let response = self.ai_service.process_request(ai_request).await?;
-        
+
         // Parse the AI response into a meeting request
-        let meeting_request = self.parse_ai_response(
-            &response.content,
-            email_id,
-            sender_email,
-        ).await?;
+        let meeting_request = self
+            .parse_ai_response(&response.content, email_id, sender_email)
+            .await?;
 
         // Update statistics
         self.update_parsing_stats(&meeting_request).await;
 
         if let Some(ref request) = meeting_request {
-            info!("Parsed meeting request '{}' with confidence {:.2}", 
-                  request.title, request.confidence);
+            info!(
+                "Parsed meeting request '{}' with confidence {:.2}",
+                request.title, request.confidence
+            );
         }
 
         Ok(meeting_request)
@@ -378,7 +378,7 @@ impl MeetingSchedulerService {
     ) -> AIResult<MeetingCreationResult> {
         // Check for conflicts first
         let conflicts = self.check_conflicts(meeting_request).await?;
-        
+
         if !conflicts.is_empty() && !auto_confirm {
             return Ok(MeetingCreationResult {
                 success: false,
@@ -391,7 +391,7 @@ impl MeetingSchedulerService {
 
         // Create calendar event
         let calendar_event = self.convert_to_calendar_event(meeting_request).await?;
-        
+
         match self.calendar_manager.create_event(calendar_event).await {
             Ok(event) => {
                 let mut stats = self.stats.write().await;
@@ -401,7 +401,10 @@ impl MeetingSchedulerService {
                     stats.confirmed_meetings += 1;
                 }
 
-                info!("Created meeting '{}' with ID {}", meeting_request.title, event.id);
+                info!(
+                    "Created meeting '{}' with ID {}",
+                    meeting_request.title, event.id
+                );
 
                 Ok(MeetingCreationResult {
                     success: true,
@@ -415,14 +418,19 @@ impl MeetingSchedulerService {
                 let mut stats = self.stats.write().await;
                 stats.failed_creations += 1;
 
-                warn!("Failed to create meeting '{}': {}", meeting_request.title, error);
+                warn!(
+                    "Failed to create meeting '{}': {}",
+                    meeting_request.title, error
+                );
 
                 Ok(MeetingCreationResult {
                     success: false,
                     event_id: None,
                     error: Some(error.to_string()),
                     conflicts,
-                    alternative_suggestions: self.suggest_alternative_times(meeting_request).await?,
+                    alternative_suggestions: self
+                        .suggest_alternative_times(meeting_request)
+                        .await?,
                 })
             }
         }
@@ -437,20 +445,18 @@ impl MeetingSchedulerService {
         email_subject: &str,
     ) -> AIResult<Option<MeetingCreationResult>> {
         // Parse meeting request
-        let meeting_request = match self.parse_meeting_request(
-            email_id,
-            email_content,
-            sender_email,
-            email_subject,
-        ).await? {
+        let meeting_request = match self
+            .parse_meeting_request(email_id, email_content, sender_email, email_subject)
+            .await?
+        {
             Some(request) => request,
             None => return Ok(None),
         };
 
         // Check if sender is trusted for auto-creation
         let config = self.config.read().await;
-        let auto_create = config.auto_create_enabled && 
-            self.is_trusted_sender(sender_email, &config);
+        let auto_create =
+            config.auto_create_enabled && self.is_trusted_sender(sender_email, &config);
         drop(config);
 
         if auto_create && meeting_request.confidence > 0.8 {
@@ -461,7 +467,7 @@ impl MeetingSchedulerService {
             let request_id = meeting_request.id;
             let mut pending = self.pending_confirmations.write().await;
             pending.insert(request_id, meeting_request);
-            
+
             // Return result indicating confirmation needed
             Ok(Some(MeetingCreationResult {
                 success: false,
@@ -576,8 +582,9 @@ If no meeting request is detected, set has_meeting_request to false and confiden
         sender_email: &str,
     ) -> AIResult<Option<MeetingRequest>> {
         // Parse JSON response from AI
-        let parsed: serde_json::Value = serde_json::from_str(ai_response)
-            .map_err(|e| crate::ai::AIError::internal_error(format!("Failed to parse AI response: {}", e)))?;
+        let parsed: serde_json::Value = serde_json::from_str(ai_response).map_err(|e| {
+            crate::ai::AIError::internal_error(format!("Failed to parse AI response: {}", e))
+        })?;
 
         let has_meeting = parsed["has_meeting_request"].as_bool().unwrap_or(false);
         if !has_meeting {
@@ -595,12 +602,14 @@ If no meeting request is detected, set has_meeting_request to false and confiden
         let description = parsed["description"].as_str().map(|s| s.to_string());
 
         // Parse datetime
-        let proposed_datetime = parsed["proposed_datetime"].as_str()
+        let proposed_datetime = parsed["proposed_datetime"]
+            .as_str()
             .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
             .map(|dt| dt.with_timezone(&chrono::Utc));
 
         // Parse alternative times
-        let alternative_times = parsed["alternative_times"].as_array()
+        let alternative_times = parsed["alternative_times"]
+            .as_array()
             .map(|arr| {
                 arr.iter()
                     .filter_map(|v| v.as_str())
@@ -632,7 +641,8 @@ If no meeting request is detected, set has_meeting_request to false and confiden
         });
 
         // Parse attendees
-        let mut attendees: Vec<MeetingAttendee> = parsed["attendees"].as_array()
+        let mut attendees: Vec<MeetingAttendee> = parsed["attendees"]
+            .as_array()
             .map(|arr| {
                 arr.iter()
                     .filter_map(|v| v.as_object())
@@ -680,7 +690,8 @@ If no meeting request is detected, set has_meeting_request to false and confiden
         };
 
         // Parse agenda items
-        let agenda_items = parsed["agenda_items"].as_array()
+        let agenda_items = parsed["agenda_items"]
+            .as_array()
             .map(|arr| {
                 arr.iter()
                     .filter_map(|v| v.as_str())
@@ -702,7 +713,8 @@ If no meeting request is detected, set has_meeting_request to false and confiden
                 frequency,
                 interval: rec["interval"].as_u64().unwrap_or(1) as u32,
                 days_of_week: vec![], // Would need more complex parsing
-                end_date: rec["end_date"].as_str()
+                end_date: rec["end_date"]
+                    .as_str()
                     .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
                     .map(|dt| dt.with_timezone(&chrono::Utc)),
                 count: None,
@@ -734,7 +746,10 @@ If no meeting request is detected, set has_meeting_request to false and confiden
     }
 
     /// Check for scheduling conflicts
-    async fn check_conflicts(&self, _meeting_request: &MeetingRequest) -> AIResult<Vec<ConflictInfo>> {
+    async fn check_conflicts(
+        &self,
+        _meeting_request: &MeetingRequest,
+    ) -> AIResult<Vec<ConflictInfo>> {
         // This would check against existing calendar events
         // For now, return empty conflicts
         Ok(vec![])
@@ -751,22 +766,21 @@ If no meeting request is detected, set has_meeting_request to false and confiden
     }
 
     /// Convert meeting request to calendar event
-    async fn convert_to_calendar_event(
-        &self,
-        meeting_request: &MeetingRequest,
-    ) -> AIResult<Event> {
+    async fn convert_to_calendar_event(&self, meeting_request: &MeetingRequest) -> AIResult<Event> {
         let config = self.config.read().await;
-        
-        let start_time = meeting_request.proposed_datetime
+
+        let start_time = meeting_request
+            .proposed_datetime
             .unwrap_or_else(|| chrono::Utc::now() + chrono::Duration::hours(1));
 
-        let duration_minutes = meeting_request.duration_minutes
+        let duration_minutes = meeting_request
+            .duration_minutes
             .unwrap_or(config.default_duration_minutes);
 
         let end_time = start_time + chrono::Duration::minutes(duration_minutes as i64);
 
         let mut description = meeting_request.description.clone().unwrap_or_default();
-        
+
         // Add agenda items to description
         if !meeting_request.agenda_items.is_empty() {
             description.push_str("\n\nAgenda:\n");
@@ -780,7 +794,9 @@ If no meeting request is detected, set has_meeting_request to false and confiden
             description.push_str(&format!("\nMeeting Link: {}\n", link));
         }
 
-        let location = meeting_request.location.as_ref()
+        let location = meeting_request
+            .location
+            .as_ref()
             .map(|loc| loc.name.clone());
 
         // Convert recurrence pattern if present (simplified for now)
@@ -816,13 +832,15 @@ If no meeting request is detected, set has_meeting_request to false and confiden
         event.status = EventStatus::Confirmed;
         event.priority = match meeting_request.priority {
             MeetingPriority::Low => EventPriority::Low,
-            MeetingPriority::Normal => EventPriority::Normal, 
+            MeetingPriority::Normal => EventPriority::Normal,
             MeetingPriority::High => EventPriority::High,
             MeetingPriority::Urgent => EventPriority::High, // Map urgent to high
         };
 
         // Convert attendees
-        event.attendees = meeting_request.attendees.iter()
+        event.attendees = meeting_request
+            .attendees
+            .iter()
             .map(|att| {
                 let mut attendee = EventAttendee::new(att.email.clone(), att.name.clone());
                 attendee.status = CalendarAttendeeStatus::NeedsAction;
@@ -837,9 +855,10 @@ If no meeting request is detected, set has_meeting_request to false and confiden
 
     /// Check if sender is trusted for auto-creation
     fn is_trusted_sender(&self, sender_email: &str, config: &MeetingSchedulerConfig) -> bool {
-        config.trusted_domains.iter().any(|domain| {
-            sender_email.ends_with(&format!("@{}", domain))
-        })
+        config
+            .trusted_domains
+            .iter()
+            .any(|domain| sender_email.ends_with(&format!("@{}", domain)))
     }
 
     /// Update parsing statistics
@@ -849,10 +868,12 @@ If no meeting request is detected, set has_meeting_request to false and confiden
 
         if let Some(request) = meeting_request {
             stats.successful_parsings += 1;
-            
+
             // Update average confidence
             let total_successful = stats.successful_parsings as f32;
-            stats.avg_confidence = ((stats.avg_confidence * (total_successful - 1.0)) + request.confidence) / total_successful;
+            stats.avg_confidence = ((stats.avg_confidence * (total_successful - 1.0))
+                + request.confidence)
+                / total_successful;
 
             // Update meeting type statistics
             let type_name = format!("{:?}", request.meeting_type);
@@ -860,7 +881,8 @@ If no meeting request is detected, set has_meeting_request to false and confiden
         }
 
         // Update parsing accuracy rate
-        stats.parsing_accuracy_rate = (stats.successful_parsings as f32 / stats.total_requests as f32) * 100.0;
+        stats.parsing_accuracy_rate =
+            (stats.successful_parsings as f32 / stats.total_requests as f32) * 100.0;
     }
 
     /// Get service statistics
@@ -1022,7 +1044,11 @@ mod tests {
         let weekly_pattern = RecurrencePattern {
             frequency: RecurrenceFrequency::Weekly,
             interval: 1,
-            days_of_week: vec![chrono::Weekday::Mon, chrono::Weekday::Wed, chrono::Weekday::Fri],
+            days_of_week: vec![
+                chrono::Weekday::Mon,
+                chrono::Weekday::Wed,
+                chrono::Weekday::Fri,
+            ],
             end_date: None,
             count: Some(10),
         };

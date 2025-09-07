@@ -1,10 +1,12 @@
-use std::path::{Path, PathBuf};
 use chrono::{DateTime, Utc};
-use sqlx::{SqlitePool, Row};
-use tracing::{info, debug};
 use serde::{Deserialize, Serialize};
+use sqlx::{Row, SqlitePool};
+use std::path::{Path, PathBuf};
+use tracing::{debug, info};
 
-use crate::mobile::kde_connect::types::{SmsMessage, SmsConversation, ContactInfo, MessageType, Attachment};
+use crate::mobile::kde_connect::types::{
+    Attachment, ContactInfo, MessageType, SmsConversation, SmsMessage,
+};
 use crate::mobile::Result;
 
 /// Comprehensive SMS/MMS message storage with SQLite backend
@@ -45,17 +47,19 @@ impl MessageStore {
     /// Create a new message store with the specified database path
     pub async fn new<P: AsRef<Path>>(database_path: P) -> Result<Self> {
         let path = database_path.as_ref().to_path_buf();
-        
+
         // Ensure the parent directory exists
         if let Some(parent) = path.parent() {
-            tokio::fs::create_dir_all(parent).await
+            tokio::fs::create_dir_all(parent)
+                .await
                 .map_err(crate::mobile::MobileError::IoError)?;
         }
 
         let database_url = format!("sqlite:{}", path.display());
         info!("Initializing SMS/MMS message store at: {}", database_url);
 
-        let pool = SqlitePool::connect(&database_url).await
+        let pool = SqlitePool::connect(&database_url)
+            .await
             .map_err(crate::mobile::MobileError::DatabaseError)?;
 
         let store = Self {
@@ -65,7 +69,7 @@ impl MessageStore {
 
         // Initialize the database schema
         store.initialize_schema().await?;
-        
+
         info!("SMS/MMS message store initialized successfully");
         Ok(store)
     }
@@ -75,7 +79,8 @@ impl MessageStore {
         debug!("Initializing database schema for SMS/MMS storage");
 
         // Create conversations table
-        sqlx::query(r#"
+        sqlx::query(
+            r#"
             CREATE TABLE IF NOT EXISTS conversations (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 thread_id INTEGER NOT NULL UNIQUE,
@@ -87,13 +92,15 @@ impl MessageStore {
                 updated_at INTEGER NOT NULL,
                 metadata TEXT -- JSON metadata for additional info
             )
-        "#)
+        "#,
+        )
         .execute(&self.pool)
         .await
         .map_err(crate::mobile::MobileError::DatabaseError)?;
 
         // Create messages table
-        sqlx::query(r#"
+        sqlx::query(
+            r#"
             CREATE TABLE IF NOT EXISTS messages (
                 id INTEGER PRIMARY KEY,
                 conversation_id INTEGER NOT NULL,
@@ -107,13 +114,15 @@ impl MessageStore {
                 updated_at INTEGER NOT NULL,
                 FOREIGN KEY (conversation_id) REFERENCES conversations (id) ON DELETE CASCADE
             )
-        "#)
+        "#,
+        )
         .execute(&self.pool)
         .await
         .map_err(crate::mobile::MobileError::DatabaseError)?;
 
         // Create contacts table for conversation participants
-        sqlx::query(r#"
+        sqlx::query(
+            r#"
             CREATE TABLE IF NOT EXISTS conversation_contacts (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 conversation_id INTEGER NOT NULL,
@@ -124,13 +133,15 @@ impl MessageStore {
                 FOREIGN KEY (conversation_id) REFERENCES conversations (id) ON DELETE CASCADE,
                 UNIQUE(conversation_id, phone_number)
             )
-        "#)
+        "#,
+        )
         .execute(&self.pool)
         .await
         .map_err(crate::mobile::MobileError::DatabaseError)?;
 
         // Create attachments table for MMS content
-        sqlx::query(r#"
+        sqlx::query(
+            r#"
             CREATE TABLE IF NOT EXISTS message_attachments (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 message_id INTEGER NOT NULL,
@@ -143,7 +154,8 @@ impl MessageStore {
                 created_at INTEGER NOT NULL,
                 FOREIGN KEY (message_id) REFERENCES messages (id) ON DELETE CASCADE
             )
-        "#)
+        "#,
+        )
         .execute(&self.pool)
         .await
         .map_err(crate::mobile::MobileError::DatabaseError)?;
@@ -187,13 +199,20 @@ impl MessageStore {
 
     /// Store a new SMS message, creating conversation if needed
     pub async fn store_message(&self, message: SmsMessage) -> Result<i64> {
-        debug!("Storing SMS message: ID={}, Thread={}", message.id, message.thread_id);
+        debug!(
+            "Storing SMS message: ID={}, Thread={}",
+            message.id, message.thread_id
+        );
 
-        let mut tx = self.pool.begin().await
+        let mut tx = self
+            .pool
+            .begin()
+            .await
             .map_err(crate::mobile::MobileError::DatabaseError)?;
 
         // Find or create conversation
-        let (conversation_id, is_new_conversation) = self.find_or_create_conversation(&mut tx, &message).await?;
+        let (conversation_id, is_new_conversation) =
+            self.find_or_create_conversation(&mut tx, &message).await?;
 
         // Insert the message
         let now = Utc::now().timestamp();
@@ -223,30 +242,36 @@ impl MessageStore {
 
         // Store attachments if any
         for attachment in &message.attachments {
-            self.store_attachment(&mut tx, message.id, attachment).await?;
+            self.store_attachment(&mut tx, message.id, attachment)
+                .await?;
         }
 
         // Update conversation metadata
-        self.update_conversation_metadata(&mut tx, conversation_id, &message, is_new_conversation).await?;
+        self.update_conversation_metadata(&mut tx, conversation_id, &message, is_new_conversation)
+            .await?;
 
-        tx.commit().await
+        tx.commit()
+            .await
             .map_err(crate::mobile::MobileError::DatabaseError)?;
 
-        info!("Successfully stored message ID {} in conversation {}", message.id, conversation_id);
+        info!(
+            "Successfully stored message ID {} in conversation {}",
+            message.id, conversation_id
+        );
         Ok(conversation_id)
     }
 
     /// Find existing conversation or create a new one
     async fn find_or_create_conversation(
-        &self, 
-        tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>, 
-        message: &SmsMessage
+        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+        message: &SmsMessage,
     ) -> Result<(i64, bool)> {
         // Try to find existing conversation by thread_id
         if let Ok(row) = sqlx::query("SELECT id FROM conversations WHERE thread_id = ?")
             .bind(message.thread_id)
             .fetch_one(&mut **tx)
-            .await 
+            .await
         {
             return Ok((row.get::<i64, _>("id"), false));
         }
@@ -255,11 +280,13 @@ impl MessageStore {
         let now = Utc::now().timestamp();
         let display_name = self.generate_conversation_display_name(&message.addresses);
 
-        let result = sqlx::query(r#"
+        let result = sqlx::query(
+            r#"
             INSERT INTO conversations 
             (thread_id, display_name, last_message_date, unread_count, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?)
-        "#)
+        "#,
+        )
         .bind(message.thread_id)
         .bind(&display_name)
         .bind(message.date)
@@ -275,11 +302,13 @@ impl MessageStore {
         // Store conversation contacts
         for (index, address) in message.addresses.iter().enumerate() {
             let contact_info = ContactInfo::from_address(address);
-            sqlx::query(r#"
+            sqlx::query(
+                r#"
                 INSERT OR IGNORE INTO conversation_contacts 
                 (conversation_id, phone_number, display_name, is_primary, created_at)
                 VALUES (?, ?, ?, ?, ?)
-            "#)
+            "#,
+            )
             .bind(conversation_id)
             .bind(&contact_info.address)
             .bind(contact_info.display_name.as_deref())
@@ -290,7 +319,10 @@ impl MessageStore {
             .map_err(crate::mobile::MobileError::DatabaseError)?;
         }
 
-        debug!("Created new conversation {} for thread {}", conversation_id, message.thread_id);
+        debug!(
+            "Created new conversation {} for thread {}",
+            conversation_id, message.thread_id
+        );
         Ok((conversation_id, true))
     }
 
@@ -302,7 +334,7 @@ impl MessageStore {
         attachment: &Attachment,
     ) -> Result<()> {
         let now = Utc::now().timestamp();
-        
+
         sqlx::query(r#"
             INSERT INTO message_attachments 
             (message_id, filename, mime_type, file_size, data, is_downloaded, download_url, created_at)
@@ -319,7 +351,7 @@ impl MessageStore {
         .execute(&mut **tx)
         .await
         .map_err(crate::mobile::MobileError::DatabaseError)?;
-        
+
         Ok(())
     }
 
@@ -332,15 +364,17 @@ impl MessageStore {
         is_new_conversation: bool,
     ) -> Result<()> {
         let now = Utc::now().timestamp();
-        
+
         // Update last message date and increment unread count only for existing conversations
         if message.read || is_new_conversation {
             // For read messages or new conversations (unread count already set during creation)
-            sqlx::query(r#"
+            sqlx::query(
+                r#"
                 UPDATE conversations 
                 SET last_message_date = ?, updated_at = ?
                 WHERE id = ?
-            "#)
+            "#,
+            )
             .bind(message.date)
             .bind(now)
             .bind(conversation_id)
@@ -349,11 +383,13 @@ impl MessageStore {
             .map_err(crate::mobile::MobileError::DatabaseError)?;
         } else {
             // For unread messages in existing conversations, increment unread count
-            sqlx::query(r#"
+            sqlx::query(
+                r#"
                 UPDATE conversations 
                 SET last_message_date = ?, unread_count = unread_count + 1, updated_at = ?
                 WHERE id = ?
-            "#)
+            "#,
+            )
             .bind(message.date)
             .bind(now)
             .bind(conversation_id)
@@ -361,7 +397,7 @@ impl MessageStore {
             .await
             .map_err(crate::mobile::MobileError::DatabaseError)?;
         }
-        
+
         Ok(())
     }
 
@@ -377,7 +413,8 @@ impl MessageStore {
         }
 
         // For group conversations, show first few participants
-        let names: Vec<String> = addresses.iter()
+        let names: Vec<String> = addresses
+            .iter()
             .take(3)
             .map(|addr| ContactInfo::from_address(addr).display_text().to_string())
             .collect();
@@ -393,14 +430,16 @@ impl MessageStore {
     pub async fn get_conversations(&self, query: &MessageQuery) -> Result<Vec<SmsConversation>> {
         debug!("Retrieving conversations with query: {:?}", query);
 
-        let mut sql = String::from(r#"
+        let mut sql = String::from(
+            r#"
             SELECT c.id, c.thread_id, c.display_name, c.last_message_date, 
                    c.unread_count, c.is_archived, c.created_at,
                    GROUP_CONCAT(cc.phone_number, ',') as phone_numbers,
                    GROUP_CONCAT(cc.display_name, ',') as contact_names
             FROM conversations c
             LEFT JOIN conversation_contacts cc ON c.id = cc.conversation_id
-        "#);
+        "#,
+        );
 
         let mut conditions = Vec::new();
         let mut bindings = Vec::new();
@@ -441,7 +480,9 @@ impl MessageStore {
             query_builder = query_builder.bind(binding);
         }
 
-        let rows = query_builder.fetch_all(&self.pool).await
+        let rows = query_builder
+            .fetch_all(&self.pool)
+            .await
             .map_err(crate::mobile::MobileError::DatabaseError)?;
 
         let mut conversations = Vec::new();
@@ -449,18 +490,22 @@ impl MessageStore {
             let phone_numbers: String = row.get("phone_numbers");
             let contact_names: Option<String> = row.try_get("contact_names").ok();
 
-            let participants = self.parse_conversation_participants(&phone_numbers, contact_names.as_deref());
+            let participants =
+                self.parse_conversation_participants(&phone_numbers, contact_names.as_deref());
 
             let conversation = SmsConversation {
                 id: row.get::<i64, _>("id"),
                 thread_id: row.get::<i64, _>("thread_id"),
                 display_name: row.get("display_name"),
                 participants,
-                last_message_date: DateTime::from_timestamp(row.get::<i64, _>("last_message_date") / 1000, 0)
-                    .unwrap_or_else(|| Utc::now()),
+                last_message_date: DateTime::from_timestamp(
+                    row.get::<i64, _>("last_message_date") / 1000,
+                    0,
+                )
+                .unwrap_or_else(|| Utc::now()),
                 unread_count: row.get::<i64, _>("unread_count") as i32,
                 is_archived: row.get("is_archived"),
-                message_count: 0, // Will be filled by separate query if needed
+                message_count: 0,     // Will be filled by separate query if needed
                 messages: Vec::new(), // Not loaded by default for performance
             };
 
@@ -472,28 +517,42 @@ impl MessageStore {
     }
 
     /// Parse conversation participants from database results
-    fn parse_conversation_participants(&self, phone_numbers: &str, contact_names: Option<&str>) -> Vec<ContactInfo> {
+    fn parse_conversation_participants(
+        &self,
+        phone_numbers: &str,
+        contact_names: Option<&str>,
+    ) -> Vec<ContactInfo> {
         let phones: Vec<&str> = phone_numbers.split(',').collect();
         let names: Vec<&str> = contact_names
             .map(|names| names.split(',').collect())
             .unwrap_or_else(|| vec![""; phones.len()]);
 
-        phones.into_iter()
+        phones
+            .into_iter()
             .zip(names.into_iter())
             .map(|(phone, name)| {
                 ContactInfo::new(
                     phone.to_string(),
-                    if name.is_empty() { None } else { Some(name.to_string()) }
+                    if name.is_empty() {
+                        None
+                    } else {
+                        Some(name.to_string())
+                    },
                 )
             })
             .collect()
     }
 
     /// Get messages for a specific conversation
-    pub async fn get_messages(&self, conversation_id: i64, query: &MessageQuery) -> Result<Vec<SmsMessage>> {
+    pub async fn get_messages(
+        &self,
+        conversation_id: i64,
+        query: &MessageQuery,
+    ) -> Result<Vec<SmsMessage>> {
         debug!("Retrieving messages for conversation {}", conversation_id);
 
-        let mut sql = String::from(r#"
+        let mut sql = String::from(
+            r#"
             SELECT m.id, m.body, m.message_type, m.is_read, m.date_sent, m.sub_id,
                    c.thread_id,
                    GROUP_CONCAT(cc.phone_number, ',') as addresses
@@ -501,7 +560,8 @@ impl MessageStore {
             JOIN conversations c ON m.conversation_id = c.id
             LEFT JOIN conversation_contacts cc ON c.id = cc.conversation_id
             WHERE m.conversation_id = ?
-        "#);
+        "#,
+        );
 
         let mut bindings = vec![conversation_id.to_string()];
         let mut conditions = Vec::new();
@@ -554,7 +614,9 @@ impl MessageStore {
             query_builder = query_builder.bind(binding);
         }
 
-        let rows = query_builder.fetch_all(&self.pool).await
+        let rows = query_builder
+            .fetch_all(&self.pool)
+            .await
             .map_err(crate::mobile::MobileError::DatabaseError)?;
 
         let mut messages = Vec::new();
@@ -568,7 +630,9 @@ impl MessageStore {
             let address_list: Vec<String> = addresses.split(',').map(|s| s.to_string()).collect();
 
             // Load attachments for this message
-            let attachments = self.get_message_attachments(row.get::<i32, _>("id")).await?;
+            let attachments = self
+                .get_message_attachments(row.get::<i32, _>("id"))
+                .await?;
 
             let message = SmsMessage {
                 id: row.get("id"),
@@ -585,33 +649,42 @@ impl MessageStore {
             messages.push(message);
         }
 
-        debug!("Retrieved {} messages for conversation {}", messages.len(), conversation_id);
+        debug!(
+            "Retrieved {} messages for conversation {}",
+            messages.len(),
+            conversation_id
+        );
         Ok(messages)
     }
 
     /// Get attachments for a specific message
     async fn get_message_attachments(&self, message_id: i32) -> Result<Vec<Attachment>> {
-        let rows = sqlx::query(r#"
+        let rows = sqlx::query(
+            r#"
             SELECT filename, mime_type, file_size, data, is_downloaded, download_url
             FROM message_attachments 
             WHERE message_id = ?
             ORDER BY id
-        "#)
+        "#,
+        )
         .bind(message_id)
         .fetch_all(&self.pool)
         .await
         .map_err(crate::mobile::MobileError::DatabaseError)?;
 
-        let attachments = rows.into_iter().map(|row| {
-            Attachment {
-                part_id: 0, // Not stored separately, use default
-                filename: row.get("filename"),
-                mime_type: row.get("mime_type"),
-                file_size: row.get("file_size"),
-                data: row.get("data"),
-                download_url: row.get("download_url"),
-            }
-        }).collect();
+        let attachments = rows
+            .into_iter()
+            .map(|row| {
+                Attachment {
+                    part_id: 0, // Not stored separately, use default
+                    filename: row.get("filename"),
+                    mime_type: row.get("mime_type"),
+                    file_size: row.get("file_size"),
+                    data: row.get("data"),
+                    download_url: row.get("download_url"),
+                }
+            })
+            .collect();
 
         Ok(attachments)
     }
@@ -620,7 +693,10 @@ impl MessageStore {
     pub async fn mark_conversation_read(&self, conversation_id: i64) -> Result<()> {
         debug!("Marking conversation {} as read", conversation_id);
 
-        let mut tx = self.pool.begin().await
+        let mut tx = self
+            .pool
+            .begin()
+            .await
             .map_err(crate::mobile::MobileError::DatabaseError)?;
 
         // Mark all messages in conversation as read
@@ -639,7 +715,8 @@ impl MessageStore {
             .await
             .map_err(crate::mobile::MobileError::DatabaseError)?;
 
-        tx.commit().await
+        tx.commit()
+            .await
             .map_err(crate::mobile::MobileError::DatabaseError)?;
 
         info!("Marked conversation {} as read", conversation_id);
@@ -650,7 +727,10 @@ impl MessageStore {
     pub async fn mark_message_read(&self, message_id: i32) -> Result<()> {
         debug!("Marking message {} as read", message_id);
 
-        let mut tx = self.pool.begin().await
+        let mut tx = self
+            .pool
+            .begin()
+            .await
             .map_err(crate::mobile::MobileError::DatabaseError)?;
 
         // Get conversation ID and current read status
@@ -673,11 +753,13 @@ impl MessageStore {
 
             // Decrement conversation unread count
             let now = Utc::now().timestamp();
-            sqlx::query(r#"
+            sqlx::query(
+                r#"
                 UPDATE conversations 
                 SET unread_count = MAX(0, unread_count - 1), updated_at = ? 
                 WHERE id = ?
-            "#)
+            "#,
+            )
             .bind(now)
             .bind(conversation_id)
             .execute(&mut *tx)
@@ -685,7 +767,8 @@ impl MessageStore {
             .map_err(crate::mobile::MobileError::DatabaseError)?;
         }
 
-        tx.commit().await
+        tx.commit()
+            .await
             .map_err(crate::mobile::MobileError::DatabaseError)?;
 
         info!("Marked message {} as read", message_id);
@@ -694,7 +777,10 @@ impl MessageStore {
 
     /// Archive or unarchive a conversation
     pub async fn archive_conversation(&self, conversation_id: i64, archived: bool) -> Result<()> {
-        debug!("Setting conversation {} archive status to {}", conversation_id, archived);
+        debug!(
+            "Setting conversation {} archive status to {}",
+            conversation_id, archived
+        );
 
         let now = Utc::now().timestamp();
         sqlx::query("UPDATE conversations SET is_archived = ?, updated_at = ? WHERE id = ?")
@@ -705,7 +791,10 @@ impl MessageStore {
             .await
             .map_err(crate::mobile::MobileError::DatabaseError)?;
 
-        info!("Set conversation {} archive status to {}", conversation_id, archived);
+        info!(
+            "Set conversation {} archive status to {}",
+            conversation_id, archived
+        );
         Ok(())
     }
 
@@ -724,10 +813,12 @@ impl MessageStore {
         let deleted_count = result.rows_affected();
 
         // Clean up conversations that no longer have messages
-        sqlx::query(r#"
+        sqlx::query(
+            r#"
             DELETE FROM conversations 
             WHERE id NOT IN (SELECT DISTINCT conversation_id FROM messages)
-        "#)
+        "#,
+        )
         .execute(&self.pool)
         .await
         .map_err(crate::mobile::MobileError::DatabaseError)?;
@@ -759,12 +850,11 @@ impl MessageStore {
             .map_err(crate::mobile::MobileError::DatabaseError)?;
 
         // Get unread conversation count
-        let unread_conversation_count: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM conversations WHERE unread_count > 0"
-        )
-        .fetch_one(&self.pool)
-        .await
-        .map_err(crate::mobile::MobileError::DatabaseError)?;
+        let unread_conversation_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM conversations WHERE unread_count > 0")
+                .fetch_one(&self.pool)
+                .await
+                .map_err(crate::mobile::MobileError::DatabaseError)?;
 
         // Get database file size
         let database_size_bytes = match tokio::fs::metadata(&self.database_path).await {
@@ -773,12 +863,14 @@ impl MessageStore {
         };
 
         // Get date range
-        let date_range_row = sqlx::query(r#"
+        let date_range_row = sqlx::query(
+            r#"
             SELECT 
                 MIN(date_sent) as oldest_date,
                 MAX(date_sent) as newest_date
             FROM messages
-        "#)
+        "#,
+        )
         .fetch_optional(&self.pool)
         .await
         .map_err(crate::mobile::MobileError::DatabaseError)?;
@@ -786,10 +878,10 @@ impl MessageStore {
         let (oldest_message_date, newest_message_date) = if let Some(row) = date_range_row {
             let oldest: Option<i64> = row.get("oldest_date");
             let newest: Option<i64> = row.get("newest_date");
-            
+
             (
                 oldest.and_then(|ts| DateTime::from_timestamp(ts / 1000, 0)),
-                newest.and_then(|ts| DateTime::from_timestamp(ts / 1000, 0))
+                newest.and_then(|ts| DateTime::from_timestamp(ts / 1000, 0)),
             )
         } else {
             (None, None)
@@ -819,7 +911,11 @@ impl MessageStore {
     }
 
     /// Search messages across all conversations
-    pub async fn search_messages(&self, search_query: &str, limit: Option<i64>) -> Result<Vec<(SmsMessage, String)>> {
+    pub async fn search_messages(
+        &self,
+        search_query: &str,
+        limit: Option<i64>,
+    ) -> Result<Vec<(SmsMessage, String)>> {
         debug!("Searching messages for query: '{}'", search_query);
 
         let sql = r#"
@@ -855,7 +951,9 @@ impl MessageStore {
             let addresses: String = row.get("addresses");
             let address_list: Vec<String> = addresses.split(',').map(|s| s.to_string()).collect();
 
-            let attachments = self.get_message_attachments(row.get::<i32, _>("id")).await?;
+            let attachments = self
+                .get_message_attachments(row.get::<i32, _>("id"))
+                .await?;
 
             let message = SmsMessage {
                 id: row.get("id"),
@@ -881,14 +979,16 @@ impl MessageStore {
     pub async fn get_recent_messages(&self, limit: usize) -> Result<Vec<SmsMessage>> {
         debug!("Getting {} recent messages", limit);
 
-        let rows = sqlx::query(r#"
+        let rows = sqlx::query(
+            r#"
             SELECT 
                 id, conversation_id, body, timestamp, message_type, 
                 read_status, sub_id, metadata
             FROM messages 
             ORDER BY timestamp DESC 
             LIMIT ?
-        "#)
+        "#,
+        )
         .bind(limit as i64)
         .fetch_all(&self.pool)
         .await
@@ -977,7 +1077,7 @@ mod tests {
         let query = MessageQuery::default();
         let conversations = store.get_conversations(&query).await.unwrap();
         assert_eq!(conversations.len(), 1);
-        
+
         let conversation = &conversations[0];
         assert_eq!(conversation.thread_id, message.thread_id);
         assert_eq!(conversation.unread_count, 1); // Message was unread
@@ -986,7 +1086,7 @@ mod tests {
         // Retrieve messages for the conversation
         let messages = store.get_messages(conversation_id, &query).await.unwrap();
         assert_eq!(messages.len(), 1);
-        
+
         let retrieved_message = &messages[0];
         assert_eq!(retrieved_message.id, message.id);
         assert_eq!(retrieved_message.body, message.body);
@@ -1013,11 +1113,11 @@ mod tests {
     #[tokio::test]
     async fn test_search_messages() {
         let store = create_test_store().await;
-        
+
         let mut message1 = create_test_message();
         message1.id = 1;
         message1.body = "Hello world from Alice".to_string();
-        
+
         let mut message2 = create_test_message();
         message2.id = 2;
         message2.body = "Goodbye world from Bob".to_string();
@@ -1040,7 +1140,7 @@ mod tests {
     #[tokio::test]
     async fn test_message_with_attachment() {
         let store = create_test_store().await;
-        
+
         let attachment = Attachment {
             part_id: 1,
             mime_type: "image/jpeg".to_string(),
@@ -1061,10 +1161,10 @@ mod tests {
         let query = MessageQuery::default();
         let messages = store.get_messages(conversation_id, &query).await.unwrap();
         assert_eq!(messages.len(), 1);
-        
+
         let retrieved_message = &messages[0];
         assert_eq!(retrieved_message.attachments.len(), 1);
-        
+
         let retrieved_attachment = &retrieved_message.attachments[0];
         assert_eq!(retrieved_attachment.filename, "photo.jpg");
         assert_eq!(retrieved_attachment.mime_type, "image/jpeg");
@@ -1074,7 +1174,7 @@ mod tests {
     #[tokio::test]
     async fn test_storage_stats() {
         let store = create_test_store().await;
-        
+
         // Store a few messages
         for i in 1..=5 {
             let mut message = create_test_message();
@@ -1087,8 +1187,8 @@ mod tests {
         assert_eq!(stats.conversation_count, 5);
         assert_eq!(stats.message_count, 5);
         assert_eq!(stats.unread_conversation_count, 5); // All messages were unread
-        // In-memory databases return 0 size, file databases have positive size
-        // Just verify the field is present and accessible
+                                                        // In-memory databases return 0 size, file databases have positive size
+                                                        // Just verify the field is present and accessible
         let _size = stats.database_size_bytes;
     }
 
@@ -1100,7 +1200,10 @@ mod tests {
         let conversation_id = store.store_message(message).await.unwrap();
 
         // Archive the conversation
-        store.archive_conversation(conversation_id, true).await.unwrap();
+        store
+            .archive_conversation(conversation_id, true)
+            .await
+            .unwrap();
 
         // Verify it's archived
         let query = MessageQuery::default();
@@ -1108,7 +1211,10 @@ mod tests {
         assert!(conversations[0].is_archived);
 
         // Unarchive
-        store.archive_conversation(conversation_id, false).await.unwrap();
+        store
+            .archive_conversation(conversation_id, false)
+            .await
+            .unwrap();
         let conversations = store.get_conversations(&query).await.unwrap();
         assert!(!conversations[0].is_archived);
     }
@@ -1116,7 +1222,7 @@ mod tests {
     #[tokio::test]
     async fn test_cleanup_old_messages() {
         let store = create_test_store().await;
-        
+
         // Store a message
         let message = create_test_message();
         store.store_message(message).await.unwrap();

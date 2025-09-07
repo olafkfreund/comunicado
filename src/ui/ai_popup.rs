@@ -1,9 +1,11 @@
 //! AI popup system with animations and interactive features
 
-use crate::email::{EmailSummary, EmailReplyAssistance};
-use crate::calendar::{CalendarInsights, EventModificationSuggestions, MeetingScheduleAnalysis, ParsedEventInfo};
+use crate::calendar::{
+    CalendarInsights, EventModificationSuggestions, MeetingScheduleAnalysis, ParsedEventInfo,
+};
+use crate::email::{EmailReplyAssistance, EmailSummary};
 use crate::theme::Theme;
-use crate::ui::typography::{TypographySystem, TypographyLevel};
+use crate::ui::typography::{TypographyLevel, TypographySystem};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
@@ -19,11 +21,17 @@ pub enum PopupAnimationState {
     /// Popup is hidden
     Hidden,
     /// Popup is animating in (sliding down)
-    AnimatingIn { start_time: Instant, duration: Duration },
+    AnimatingIn {
+        start_time: Instant,
+        duration: Duration,
+    },
     /// Popup is fully visible
     Visible,
     /// Popup is animating out (sliding up)
-    AnimatingOut { start_time: Instant, duration: Duration },
+    AnimatingOut {
+        start_time: Instant,
+        duration: Duration,
+    },
 }
 
 /// Reply tone options
@@ -167,10 +175,7 @@ pub enum AIPopupContent {
         selected_category: InsightsCategory,
     },
     /// Loading state
-    Loading {
-        message: String,
-        progress: f32,
-    },
+    Loading { message: String, progress: f32 },
     /// Error state
     Error {
         message: String,
@@ -261,7 +266,11 @@ impl AIPopup {
 
     /// Update loading progress
     pub fn update_loading_progress(&mut self, progress: f32, message: Option<String>) {
-        if let Some(AIPopupContent::Loading { progress: ref mut p, message: ref mut m }) = &mut self.content {
+        if let Some(AIPopupContent::Loading {
+            progress: ref mut p,
+            message: ref mut m,
+        }) = &mut self.content
+        {
             *p = progress.clamp(0.0, 1.0);
             if let Some(new_message) = message {
                 *m = new_message;
@@ -363,12 +372,18 @@ impl AIPopup {
     /// Update animation state
     pub fn update_animation(&mut self) {
         match &self.animation_state {
-            PopupAnimationState::AnimatingIn { start_time, duration } => {
+            PopupAnimationState::AnimatingIn {
+                start_time,
+                duration,
+            } => {
                 if start_time.elapsed() >= *duration {
                     self.animation_state = PopupAnimationState::Visible;
                 }
             }
-            PopupAnimationState::AnimatingOut { start_time, duration } => {
+            PopupAnimationState::AnimatingOut {
+                start_time,
+                duration,
+            } => {
                 if start_time.elapsed() >= *duration {
                     self.animation_state = PopupAnimationState::Hidden;
                     self.content = None;
@@ -381,12 +396,18 @@ impl AIPopup {
     /// Get animation progress (0.0 to 1.0)
     fn get_animation_progress(&self) -> f32 {
         match &self.animation_state {
-            PopupAnimationState::AnimatingIn { start_time, duration } => {
+            PopupAnimationState::AnimatingIn {
+                start_time,
+                duration,
+            } => {
                 let elapsed = start_time.elapsed().as_millis() as f32;
                 let total = duration.as_millis() as f32;
                 (elapsed / total).clamp(0.0, 1.0)
             }
-            PopupAnimationState::AnimatingOut { start_time, duration } => {
+            PopupAnimationState::AnimatingOut {
+                start_time,
+                duration,
+            } => {
                 let elapsed = start_time.elapsed().as_millis() as f32;
                 let total = duration.as_millis() as f32;
                 1.0 - (elapsed / total).clamp(0.0, 1.0)
@@ -401,9 +422,12 @@ impl AIPopup {
         if !self.is_interactive() {
             return;
         }
-        
+
         let tabs = PopupTab::all_tabs();
-        let current_index = tabs.iter().position(|t| t == &self.current_tab).unwrap_or(0);
+        let current_index = tabs
+            .iter()
+            .position(|t| t == &self.current_tab)
+            .unwrap_or(0);
         let next_index = (current_index + 1) % tabs.len();
         self.current_tab = tabs[next_index].clone();
         self.selected_index = 0;
@@ -417,8 +441,15 @@ impl AIPopup {
         }
 
         let tabs = PopupTab::all_tabs();
-        let current_index = tabs.iter().position(|t| t == &self.current_tab).unwrap_or(0);
-        let prev_index = if current_index == 0 { tabs.len() - 1 } else { current_index - 1 };
+        let current_index = tabs
+            .iter()
+            .position(|t| t == &self.current_tab)
+            .unwrap_or(0);
+        let prev_index = if current_index == 0 {
+            tabs.len() - 1
+        } else {
+            current_index - 1
+        };
         self.current_tab = tabs[prev_index].clone();
         self.selected_index = 0;
         self.list_state.select(Some(0));
@@ -458,27 +489,35 @@ impl AIPopup {
             (Some(AIPopupContent::EmailSummary { summary, .. }), PopupTab::Actions) => {
                 summary.action_items.len()
             }
-            (Some(AIPopupContent::EventModification { selected_category, suggestions }), _) => {
-                match selected_category {
-                    ModificationCategory::Time => suggestions.time_suggestions.len(),
-                    ModificationCategory::Location => suggestions.location_suggestions.len(),
-                    ModificationCategory::Title => suggestions.title_suggestions.len(),
-                    ModificationCategory::Attendees => suggestions.attendee_suggestions.len(),
-                    ModificationCategory::Optimization => suggestions.optimization_tips.len(),
-                }
-            }
+            (
+                Some(AIPopupContent::EventModification {
+                    selected_category,
+                    suggestions,
+                }),
+                _,
+            ) => match selected_category {
+                ModificationCategory::Time => suggestions.time_suggestions.len(),
+                ModificationCategory::Location => suggestions.location_suggestions.len(),
+                ModificationCategory::Title => suggestions.title_suggestions.len(),
+                ModificationCategory::Attendees => suggestions.attendee_suggestions.len(),
+                ModificationCategory::Optimization => suggestions.optimization_tips.len(),
+            },
             (Some(AIPopupContent::MeetingScheduling { analysis, .. }), _) => {
                 analysis.optimal_times.len()
             }
-            (Some(AIPopupContent::CalendarInsights { insights, selected_category }), _) => {
-                match selected_category {
-                    InsightsCategory::Patterns => insights.meeting_patterns.len(),
-                    InsightsCategory::TimeManagement => insights.time_management_tips.len(),
-                    InsightsCategory::Optimization => insights.optimization_suggestions.len(),
-                    InsightsCategory::Productivity => insights.productivity_insights.len(),
-                    InsightsCategory::FocusTime => insights.focus_time_suggestions.len(),
-                }
-            }
+            (
+                Some(AIPopupContent::CalendarInsights {
+                    insights,
+                    selected_category,
+                }),
+                _,
+            ) => match selected_category {
+                InsightsCategory::Patterns => insights.meeting_patterns.len(),
+                InsightsCategory::TimeManagement => insights.time_management_tips.len(),
+                InsightsCategory::Optimization => insights.optimization_suggestions.len(),
+                InsightsCategory::Productivity => insights.productivity_insights.len(),
+                InsightsCategory::FocusTime => insights.focus_time_suggestions.len(),
+            },
             _ => 1,
         }
     }
@@ -490,7 +529,14 @@ impl AIPopup {
         }
 
         match (&mut self.content, &self.current_tab) {
-            (Some(AIPopupContent::EmailSummary { selected_tone, generating_reply, .. }), PopupTab::Reply) => {
+            (
+                Some(AIPopupContent::EmailSummary {
+                    selected_tone,
+                    generating_reply,
+                    ..
+                }),
+                PopupTab::Reply,
+            ) => {
                 if !*generating_reply {
                     let tones = ReplyTone::all_tones();
                     if let Some(tone) = tones.get(self.selected_index) {
@@ -506,7 +552,13 @@ impl AIPopup {
                     return Some(PopupAction::ConfirmEventCreation);
                 }
             }
-            (Some(AIPopupContent::EventModification { selected_category, suggestions }), _) => {
+            (
+                Some(AIPopupContent::EventModification {
+                    selected_category,
+                    suggestions,
+                }),
+                _,
+            ) => {
                 let suggestions_vec = match selected_category {
                     ModificationCategory::Time => &suggestions.time_suggestions,
                     ModificationCategory::Location => &suggestions.location_suggestions,
@@ -514,19 +566,33 @@ impl AIPopup {
                     ModificationCategory::Attendees => &suggestions.attendee_suggestions,
                     ModificationCategory::Optimization => &suggestions.optimization_tips,
                 };
-                
+
                 if let Some(suggestion) = suggestions_vec.get(self.selected_index) {
-                    return Some(PopupAction::ApplyEventModification(selected_category.clone(), suggestion.clone()));
+                    return Some(PopupAction::ApplyEventModification(
+                        selected_category.clone(),
+                        suggestion.clone(),
+                    ));
                 }
             }
-            (Some(AIPopupContent::MeetingScheduling { selected_time_index, .. }), _) => {
+            (
+                Some(AIPopupContent::MeetingScheduling {
+                    selected_time_index,
+                    ..
+                }),
+                _,
+            ) => {
                 *selected_time_index = self.selected_index;
                 return Some(PopupAction::SelectMeetingTime(self.selected_index));
             }
             (Some(AIPopupContent::CalendarInsights { .. }), _) => {
                 return Some(PopupAction::CreateEventFromSuggestion);
             }
-            (Some(AIPopupContent::Error { retry_available, .. }), _) => {
+            (
+                Some(AIPopupContent::Error {
+                    retry_available, ..
+                }),
+                _,
+            ) => {
                 if *retry_available {
                     return Some(PopupAction::Retry);
                 } else {
@@ -545,7 +611,12 @@ impl AIPopup {
 
     /// Set reply assistance
     pub fn set_reply_assistance(&mut self, reply_assistance: EmailReplyAssistance) {
-        if let Some(AIPopupContent::EmailSummary { reply_assistance: ref mut ra, generating_reply, .. }) = &mut self.content {
+        if let Some(AIPopupContent::EmailSummary {
+            reply_assistance: ref mut ra,
+            generating_reply,
+            ..
+        }) = &mut self.content
+        {
             *ra = Some(reply_assistance);
             *generating_reply = false;
         }
@@ -555,39 +626,52 @@ impl AIPopup {
     fn calculate_popup_rect(&self, area: Rect) -> Rect {
         let popup_width = (area.width as f32 * 0.8).min(100.0) as u16;
         let popup_height = (area.height as f32 * 0.7).min(30.0) as u16;
-        
+
         let x = (area.width.saturating_sub(popup_width)) / 2;
         let base_y = (area.height.saturating_sub(popup_height)) / 2;
-        
+
         // Apply animation offset
         let progress = self.get_animation_progress();
         let animation_offset = ((1.0 - progress) * 10.0) as u16;
         let y = base_y.saturating_sub(animation_offset);
-        
+
         Rect::new(x, y, popup_width, popup_height)
     }
 
     /// Render the popup
-    pub fn render(&self, frame: &mut Frame, area: Rect, theme: &Theme, typography: &TypographySystem) {
+    pub fn render(
+        &self,
+        frame: &mut Frame,
+        area: Rect,
+        theme: &Theme,
+        typography: &TypographySystem,
+    ) {
         if matches!(self.animation_state, PopupAnimationState::Hidden) {
             return;
         }
 
         let popup_rect = self.calculate_popup_rect(area);
-        
+
         // Calculate opacity based on animation
         let progress = self.get_animation_progress();
         let opacity = (progress * 255.0) as u8;
-        
+
         // Clear background with semi-transparent overlay
         frame.render_widget(Clear, area);
-        
+
         // Render popup content
         self.render_popup_content(frame, popup_rect, theme, typography, opacity);
     }
 
     /// Render popup content
-    fn render_popup_content(&self, frame: &mut Frame, area: Rect, theme: &Theme, typography: &TypographySystem, _opacity: u8) {
+    fn render_popup_content(
+        &self,
+        frame: &mut Frame,
+        area: Rect,
+        theme: &Theme,
+        typography: &TypographySystem,
+        _opacity: u8,
+    ) {
         // Main popup block
         let popup_block = Block::default()
             .borders(Borders::ALL)
@@ -600,26 +684,90 @@ impl AIPopup {
         frame.render_widget(popup_block, area);
 
         match &self.content {
-            Some(AIPopupContent::EmailSummary { summary, reply_assistance, selected_tone, generating_reply }) => {
-                self.render_email_summary(frame, inner_area, theme, typography, summary, reply_assistance, selected_tone, *generating_reply);
+            Some(AIPopupContent::EmailSummary {
+                summary,
+                reply_assistance,
+                selected_tone,
+                generating_reply,
+            }) => {
+                self.render_email_summary(
+                    frame,
+                    inner_area,
+                    theme,
+                    typography,
+                    summary,
+                    reply_assistance,
+                    selected_tone,
+                    *generating_reply,
+                );
             }
-            Some(AIPopupContent::EventCreation { parsed_event, confirmed }) => {
-                self.render_event_creation(frame, inner_area, theme, typography, parsed_event, *confirmed);
+            Some(AIPopupContent::EventCreation {
+                parsed_event,
+                confirmed,
+            }) => {
+                self.render_event_creation(
+                    frame,
+                    inner_area,
+                    theme,
+                    typography,
+                    parsed_event,
+                    *confirmed,
+                );
             }
-            Some(AIPopupContent::EventModification { suggestions, selected_category }) => {
-                self.render_event_modification(frame, inner_area, theme, typography, suggestions, selected_category);
+            Some(AIPopupContent::EventModification {
+                suggestions,
+                selected_category,
+            }) => {
+                self.render_event_modification(
+                    frame,
+                    inner_area,
+                    theme,
+                    typography,
+                    suggestions,
+                    selected_category,
+                );
             }
-            Some(AIPopupContent::MeetingScheduling { analysis, selected_time_index }) => {
-                self.render_meeting_scheduling(frame, inner_area, theme, typography, analysis, *selected_time_index);
+            Some(AIPopupContent::MeetingScheduling {
+                analysis,
+                selected_time_index,
+            }) => {
+                self.render_meeting_scheduling(
+                    frame,
+                    inner_area,
+                    theme,
+                    typography,
+                    analysis,
+                    *selected_time_index,
+                );
             }
-            Some(AIPopupContent::CalendarInsights { insights, selected_category }) => {
-                self.render_calendar_insights(frame, inner_area, theme, typography, insights, selected_category);
+            Some(AIPopupContent::CalendarInsights {
+                insights,
+                selected_category,
+            }) => {
+                self.render_calendar_insights(
+                    frame,
+                    inner_area,
+                    theme,
+                    typography,
+                    insights,
+                    selected_category,
+                );
             }
             Some(AIPopupContent::Loading { message, progress }) => {
                 self.render_loading(frame, inner_area, theme, typography, message, *progress);
             }
-            Some(AIPopupContent::Error { message, retry_available }) => {
-                self.render_error(frame, inner_area, theme, typography, message, *retry_available);
+            Some(AIPopupContent::Error {
+                message,
+                retry_available,
+            }) => {
+                self.render_error(
+                    frame,
+                    inner_area,
+                    theme,
+                    typography,
+                    message,
+                    *retry_available,
+                );
             }
             _ => {}
         }
@@ -652,9 +800,21 @@ impl AIPopup {
 
         // Render content based on current tab
         match self.current_tab {
-            PopupTab::Summary => self.render_summary_tab(frame, chunks[1], theme, typography, summary),
-            PopupTab::Reply => self.render_reply_tab(frame, chunks[1], theme, typography, reply_assistance, selected_tone, generating_reply),
-            PopupTab::Actions => self.render_actions_tab(frame, chunks[1], theme, typography, summary),
+            PopupTab::Summary => {
+                self.render_summary_tab(frame, chunks[1], theme, typography, summary)
+            }
+            PopupTab::Reply => self.render_reply_tab(
+                frame,
+                chunks[1],
+                theme,
+                typography,
+                reply_assistance,
+                selected_tone,
+                generating_reply,
+            ),
+            PopupTab::Actions => {
+                self.render_actions_tab(frame, chunks[1], theme, typography, summary)
+            }
         }
 
         // Render footer
@@ -662,14 +822,20 @@ impl AIPopup {
     }
 
     /// Render tabs
-    fn render_tabs(&self, frame: &mut Frame, area: Rect, theme: &Theme, _typography: &TypographySystem) {
+    fn render_tabs(
+        &self,
+        frame: &mut Frame,
+        area: Rect,
+        theme: &Theme,
+        _typography: &TypographySystem,
+    ) {
         let tabs = PopupTab::all_tabs();
         let tab_width = area.width / tabs.len() as u16;
-        
+
         for (i, tab) in tabs.iter().enumerate() {
             let x = area.x + (i as u16 * tab_width);
             let tab_area = Rect::new(x, area.y, tab_width, area.height);
-            
+
             let is_selected = tab == &self.current_tab;
             let style = if is_selected {
                 Style::default()
@@ -679,17 +845,24 @@ impl AIPopup {
             } else {
                 Style::default().fg(theme.colors.palette.text_muted)
             };
-            
+
             let tab_text = Paragraph::new(tab.display_name())
                 .style(style)
                 .alignment(Alignment::Center);
-            
+
             frame.render_widget(tab_text, tab_area);
         }
     }
 
     /// Render summary tab
-    fn render_summary_tab(&self, frame: &mut Frame, area: Rect, theme: &Theme, typography: &TypographySystem, summary: &EmailSummary) {
+    fn render_summary_tab(
+        &self,
+        frame: &mut Frame,
+        area: Rect,
+        theme: &Theme,
+        typography: &TypographySystem,
+        summary: &EmailSummary,
+    ) {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
@@ -715,15 +888,16 @@ impl AIPopup {
         frame.render_widget(summary_para, chunks[1]);
 
         // Key points
-        let key_points: Vec<ListItem> = summary.key_points
+        let key_points: Vec<ListItem> = summary
+            .key_points
             .iter()
             .map(|point| ListItem::new(format!("• {}", point)))
             .collect();
-        
+
         let key_points_list = List::new(key_points)
             .block(Block::default().title("Key Points").borders(Borders::ALL))
             .style(typography.get_typography_style(TypographyLevel::Body, theme));
-        
+
         frame.render_widget(key_points_list, chunks[2]);
     }
 
@@ -740,7 +914,10 @@ impl AIPopup {
     ) {
         if generating_reply {
             let loading_text = typography.create_text(
-                &format!("Generating {} reply...", selected_tone.display_name().to_lowercase()),
+                &format!(
+                    "Generating {} reply...",
+                    selected_tone.display_name().to_lowercase()
+                ),
                 TypographyLevel::Body,
                 theme,
             );
@@ -753,12 +930,15 @@ impl AIPopup {
 
         if let Some(reply) = reply_assistance {
             // Show generated replies
-            let replies: Vec<ListItem> = reply.reply_suggestions
+            let replies: Vec<ListItem> = reply
+                .reply_suggestions
                 .iter()
                 .enumerate()
                 .map(|(i, suggestion)| {
                     let style = if i == self.selected_index {
-                        Style::default().bg(theme.colors.palette.selection).fg(theme.colors.palette.background)
+                        Style::default()
+                            .bg(theme.colors.palette.selection)
+                            .fg(theme.colors.palette.background)
                     } else {
                         Style::default()
                     };
@@ -767,7 +947,11 @@ impl AIPopup {
                 .collect();
 
             let replies_list = List::new(replies)
-                .block(Block::default().title("Reply Suggestions").borders(Borders::ALL))
+                .block(
+                    Block::default()
+                        .title("Reply Suggestions")
+                        .borders(Borders::ALL),
+                )
                 .highlight_style(Style::default().add_modifier(Modifier::BOLD));
 
             frame.render_widget(replies_list, area);
@@ -778,16 +962,23 @@ impl AIPopup {
                 .enumerate()
                 .map(|(i, tone)| {
                     let style = if i == self.selected_index {
-                        Style::default().bg(theme.colors.palette.selection).fg(theme.colors.palette.background)
+                        Style::default()
+                            .bg(theme.colors.palette.selection)
+                            .fg(theme.colors.palette.background)
                     } else {
                         Style::default()
                     };
-                    ListItem::new(format!("{} - {}", tone.display_name(), tone.description())).style(style)
+                    ListItem::new(format!("{} - {}", tone.display_name(), tone.description()))
+                        .style(style)
                 })
                 .collect();
 
             let tones_list = List::new(tones)
-                .block(Block::default().title("Select Reply Tone").borders(Borders::ALL))
+                .block(
+                    Block::default()
+                        .title("Select Reply Tone")
+                        .borders(Borders::ALL),
+                )
                 .highlight_style(Style::default().add_modifier(Modifier::BOLD));
 
             frame.render_widget(tones_list, area);
@@ -795,9 +986,20 @@ impl AIPopup {
     }
 
     /// Render actions tab
-    fn render_actions_tab(&self, frame: &mut Frame, area: Rect, theme: &Theme, typography: &TypographySystem, summary: &EmailSummary) {
+    fn render_actions_tab(
+        &self,
+        frame: &mut Frame,
+        area: Rect,
+        theme: &Theme,
+        typography: &TypographySystem,
+        summary: &EmailSummary,
+    ) {
         if summary.action_items.is_empty() {
-            let no_actions = typography.create_text("No action items found in this email.", TypographyLevel::Body, theme);
+            let no_actions = typography.create_text(
+                "No action items found in this email.",
+                TypographyLevel::Body,
+                theme,
+            );
             let no_actions_para = Paragraph::new(no_actions)
                 .alignment(Alignment::Center)
                 .wrap(Wrap { trim: true });
@@ -805,12 +1007,15 @@ impl AIPopup {
             return;
         }
 
-        let actions: Vec<ListItem> = summary.action_items
+        let actions: Vec<ListItem> = summary
+            .action_items
             .iter()
             .enumerate()
             .map(|(i, action)| {
                 let style = if i == self.selected_index {
-                    Style::default().bg(theme.colors.palette.selection).fg(theme.colors.palette.background)
+                    Style::default()
+                        .bg(theme.colors.palette.selection)
+                        .fg(theme.colors.palette.background)
                 } else {
                     Style::default()
                 };
@@ -826,7 +1031,15 @@ impl AIPopup {
     }
 
     /// Render loading state
-    fn render_loading(&self, frame: &mut Frame, area: Rect, theme: &Theme, typography: &TypographySystem, message: &str, progress: f32) {
+    fn render_loading(
+        &self,
+        frame: &mut Frame,
+        area: Rect,
+        theme: &Theme,
+        typography: &TypographySystem,
+        message: &str,
+        progress: f32,
+    ) {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
@@ -846,14 +1059,22 @@ impl AIPopup {
         // Progress bar
         let progress_width = (chunks[1].width as f32 * progress) as u16;
         let progress_area = Rect::new(chunks[1].x, chunks[1].y + 1, progress_width, 1);
-        
-        let progress_block = Block::default()
-            .style(Style::default().bg(theme.colors.palette.selection));
+
+        let progress_block =
+            Block::default().style(Style::default().bg(theme.colors.palette.selection));
         frame.render_widget(progress_block, progress_area);
     }
 
     /// Render error state
-    fn render_error(&self, frame: &mut Frame, area: Rect, theme: &Theme, typography: &TypographySystem, message: &str, retry_available: bool) {
+    fn render_error(
+        &self,
+        frame: &mut Frame,
+        area: Rect,
+        theme: &Theme,
+        typography: &TypographySystem,
+        message: &str,
+        retry_available: bool,
+    ) {
         let error_text = typography.create_text(message, TypographyLevel::Body, theme);
         let mut error_para = Paragraph::new(error_text)
             .alignment(Alignment::Center)
@@ -873,12 +1094,22 @@ impl AIPopup {
     }
 
     /// Render footer
-    fn render_footer(&self, frame: &mut Frame, area: Rect, theme: &Theme, typography: &TypographySystem) {
+    fn render_footer(
+        &self,
+        frame: &mut Frame,
+        area: Rect,
+        theme: &Theme,
+        typography: &TypographySystem,
+    ) {
         let footer_text = Line::from(vec![
             typography.create_emphasis("Tab", theme),
             typography.create_span("/".to_string(), TypographyLevel::Caption, theme),
             typography.create_emphasis("Shift+Tab", theme),
-            typography.create_span(": Switch tabs  ".to_string(), TypographyLevel::Caption, theme),
+            typography.create_span(
+                ": Switch tabs  ".to_string(),
+                TypographyLevel::Caption,
+                theme,
+            ),
             typography.create_emphasis("↑/↓", theme),
             typography.create_span(": Navigate  ".to_string(), TypographyLevel::Caption, theme),
             typography.create_emphasis("Enter", theme),
@@ -896,21 +1127,28 @@ impl AIPopup {
 
     /// Render event creation content
     fn render_event_creation(
-        &self, 
-        frame: &mut Frame, 
-        area: Rect, 
-        theme: &Theme, 
+        &self,
+        frame: &mut Frame,
+        area: Rect,
+        theme: &Theme,
         typography: &TypographySystem,
         parsed_event: &ParsedEventInfo,
         confirmed: bool,
     ) {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([Constraint::Length(3), Constraint::Min(0), Constraint::Length(3)])
+            .constraints([
+                Constraint::Length(3),
+                Constraint::Min(0),
+                Constraint::Length(3),
+            ])
             .split(area);
 
         // Title
-        let title = format!("🗓️ Create Event (Confidence: {:.0}%)", parsed_event.confidence * 100.0);
+        let title = format!(
+            "🗓️ Create Event (Confidence: {:.0}%)",
+            parsed_event.confidence * 100.0
+        );
         let title_para = Paragraph::new(title)
             .alignment(Alignment::Center)
             .style(typography.get_typography_style(TypographyLevel::Heading3, theme));
@@ -948,9 +1186,10 @@ impl AIPopup {
 
         if let Some(description) = &parsed_event.description {
             details.push(Line::from(""));
-            details.push(Line::from(vec![
-                Span::styled("Description: ", Style::default().add_modifier(Modifier::BOLD)),
-            ]));
+            details.push(Line::from(vec![Span::styled(
+                "Description: ",
+                Style::default().add_modifier(Modifier::BOLD),
+            )]));
             details.push(Line::from(Span::raw(description.clone())));
         }
 
@@ -965,7 +1204,7 @@ impl AIPopup {
         } else {
             "Press Enter to confirm event creation, Tab to modify, Escape to cancel"
         };
-        
+
         let footer_para = Paragraph::new(footer_text)
             .alignment(Alignment::Center)
             .style(typography.get_typography_style(TypographyLevel::Caption, theme));
@@ -984,7 +1223,12 @@ impl AIPopup {
     ) {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([Constraint::Length(3), Constraint::Length(3), Constraint::Min(0), Constraint::Length(3)])
+            .constraints([
+                Constraint::Length(3),
+                Constraint::Length(3),
+                Constraint::Min(0),
+                Constraint::Length(3),
+            ])
             .split(area);
 
         // Title
@@ -996,14 +1240,17 @@ impl AIPopup {
 
         // Category tabs
         let categories = ModificationCategory::all_categories();
-        let category_names: Vec<String> = categories.iter()
-            .map(|c| if c == selected_category {
-                format!("[{}]", c.display_name())
-            } else {
-                c.display_name().to_string()
+        let category_names: Vec<String> = categories
+            .iter()
+            .map(|c| {
+                if c == selected_category {
+                    format!("[{}]", c.display_name())
+                } else {
+                    c.display_name().to_string()
+                }
             })
             .collect();
-        
+
         let tabs_para = Paragraph::new(category_names.join("  "))
             .alignment(Alignment::Center)
             .style(typography.get_typography_style(TypographyLevel::Body, theme));
@@ -1018,11 +1265,14 @@ impl AIPopup {
             ModificationCategory::Optimization => &suggestions.optimization_tips,
         };
 
-        let items: Vec<ListItem> = current_suggestions.iter()
+        let items: Vec<ListItem> = current_suggestions
+            .iter()
             .enumerate()
             .map(|(i, suggestion)| {
                 let style = if i == self.selected_index {
-                    Style::default().bg(theme.colors.palette.selection).fg(theme.colors.palette.background)
+                    Style::default()
+                        .bg(theme.colors.palette.selection)
+                        .fg(theme.colors.palette.background)
                 } else {
                     Style::default()
                 };
@@ -1030,12 +1280,13 @@ impl AIPopup {
             })
             .collect();
 
-        let list = List::new(items)
-            .style(typography.get_typography_style(TypographyLevel::Body, theme));
+        let list =
+            List::new(items).style(typography.get_typography_style(TypographyLevel::Body, theme));
         frame.render_widget(list, chunks[2]);
 
         // Footer
-        let footer_text = "Use ↑↓ to navigate, Enter to apply, Tab to switch categories, Escape to close";
+        let footer_text =
+            "Use ↑↓ to navigate, Enter to apply, Tab to switch categories, Escape to close";
         let footer_para = Paragraph::new(footer_text)
             .alignment(Alignment::Center)
             .style(typography.get_typography_style(TypographyLevel::Caption, theme));
@@ -1054,45 +1305,58 @@ impl AIPopup {
     ) {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([Constraint::Length(3), Constraint::Min(0), Constraint::Length(3)])
+            .constraints([
+                Constraint::Length(3),
+                Constraint::Min(0),
+                Constraint::Length(3),
+            ])
             .split(area);
 
         // Title
-        let title = format!("📅 Meeting Scheduling Analysis (Duration: {}min)", analysis.suggested_duration);
+        let title = format!(
+            "📅 Meeting Scheduling Analysis (Duration: {}min)",
+            analysis.suggested_duration
+        );
         let title_para = Paragraph::new(title)
             .alignment(Alignment::Center)
             .style(typography.get_typography_style(TypographyLevel::Heading3, theme));
         frame.render_widget(title_para, chunks[0]);
 
         // Optimal times list
-        let items: Vec<ListItem> = analysis.optimal_times.iter()
+        let items: Vec<ListItem> = analysis
+            .optimal_times
+            .iter()
             .enumerate()
             .map(|(i, time)| {
                 let mut text = time.format("%Y-%m-%d %H:%M").to_string();
-                
+
                 // Add conflict information
-                let conflicts: Vec<_> = analysis.conflicts.iter()
+                let conflicts: Vec<_> = analysis
+                    .conflicts
+                    .iter()
                     .filter(|c| c.conflict_time == *time)
                     .collect();
-                
+
                 if !conflicts.is_empty() {
                     text.push_str(&format!(" (⚠️ {} conflicts)", conflicts.len()));
                 }
 
                 let style = if i == self.selected_index {
-                    Style::default().bg(theme.colors.palette.selection).fg(theme.colors.palette.background)
+                    Style::default()
+                        .bg(theme.colors.palette.selection)
+                        .fg(theme.colors.palette.background)
                 } else if !conflicts.is_empty() {
                     Style::default().fg(Color::Yellow)
                 } else {
                     Style::default()
                 };
-                
+
                 ListItem::new(text).style(style)
             })
             .collect();
 
-        let list = List::new(items)
-            .style(typography.get_typography_style(TypographyLevel::Body, theme));
+        let list =
+            List::new(items).style(typography.get_typography_style(TypographyLevel::Body, theme));
         frame.render_widget(list, chunks[1]);
 
         // Footer
@@ -1115,7 +1379,12 @@ impl AIPopup {
     ) {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([Constraint::Length(3), Constraint::Length(3), Constraint::Min(0), Constraint::Length(3)])
+            .constraints([
+                Constraint::Length(3),
+                Constraint::Length(3),
+                Constraint::Min(0),
+                Constraint::Length(3),
+            ])
             .split(area);
 
         // Title
@@ -1127,14 +1396,17 @@ impl AIPopup {
 
         // Category tabs
         let categories = InsightsCategory::all_categories();
-        let category_names: Vec<String> = categories.iter()
-            .map(|c| if c == selected_category {
-                format!("[{}]", c.display_name())
-            } else {
-                c.display_name().to_string()
+        let category_names: Vec<String> = categories
+            .iter()
+            .map(|c| {
+                if c == selected_category {
+                    format!("[{}]", c.display_name())
+                } else {
+                    c.display_name().to_string()
+                }
             })
             .collect();
-        
+
         let tabs_para = Paragraph::new(category_names.join("  "))
             .alignment(Alignment::Center)
             .style(typography.get_typography_style(TypographyLevel::Body, theme));
@@ -1149,11 +1421,14 @@ impl AIPopup {
             InsightsCategory::FocusTime => &insights.focus_time_suggestions,
         };
 
-        let items: Vec<ListItem> = current_insights.iter()
+        let items: Vec<ListItem> = current_insights
+            .iter()
             .enumerate()
             .map(|(i, insight)| {
                 let style = if i == self.selected_index {
-                    Style::default().bg(theme.colors.palette.selection).fg(theme.colors.palette.background)
+                    Style::default()
+                        .bg(theme.colors.palette.selection)
+                        .fg(theme.colors.palette.background)
                 } else {
                     Style::default()
                 };
@@ -1161,12 +1436,13 @@ impl AIPopup {
             })
             .collect();
 
-        let list = List::new(items)
-            .style(typography.get_typography_style(TypographyLevel::Body, theme));
+        let list =
+            List::new(items).style(typography.get_typography_style(TypographyLevel::Body, theme));
         frame.render_widget(list, chunks[2]);
 
         // Footer
-        let footer_text = "Use ↑↓ to navigate, Tab to switch categories, Enter to create event, Escape to close";
+        let footer_text =
+            "Use ↑↓ to navigate, Tab to switch categories, Enter to create event, Escape to close";
         let footer_para = Paragraph::new(footer_text)
             .alignment(Alignment::Center)
             .style(typography.get_typography_style(TypographyLevel::Caption, theme));

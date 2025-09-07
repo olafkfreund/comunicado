@@ -6,9 +6,7 @@ use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{
-        Block, Borders, Clear, List, ListItem, ListState, Paragraph, Wrap,
-    },
+    widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Wrap},
     Frame,
 };
 use std::sync::Arc;
@@ -44,17 +42,17 @@ pub enum ContactPopupMode {
 /// Contact popup widget for quick access
 pub struct ContactPopup {
     manager: Arc<ContactsManager>,
-    
+
     // UI State
     mode: ContactPopupMode,
     search_query: String,
     is_searching: bool,
     list_state: ListState,
-    
+
     // Data
     contacts: Vec<Contact>,
     filtered_contacts: Vec<Contact>,
-    
+
     // Display settings
     show_details: bool,
     max_results: usize,
@@ -88,24 +86,31 @@ impl ContactPopup {
         let criteria = ContactSearchCriteria::new().with_limit(self.max_results);
         self.contacts = self.manager.search_contacts(&criteria).await?;
         self.filtered_contacts.clear();
-        
+
         if !self.contacts.is_empty() {
             self.list_state.select(Some(0));
         }
-        
+
         Ok(())
     }
 
     /// Set popup mode
     pub fn set_mode(&mut self, mode: ContactPopupMode) {
         self.mode = mode;
-        self.list_state.select(if self.get_display_contacts().is_empty() { None } else { Some(0) });
+        self.list_state
+            .select(if self.get_display_contacts().is_empty() {
+                None
+            } else {
+                Some(0)
+            });
     }
 
     /// Get contacts to display based on current mode
     fn get_display_contacts(&self) -> &[Contact] {
         match self.mode {
-            ContactPopupMode::Search if !self.filtered_contacts.is_empty() => &self.filtered_contacts,
+            ContactPopupMode::Search if !self.filtered_contacts.is_empty() => {
+                &self.filtered_contacts
+            }
             _ => &self.contacts,
         }
     }
@@ -115,11 +120,11 @@ impl ContactPopup {
         let criteria = ContactSearchCriteria::new(); // No limit - get all contacts
         self.contacts = self.manager.search_contacts(&criteria).await?;
         self.filtered_contacts.clear();
-        
+
         if !self.contacts.is_empty() {
             self.list_state.select(Some(0));
         }
-        
+
         tracing::info!("📱 Loaded {} contacts for All mode", self.contacts.len());
         Ok(())
     }
@@ -128,10 +133,10 @@ impl ContactPopup {
     pub fn render(&mut self, f: &mut Frame, area: Rect, theme: &Theme) {
         // Calculate popup size (80% of screen, centered)
         let popup_area = self.calculate_popup_area(area);
-        
+
         // Clear the background
         f.render_widget(Clear, popup_area);
-        
+
         // Main popup block
         let popup_block = Block::default()
             .title("📞 Quick Contacts")
@@ -154,10 +159,10 @@ impl ContactPopup {
 
         // Render header with search bar
         self.render_search_header(f, chunks[0], theme);
-        
+
         // Render contact list
         self.render_contact_list(f, chunks[1], theme);
-        
+
         // Render footer with help
         self.render_footer(f, chunks[2], theme);
     }
@@ -166,10 +171,10 @@ impl ContactPopup {
     fn calculate_popup_area(&self, area: Rect) -> Rect {
         let popup_width = (area.width as f32 * 0.8) as u16;
         let popup_height = (area.height as f32 * 0.8) as u16;
-        
+
         let x = (area.width.saturating_sub(popup_width)) / 2;
         let y = (area.height.saturating_sub(popup_height)) / 2;
-        
+
         Rect {
             x: area.x + x,
             y: area.y + y,
@@ -186,7 +191,7 @@ impl ContactPopup {
                 ContactPopupMode::QuickSelect => "Search Contacts",
                 ContactPopupMode::Recent => "Recent Contacts",
                 ContactPopupMode::All => "All Contacts",
-                ContactPopupMode::Favorites => "Favorite Contacts", 
+                ContactPopupMode::Favorites => "Favorite Contacts",
                 ContactPopupMode::Search => "Search Results",
             })
             .border_style(if self.is_searching {
@@ -203,13 +208,14 @@ impl ContactPopup {
             format!("🔍 {} (Enter to search)", self.search_query)
         };
 
-        let search_paragraph = Paragraph::new(search_text)
-            .block(search_block)
-            .style(if self.is_searching {
-                Style::default().fg(Color::Yellow)
-            } else {
-                Style::default().fg(theme.colors.palette.text_muted)
-            });
+        let search_paragraph =
+            Paragraph::new(search_text)
+                .block(search_block)
+                .style(if self.is_searching {
+                    Style::default().fg(Color::Yellow)
+                } else {
+                    Style::default().fg(theme.colors.palette.text_muted)
+                });
 
         f.render_widget(search_paragraph, area);
     }
@@ -217,7 +223,7 @@ impl ContactPopup {
     /// Render contact list
     fn render_contact_list(&mut self, f: &mut Frame, area: Rect, theme: &Theme) {
         let contacts = self.get_display_contacts();
-        
+
         if contacts.is_empty() {
             self.render_empty_state(f, area, theme);
             return;
@@ -230,20 +236,22 @@ impl ContactPopup {
             .map(|(_i, contact)| {
                 // Create contact item without borrowing self
                 let display_name = if contact.display_name.is_empty() {
-                    contact.primary_email()
+                    contact
+                        .primary_email()
                         .map(|e| e.address.clone())
                         .unwrap_or_else(|| "Unknown Contact".to_string())
                 } else {
                     contact.display_name.clone()
                 };
 
-                let email = contact.primary_email()
+                let email = contact
+                    .primary_email()
                     .map(|e| e.address.clone())
                     .unwrap_or_else(|| "No email".to_string());
 
                 // Build enhanced contact display with more details
                 let mut info_parts = Vec::new();
-                
+
                 // Add company and job title if available
                 if let Some(company) = &contact.company {
                     if let Some(job_title) = &contact.job_title {
@@ -254,38 +262,40 @@ impl ContactPopup {
                 } else if let Some(job_title) = &contact.job_title {
                     info_parts.push(format!("💼 {}", job_title));
                 }
-                
+
                 // Add phone if available
                 if let Some(phone) = contact.primary_phone() {
                     info_parts.push(format!("📞 {}", phone.number));
                 }
-                
+
                 // Add profile picture indicator or initial
                 let avatar = if contact.photo_url.is_some() {
                     "📷".to_string() // Camera icon for contacts with photos
                 } else {
                     // Generate initial from display name
-                    contact.display_name.chars().next()
+                    contact
+                        .display_name
+                        .chars()
+                        .next()
                         .map(|c| format!("({})", c.to_uppercase()))
                         .unwrap_or_else(|| "(??)".to_string())
                 };
-                
+
                 // Add source indicator
                 let source_icon = match contact.source {
                     crate::contacts::ContactSource::Google { .. } => "🌐G",
-                    crate::contacts::ContactSource::Outlook { .. } => "📧O", 
+                    crate::contacts::ContactSource::Outlook { .. } => "📧O",
                     crate::contacts::ContactSource::Local => "💾L",
                 };
-                
+
                 // Format: Avatar Name <email> | Additional Info | Source
                 let mut text = format!("{} {} <{}>", avatar, display_name, email);
                 if !info_parts.is_empty() {
                     text.push_str(&format!(" │ {}", info_parts.join(" │ ")));
                 }
                 text.push_str(&format!(" │ {}", source_icon));
-                
-                ListItem::new(text)
-                    .style(Style::default().fg(theme.colors.palette.text_primary))
+
+                ListItem::new(text).style(Style::default().fg(theme.colors.palette.text_primary))
             })
             .collect();
 
@@ -294,7 +304,7 @@ impl ContactPopup {
                 Block::default()
                     .borders(Borders::ALL)
                     .title(format!("Contacts ({})", contacts.len()))
-                    .border_style(Style::default().fg(theme.colors.palette.border))
+                    .border_style(Style::default().fg(theme.colors.palette.border)),
             )
             .highlight_style(
                 Style::default()
@@ -311,7 +321,7 @@ impl ContactPopup {
     #[allow(dead_code)]
     fn create_contact_item(&self, contact: &Contact, _index: usize, theme: &Theme) -> ListItem {
         let mut lines = vec![];
-        
+
         // Main line with name and primary email
         let email_text = contact
             .primary_email()
@@ -320,7 +330,7 @@ impl ContactPopup {
 
         let source_icon = match contact.source {
             crate::contacts::ContactSource::Google { .. } => "🌐",
-            crate::contacts::ContactSource::Outlook { .. } => "📧", 
+            crate::contacts::ContactSource::Outlook { .. } => "📧",
             crate::contacts::ContactSource::Local => "💾",
         };
 
@@ -331,31 +341,26 @@ impl ContactPopup {
                     .fg(theme.colors.palette.text_primary)
                     .add_modifier(Modifier::BOLD),
             ),
-            Span::styled(
-                email_text,
-                Style::default().fg(theme.colors.palette.accent),
-            ),
+            Span::styled(email_text, Style::default().fg(theme.colors.palette.accent)),
         ]));
 
         // Optional details line
         if self.show_details {
             let mut details = vec![];
-            
+
             if let Some(company) = &contact.company {
                 details.push(format!("🏢 {}", company));
             }
-            
+
             if let Some(job_title) = &contact.job_title {
                 details.push(format!("💼 {}", job_title));
             }
-            
+
             if !details.is_empty() {
-                lines.push(Line::from(vec![
-                    Span::styled(
-                        format!("  {}", details.join(" • ")),
-                        Style::default().fg(theme.colors.palette.text_muted),
-                    )
-                ]));
+                lines.push(Line::from(vec![Span::styled(
+                    format!("  {}", details.join(" • ")),
+                    Style::default().fg(theme.colors.palette.text_muted),
+                )]));
             }
         }
 
@@ -374,27 +379,23 @@ impl ContactPopup {
 
         let empty_paragraph = Paragraph::new(vec![
             Line::from(""),
-            Line::from(vec![
-                Span::styled(
-                    message,
-                    Style::default()
-                        .fg(theme.colors.palette.text_muted)
-                        .add_modifier(Modifier::ITALIC),
-                )
-            ]),
+            Line::from(vec![Span::styled(
+                message,
+                Style::default()
+                    .fg(theme.colors.palette.text_muted)
+                    .add_modifier(Modifier::ITALIC),
+            )]),
             Line::from(""),
-            Line::from(vec![
-                Span::styled(
-                    "Press 's' to sync contacts or 'f' to view all contacts",
-                    Style::default().fg(theme.colors.palette.text_muted),
-                )
-            ]),
+            Line::from(vec![Span::styled(
+                "Press 's' to sync contacts or 'f' to view all contacts",
+                Style::default().fg(theme.colors.palette.text_muted),
+            )]),
         ])
         .alignment(Alignment::Center)
         .block(
             Block::default()
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(theme.colors.palette.border))
+                .border_style(Style::default().fg(theme.colors.palette.border)),
         );
 
         f.render_widget(empty_paragraph, area);
@@ -426,12 +427,15 @@ impl ContactPopup {
     }
 
     /// Handle keyboard input
-    pub async fn handle_key(&mut self, key: crossterm::event::KeyCode) -> Option<ContactPopupAction> {
+    pub async fn handle_key(
+        &mut self,
+        key: crossterm::event::KeyCode,
+    ) -> Option<ContactPopupAction> {
         use crossterm::event::KeyCode;
 
         match key {
             KeyCode::Esc => Some(ContactPopupAction::Close),
-            
+
             KeyCode::Enter => {
                 if let Some(contact) = self.get_selected_contact() {
                     // Always show contact details when Enter is pressed
@@ -440,33 +444,33 @@ impl ContactPopup {
                     None
                 }
             }
-            
+
             KeyCode::Up => {
                 self.select_previous_contact();
                 None
             }
-            
+
             KeyCode::Down => {
                 self.select_next_contact();
                 None
             }
-            
+
             KeyCode::Tab => {
                 self.show_details = !self.show_details;
                 None
             }
-            
+
             KeyCode::Char('/') => {
                 self.set_mode(ContactPopupMode::Search);
                 self.is_searching = true;
                 None
             }
-            
+
             KeyCode::Char('r') => {
                 self.set_mode(ContactPopupMode::Recent);
                 None
             }
-            
+
             KeyCode::Char('f') if !self.is_searching => {
                 // Change 'f' to show ALL contacts instead of favorites
                 self.set_mode(ContactPopupMode::All);
@@ -476,30 +480,30 @@ impl ContactPopup {
                 }
                 None
             }
-            
+
             KeyCode::Char('F') if !self.is_searching => {
                 Some(ContactPopupAction::OpenFullAddressBook)
             }
-            
+
             KeyCode::Char('s') if !self.is_searching => {
                 // 's' should trigger sync, not show limited contacts
                 tracing::info!("🔄 Starting contact sync...");
                 self.sync_contacts().await;
                 None
             }
-            
+
             KeyCode::Backspace if self.is_searching => {
                 self.search_query.pop();
                 self.perform_search().await;
                 None
             }
-            
+
             KeyCode::Char(c) if self.is_searching => {
                 self.search_query.push(c);
                 self.perform_search().await;
                 None
             }
-            
+
             _ => None,
         }
     }
@@ -507,9 +511,7 @@ impl ContactPopup {
     /// Get currently selected contact
     pub fn get_selected_contact(&self) -> Option<&Contact> {
         let contacts = self.get_display_contacts();
-        self.list_state
-            .selected()
-            .and_then(|i| contacts.get(i))
+        self.list_state.selected().and_then(|i| contacts.get(i))
     }
 
     /// Select next contact
@@ -546,7 +548,11 @@ impl ContactPopup {
     async fn perform_search(&mut self) {
         if self.search_query.is_empty() {
             self.filtered_contacts.clear();
-            self.list_state.select(if self.contacts.is_empty() { None } else { Some(0) });
+            self.list_state.select(if self.contacts.is_empty() {
+                None
+            } else {
+                Some(0)
+            });
             return;
         }
 
@@ -557,7 +563,12 @@ impl ContactPopup {
         match self.manager.search_contacts(&criteria).await {
             Ok(contacts) => {
                 self.filtered_contacts = contacts;
-                self.list_state.select(if self.filtered_contacts.is_empty() { None } else { Some(0) });
+                self.list_state
+                    .select(if self.filtered_contacts.is_empty() {
+                        None
+                    } else {
+                        Some(0)
+                    });
             }
             Err(e) => {
                 tracing::error!("Contact search failed: {}", e);
@@ -584,7 +595,11 @@ impl ContactPopup {
         self.is_searching = false;
         self.show_details = false;
         self.filtered_contacts.clear();
-        self.list_state.select(if self.contacts.is_empty() { None } else { Some(0) });
+        self.list_state.select(if self.contacts.is_empty() {
+            None
+        } else {
+            Some(0)
+        });
     }
 
     /// Check if popup is in search mode

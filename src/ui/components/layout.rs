@@ -14,13 +14,13 @@ pub type LayoutResult<T> = Result<T, LayoutError>;
 pub enum LayoutError {
     #[error("Layout template not found: {template_id}")]
     TemplateNotFound { template_id: String },
-    
+
     #[error("Invalid layout constraints: {reason}")]
     InvalidConstraints { reason: String },
-    
+
     #[error("Responsive rule error: {rule_id}")]
     ResponsiveRuleError { rule_id: String },
-    
+
     #[error("Layout calculation failed: {0}")]
     CalculationFailed(String),
 }
@@ -51,19 +51,19 @@ impl LayoutSpec {
             cacheable: true,
         }
     }
-    
+
     /// Add a responsive rule
     pub fn with_responsive_rule(mut self, rule: ResponsiveRule) -> Self {
         self.responsive_rules.push(rule);
         self
     }
-    
+
     /// Set minimum size requirements
     pub fn with_min_size(mut self, width: u16, height: u16) -> Self {
         self.min_size = Some((width, height));
         self
     }
-    
+
     /// Set whether this layout can be cached
     pub fn with_caching(mut self, cacheable: bool) -> Self {
         self.cacheable = cacheable;
@@ -75,21 +75,11 @@ impl LayoutSpec {
 #[derive(Debug, Clone)]
 pub enum LayoutTemplate {
     /// Three-pane horizontal layout (left, center, right)
-    ThreePane {
-        left: f32,
-        center: f32,
-        right: f32,
-    },
+    ThreePane { left: f32, center: f32, right: f32 },
     /// Two-pane horizontal layout (left, right)
-    TwoPane {
-        left: f32,
-        right: f32,
-    },
+    TwoPane { left: f32, right: f32 },
     /// Two-pane vertical layout (top, bottom)
-    TwoPaneVertical {
-        top: f32,
-        bottom: f32,
-    },
+    TwoPaneVertical { top: f32, bottom: f32 },
     /// Full screen layout
     FullScreen,
     /// Grid layout
@@ -120,9 +110,13 @@ impl LayoutTemplate {
     /// Calculate layout areas for the given template
     pub fn calculate(&self, area: Rect) -> LayoutResult<Vec<Rect>> {
         match self {
-            LayoutTemplate::ThreePane { left, center, right } => {
+            LayoutTemplate::ThreePane {
+                left,
+                center,
+                right,
+            } => {
                 self.validate_percentages(&[*left, *center, *right])?;
-                
+
                 let chunks = Layout::default()
                     .direction(Direction::Horizontal)
                     .constraints([
@@ -131,13 +125,13 @@ impl LayoutTemplate {
                         Constraint::Percentage((*right * 100.0) as u16),
                     ])
                     .split(area);
-                    
+
                 Ok(chunks.to_vec())
-            },
-            
+            }
+
             LayoutTemplate::TwoPane { left, right } => {
                 self.validate_percentages(&[*left, *right])?;
-                
+
                 let chunks = Layout::default()
                     .direction(Direction::Horizontal)
                     .constraints([
@@ -145,13 +139,13 @@ impl LayoutTemplate {
                         Constraint::Percentage((*right * 100.0) as u16),
                     ])
                     .split(area);
-                    
+
                 Ok(chunks.to_vec())
-            },
-            
+            }
+
             LayoutTemplate::TwoPaneVertical { top, bottom } => {
                 self.validate_percentages(&[*top, *bottom])?;
-                
+
                 let chunks = Layout::default()
                     .direction(Direction::Vertical)
                     .constraints([
@@ -159,27 +153,30 @@ impl LayoutTemplate {
                         Constraint::Percentage((*bottom * 100.0) as u16),
                     ])
                     .split(area);
-                    
+
                 Ok(chunks.to_vec())
-            },
-            
-            LayoutTemplate::FullScreen => {
-                Ok(vec![area])
-            },
-            
-            LayoutTemplate::Grid { cols, rows, col_constraints, row_constraints } => {
+            }
+
+            LayoutTemplate::FullScreen => Ok(vec![area]),
+
+            LayoutTemplate::Grid {
+                cols,
+                rows,
+                col_constraints,
+                row_constraints,
+            } => {
                 if col_constraints.len() != *cols || row_constraints.len() != *rows {
                     return Err(LayoutError::InvalidConstraints {
                         reason: "Grid constraints don't match grid dimensions".to_string(),
                     });
                 }
-                
+
                 // First split into columns
                 let col_chunks = Layout::default()
                     .direction(Direction::Horizontal)
                     .constraints(col_constraints.clone())
                     .split(area);
-                    
+
                 // Then split each column into rows
                 let mut result = Vec::new();
                 for col_chunk in col_chunks.iter() {
@@ -189,14 +186,18 @@ impl LayoutTemplate {
                         .split(*col_chunk);
                     result.extend(row_chunks.iter().cloned());
                 }
-                
+
                 Ok(result)
-            },
-            
-            LayoutTemplate::Sidebar { sidebar_width, sidebar_position } => {
+            }
+
+            LayoutTemplate::Sidebar {
+                sidebar_width,
+                sidebar_position,
+            } => {
                 let sidebar_constraint = Constraint::Percentage((*sidebar_width * 100.0) as u16);
-                let main_constraint = Constraint::Percentage(((1.0 - sidebar_width) * 100.0) as u16);
-                
+                let main_constraint =
+                    Constraint::Percentage(((1.0 - sidebar_width) * 100.0) as u16);
+
                 let chunks = Layout::default()
                     .direction(Direction::Horizontal)
                     .constraints(match sidebar_position {
@@ -204,11 +205,14 @@ impl LayoutTemplate {
                         SidebarPosition::Right => [main_constraint, sidebar_constraint],
                     })
                     .split(area);
-                    
+
                 Ok(chunks.to_vec())
-            },
-            
-            LayoutTemplate::HeaderFooter { header_height, footer_height } => {
+            }
+
+            LayoutTemplate::HeaderFooter {
+                header_height,
+                footer_height,
+            } => {
                 let chunks = Layout::default()
                     .direction(Direction::Vertical)
                     .constraints([
@@ -217,25 +221,29 @@ impl LayoutTemplate {
                         Constraint::Length(*footer_height),
                     ])
                     .split(area);
-                    
+
                 Ok(chunks.to_vec())
-            },
-            
-            LayoutTemplate::Complex { sections, direction } => {
-                let constraints: Vec<Constraint> = sections.iter()
+            }
+
+            LayoutTemplate::Complex {
+                sections,
+                direction,
+            } => {
+                let constraints: Vec<Constraint> = sections
+                    .iter()
                     .map(|section| section.constraint.clone())
                     .collect();
-                    
+
                 let chunks = Layout::default()
                     .direction(*direction)
                     .constraints(constraints)
                     .split(area);
-                    
+
                 Ok(chunks.to_vec())
-            },
+            }
         }
     }
-    
+
     /// Validate that percentages sum to approximately 1.0
     fn validate_percentages(&self, percentages: &[f32]) -> LayoutResult<()> {
         let sum: f32 = percentages.iter().sum();
@@ -271,7 +279,7 @@ impl LayoutSection {
             min_size: None,
         }
     }
-    
+
     pub fn with_min_size(mut self, width: u16, height: u16) -> Self {
         self.min_size = Some((width, height));
         self
@@ -294,17 +302,17 @@ impl ResponsiveRule {
     pub fn when_width_lt(threshold: u16) -> ResponsiveRuleBuilder {
         ResponsiveRuleBuilder::new(ResponsiveCondition::WidthLessThan(threshold))
     }
-    
+
     /// Create a rule for when height is less than threshold
     pub fn when_height_lt(threshold: u16) -> ResponsiveRuleBuilder {
         ResponsiveRuleBuilder::new(ResponsiveCondition::HeightLessThan(threshold))
     }
-    
+
     /// Create a rule for when area is less than threshold
     pub fn when_area_lt(threshold: u32) -> ResponsiveRuleBuilder {
         ResponsiveRuleBuilder::new(ResponsiveCondition::AreaLessThan(threshold))
     }
-    
+
     /// Check if this rule applies to the given area
     pub fn applies_to(&self, area: Rect) -> bool {
         self.condition.evaluate(area)
@@ -324,13 +332,13 @@ impl ResponsiveRuleBuilder {
             priority: 0,
         }
     }
-    
+
     /// Set rule priority
     pub fn with_priority(mut self, priority: i32) -> Self {
         self.priority = priority;
         self
     }
-    
+
     /// Complete the rule with a template
     pub fn use_template(self, template: LayoutTemplate) -> ResponsiveRule {
         ResponsiveRule {
@@ -339,12 +347,12 @@ impl ResponsiveRuleBuilder {
             priority: self.priority,
         }
     }
-    
+
     /// Use two-pane layout
     pub fn use_two_pane(self, left: f32, right: f32) -> ResponsiveRule {
         self.use_template(LayoutTemplate::TwoPane { left, right })
     }
-    
+
     /// Use full screen layout
     pub fn use_full_screen(self) -> ResponsiveRule {
         self.use_template(LayoutTemplate::FullScreen)
@@ -376,22 +384,18 @@ impl ResponsiveCondition {
             ResponsiveCondition::HeightGreaterThan(threshold) => area.height > *threshold,
             ResponsiveCondition::AreaLessThan(threshold) => {
                 (area.width as u32 * area.height as u32) < *threshold
-            },
+            }
             ResponsiveCondition::AreaGreaterThan(threshold) => {
                 (area.width as u32 * area.height as u32) > *threshold
-            },
+            }
             ResponsiveCondition::AspectRatioLessThan(ratio) => {
                 (area.width as f32 / area.height as f32) < *ratio
-            },
+            }
             ResponsiveCondition::AspectRatioGreaterThan(ratio) => {
                 (area.width as f32 / area.height as f32) > *ratio
-            },
-            ResponsiveCondition::And(left, right) => {
-                left.evaluate(area) && right.evaluate(area)
-            },
-            ResponsiveCondition::Or(left, right) => {
-                left.evaluate(area) || right.evaluate(area)
-            },
+            }
+            ResponsiveCondition::And(left, right) => left.evaluate(area) && right.evaluate(area),
+            ResponsiveCondition::Or(left, right) => left.evaluate(area) || right.evaluate(area),
         }
     }
 }
@@ -417,48 +421,50 @@ impl LayoutManager {
             cache_misses: 0,
         }
     }
-    
+
     /// Register a layout specification
     pub fn register_layout(&mut self, spec: LayoutSpec) {
         self.layouts.insert(spec.id.clone(), spec);
     }
-    
+
     /// Calculate layout for the given specification and area
     pub fn calculate_layout(&mut self, layout_id: &str, area: Rect) -> LayoutResult<Vec<Rect>> {
-        let spec = self.layouts.get(layout_id)
+        let spec = self
+            .layouts
+            .get(layout_id)
             .ok_or_else(|| LayoutError::TemplateNotFound {
                 template_id: layout_id.to_string(),
             })?;
-        
+
         // Check minimum size requirements
         if let Some((min_width, min_height)) = spec.min_size {
             if area.width < min_width || area.height < min_height {
-                return Err(LayoutError::CalculationFailed(
-                    format!("Area too small: {}x{}, minimum: {}x{}", 
-                           area.width, area.height, min_width, min_height)
-                ));
+                return Err(LayoutError::CalculationFailed(format!(
+                    "Area too small: {}x{}, minimum: {}x{}",
+                    area.width, area.height, min_width, min_height
+                )));
             }
         }
-        
+
         // Check cache if layout is cacheable
         if spec.cacheable {
             let cache_key = LayoutCacheKey {
                 layout_id: layout_id.to_string(),
                 area,
             };
-            
+
             if let Some(cached_result) = self.cache.get(&cache_key) {
                 self.cache_hits += 1;
                 return Ok(cached_result.clone());
             }
         }
-        
+
         // Find applicable template (check responsive rules)
         let template = self.find_applicable_template(spec, area)?;
-        
+
         // Calculate layout
         let result = template.calculate(area)?;
-        
+
         // Cache result if cacheable
         if spec.cacheable {
             let cache_key = LayoutCacheKey {
@@ -467,33 +473,37 @@ impl LayoutManager {
             };
             self.cache.insert(cache_key, result.clone());
         }
-        
+
         self.cache_misses += 1;
         Ok(result)
     }
-    
+
     /// Find the applicable template based on responsive rules
-    fn find_applicable_template(&self, spec: &LayoutSpec, area: Rect) -> LayoutResult<LayoutTemplate> {
+    fn find_applicable_template(
+        &self,
+        spec: &LayoutSpec,
+        area: Rect,
+    ) -> LayoutResult<LayoutTemplate> {
         // Sort responsive rules by priority (highest first)
         let mut rules = spec.responsive_rules.clone();
         rules.sort_by(|a, b| b.priority.cmp(&a.priority));
-        
+
         // Find first matching rule
         for rule in &rules {
             if rule.applies_to(area) {
                 return Ok(rule.template.clone());
             }
         }
-        
+
         // Use base template if no rules match
         Ok(spec.template.clone())
     }
-    
+
     /// Clear layout cache
     pub fn clear_cache(&mut self) {
         self.cache.clear();
     }
-    
+
     /// Get cache statistics
     pub fn cache_stats(&self) -> (u64, u64, f64) {
         let total_requests = self.cache_hits + self.cache_misses;
@@ -502,10 +512,10 @@ impl LayoutManager {
         } else {
             0.0
         };
-        
+
         (self.cache_hits, self.cache_misses, hit_rate)
     }
-    
+
     /// Get all registered layout IDs
     pub fn layout_ids(&self) -> Vec<&str> {
         self.layouts.keys().map(|s| s.as_str()).collect()
@@ -515,10 +525,10 @@ impl LayoutManager {
 impl Default for LayoutManager {
     fn default() -> Self {
         let mut manager = Self::new();
-        
+
         // Register common layouts
         manager.register_common_layouts();
-        
+
         manager
     }
 }
@@ -535,18 +545,12 @@ impl LayoutManager {
                 right: 0.40,
             },
         )
-        .with_responsive_rule(
-            ResponsiveRule::when_width_lt(120)
-                .use_two_pane(0.4, 0.6)
-        )
-        .with_responsive_rule(
-            ResponsiveRule::when_width_lt(80)
-                .use_full_screen()
-        )
+        .with_responsive_rule(ResponsiveRule::when_width_lt(120).use_two_pane(0.4, 0.6))
+        .with_responsive_rule(ResponsiveRule::when_width_lt(80).use_full_screen())
         .with_min_size(60, 20);
-        
+
         self.register_layout(email_layout);
-        
+
         // Calendar layout
         let calendar_layout = LayoutSpec::new(
             "calendar_main".to_string(),
@@ -555,21 +559,16 @@ impl LayoutManager {
                 footer_height: 1,
             },
         )
-        .with_responsive_rule(
-            ResponsiveRule::when_height_lt(15)
-                .use_full_screen()
-        );
-        
+        .with_responsive_rule(ResponsiveRule::when_height_lt(15).use_full_screen());
+
         self.register_layout(calendar_layout);
-        
+
         // Full screen layout
-        let fullscreen_layout = LayoutSpec::new(
-            "fullscreen".to_string(),
-            LayoutTemplate::FullScreen,
-        );
-        
+        let fullscreen_layout =
+            LayoutSpec::new("fullscreen".to_string(), LayoutTemplate::FullScreen);
+
         self.register_layout(fullscreen_layout);
-        
+
         // Sidebar layout
         let sidebar_layout = LayoutSpec::new(
             "sidebar_main".to_string(),
@@ -578,11 +577,8 @@ impl LayoutManager {
                 sidebar_position: SidebarPosition::Left,
             },
         )
-        .with_responsive_rule(
-            ResponsiveRule::when_width_lt(100)
-                .use_full_screen()
-        );
-        
+        .with_responsive_rule(ResponsiveRule::when_width_lt(100).use_full_screen());
+
         self.register_layout(sidebar_layout);
     }
 }
@@ -597,7 +593,7 @@ struct LayoutCacheKey {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_three_pane_layout() {
         let template = LayoutTemplate::ThreePane {
@@ -605,68 +601,73 @@ mod tests {
             center: 0.35,
             right: 0.40,
         };
-        
+
         let area = Rect::new(0, 0, 100, 50);
         let result = template.calculate(area).unwrap();
-        
+
         assert_eq!(result.len(), 3);
         assert_eq!(result[0].width, 25); // 25% of 100
         assert_eq!(result[1].width, 35); // 35% of 100
         assert_eq!(result[2].width, 40); // 40% of 100
     }
-    
+
     #[test]
     fn test_responsive_rule() {
-        let rule = ResponsiveRule::when_width_lt(80)
-            .use_two_pane(0.5, 0.5);
-        
+        let rule = ResponsiveRule::when_width_lt(80).use_two_pane(0.5, 0.5);
+
         let small_area = Rect::new(0, 0, 70, 30);
         let large_area = Rect::new(0, 0, 120, 30);
-        
+
         assert!(rule.applies_to(small_area));
         assert!(!rule.applies_to(large_area));
     }
-    
+
     #[test]
     fn test_layout_manager() {
         let mut manager = LayoutManager::new();
-        
+
         let spec = LayoutSpec::new(
             "test".to_string(),
-            LayoutTemplate::TwoPane { left: 0.6, right: 0.4 },
+            LayoutTemplate::TwoPane {
+                left: 0.6,
+                right: 0.4,
+            },
         );
-        
+
         manager.register_layout(spec);
-        
+
         let area = Rect::new(0, 0, 100, 50);
         let result = manager.calculate_layout("test", area).unwrap();
-        
+
         assert_eq!(result.len(), 2);
         assert_eq!(result[0].width, 60);
         assert_eq!(result[1].width, 40);
     }
-    
+
     #[test]
     fn test_layout_cache() {
         let mut manager = LayoutManager::new();
-        
+
         let spec = LayoutSpec::new(
             "cached_test".to_string(),
-            LayoutTemplate::TwoPane { left: 0.5, right: 0.5 },
+            LayoutTemplate::TwoPane {
+                left: 0.5,
+                right: 0.5,
+            },
         );
-        
+
         manager.register_layout(spec);
-        
+
         let area = Rect::new(0, 0, 100, 50);
-        
+
         // First calculation (cache miss)
         let _result1 = manager.calculate_layout("cached_test", area).unwrap();
         let (hits1, misses1, _) = manager.cache_stats();
-        
+
         // Second calculation (cache hit)
         let _result2 = manager.calculate_layout("cached_test", area).unwrap();
         let (hits2, misses2, _) = manager.cache_stats();
-        
+
         assert_eq!(hits1, 0);
         assert_eq!(misses1, 1);
         assert_eq!(hits2, 1);

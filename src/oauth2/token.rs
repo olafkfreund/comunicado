@@ -163,59 +163,66 @@ impl TokenManager {
             let tokens = self.tokens.read().await;
             tokens.get(account_id).cloned()
         };
-        
-        let (needs_refresh, is_expired, _token_from_storage) = if let Some(token_pair) = token_in_cache {
-            (
-                token_pair.access_token.needs_refresh(5), // 5 minute buffer
-                token_pair.access_token.is_expired(),
-                None
-            )
-        } else {
-            // Token not found in cache, try loading from storage as fallback
-            if let Some(ref storage) = self.storage {
-                if let Ok(Some(account)) = storage.load_account(account_id) {
-                    if !account.access_token.is_empty() {
-                        tracing::debug!("Loading token from storage for account: {} (expired: {})", account_id, account.is_token_expired());
-                        
-                        // Create tokens from storage and cache them (even if expired - refresh logic will handle it)
-                        let access_token = AccessToken {
-                            token: account.access_token.clone(),
-                            token_type: "Bearer".to_string(),
-                            expires_at: account.token_expires_at,
-                            scopes: account.scopes.clone(),
-                        };
-                        
-                        let refresh_token = account.refresh_token.as_ref()
-                            .map(|token| RefreshToken::new(token.clone()));
-                        
-                        let token_pair = TokenPair {
-                            access_token: access_token.clone(),
-                            refresh_token,
-                            account_id: account_id.to_string(),
-                            provider: account.provider,
-                        };
-                        
-                        // Cache the tokens for future use
-                        {
-                            let mut tokens = self.tokens.write().await;
-                            tokens.insert(account_id.to_string(), token_pair);
+
+        let (needs_refresh, is_expired, _token_from_storage) =
+            if let Some(token_pair) = token_in_cache {
+                (
+                    token_pair.access_token.needs_refresh(5), // 5 minute buffer
+                    token_pair.access_token.is_expired(),
+                    None,
+                )
+            } else {
+                // Token not found in cache, try loading from storage as fallback
+                if let Some(ref storage) = self.storage {
+                    if let Ok(Some(account)) = storage.load_account(account_id) {
+                        if !account.access_token.is_empty() {
+                            tracing::debug!(
+                                "Loading token from storage for account: {} (expired: {})",
+                                account_id,
+                                account.is_token_expired()
+                            );
+
+                            // Create tokens from storage and cache them (even if expired - refresh logic will handle it)
+                            let access_token = AccessToken {
+                                token: account.access_token.clone(),
+                                token_type: "Bearer".to_string(),
+                                expires_at: account.token_expires_at,
+                                scopes: account.scopes.clone(),
+                            };
+
+                            let refresh_token = account
+                                .refresh_token
+                                .as_ref()
+                                .map(|token| RefreshToken::new(token.clone()));
+
+                            let token_pair = TokenPair {
+                                access_token: access_token.clone(),
+                                refresh_token,
+                                account_id: account_id.to_string(),
+                                provider: account.provider,
+                            };
+
+                            // Cache the tokens for future use
+                            {
+                                let mut tokens = self.tokens.write().await;
+                                tokens.insert(account_id.to_string(), token_pair);
+                            }
+
+                            // Calculate refresh flags for the loaded token
+                            let needs_refresh = access_token.needs_refresh(5);
+                            let is_expired = access_token.is_expired();
+
+                            (needs_refresh, is_expired, Some(access_token))
+                        } else {
+                            (false, false, None)
                         }
-                        
-                        // Calculate refresh flags for the loaded token
-                        let needs_refresh = access_token.needs_refresh(5);
-                        let is_expired = access_token.is_expired();
-                        
-                        (needs_refresh, is_expired, Some(access_token))
                     } else {
                         (false, false, None)
                     }
                 } else {
                     (false, false, None)
                 }
-            } else {
-                (false, false, None)
-            }
-        };
+            };
 
         if needs_refresh || is_expired {
             tracing::info!(
@@ -921,7 +928,9 @@ impl TokenRefreshScheduler {
         let interval = self.refresh_interval;
 
         // Skip initial token check during startup to avoid blocking - background scheduler will handle it
-        tracing::debug!("Starting token refresh scheduler - initial validation will happen in background");
+        tracing::debug!(
+            "Starting token refresh scheduler - initial validation will happen in background"
+        );
 
         tokio::spawn(async move {
             let mut refresh_interval = tokio::time::interval(tokio::time::Duration::from_secs(
@@ -972,10 +981,7 @@ impl TokenRefreshScheduler {
                     };
 
                     if is_expired {
-                        tracing::info!(
-                            "Refreshing expired token for account {}",
-                            account_id
-                        );
+                        tracing::info!("Refreshing expired token for account {}", account_id);
                         token_manager.refresh_access_token(&account_id).await
                     } else if needs_refresh {
                         tracing::info!(

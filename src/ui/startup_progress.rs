@@ -1,5 +1,5 @@
 //! Startup progress UI component
-//! 
+//!
 //! Shows users real-time startup progress with progress bars and status updates
 
 use ratatui::{
@@ -64,7 +64,13 @@ impl StartupProgressWidget {
     }
 
     /// Add or update background task status
-    pub fn update_background_task(&mut self, name: String, progress: f64, status: String, completed: bool) {
+    pub fn update_background_task(
+        &mut self,
+        name: String,
+        progress: f64,
+        status: String,
+        completed: bool,
+    ) {
         let task_status = BackgroundTaskStatus {
             name: name.clone(),
             progress: progress.clamp(0.0, 100.0),
@@ -99,45 +105,48 @@ impl StartupProgressWidget {
     pub fn render(&self, f: &mut Frame<'_>, area: Rect) {
         // Create centered popup area
         let popup_area = self.centered_rect(80, if self.show_details { 80 } else { 50 }, area);
-        
+
         // Clear background
         f.render_widget(Clear, popup_area);
-        
+
         // Main container
         let block = Block::default()
             .title(" Comunicado - Starting Up ")
             .borders(Borders::ALL)
             .border_style(Style::default().fg(Color::Cyan));
-        
+
         f.render_widget(block, popup_area);
-        
+
         // Inner layout
-        let inner = popup_area.inner(&ratatui::layout::Margin { vertical: 1, horizontal: 2 });
-        
+        let inner = popup_area.inner(ratatui::layout::Margin {
+            vertical: 1,
+            horizontal: 2,
+        });
+
         if self.show_details {
             self.render_detailed_view(f, inner);
         } else {
             self.render_simple_view(f, inner);
         }
-        
+
         // Instructions at bottom
         let instructions = if self.show_details {
             "Press 'd' to hide details, 'q' to quit"
         } else {
             "Press 'd' for details, 'q' to quit"
         };
-        
+
         let instruction_area = Rect {
             x: popup_area.x + 2,
             y: popup_area.y + popup_area.height - 2,
             width: popup_area.width - 4,
             height: 1,
         };
-        
+
         let instruction_paragraph = Paragraph::new(instructions)
             .style(Style::default().fg(Color::Gray))
             .alignment(Alignment::Center);
-        
+
         f.render_widget(instruction_paragraph, instruction_area);
     }
 
@@ -169,7 +178,11 @@ impl StartupProgressWidget {
 
         // Overall progress bar
         let overall_gauge = Gauge::default()
-            .block(Block::default().title("Overall Progress").borders(Borders::ALL))
+            .block(
+                Block::default()
+                    .title("Overall Progress")
+                    .borders(Borders::ALL),
+            )
             .gauge_style(Style::default().fg(Color::Green).bg(Color::Black))
             .percent(self.overall_progress as u16)
             .label(format!("{:.1}%", self.overall_progress));
@@ -177,7 +190,11 @@ impl StartupProgressWidget {
 
         // Phase progress bar
         let phase_gauge = Gauge::default()
-            .block(Block::default().title("Current Phase").borders(Borders::ALL))
+            .block(
+                Block::default()
+                    .title("Current Phase")
+                    .borders(Borders::ALL),
+            )
             .gauge_style(Style::default().fg(Color::Cyan).bg(Color::Black))
             .percent(self.phase_progress as u16)
             .label(format!("{:.1}%", self.phase_progress));
@@ -195,11 +212,17 @@ impl StartupProgressWidget {
         if !self.background_tasks.is_empty() {
             let completed_count = self.background_tasks.iter().filter(|t| t.completed).count();
             let total_count = self.background_tasks.len();
-            
-            let bg_status = format!("Background Tasks: {}/{} completed", completed_count, total_count);
+
+            let bg_status = format!(
+                "Background Tasks: {}/{} completed",
+                completed_count, total_count
+            );
             let bg_paragraph = Paragraph::new(vec![
                 Line::from(Span::styled(bg_status, Style::default().fg(Color::Blue))),
-                Line::from(Span::styled("Press 'd' for details", Style::default().fg(Color::Gray))),
+                Line::from(Span::styled(
+                    "Press 'd' for details",
+                    Style::default().fg(Color::Gray),
+                )),
             ])
             .alignment(Alignment::Center);
             f.render_widget(bg_paragraph, chunks[4]);
@@ -219,17 +242,19 @@ impl StartupProgressWidget {
             .split(area);
 
         // Status message
-        let status = Paragraph::new(vec![
-            Line::from(vec![
-                Span::styled("Status: ", Style::default().fg(Color::Yellow)),
-                Span::styled(&self.status_message, Style::default().fg(Color::White)),
-            ]),
-        ]);
+        let status = Paragraph::new(vec![Line::from(vec![
+            Span::styled("Status: ", Style::default().fg(Color::Yellow)),
+            Span::styled(&self.status_message, Style::default().fg(Color::White)),
+        ])]);
         f.render_widget(status, chunks[0]);
 
         // Overall progress bar
         let overall_gauge = Gauge::default()
-            .block(Block::default().title("Overall Progress").borders(Borders::ALL))
+            .block(
+                Block::default()
+                    .title("Overall Progress")
+                    .borders(Borders::ALL),
+            )
             .gauge_style(Style::default().fg(Color::Green).bg(Color::Black))
             .percent(self.overall_progress as u16)
             .label(format!("{:.1}%", self.overall_progress));
@@ -249,24 +274,27 @@ impl StartupProgressWidget {
                 .title("Background Tasks")
                 .borders(Borders::ALL)
                 .border_style(Style::default().fg(Color::Blue));
-            
-            let task_inner = chunks[3].inner(&ratatui::layout::Margin { vertical: 1, horizontal: 1 });
+
+            let task_inner = chunks[3].inner(ratatui::layout::Margin {
+                vertical: 1,
+                horizontal: 1,
+            });
             f.render_widget(task_block, chunks[3]);
-            
+
             // Create layout for each task
             let task_count = self.background_tasks.len();
             let task_height = 2; // Each task takes 2 lines
-            
+
             if task_count > 0 {
                 let constraints: Vec<Constraint> = (0..task_count)
                     .map(|_| Constraint::Length(task_height))
                     .collect();
-                
+
                 let task_chunks = Layout::default()
                     .direction(Direction::Vertical)
                     .constraints(constraints)
                     .split(task_inner);
-                
+
                 for (i, task) in self.background_tasks.iter().enumerate() {
                     if i < task_chunks.len() {
                         self.render_background_task(f, task_chunks[i], task);
@@ -309,8 +337,8 @@ impl StartupProgressWidget {
                 .label(format!("{:.0}%", task.progress));
             f.render_widget(task_gauge, chunks[1]);
         } else if task.completed {
-            let completed_text = Paragraph::new("✅ Completed")
-                .style(Style::default().fg(Color::Green));
+            let completed_text =
+                Paragraph::new("✅ Completed").style(Style::default().fg(Color::Green));
             f.render_widget(completed_text, chunks[1]);
         }
     }

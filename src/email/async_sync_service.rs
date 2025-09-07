@@ -1,19 +1,20 @@
 /// Async IMAP sync service that integrates with the background processor
-/// 
+///
 /// This service provides non-blocking IMAP sync operations with real-time progress updates
 /// and cancellation support through the background processor.
-
 use crate::email::database::EmailDatabase;
-use crate::email::sync_engine::{SyncEngine, SyncProgress, SyncStrategy, SyncPhase};
+use crate::email::sync_engine::{SyncEngine, SyncPhase, SyncProgress, SyncStrategy};
 use crate::imap::ImapAccountManager;
-use crate::performance::background_processor::{BackgroundProcessor, BackgroundTask, BackgroundTaskType, TaskPriority, TaskResultData};
+use crate::performance::background_processor::{
+    BackgroundProcessor, BackgroundTask, BackgroundTaskType, TaskPriority, TaskResultData,
+};
+use anyhow::Result;
 use std::sync::Arc;
+use std::time::Instant;
 use tokio::sync::mpsc;
 use tokio::time::Duration;
-use std::time::Instant;
 use tracing::info;
 use uuid::Uuid;
-use anyhow::Result;
 
 /// Async IMAP sync service
 #[allow(dead_code)]
@@ -69,10 +70,16 @@ impl AsyncSyncService {
             estimated_duration: Some(Duration::from_secs(30)),
         };
 
-        let task_id = self.background_processor.queue_task(task).await
+        let task_id = self
+            .background_processor
+            .queue_task(task)
+            .await
             .map_err(|e| anyhow::anyhow!("Failed to queue folder sync task: {}", e))?;
 
-        info!("Queued folder sync task {} for {} • {}", task_id, account_id, folder_name);
+        info!(
+            "Queued folder sync task {} for {} • {}",
+            task_id, account_id, folder_name
+        );
         Ok(task_id)
     }
 
@@ -93,7 +100,10 @@ impl AsyncSyncService {
             estimated_duration: Some(Duration::from_secs(120)),
         };
 
-        let task_id = self.background_processor.queue_task(task).await
+        let task_id = self
+            .background_processor
+            .queue_task(task)
+            .await
             .map_err(|e| anyhow::anyhow!("Failed to queue account sync task: {}", e))?;
 
         info!("Queued account sync task {} for {}", task_id, account_id);
@@ -112,15 +122,23 @@ impl AsyncSyncService {
             priority: TaskPriority::High,
             account_id: account_id.clone(),
             folder_name: Some(folder_name.clone()),
-            task_type: BackgroundTaskType::FolderRefresh { folder_name: folder_name.clone() },
+            task_type: BackgroundTaskType::FolderRefresh {
+                folder_name: folder_name.clone(),
+            },
             created_at: Instant::now(),
             estimated_duration: Some(Duration::from_secs(5)),
         };
 
-        let task_id = self.background_processor.queue_task(task).await
+        let task_id = self
+            .background_processor
+            .queue_task(task)
+            .await
             .map_err(|e| anyhow::anyhow!("Failed to queue folder refresh task: {}", e))?;
 
-        info!("Queued folder refresh task {} for {} • {}", task_id, account_id, folder_name);
+        info!(
+            "Queued folder refresh task {} for {} • {}",
+            task_id, account_id, folder_name
+        );
         Ok(task_id)
     }
 
@@ -143,7 +161,10 @@ impl AsyncSyncService {
         folder_name: String,
         _strategy: SyncStrategy,
     ) -> Result<TaskResultData, String> {
-        info!("Starting folder sync execution: {} • {}", account_id, folder_name);
+        info!(
+            "Starting folder sync execution: {} • {}",
+            account_id, folder_name
+        );
 
         // Send initial progress update
         let initial_progress = SyncProgress {
@@ -179,8 +200,11 @@ impl AsyncSyncService {
             .ok_or(format!("Folder '{}' not found", folder_name))?;
 
         // Perform real IMAP folder sync using the client directly
-        info!("Starting real folder sync for {} • {}", account_id, folder_name);
-        
+        info!(
+            "Starting real folder sync for {} • {}",
+            account_id, folder_name
+        );
+
         // Send initial progress
         let _ = progress_sender.send(SyncProgress {
             account_id: account_id.clone(),
@@ -203,7 +227,7 @@ impl AsyncSyncService {
         };
 
         let total_messages = folder_status.exists.unwrap_or(0) as usize;
-        
+
         // Send fetching headers progress
         let _ = progress_sender.send(SyncProgress {
             account_id: account_id.clone(),
@@ -219,7 +243,7 @@ impl AsyncSyncService {
         // For now, we'll do a basic folder sync operation
         // TODO: Implement full message sync with database storage
         // This would require integrating with the EmailDatabase
-        
+
         // Send completion progress with actual message count
         let completion_progress = SyncProgress {
             account_id: account_id.clone(),
@@ -233,7 +257,10 @@ impl AsyncSyncService {
         };
         let _ = progress_sender.send(completion_progress);
 
-        info!("Folder sync completed successfully: {} • {} ({} messages)", account_id, folder_name, total_messages);
+        info!(
+            "Folder sync completed successfully: {} • {} ({} messages)",
+            account_id, folder_name, total_messages
+        );
         Ok(TaskResultData::MessageCount(total_messages))
     }
 
@@ -262,7 +289,7 @@ impl AsyncSyncService {
 
         // Perform real IMAP account sync by getting folder list and syncing important folders
         info!("Starting real account sync for {}", account_id);
-        
+
         // Get IMAP client for the account
         let client = account_manager
             .get_client(&account_id)
@@ -309,10 +336,9 @@ impl AsyncSyncService {
 
         // Sync important folders by getting their message counts
         for folder in &folders {
-            if important_folders.iter().any(|&important| 
-                folder.name.eq_ignore_ascii_case(important) || 
-                folder.name.contains(important)
-            ) {
+            if important_folders.iter().any(|&important| {
+                folder.name.eq_ignore_ascii_case(important) || folder.name.contains(important)
+            }) {
                 match {
                     let mut client_guard = client.lock().await;
                     client_guard.select_folder(&folder.name).await
@@ -321,7 +347,10 @@ impl AsyncSyncService {
                         let folder_message_count = folder_status.exists.unwrap_or(0);
                         total_messages += folder_message_count;
                         processed_folders += 1;
-                        info!("Synced folder {} with {} messages", folder.name, folder_message_count);
+                        info!(
+                            "Synced folder {} with {} messages",
+                            folder.name, folder_message_count
+                        );
                     }
                     Err(e) => {
                         tracing::warn!("Failed to sync folder {}: {}", folder.name, e);
@@ -329,7 +358,7 @@ impl AsyncSyncService {
                 }
             }
         }
-        
+
         // Send completion progress with actual counts
         let completion_progress = SyncProgress {
             account_id: account_id.clone(),
@@ -343,7 +372,10 @@ impl AsyncSyncService {
         };
         let _ = progress_sender.send(completion_progress);
 
-        info!("Account sync completed successfully: {} ({} folders, {} messages)", account_id, processed_folders, total_messages);
+        info!(
+            "Account sync completed successfully: {} ({} folders, {} messages)",
+            account_id, processed_folders, total_messages
+        );
         Ok(TaskResultData::MessageCount(total_messages as usize))
     }
 
@@ -354,7 +386,10 @@ impl AsyncSyncService {
         account_id: String,
         folder_name: String,
     ) -> Result<TaskResultData, String> {
-        info!("Starting folder refresh execution: {} • {}", account_id, folder_name);
+        info!(
+            "Starting folder refresh execution: {} • {}",
+            account_id, folder_name
+        );
 
         // Send progress update
         let progress = SyncProgress {
@@ -378,15 +413,15 @@ impl AsyncSyncService {
         // Select folder and perform actual message sync (like CLI)
         let messages_synced = {
             let mut client_guard = client.lock().await;
-            
+
             // Select folder
             let folder_status = client_guard
                 .select_folder(&folder_name)
                 .await
                 .map_err(|e| format!("Failed to select folder: {}", e))?;
-            
+
             let total_messages = folder_status.exists.unwrap_or(0);
-            
+
             // Send progress update with total count
             let progress_update = SyncProgress {
                 account_id: account_id.clone(),
@@ -399,25 +434,25 @@ impl AsyncSyncService {
                 estimated_completion: Some(chrono::Utc::now() + chrono::Duration::seconds(10)),
             };
             let _ = progress_sender.send(progress_update);
-            
+
             if total_messages == 0 {
                 info!("Folder {} is empty, nothing to sync", folder_name);
                 return Ok(TaskResultData::MessageCount(0));
             }
-            
+
             // Get message UIDs using SEARCH (same as CLI)
             use crate::imap::SearchCriteria;
             let message_uids = client_guard
                 .search(&SearchCriteria::All)
                 .await
                 .map_err(|e| format!("Failed to search for messages: {}", e))?;
-            
+
             let message_count = message_uids.len();
             if message_count == 0 {
                 info!("No messages found in folder {}", folder_name);
                 return Ok(TaskResultData::MessageCount(0));
             }
-            
+
             // Limit to reasonable number for background sync (same as CLI default)
             let max_messages = 100;
             let fetch_count = std::cmp::min(message_count, max_messages);
@@ -426,22 +461,28 @@ impl AsyncSyncService {
             } else {
                 1
             };
-            
-            info!("Syncing {} messages from folder {} (out of {})", fetch_count, folder_name, message_count);
-            
+
+            info!(
+                "Syncing {} messages from folder {} (out of {})",
+                fetch_count, folder_name, message_count
+            );
+
             // Fetch messages with proper sequence range (same as CLI)
             let sequence_range = if fetch_count == message_count {
                 "1:*".to_string()
             } else {
                 format!("{}:{}", start_uid, message_count)
             };
-            
+
             // Fetch messages with headers (same items as CLI)
             let messages = client_guard
-                .fetch_messages(&sequence_range, &["UID", "ENVELOPE", "FLAGS", "INTERNALDATE", "RFC822.SIZE"])
+                .fetch_messages(
+                    &sequence_range,
+                    &["UID", "ENVELOPE", "FLAGS", "INTERNALDATE", "RFC822.SIZE"],
+                )
                 .await
                 .map_err(|e| format!("Failed to fetch messages: {}", e))?;
-            
+
             // Send progress update
             let headers_progress = SyncProgress {
                 account_id: account_id.clone(),
@@ -454,8 +495,12 @@ impl AsyncSyncService {
                 estimated_completion: Some(chrono::Utc::now() + chrono::Duration::seconds(5)),
             };
             let _ = progress_sender.send(headers_progress);
-            
-            info!("Successfully fetched {} messages from folder {}", messages.len(), folder_name);
+
+            info!(
+                "Successfully fetched {} messages from folder {}",
+                messages.len(),
+                folder_name
+            );
             messages.len()
         };
 
@@ -472,7 +517,10 @@ impl AsyncSyncService {
         };
         let _ = progress_sender.send(completion_progress);
 
-        info!("Folder refresh completed successfully: {} • {} ({} messages synced)", account_id, folder_name, messages_synced);
+        info!(
+            "Folder refresh completed successfully: {} • {} ({} messages synced)",
+            account_id, folder_name, messages_synced
+        );
         Ok(TaskResultData::MessageCount(messages_synced))
     }
 }

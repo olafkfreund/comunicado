@@ -4,11 +4,11 @@
 //! across application restarts and recover them when the application starts.
 
 use crate::notifications::types::{NotificationEvent, NotificationPriority};
+use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
 use std::fs;
-use chrono::{DateTime, Utc, Duration};
+use std::path::{Path, PathBuf};
 use tracing::{debug, info, warn};
 use uuid::Uuid;
 
@@ -125,9 +125,11 @@ pub struct NotificationPersistenceManager {
 
 impl NotificationPersistenceManager {
     /// Create a new persistence manager
-    pub fn new<P: AsRef<Path>>(data_dir: P) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+    pub fn new<P: AsRef<Path>>(
+        data_dir: P,
+    ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let storage_path = data_dir.as_ref().join("notifications.json");
-        
+
         // Ensure data directory exists
         if let Some(parent) = storage_path.parent() {
             fs::create_dir_all(parent)
@@ -149,22 +151,30 @@ impl NotificationPersistenceManager {
     }
 
     /// Load storage from file
-    fn load_storage(path: &Path) -> Result<NotificationStorage, Box<dyn std::error::Error + Send + Sync>> {
+    fn load_storage(
+        path: &Path,
+    ) -> Result<NotificationStorage, Box<dyn std::error::Error + Send + Sync>> {
         let content = fs::read_to_string(path)
             .map_err(|e| format!("Failed to read notification storage: {}", e))?;
-        
+
         let mut storage: NotificationStorage = serde_json::from_str(&content)
             .map_err(|e| format!("Failed to parse notification storage: {}", e))?;
 
         // Validate and migrate if needed
         if storage.version > 1 {
-            warn!("Notification storage version {} is newer than supported version 1", storage.version);
+            warn!(
+                "Notification storage version {} is newer than supported version 1",
+                storage.version
+            );
         }
 
         // Clean up expired notifications on load
         Self::cleanup_storage(&mut storage);
 
-        debug!("Loaded {} notifications from storage", storage.notifications.len());
+        debug!(
+            "Loaded {} notifications from storage",
+            storage.notifications.len()
+        );
         Ok(storage)
     }
 
@@ -172,7 +182,9 @@ impl NotificationPersistenceManager {
     pub fn save_storage(&mut self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         // Add any pending notifications
         for notification in self.pending_saves.drain(..) {
-            self.storage.notifications.insert(notification.id, notification);
+            self.storage
+                .notifications
+                .insert(notification.id, notification);
         }
 
         // Cleanup before saving
@@ -184,7 +196,10 @@ impl NotificationPersistenceManager {
         fs::write(&self.storage_path, content)
             .map_err(|e| format!("Failed to write notification storage: {}", e))?;
 
-        debug!("Saved notification storage with {} notifications", self.storage.notifications.len());
+        debug!(
+            "Saved notification storage with {} notifications",
+            self.storage.notifications.len()
+        );
         Ok(())
     }
 
@@ -204,7 +219,8 @@ impl NotificationPersistenceManager {
 
     /// Get all notifications that should be recovered on startup
     pub fn get_recovery_notifications(&self) -> Vec<PersistentNotification> {
-        self.storage.notifications
+        self.storage
+            .notifications
             .values()
             .filter(|n| n.should_show() && n.persistent)
             .cloned()
@@ -233,13 +249,22 @@ impl NotificationPersistenceManager {
     /// Get notification statistics
     pub fn get_stats(&self) -> PersistenceStats {
         let total = self.storage.notifications.len();
-        let active = self.storage.notifications.values()
+        let active = self
+            .storage
+            .notifications
+            .values()
             .filter(|n| n.should_show())
             .count();
-        let dismissed = self.storage.notifications.values()
+        let dismissed = self
+            .storage
+            .notifications
+            .values()
             .filter(|n| n.dismissed)
             .count();
-        let expired = self.storage.notifications.values()
+        let expired = self
+            .storage
+            .notifications
+            .values()
             .filter(|n| n.is_expired())
             .count();
 
@@ -254,7 +279,10 @@ impl NotificationPersistenceManager {
     }
 
     /// Update persistence settings
-    pub fn update_settings(&mut self, settings: PersistenceSettings) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub fn update_settings(
+        &mut self,
+        settings: PersistenceSettings,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         self.storage.settings = settings;
         self.save_storage()
     }
@@ -264,9 +292,9 @@ impl NotificationPersistenceManager {
         let initial_count = self.storage.notifications.len();
         Self::cleanup_storage(&mut self.storage);
         let removed_count = initial_count - self.storage.notifications.len();
-        
+
         self.save_storage()?;
-        
+
         info!("Cleaned up {} old notifications", removed_count);
         Ok(removed_count)
     }
@@ -278,19 +306,22 @@ impl NotificationPersistenceManager {
     }
 
     /// Import notifications from backup
-    pub fn import_notifications(&mut self, data: &str) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
+    pub fn import_notifications(
+        &mut self,
+        data: &str,
+    ) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
         let imported_storage: NotificationStorage = serde_json::from_str(data)
             .map_err(|e| format!("Failed to parse imported notifications: {}", e))?;
 
         let imported_count = imported_storage.notifications.len();
-        
+
         // Merge with existing notifications (imported take precedence)
         for (id, notification) in imported_storage.notifications {
             self.storage.notifications.insert(id, notification);
         }
 
         self.save_storage()?;
-        
+
         info!("Imported {} notifications", imported_count);
         Ok(imported_count)
     }
@@ -383,14 +414,14 @@ pub struct PersistenceStats {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::tempdir;
     use crate::notifications::types::*;
+    use tempfile::tempdir;
 
     #[test]
     fn test_persistence_manager_creation() {
         let temp_dir = tempdir().unwrap();
         let manager = NotificationPersistenceManager::new(temp_dir.path()).unwrap();
-        
+
         assert_eq!(manager.storage.notifications.len(), 0);
         assert_eq!(manager.storage.version, 1);
     }
@@ -415,7 +446,7 @@ mod tests {
         // Create new manager to test persistence
         let manager2 = NotificationPersistenceManager::new(temp_dir.path()).unwrap();
         let recovery_notifications = manager2.get_recovery_notifications();
-        
+
         assert_eq!(recovery_notifications.len(), 1);
         assert_eq!(recovery_notifications[0].id, id);
     }
@@ -428,12 +459,12 @@ mod tests {
                 message: "Test".to_string(),
                 priority: NotificationPriority::Low,
             },
-            true
+            true,
         );
 
         // Simulate expiration
         notification.expires_at = Some(Utc::now() - Duration::hours(1));
-        
+
         assert!(notification.is_expired());
         assert!(!notification.should_show());
     }
@@ -450,13 +481,16 @@ mod tests {
                 message: "Expired".to_string(),
                 priority: NotificationPriority::Low,
             },
-            true
+            true,
         );
         expired_notification.expires_at = Some(Utc::now() - Duration::hours(25));
         expired_notification.created_at = Utc::now() - Duration::hours(25);
-        
-        manager.storage.notifications.insert(expired_notification.id, expired_notification);
-        
+
+        manager
+            .storage
+            .notifications
+            .insert(expired_notification.id, expired_notification);
+
         let removed = manager.force_cleanup().unwrap();
         assert_eq!(removed, 1);
     }

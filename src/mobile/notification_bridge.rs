@@ -195,13 +195,13 @@ impl NotificationBridge {
         action: NotificationAction,
     ) -> Result<()> {
         let mut pending = self.pending_notifications.write().await;
-        
+
         if let Some(notification) = pending.get_mut(&notification_id) {
             notification.actions.push(action);
             Ok(())
         } else {
             Err(MobileError::ConfigurationError(
-                "Notification not found".to_string()
+                "Notification not found".to_string(),
             ))
         }
     }
@@ -214,13 +214,13 @@ impl NotificationBridge {
         value: String,
     ) -> Result<()> {
         let mut pending = self.pending_notifications.write().await;
-        
+
         if let Some(notification) = pending.get_mut(&notification_id) {
             notification.custom_data.insert(key, value);
             Ok(())
         } else {
             Err(MobileError::ConfigurationError(
-                "Notification not found".to_string()
+                "Notification not found".to_string(),
             ))
         }
     }
@@ -245,7 +245,7 @@ impl NotificationBridge {
 
         if notification.is_none() {
             return Err(MobileError::ConfigurationError(
-                "Notification not found".to_string()
+                "Notification not found".to_string(),
             ));
         }
 
@@ -272,11 +272,13 @@ impl NotificationBridge {
     /// Mark notification as delivered
     pub async fn mark_delivered(&self, notification_id: Uuid) -> Result<()> {
         let mut sent = self.sent_notifications.write().await;
-        
-        if let Some(notification) = sent.iter_mut()
-            .find(|n| n.notification_id == notification_id) {
+
+        if let Some(notification) = sent
+            .iter_mut()
+            .find(|n| n.notification_id == notification_id)
+        {
             notification.status = DeliveryStatus::Delivered;
-            
+
             // Update statistics
             let mut stats = self.statistics.write().await;
             stats.total_delivered += 1;
@@ -288,19 +290,20 @@ impl NotificationBridge {
     /// Mark notification as failed
     pub async fn mark_failed(&self, notification_id: Uuid, retry: bool) -> Result<()> {
         let mut sent = self.sent_notifications.write().await;
-        
-        if let Some(notification) = sent.iter_mut()
-            .find(|n| n.notification_id == notification_id) {
-            
+
+        if let Some(notification) = sent
+            .iter_mut()
+            .find(|n| n.notification_id == notification_id)
+        {
             if retry && notification.retry_count < 3 {
                 notification.retry_count += 1;
                 notification.status = DeliveryStatus::Pending;
-                
+
                 // Move back to pending for retry
                 // This would typically involve re-queuing the notification
             } else {
                 notification.status = DeliveryStatus::Failed;
-                
+
                 // Update statistics
                 let mut stats = self.statistics.write().await;
                 stats.total_failed += 1;
@@ -337,7 +340,7 @@ impl NotificationBridge {
     pub async fn cleanup_expired_notifications(&self) -> Result<()> {
         let now = Utc::now();
         let mut pending = self.pending_notifications.write().await;
-        
+
         pending.retain(|_, notification| {
             if let Some(expires_at) = notification.expires_at {
                 expires_at > now
@@ -363,30 +366,40 @@ impl NotificationBridge {
         subject: String,
         preview: String,
     ) -> Result<Uuid> {
-        let id = self.create_notification(
-            format!("New email from {}", from),
-            format!("{}: {}", subject, preview),
-            "email".to_string(),
-            NotificationPriority::Normal,
-            NotificationCategory::Email,
-        ).await?;
+        let id = self
+            .create_notification(
+                format!("New email from {}", from),
+                format!("{}: {}", subject, preview),
+                "email".to_string(),
+                NotificationPriority::Normal,
+                NotificationCategory::Email,
+            )
+            .await?;
 
         // Add email-specific actions
-        self.add_action(id, NotificationAction {
-            id: "reply".to_string(),
-            title: "Reply".to_string(),
-            icon: Some("reply".to_string()),
-            action_type: ActionType::Reply,
-            requires_auth: false,
-        }).await?;
+        self.add_action(
+            id,
+            NotificationAction {
+                id: "reply".to_string(),
+                title: "Reply".to_string(),
+                icon: Some("reply".to_string()),
+                action_type: ActionType::Reply,
+                requires_auth: false,
+            },
+        )
+        .await?;
 
-        self.add_action(id, NotificationAction {
-            id: "archive".to_string(),
-            title: "Archive".to_string(),
-            icon: Some("archive".to_string()),
-            action_type: ActionType::Archive,
-            requires_auth: false,
-        }).await?;
+        self.add_action(
+            id,
+            NotificationAction {
+                id: "archive".to_string(),
+                title: "Archive".to_string(),
+                icon: Some("archive".to_string()),
+                action_type: ActionType::Archive,
+                requires_auth: false,
+            },
+        )
+        .await?;
 
         Ok(id)
     }
@@ -407,22 +420,32 @@ impl NotificationBridge {
             n => format!("starting in {} hours", n / 60),
         };
 
-        let id = self.create_notification(
-            format!("Meeting reminder: {}", event_title),
-            format!("Event {} at {}", reminder_text, time_str),
-            "calendar".to_string(),
-            if minutes_before <= 5 { NotificationPriority::High } else { NotificationPriority::Normal },
-            NotificationCategory::Calendar,
-        ).await?;
+        let id = self
+            .create_notification(
+                format!("Meeting reminder: {}", event_title),
+                format!("Event {} at {}", reminder_text, time_str),
+                "calendar".to_string(),
+                if minutes_before <= 5 {
+                    NotificationPriority::High
+                } else {
+                    NotificationPriority::Normal
+                },
+                NotificationCategory::Calendar,
+            )
+            .await?;
 
         // Add calendar-specific actions
-        self.add_action(id, NotificationAction {
-            id: "snooze".to_string(),
-            title: "Snooze 5min".to_string(),
-            icon: Some("snooze".to_string()),
-            action_type: ActionType::Snooze,
-            requires_auth: false,
-        }).await?;
+        self.add_action(
+            id,
+            NotificationAction {
+                id: "snooze".to_string(),
+                title: "Snooze 5min".to_string(),
+                icon: Some("snooze".to_string()),
+                action_type: ActionType::Snooze,
+                requires_auth: false,
+            },
+        )
+        .await?;
 
         Ok(id)
     }
@@ -431,35 +454,53 @@ impl NotificationBridge {
     async fn update_statistics(&self, notification: &NotificationPayload) {
         let mut stats = self.statistics.write().await;
         stats.total_sent += 1;
-        
-        *stats.by_priority.entry(notification.priority.clone()).or_insert(0) += 1;
-        *stats.by_category.entry(format!("{:?}", notification.category)).or_insert(0) += 1;
+
+        *stats
+            .by_priority
+            .entry(notification.priority.clone())
+            .or_insert(0) += 1;
+        *stats
+            .by_category
+            .entry(format!("{:?}", notification.category))
+            .or_insert(0) += 1;
     }
 }
 
 impl RateLimiter {
     pub fn new() -> Self {
         let mut limits = HashMap::new();
-        limits.insert(NotificationPriority::Low, RateLimit {
-            max_per_minute: 5,
-            max_per_hour: 50,
-            burst_size: 10,
-        });
-        limits.insert(NotificationPriority::Normal, RateLimit {
-            max_per_minute: 10,
-            max_per_hour: 100,
-            burst_size: 20,
-        });
-        limits.insert(NotificationPriority::High, RateLimit {
-            max_per_minute: 20,
-            max_per_hour: 200,
-            burst_size: 30,
-        });
-        limits.insert(NotificationPriority::Critical, RateLimit {
-            max_per_minute: 50,
-            max_per_hour: 500,
-            burst_size: 100,
-        });
+        limits.insert(
+            NotificationPriority::Low,
+            RateLimit {
+                max_per_minute: 5,
+                max_per_hour: 50,
+                burst_size: 10,
+            },
+        );
+        limits.insert(
+            NotificationPriority::Normal,
+            RateLimit {
+                max_per_minute: 10,
+                max_per_hour: 100,
+                burst_size: 20,
+            },
+        );
+        limits.insert(
+            NotificationPriority::High,
+            RateLimit {
+                max_per_minute: 20,
+                max_per_hour: 200,
+                burst_size: 30,
+            },
+        );
+        limits.insert(
+            NotificationPriority::Critical,
+            RateLimit {
+                max_per_minute: 50,
+                max_per_hour: 500,
+                burst_size: 100,
+            },
+        );
 
         Self {
             limits,
@@ -482,8 +523,9 @@ impl RateLimiter {
     }
 
     pub async fn check_limit(&self, priority: &NotificationPriority) -> Result<bool> {
-        let limit = self.limits.get(priority)
-            .ok_or_else(|| MobileError::ConfigurationError("Rate limit not configured".to_string()))?;
+        let limit = self.limits.get(priority).ok_or_else(|| {
+            MobileError::ConfigurationError("Rate limit not configured".to_string())
+        })?;
 
         let mut usage = self.usage.write().await;
         let usage_list = usage.get_mut(priority).unwrap();
@@ -496,7 +538,8 @@ impl RateLimiter {
         usage_list.retain(|&timestamp| timestamp > one_hour_ago);
 
         // Check limits
-        let recent_minute = usage_list.iter()
+        let recent_minute = usage_list
+            .iter()
             .filter(|&&timestamp| timestamp > one_minute_ago)
             .count() as u32;
 

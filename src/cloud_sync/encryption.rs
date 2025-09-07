@@ -87,10 +87,11 @@ impl CloudEncryption {
 
         let key = self.key_manager.get_current_key()?;
         let result = self.cipher.encrypt(data, &key)?;
-        
+
         // Serialize encryption result
-        serde_json::to_vec(&result)
-            .map_err(|e| CloudSyncError::Encryption(format!("Failed to serialize encrypted data: {}", e)))
+        serde_json::to_vec(&result).map_err(|e| {
+            CloudSyncError::Encryption(format!("Failed to serialize encrypted data: {}", e))
+        })
     }
 
     /// Decrypt data from cloud storage
@@ -100,12 +101,14 @@ impl CloudEncryption {
         }
 
         // Deserialize encryption result
-        let encryption_result: EncryptionResult = serde_json::from_slice(encrypted_data)
-            .map_err(|e| CloudSyncError::Encryption(format!("Failed to deserialize encrypted data: {}", e)))?;
+        let encryption_result: EncryptionResult =
+            serde_json::from_slice(encrypted_data).map_err(|e| {
+                CloudSyncError::Encryption(format!("Failed to deserialize encrypted data: {}", e))
+            })?;
 
         // Get the appropriate key
         let key = self.key_manager.get_key(&encryption_result.key_id)?;
-        
+
         // Decrypt the data
         self.cipher.decrypt(&encryption_result, &key)
     }
@@ -127,7 +130,7 @@ impl CloudEncryption {
     /// Generate new master key
     fn generate_master_key(&self) -> CloudSyncResult<EncryptionKey> {
         use rand::RngCore;
-        
+
         let mut key_data = vec![0u8; 32]; // 256-bit key
         rand::thread_rng().fill_bytes(&mut key_data);
 
@@ -167,8 +170,9 @@ impl EncryptionKeyManager {
 
     fn get_current_key(&self) -> CloudSyncResult<&EncryptionKey> {
         let device_id = self.get_device_id()?;
-        self.device_keys.get(&device_id)
-            .ok_or_else(|| CloudSyncError::Encryption("No current encryption key available".to_string()))
+        self.device_keys.get(&device_id).ok_or_else(|| {
+            CloudSyncError::Encryption("No current encryption key available".to_string())
+        })
     }
 
     fn get_key(&self, key_id: &str) -> CloudSyncResult<&EncryptionKey> {
@@ -186,7 +190,10 @@ impl EncryptionKeyManager {
             }
         }
 
-        Err(CloudSyncError::Encryption(format!("Encryption key not found: {}", key_id)))
+        Err(CloudSyncError::Encryption(format!(
+            "Encryption key not found: {}",
+            key_id
+        )))
     }
 
     async fn rotate_keys(&mut self) -> CloudSyncResult<()> {
@@ -208,15 +215,21 @@ impl EncryptionKeyManager {
         let hostname = std::env::var("HOSTNAME")
             .or_else(|_| std::env::var("COMPUTERNAME"))
             .unwrap_or_else(|_| "unknown".to_string());
-        
+
         let mut hasher = DefaultHasher::new();
         hostname.hash(&mut hasher);
-        std::env::var("USER").unwrap_or_else(|_| "user".to_string()).hash(&mut hasher);
-        
+        std::env::var("USER")
+            .unwrap_or_else(|_| "user".to_string())
+            .hash(&mut hasher);
+
         Ok(format!("{:x}", hasher.finish()))
     }
 
-    fn derive_device_key(&self, master_key: &EncryptionKey, device_id: &str) -> CloudSyncResult<EncryptionKey> {
+    fn derive_device_key(
+        &self,
+        master_key: &EncryptionKey,
+        device_id: &str,
+    ) -> CloudSyncResult<EncryptionKey> {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
 
@@ -247,7 +260,7 @@ impl EncryptionKeyManager {
 
     fn generate_rotation_key(&self) -> CloudSyncResult<EncryptionKey> {
         use rand::RngCore;
-        
+
         let mut key_data = vec![0u8; 32];
         rand::thread_rng().fill_bytes(&mut key_data);
 
@@ -282,9 +295,13 @@ impl EncryptionCipher {
         }
     }
 
-    fn encrypt_aes_gcm(&self, data: &[u8], key: &EncryptionKey) -> CloudSyncResult<EncryptionResult> {
+    fn encrypt_aes_gcm(
+        &self,
+        data: &[u8],
+        key: &EncryptionKey,
+    ) -> CloudSyncResult<EncryptionResult> {
         use rand::RngCore;
-        
+
         // Generate random nonce
         let mut nonce = vec![0u8; 12]; // 96-bit nonce for AES-GCM
         rand::thread_rng().fill_bytes(&mut nonce);
@@ -301,14 +318,22 @@ impl EncryptionCipher {
         })
     }
 
-    fn decrypt_aes_gcm(&self, result: &EncryptionResult, key: &EncryptionKey) -> CloudSyncResult<Vec<u8>> {
+    fn decrypt_aes_gcm(
+        &self,
+        result: &EncryptionResult,
+        key: &EncryptionKey,
+    ) -> CloudSyncResult<Vec<u8>> {
         // Simulate AES-GCM decryption (in production, use proper crypto library)
         Ok(self.xor_encrypt(&result.encrypted_data, &key.key_data, &result.nonce))
     }
 
-    fn encrypt_chacha20(&self, data: &[u8], key: &EncryptionKey) -> CloudSyncResult<EncryptionResult> {
+    fn encrypt_chacha20(
+        &self,
+        data: &[u8],
+        key: &EncryptionKey,
+    ) -> CloudSyncResult<EncryptionResult> {
         use rand::RngCore;
-        
+
         let mut nonce = vec![0u8; 12];
         rand::thread_rng().fill_bytes(&mut nonce);
 
@@ -323,13 +348,21 @@ impl EncryptionCipher {
         })
     }
 
-    fn decrypt_chacha20(&self, result: &EncryptionResult, key: &EncryptionKey) -> CloudSyncResult<Vec<u8>> {
+    fn decrypt_chacha20(
+        &self,
+        result: &EncryptionResult,
+        key: &EncryptionKey,
+    ) -> CloudSyncResult<Vec<u8>> {
         Ok(self.xor_encrypt(&result.encrypted_data, &key.key_data, &result.nonce))
     }
 
-    fn encrypt_xchacha20(&self, data: &[u8], key: &EncryptionKey) -> CloudSyncResult<EncryptionResult> {
+    fn encrypt_xchacha20(
+        &self,
+        data: &[u8],
+        key: &EncryptionKey,
+    ) -> CloudSyncResult<EncryptionResult> {
         use rand::RngCore;
-        
+
         let mut nonce = vec![0u8; 24]; // XChaCha20 uses 192-bit nonce
         rand::thread_rng().fill_bytes(&mut nonce);
 
@@ -344,20 +377,24 @@ impl EncryptionCipher {
         })
     }
 
-    fn decrypt_xchacha20(&self, result: &EncryptionResult, key: &EncryptionKey) -> CloudSyncResult<Vec<u8>> {
+    fn decrypt_xchacha20(
+        &self,
+        result: &EncryptionResult,
+        key: &EncryptionKey,
+    ) -> CloudSyncResult<Vec<u8>> {
         Ok(self.xor_encrypt(&result.encrypted_data, &key.key_data, &result.nonce))
     }
 
     /// Simple XOR-based encryption for simulation (NOT for production use)
     fn xor_encrypt(&self, data: &[u8], key: &[u8], nonce: &[u8]) -> Vec<u8> {
         let mut result = Vec::with_capacity(data.len());
-        
+
         for (i, &byte) in data.iter().enumerate() {
             let key_byte = key[i % key.len()];
             let nonce_byte = nonce[i % nonce.len()];
             result.push(byte ^ key_byte ^ nonce_byte);
         }
-        
+
         result
     }
 }

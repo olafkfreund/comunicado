@@ -43,7 +43,9 @@ impl OAuth2Provider {
         if let Some(domain) = email.split('@').nth(1) {
             match domain.to_lowercase().as_str() {
                 "gmail.com" | "googlemail.com" => Some(OAuth2Provider::Gmail),
-                "outlook.com" | "hotmail.com" | "live.com" | "msn.com" => Some(OAuth2Provider::Outlook),
+                "outlook.com" | "hotmail.com" | "live.com" | "msn.com" => {
+                    Some(OAuth2Provider::Outlook)
+                }
                 "yahoo.com" | "ymail.com" | "rocketmail.com" => Some(OAuth2Provider::Yahoo),
                 _ => None,
             }
@@ -76,18 +78,17 @@ impl ProviderConfig {
     /// Create Gmail configuration
     /// Loads credentials from configuration file
     pub fn gmail() -> Self {
-        let (client_id, client_secret) = Self::load_credentials("gmail")
-            .unwrap_or_else(|| {
-                eprintln!("⚠️  Gmail OAuth2 credentials not found!");
-                eprintln!("📁 Create ~/.config/comunicado/oauth2-config.json with your credentials");
-                eprintln!("📖 See oauth2-config-example.json for setup instructions");
-                eprintln!("🔗 Get credentials at: https://console.cloud.google.com/");
-                (
-                    "MISSING_CLIENT_ID".to_string(), 
-                    Some("MISSING_CLIENT_SECRET".to_string())
-                )
-            });
-        
+        let (client_id, client_secret) = Self::load_credentials("gmail").unwrap_or_else(|| {
+            eprintln!("⚠️  Gmail OAuth2 credentials not found!");
+            eprintln!("📁 Create ~/.config/comunicado/oauth2-config.json with your credentials");
+            eprintln!("📖 See oauth2-config-example.json for setup instructions");
+            eprintln!("🔗 Get credentials at: https://console.cloud.google.com/");
+            (
+                "MISSING_CLIENT_ID".to_string(),
+                Some("MISSING_CLIENT_SECRET".to_string()),
+            )
+        });
+
         Self {
             provider: OAuth2Provider::Gmail,
             client_id,
@@ -253,33 +254,37 @@ impl ProviderConfig {
     fn load_credentials(provider: &str) -> Option<(String, Option<String>)> {
         use std::fs;
         use std::path::PathBuf;
-        
+
         // Try multiple config file locations
         let config_paths = vec![
-            PathBuf::from(format!("{}/.config/comunicado/oauth2-config.json", 
-                std::env::var("HOME").unwrap_or_default())),
+            PathBuf::from(format!(
+                "{}/.config/comunicado/oauth2-config.json",
+                std::env::var("HOME").unwrap_or_default()
+            )),
             PathBuf::from("./oauth2-config.json"),
             PathBuf::from("./config/oauth2-config.json"),
         ];
-        
+
         for config_path in config_paths {
             if let Ok(config_content) = fs::read_to_string(&config_path) {
                 if let Ok(config) = serde_json::from_str::<serde_json::Value>(&config_content) {
                     if let Some(provider_config) = config.get(provider) {
-                        let client_id = provider_config.get("client_id")
+                        let client_id = provider_config
+                            .get("client_id")
                             .and_then(|v| v.as_str())
                             .map(|s| s.to_string())?;
-                        
-                        let client_secret = provider_config.get("client_secret")
+
+                        let client_secret = provider_config
+                            .get("client_secret")
                             .and_then(|v| v.as_str())
                             .map(|s| s.to_string());
-                        
+
                         return Some((client_id, client_secret));
                     }
                 }
             }
         }
-        
+
         None
     }
 

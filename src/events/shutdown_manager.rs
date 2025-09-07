@@ -146,7 +146,8 @@ pub struct CleanupTask {
     /// Cleanup priority
     pub priority: ShutdownPriority,
     /// Cleanup function
-    pub cleanup_fn: Box<dyn Fn() -> tokio::task::JoinHandle<Result<(), ShutdownError>> + Send + Sync>,
+    pub cleanup_fn:
+        Box<dyn Fn() -> tokio::task::JoinHandle<Result<(), ShutdownError>> + Send + Sync>,
     /// Resource description
     pub description: String,
     /// Whether task is critical (failure blocks shutdown)
@@ -200,11 +201,15 @@ impl std::fmt::Display for ShutdownError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ShutdownError::Timeout(op) => write!(f, "Timeout during: {}", op),
-            ShutdownError::OperationFailed(op, reason) => write!(f, "Operation '{}' failed: {}", op, reason),
+            ShutdownError::OperationFailed(op, reason) => {
+                write!(f, "Operation '{}' failed: {}", op, reason)
+            }
             ShutdownError::ResourceCleanupFailed(resource, reason) => {
                 write!(f, "Resource '{}' cleanup failed: {}", resource, reason)
             }
-            ShutdownError::HookFailed(hook, reason) => write!(f, "Hook '{}' failed: {}", hook, reason),
+            ShutdownError::HookFailed(hook, reason) => {
+                write!(f, "Hook '{}' failed: {}", hook, reason)
+            }
             ShutdownError::StateSaveFailed(reason) => write!(f, "State save failed: {}", reason),
             ShutdownError::Unexpected(reason) => write!(f, "Unexpected shutdown error: {}", reason),
         }
@@ -242,13 +247,19 @@ impl ShutdownManager {
     /// Register a shutdown hook
     pub async fn register_hook(&self, hook: ShutdownHook) -> Result<(), ShutdownError> {
         let mut hooks = self.hooks.write().await;
-        
+
         if hooks.contains_key(&hook.id) {
-            return Err(ShutdownError::Unexpected(format!("Hook '{}' already registered", hook.id)));
+            return Err(ShutdownError::Unexpected(format!(
+                "Hook '{}' already registered",
+                hook.id
+            )));
         }
 
         if self.config.detailed_logging {
-            info!("Registered shutdown hook: {} (priority: {:?})", hook.id, hook.priority);
+            info!(
+                "Registered shutdown hook: {} (priority: {:?})",
+                hook.id, hook.priority
+            );
         }
 
         hooks.insert(hook.id.clone(), hook);
@@ -258,13 +269,19 @@ impl ShutdownManager {
     /// Register a resource cleanup task
     pub async fn register_cleanup_task(&self, task: CleanupTask) -> Result<(), ShutdownError> {
         let mut registry = self.cleanup_registry.write().await;
-        
+
         if registry.contains_key(&task.id) {
-            return Err(ShutdownError::Unexpected(format!("Cleanup task '{}' already registered", task.id)));
+            return Err(ShutdownError::Unexpected(format!(
+                "Cleanup task '{}' already registered",
+                task.id
+            )));
         }
 
         if self.config.detailed_logging {
-            info!("Registered cleanup task: {} - {}", task.id, task.description);
+            info!(
+                "Registered cleanup task: {} - {}",
+                task.id, task.description
+            );
         }
 
         registry.insert(task.id.clone(), task);
@@ -282,17 +299,25 @@ impl ShutdownManager {
         }
 
         // Acquire permit from operation semaphore to limit concurrent operations
-        let _permit = self.coordinator.operation_semaphore.acquire().await
-            .map_err(|_| ShutdownError::OperationFailed(
-                operation.operation_type.clone(),
-                "Failed to acquire operation permit".to_string(),
-            ))?;
+        let _permit = self
+            .coordinator
+            .operation_semaphore
+            .acquire()
+            .await
+            .map_err(|_| {
+                ShutdownError::OperationFailed(
+                    operation.operation_type.clone(),
+                    "Failed to acquire operation permit".to_string(),
+                )
+            })?;
 
         let operation_id = operation.id;
         let mut active_ops = self.active_operations.write().await;
         active_ops.insert(operation_id, operation);
 
-        self.coordinator.active_operation_count.fetch_add(1, Ordering::AcqRel);
+        self.coordinator
+            .active_operation_count
+            .fetch_add(1, Ordering::AcqRel);
 
         // Note: permit is automatically released when _permit is dropped
         Ok(operation_id)
@@ -302,15 +327,19 @@ impl ShutdownManager {
     pub async fn complete_operation(&self, operation_id: Uuid) {
         let mut active_ops = self.active_operations.write().await;
         if active_ops.remove(&operation_id).is_some() {
-            self.coordinator.active_operation_count.fetch_sub(1, Ordering::AcqRel);
+            self.coordinator
+                .active_operation_count
+                .fetch_sub(1, Ordering::AcqRel);
         }
     }
 
     /// Initiate graceful shutdown
     pub async fn initiate_shutdown(&self) -> Result<(), ShutdownError> {
         // Set shutdown flag
-        self.coordinator.shutdown_requested.store(true, Ordering::Release);
-        
+        self.coordinator
+            .shutdown_requested
+            .store(true, Ordering::Release);
+
         {
             let mut started = self.coordinator.shutdown_started.lock().await;
             *started = Some(Instant::now());
@@ -323,7 +352,9 @@ impl ShutdownManager {
         info!("Graceful shutdown initiated");
 
         // Start shutdown process
-        self.progress_tracker.start_phase(ShutdownPhase::Initialization).await;
+        self.progress_tracker
+            .start_phase(ShutdownPhase::Initialization)
+            .await;
 
         // Execute shutdown sequence with timeout
         match timeout(self.config.graceful_timeout, self.execute_shutdown()).await {
@@ -370,15 +401,19 @@ impl ShutdownManager {
 
         let mut state = self.state.write().await;
         *state = ShutdownState::Terminated;
-        
-        self.progress_tracker.start_phase(ShutdownPhase::Completion).await;
+
+        self.progress_tracker
+            .start_phase(ShutdownPhase::Completion)
+            .await;
         Ok(())
     }
 
     /// Wait for active operations to complete or timeout
     async fn drain_operations(&self) -> Result<(), ShutdownError> {
-        self.progress_tracker.start_phase(ShutdownPhase::OperationDraining).await;
-        
+        self.progress_tracker
+            .start_phase(ShutdownPhase::OperationDraining)
+            .await;
+
         let mut state = self.state.write().await;
         *state = ShutdownState::DrainingOperations;
         drop(state);
@@ -386,22 +421,30 @@ impl ShutdownManager {
         info!("Draining active operations...");
 
         let start_time = Instant::now();
-        
+
         loop {
-            let active_count = self.coordinator.active_operation_count.load(Ordering::Acquire);
-            
+            let active_count = self
+                .coordinator
+                .active_operation_count
+                .load(Ordering::Acquire);
+
             if active_count == 0 {
                 info!("All active operations completed");
-                self.progress_tracker.complete_step("operation_draining".to_string()).await;
+                self.progress_tracker
+                    .complete_step("operation_draining".to_string())
+                    .await;
                 return Ok(());
             }
 
             if start_time.elapsed() > self.config.operation_timeout {
                 let active_ops = self.active_operations.read().await;
                 let remaining_ops: Vec<_> = active_ops.values().collect();
-                
-                warn!("Operation timeout reached, {} operations still active", active_count);
-                
+
+                warn!(
+                    "Operation timeout reached, {} operations still active",
+                    active_count
+                );
+
                 // Try to interrupt interruptible operations
                 for op in &remaining_ops {
                     if op.interruptible {
@@ -424,8 +467,10 @@ impl ShutdownManager {
 
     /// Execute shutdown hooks in priority order
     async fn execute_hooks(&self) -> Result<(), ShutdownError> {
-        self.progress_tracker.start_phase(ShutdownPhase::HookExecution).await;
-        
+        self.progress_tracker
+            .start_phase(ShutdownPhase::HookExecution)
+            .await;
+
         info!("Executing shutdown hooks...");
 
         let hooks = self.hooks.read().await;
@@ -436,9 +481,12 @@ impl ShutdownManager {
 
         for hook in sorted_hooks {
             let hook_start = Instant::now();
-            
+
             if self.config.detailed_logging {
-                info!("Executing shutdown hook: {} (priority: {:?})", hook.id, hook.priority);
+                info!(
+                    "Executing shutdown hook: {} (priority: {:?})",
+                    hook.id, hook.priority
+                );
             }
 
             // Execute hook with timeout
@@ -449,7 +497,9 @@ impl ShutdownManager {
                     if self.config.detailed_logging {
                         info!("Hook '{}' completed in {:?}", hook.id, duration);
                     }
-                    self.progress_tracker.complete_step(format!("hook_{}", hook.id)).await;
+                    self.progress_tracker
+                        .complete_step(format!("hook_{}", hook.id))
+                        .await;
                 }
                 Ok(Ok(Err(e))) => {
                     error!("Hook '{}' failed: {}", hook.id, e);
@@ -463,13 +513,17 @@ impl ShutdownManager {
                     );
                     error!("Hook '{}' join failed: {}", hook.id, join_error);
                     failed_hooks.push((hook.id.clone(), error.clone()));
-                    self.progress_tracker.fail_step(hook.id.clone(), error).await;
+                    self.progress_tracker
+                        .fail_step(hook.id.clone(), error)
+                        .await;
                 }
                 Err(_) => {
                     let error = ShutdownError::Timeout(format!("Hook '{}'", hook.id));
                     error!("Hook '{}' timed out after {:?}", hook.id, hook.timeout);
                     failed_hooks.push((hook.id.clone(), error.clone()));
-                    self.progress_tracker.fail_step(hook.id.clone(), error).await;
+                    self.progress_tracker
+                        .fail_step(hook.id.clone(), error)
+                        .await;
                 }
             }
         }
@@ -485,8 +539,10 @@ impl ShutdownManager {
 
     /// Clean up registered resources
     async fn cleanup_resources(&self) -> Result<(), ShutdownError> {
-        self.progress_tracker.start_phase(ShutdownPhase::ResourceCleanup).await;
-        
+        self.progress_tracker
+            .start_phase(ShutdownPhase::ResourceCleanup)
+            .await;
+
         let mut state = self.state.write().await;
         *state = ShutdownState::Cleanup;
         drop(state);
@@ -495,7 +551,7 @@ impl ShutdownManager {
 
         // Process cleanup tasks sequentially to avoid borrow issues
         let mut _failed_cleanups: Vec<ShutdownError> = Vec::new();
-        
+
         // Get task IDs first
         let task_ids = {
             let registry = self.cleanup_registry.read().await;
@@ -518,19 +574,21 @@ impl ShutdownManager {
                     continue; // Task was removed
                 }
             };
-            
+
             if self.config.detailed_logging {
                 info!("Cleaning up resource: {} - {}", task_id, task_description);
             }
-            
+
             // For now, simulate cleanup with a delay
             // In a real implementation, you would call the actual cleanup function
             tokio::time::sleep(Duration::from_millis(50)).await;
-            
+
             if self.config.detailed_logging {
                 info!("Resource cleanup completed: {}", task_id);
             }
-            self.progress_tracker.complete_step(format!("cleanup_{}", task_id)).await;
+            self.progress_tracker
+                .complete_step(format!("cleanup_{}", task_id))
+                .await;
         }
 
         info!("Resource cleanup completed");
@@ -539,52 +597,64 @@ impl ShutdownManager {
 
     /// Save application state
     async fn save_application_state(&self) -> Result<(), ShutdownError> {
-        self.progress_tracker.start_phase(ShutdownPhase::StatePreservation).await;
-        
+        self.progress_tracker
+            .start_phase(ShutdownPhase::StatePreservation)
+            .await;
+
         info!("Saving application state...");
-        
+
         // This is a placeholder - in a real implementation, you would save:
         // - Configuration state
         // - User preferences
         // - Active session information
         // - Pending operations state
         // - etc.
-        
+
         tokio::time::sleep(Duration::from_millis(100)).await; // Simulate state saving
-        
-        self.progress_tracker.complete_step("state_save".to_string()).await;
+
+        self.progress_tracker
+            .complete_step("state_save".to_string())
+            .await;
         info!("Application state saved");
         Ok(())
     }
 
     /// Flush log buffers
     async fn flush_logs(&self) -> Result<(), ShutdownError> {
-        self.progress_tracker.start_phase(ShutdownPhase::LogFlushing).await;
-        
+        self.progress_tracker
+            .start_phase(ShutdownPhase::LogFlushing)
+            .await;
+
         info!("Flushing log buffers...");
-        
+
         // Flush tracing logs
         // In a real implementation, you would ensure all log buffers are flushed
         tokio::time::sleep(Duration::from_millis(50)).await; // Simulate log flushing
-        
-        self.progress_tracker.complete_step("log_flush".to_string()).await;
+
+        self.progress_tracker
+            .complete_step("log_flush".to_string())
+            .await;
         info!("Log buffers flushed");
         Ok(())
     }
 
     /// Finalize shutdown process
     async fn finalize_shutdown(&self) -> Result<(), ShutdownError> {
-        self.progress_tracker.start_phase(ShutdownPhase::Finalization).await;
-        
+        self.progress_tracker
+            .start_phase(ShutdownPhase::Finalization)
+            .await;
+
         let mut state = self.state.write().await;
         *state = ShutdownState::Finalization;
         drop(state);
 
         info!("Finalizing shutdown...");
-        
+
         // Final cleanup steps
-        self.progress_tracker.complete_step("finalization".to_string()).await;
-        
+        self.progress_tracker
+            .complete_step("finalization".to_string())
+            .await;
+
         info!("Shutdown finalized");
         Ok(())
     }
@@ -592,7 +662,7 @@ impl ShutdownManager {
     /// Force immediate shutdown (emergency termination)
     async fn force_shutdown(&self) {
         error!("Forcing immediate shutdown");
-        
+
         let mut state = self.state.write().await;
         *state = ShutdownState::ForcedTermination;
         drop(state);
@@ -635,7 +705,6 @@ impl Clone for ShutdownManager {
     }
 }
 
-
 impl ShutdownProgressTracker {
     fn new() -> Self {
         Self {
@@ -649,7 +718,7 @@ impl ShutdownProgressTracker {
     async fn start_phase(&self, phase: ShutdownPhase) {
         let mut current = self.current_phase.write().await;
         *current = phase;
-        
+
         let mut timestamps = self.phase_timestamps.write().await;
         timestamps.insert(phase, Instant::now());
     }

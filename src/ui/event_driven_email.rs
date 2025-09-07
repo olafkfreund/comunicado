@@ -3,13 +3,12 @@
 //! This module provides event-driven implementations for email operations,
 //! replacing direct method calls with event publishing to decouple components.
 
-use crate::events::{publish, EventError};
 use crate::events::types::{
-    UIEvent, UIEventData, EmailEvent, EmailEventData,
-    AccountEvent, AccountEventData, SearchScope,
-    UIMode as EventUIMode
+    AccountEvent, AccountEventData, EmailEvent, EmailEventData, SearchScope, UIEvent, UIEventData,
+    UIMode as EventUIMode,
 };
-use crate::ui::{UIMode, FocusedPane};
+use crate::events::{publish, EventError};
+use crate::ui::{FocusedPane, UIMode};
 use uuid::Uuid;
 
 /// Event-driven email operations handler
@@ -29,7 +28,12 @@ impl EventDrivenEmailHandler {
     }
 
     /// Update the current context (account, email, folder)
-    pub fn update_context(&mut self, account_id: Option<String>, email_id: Option<Uuid>, folder: Option<String>) {
+    pub fn update_context(
+        &mut self,
+        account_id: Option<String>,
+        email_id: Option<Uuid>,
+        folder: Option<String>,
+    ) {
         self.current_account_id = account_id;
         self.selected_email_id = email_id;
         self.current_folder = folder;
@@ -46,20 +50,26 @@ impl EventDrivenEmailHandler {
                 account_id: account_id.clone(),
                 email_id: *email_id,
             });
-            
+
             publish(event)?;
-            
+
             // Also publish UI event for immediate feedback
             let ui_event = UIEventData::new(UIEvent::ComponentFocused {
                 component_id: "message_list".to_string(),
             });
             publish(ui_event)?;
-            
-            tracing::info!("Published email deletion event for email {} in account {}", email_id, account_id);
+
+            tracing::info!(
+                "Published email deletion event for email {} in account {}",
+                email_id,
+                account_id
+            );
         } else {
-            return Err(EventError::ProcessingFailed("No email selected for deletion".to_string()));
+            return Err(EventError::ProcessingFailed(
+                "No email selected for deletion".to_string(),
+            ));
         }
-        
+
         Ok(())
     }
 
@@ -74,14 +84,20 @@ impl EventDrivenEmailHandler {
                 account_id: account_id.clone(),
                 email_id: *email_id,
             });
-            
+
             publish(event)?;
-            
-            tracing::info!("Published email archive event for email {} in account {}", email_id, account_id);
+
+            tracing::info!(
+                "Published email archive event for email {} in account {}",
+                email_id,
+                account_id
+            );
         } else {
-            return Err(EventError::ProcessingFailed("No email selected for archiving".to_string()));
+            return Err(EventError::ProcessingFailed(
+                "No email selected for archiving".to_string(),
+            ));
         }
-        
+
         Ok(())
     }
 
@@ -96,14 +112,20 @@ impl EventDrivenEmailHandler {
                 account_id: account_id.clone(),
                 email_id: *email_id,
             });
-            
+
             publish(event)?;
-            
-            tracing::info!("Published email mark read event for email {} in account {}", email_id, account_id);
+
+            tracing::info!(
+                "Published email mark read event for email {} in account {}",
+                email_id,
+                account_id
+            );
         } else {
-            return Err(EventError::ProcessingFailed("No email selected for marking read".to_string()));
+            return Err(EventError::ProcessingFailed(
+                "No email selected for marking read".to_string(),
+            ));
         }
-        
+
         Ok(())
     }
 
@@ -118,14 +140,20 @@ impl EventDrivenEmailHandler {
                 account_id: account_id.clone(),
                 email_id: *email_id,
             });
-            
+
             publish(event)?;
-            
-            tracing::info!("Published email mark unread event for email {} in account {}", email_id, account_id);
+
+            tracing::info!(
+                "Published email mark unread event for email {} in account {}",
+                email_id,
+                account_id
+            );
         } else {
-            return Err(EventError::ProcessingFailed("No email selected for marking unread".to_string()));
+            return Err(EventError::ProcessingFailed(
+                "No email selected for marking unread".to_string(),
+            ));
         }
-        
+
         Ok(())
     }
 
@@ -140,101 +168,122 @@ impl EventDrivenEmailHandler {
                 account_id: account_id.clone(),
                 email_id: *email_id,
             });
-            
+
             publish(event)?;
-            
-            tracing::info!("Published email flag toggle event for email {} in account {}", email_id, account_id);
+
+            tracing::info!(
+                "Published email flag toggle event for email {} in account {}",
+                email_id,
+                account_id
+            );
         } else {
-            return Err(EventError::ProcessingFailed("No email selected for flag toggle".to_string()));
+            return Err(EventError::ProcessingFailed(
+                "No email selected for flag toggle".to_string(),
+            ));
         }
-        
+
         Ok(())
     }
 
     /// Start reply to the currently selected email using events
     pub fn reply_to_current_email(&self) -> Result<(), EventError> {
-        if let (Some(account_id), Some(email_id)) = (
-            &self.current_account_id,
-            &self.selected_email_id,
-        ) {
+        if let (Some(account_id), Some(email_id)) =
+            (&self.current_account_id, &self.selected_email_id)
+        {
             let reply_id = Uuid::new_v4();
             let event = EmailEventData::new(EmailEvent::EmailReplied {
                 original_id: *email_id,
                 reply_id,
             });
-            
+
             publish(event)?;
-            
+
             // Also publish UI mode change event
             let ui_event = UIEventData::new(UIEvent::ModeChanged {
                 from: EventUIMode::Normal,
                 to: EventUIMode::Compose,
             });
             publish(ui_event)?;
-            
-            tracing::info!("Published email reply event for email {} in account {}", email_id, account_id);
+
+            tracing::info!(
+                "Published email reply event for email {} in account {}",
+                email_id,
+                account_id
+            );
         } else {
-            return Err(EventError::ProcessingFailed("No email selected for reply".to_string()));
+            return Err(EventError::ProcessingFailed(
+                "No email selected for reply".to_string(),
+            ));
         }
-        
+
         Ok(())
     }
 
     /// Start reply all to the currently selected email using events
     pub fn reply_all_to_current_email(&self) -> Result<(), EventError> {
-        if let (Some(account_id), Some(email_id)) = (
-            &self.current_account_id,
-            &self.selected_email_id,
-        ) {
+        if let (Some(account_id), Some(email_id)) =
+            (&self.current_account_id, &self.selected_email_id)
+        {
             let reply_id = Uuid::new_v4();
             let event = EmailEventData::new(EmailEvent::EmailReplied {
                 original_id: *email_id,
                 reply_id,
             });
-            
+
             publish(event)?;
-            
+
             // Also publish UI mode change event
             let ui_event = UIEventData::new(UIEvent::ModeChanged {
                 from: EventUIMode::Normal,
                 to: EventUIMode::Compose,
             });
             publish(ui_event)?;
-            
-            tracing::info!("Published email reply all event for email {} in account {}", email_id, account_id);
+
+            tracing::info!(
+                "Published email reply all event for email {} in account {}",
+                email_id,
+                account_id
+            );
         } else {
-            return Err(EventError::ProcessingFailed("No email selected for reply all".to_string()));
+            return Err(EventError::ProcessingFailed(
+                "No email selected for reply all".to_string(),
+            ));
         }
-        
+
         Ok(())
     }
 
     /// Start forward of the currently selected email using events
     pub fn forward_current_email(&self) -> Result<(), EventError> {
-        if let (Some(account_id), Some(email_id)) = (
-            &self.current_account_id,
-            &self.selected_email_id,
-        ) {
+        if let (Some(account_id), Some(email_id)) =
+            (&self.current_account_id, &self.selected_email_id)
+        {
             let forward_id = Uuid::new_v4();
             let event = EmailEventData::new(EmailEvent::EmailForwarded {
                 original_id: *email_id,
                 forward_id,
             });
-            
+
             publish(event)?;
-            
+
             // Also publish UI mode change event
             let ui_event = UIEventData::new(UIEvent::ModeChanged {
                 from: EventUIMode::Normal,
                 to: EventUIMode::Compose,
             });
             publish(ui_event)?;
-            
-            tracing::info!("Published email forward event for email {} in account {}", email_id, account_id);
+
+            tracing::info!(
+                "Published email forward event for email {} in account {}",
+                email_id,
+                account_id
+            );
         } else {
-            return Err(EventError::ProcessingFailed("No email selected for forwarding".to_string()));
+            return Err(EventError::ProcessingFailed(
+                "No email selected for forwarding".to_string(),
+            ));
         }
-        
+
         Ok(())
     }
 
@@ -245,18 +294,24 @@ impl EventDrivenEmailHandler {
                 account_id: account_id.clone(),
                 folder_path: folder_path.clone(),
             });
-            
+
             publish(event)?;
-            
+
             // Update local state
             self.current_folder = Some(folder_path.clone());
             self.selected_email_id = None; // Clear selection when changing folders
-            
-            tracing::info!("Published folder change event to {} in account {}", folder_path, account_id);
+
+            tracing::info!(
+                "Published folder change event to {} in account {}",
+                folder_path,
+                account_id
+            );
         } else {
-            return Err(EventError::ProcessingFailed("No account selected for folder switch".to_string()));
+            return Err(EventError::ProcessingFailed(
+                "No account selected for folder switch".to_string(),
+            ));
         }
-        
+
         Ok(())
     }
 
@@ -266,30 +321,32 @@ impl EventDrivenEmailHandler {
             let event = AccountEventData::new(AccountEvent::AccountSyncStarted {
                 account_id: account_id.clone(),
             });
-            
+
             publish(event)?;
-            
+
             tracing::info!("Published manual sync event for account {}", account_id);
         } else {
-            return Err(EventError::ProcessingFailed("No account selected for sync".to_string()));
+            return Err(EventError::ProcessingFailed(
+                "No account selected for sync".to_string(),
+            ));
         }
-        
+
         Ok(())
     }
 
     /// Handle search operation using events
     pub fn search_emails(&self, query: String, scope: SearchScope) -> Result<(), EventError> {
         let event = EmailEventData::new(EmailEvent::SearchStarted { query, scope });
-        
+
         publish(event)?;
-        
+
         // Also publish UI state change
         let ui_event = UIEventData::new(UIEvent::ModeChanged {
             from: EventUIMode::Normal,
             to: EventUIMode::Search,
         });
         publish(ui_event)?;
-        
+
         tracing::info!("Published email search event");
         Ok(())
     }
@@ -320,7 +377,7 @@ impl EventDrivenUIState {
     /// Change the focused pane using events
     pub fn change_pane(&mut self, new_pane: FocusedPane) -> Result<(), EventError> {
         let old_pane = self.current_pane.clone();
-        
+
         if old_pane != new_pane {
             // Update state
             self.pane_history.push(old_pane.clone());
@@ -328,27 +385,27 @@ impl EventDrivenUIState {
                 self.pane_history.remove(0); // Keep history limited
             }
             self.current_pane = new_pane.clone();
-            
+
             // TODO: Publish event with proper type conversion from UI types to Event types
-            
+
             // tracing::// debug!("Published pane change event from {:?} to {:?}", old_pane, new_pane);
         }
-        
+
         Ok(())
     }
 
     /// Change the UI mode using events
     pub fn change_mode(&mut self, new_mode: UIMode) -> Result<(), EventError> {
         let old_mode = self.current_mode.clone();
-        
+
         if old_mode != new_mode {
             self.current_mode = new_mode.clone();
-            
+
             // TODO: Publish event with proper type conversion from UI types to Event types
-            
+
             // tracing::// debug!("Published mode change event from {:?} to {:?}", old_mode, new_mode);
         }
-        
+
         Ok(())
     }
 
@@ -357,17 +414,17 @@ impl EventDrivenUIState {
         if let Some(previous_pane) = self.pane_history.pop() {
             let _current_pane = self.current_pane.clone();
             self.current_pane = previous_pane.clone();
-            
+
             // TODO: Publish event with proper type conversion
             // let event = UIEventData::new(UIEvent::PaneChanged {
             //     from: convert_ui_to_event_pane(current_pane),
             //     to: convert_ui_to_event_pane(previous_pane),
             // });
             // publish(event)?;
-            
+
             // tracing::// debug!("Published back navigation event to {:?}", previous_pane);
         }
-        
+
         Ok(())
     }
 
@@ -375,7 +432,7 @@ impl EventDrivenUIState {
     pub fn change_theme(&self, theme_name: String) -> Result<(), EventError> {
         let event = UIEventData::new(UIEvent::ThemeChanged { theme_name });
         publish(event)?;
-        
+
         tracing::info!("Published theme change event");
         Ok(())
     }
@@ -384,7 +441,7 @@ impl EventDrivenUIState {
     pub fn handle_window_resize(&self, new_size: (u16, u16)) -> Result<(), EventError> {
         let event = UIEventData::new(UIEvent::WindowResized { new_size });
         publish(event)?;
-        
+
         // tracing::// debug!("Published window resize event: {:?}", new_size);
         Ok(())
     }
@@ -413,10 +470,10 @@ impl EventMigrationHelper {
     pub fn handle_command_action(
         action: &crate::ui::command_palette::CommandAction,
         email_handler: &EventDrivenEmailHandler,
-_ui_state: &mut EventDrivenUIState,
+        _ui_state: &mut EventDrivenUIState,
     ) -> Result<(), EventError> {
         use crate::ui::command_palette::CommandAction;
-        
+
         match action {
             CommandAction::DeleteEmail => {
                 email_handler.delete_current_email()?;
@@ -440,7 +497,7 @@ _ui_state: &mut EventDrivenUIState,
                 email_handler.mark_current_email_unread()?;
             }
             CommandAction::ShowKeyboardShortcuts => {
-                // TODO: Fix type conversion - EventUIMode::Help to UIMode  
+                // TODO: Fix type conversion - EventUIMode::Help to UIMode
                 // ui_state.change_mode(UIMode::Help)?;
             }
             CommandAction::ToggleContacts => {
@@ -456,18 +513,18 @@ _ui_state: &mut EventDrivenUIState,
                 // tracing::// debug!("Command action {:?} not yet migrated to event system", action);
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// Convert legacy keyboard actions to event-driven operations
     pub fn handle_keyboard_action(
         action: &crate::keyboard::KeyboardAction,
         email_handler: &EventDrivenEmailHandler,
-_ui_state: &mut EventDrivenUIState,
+        _ui_state: &mut EventDrivenUIState,
     ) -> Result<(), EventError> {
         use crate::keyboard::KeyboardAction;
-        
+
         match action {
             KeyboardAction::DeleteEmail => {
                 email_handler.delete_current_email()?;
@@ -493,7 +550,7 @@ _ui_state: &mut EventDrivenUIState,
                 // tracing::// debug!("Keyboard action {:?} not yet migrated to event system", action);
             }
         }
-        
+
         Ok(())
     }
 }
@@ -502,45 +559,50 @@ _ui_state: &mut EventDrivenUIState,
 mod tests {
     use super::*;
     use crate::events::initialize_event_bus;
-    
+
     #[test]
     fn test_event_driven_email_handler() {
         let _bus = initialize_event_bus();
-        
+
         let mut handler = EventDrivenEmailHandler::new();
         handler.update_context(
             Some("test_account".to_string()),
             Some(Uuid::new_v4()),
             Some("INBOX".to_string()),
         );
-        
+
         assert!(handler.delete_current_email().is_ok());
         assert!(handler.archive_current_email().is_ok());
     }
-    
+
     #[test]
     fn test_event_driven_ui_state() {
         let _bus = initialize_event_bus();
-        
+
         let mut ui_state = EventDrivenUIState::new();
         assert_eq!(ui_state.current_pane(), &FocusedPane::MessageList);
-        
+
         assert!(ui_state.change_pane(FocusedPane::Calendar).is_ok());
         assert_eq!(ui_state.current_pane(), &FocusedPane::Calendar);
-        
+
         assert!(ui_state.go_back().is_ok());
         assert_eq!(ui_state.current_pane(), &FocusedPane::MessageList);
     }
-    
+
     #[test]
     fn test_migration_helper() {
         let _bus = initialize_event_bus();
-        
+
         let email_handler = EventDrivenEmailHandler::new();
         let mut ui_state = EventDrivenUIState::new();
-        
+
         let action = crate::ui::command_palette::CommandAction::ShowKeyboardShortcuts;
-        assert!(EventMigrationHelper::handle_command_action(&action, &email_handler, &mut ui_state).is_ok());
+        assert!(EventMigrationHelper::handle_command_action(
+            &action,
+            &email_handler,
+            &mut ui_state
+        )
+        .is_ok());
         assert_eq!(ui_state.current_mode(), &UIMode::KeyboardShortcuts);
     }
 }

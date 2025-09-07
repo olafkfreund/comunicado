@@ -15,9 +15,9 @@ pub enum AIError {
     AuthenticationFailure { provider: String },
 
     #[error("Rate limit exceeded for provider: {provider}, retry after: {retry_after:?}")]
-    RateLimitExceeded { 
-        provider: String, 
-        retry_after: Option<std::time::Duration> 
+    RateLimitExceeded {
+        provider: String,
+        retry_after: Option<std::time::Duration>,
     },
 
     #[error("Content was filtered by AI provider: {reason}")]
@@ -28,7 +28,7 @@ pub enum AIError {
 
     #[error("AI configuration error: {message}")]
     ConfigurationError { message: String },
-    
+
     #[error("Configuration error: {0}")]
     Configuration(String),
 
@@ -73,7 +73,10 @@ impl AIError {
     }
 
     /// Create a rate limit exceeded error
-    pub fn rate_limit(provider: impl Into<String>, retry_after: Option<std::time::Duration>) -> Self {
+    pub fn rate_limit(
+        provider: impl Into<String>,
+        retry_after: Option<std::time::Duration>,
+    ) -> Self {
         AIError::RateLimitExceeded {
             provider: provider.into(),
             retry_after,
@@ -205,7 +208,10 @@ impl AIError {
                 "Generate a new API key from provider's dashboard".to_string(),
                 "Run: comunicado config --show to check current settings".to_string(),
             ],
-            AIError::RateLimitExceeded { provider, retry_after } => {
+            AIError::RateLimitExceeded {
+                provider,
+                retry_after,
+            } => {
                 let mut suggestions = vec![
                     format!("Rate limit reached for {}", provider),
                     "Wait before making more requests".to_string(),
@@ -215,7 +221,7 @@ impl AIError {
                 }
                 suggestions.push("Consider upgrading your API plan".to_string());
                 suggestions
-            },
+            }
             AIError::ContentFiltered { .. } => vec![
                 "Try rephrasing your request".to_string(),
                 "Use less sensitive or controversial terms".to_string(),

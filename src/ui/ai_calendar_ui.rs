@@ -1,8 +1,8 @@
 //! AI calendar assistant UI components
 
 use crate::calendar::{
-    AICalendarAssistant, CalendarInsights, EventModificationSuggestions, 
-    MeetingScheduleAnalysis, NaturalLanguageEventRequest, ParsedEventInfo,
+    AICalendarAssistant, CalendarInsights, EventModificationSuggestions, MeetingScheduleAnalysis,
+    NaturalLanguageEventRequest, ParsedEventInfo,
 };
 use crate::theme::Theme;
 use ratatui::{
@@ -185,20 +185,22 @@ impl AICalendarUIState {
     /// Move selection down
     pub fn move_down(&mut self) {
         let max_items = match &self.mode {
-            AICalendarMode::ModifyEvent => {
-                self.modification_suggestions
-                    .as_ref()
-                    .map(|s| s.time_suggestions.len() + s.location_suggestions.len() + 
-                           s.title_suggestions.len() + s.attendee_suggestions.len() + 
-                           s.optimization_tips.len())
-                    .unwrap_or(0)
-            },
-            AICalendarMode::ScheduleMeeting => {
-                self.schedule_analysis
-                    .as_ref()
-                    .map(|a| a.optimal_times.len())
-                    .unwrap_or(0)
-            },
+            AICalendarMode::ModifyEvent => self
+                .modification_suggestions
+                .as_ref()
+                .map(|s| {
+                    s.time_suggestions.len()
+                        + s.location_suggestions.len()
+                        + s.title_suggestions.len()
+                        + s.attendee_suggestions.len()
+                        + s.optimization_tips.len()
+                })
+                .unwrap_or(0),
+            AICalendarMode::ScheduleMeeting => self
+                .schedule_analysis
+                .as_ref()
+                .map(|a| a.optimal_times.len())
+                .unwrap_or(0),
             _ => 0,
         };
 
@@ -213,24 +215,26 @@ impl AICalendarUIState {
         match &self.mode {
             AICalendarMode::ModifyEvent => {
                 if let Some(suggestions) = &self.modification_suggestions {
-                    let all_suggestions: Vec<_> = suggestions.time_suggestions
+                    let all_suggestions: Vec<_> = suggestions
+                        .time_suggestions
                         .iter()
                         .chain(suggestions.location_suggestions.iter())
                         .chain(suggestions.title_suggestions.iter())
                         .chain(suggestions.attendee_suggestions.iter())
                         .chain(suggestions.optimization_tips.iter())
                         .collect();
-                    all_suggestions.get(self.selected_suggestion).map(|s| s.to_string())
+                    all_suggestions
+                        .get(self.selected_suggestion)
+                        .map(|s| s.to_string())
                 } else {
                     None
                 }
-            },
-            AICalendarMode::ScheduleMeeting => {
-                self.schedule_analysis
-                    .as_ref()
-                    .and_then(|a| a.optimal_times.get(self.selected_suggestion))
-                    .map(|time| time.format("%Y-%m-%d %H:%M UTC").to_string())
-            },
+            }
+            AICalendarMode::ScheduleMeeting => self
+                .schedule_analysis
+                .as_ref()
+                .and_then(|a| a.optimal_times.get(self.selected_suggestion))
+                .map(|time| time.format("%Y-%m-%d %H:%M UTC").to_string()),
             _ => None,
         }
     }
@@ -284,22 +288,22 @@ impl AICalendarUI {
         match &state.mode {
             AICalendarMode::CreateEvent => {
                 self.render_create_event(frame, area, state, theme, block);
-            },
+            }
             AICalendarMode::ModifyEvent => {
                 self.render_modify_event(frame, area, state, theme, block);
-            },
+            }
             AICalendarMode::ScheduleMeeting => {
                 self.render_schedule_meeting(frame, area, state, theme, block);
-            },
+            }
             AICalendarMode::Insights => {
                 self.render_calendar_insights(frame, area, state, theme, block);
-            },
+            }
             AICalendarMode::QuickSchedule => {
                 self.render_quick_schedule(frame, area, state, theme, block);
-            },
+            }
             AICalendarMode::Hidden => {
                 // Already handled above
-            },
+            }
         }
     }
 
@@ -313,7 +317,13 @@ impl AICalendarUI {
         block: Block,
     ) {
         if state.loading {
-            self.render_loading(frame, area, theme, block, "Creating event from natural language...");
+            self.render_loading(
+                frame,
+                area,
+                theme,
+                block,
+                "Creating event from natural language...",
+            );
             return;
         }
 
@@ -344,14 +354,20 @@ impl AICalendarUI {
 
         // Input area
         let input_style = if state.input_mode {
-            Style::default().fg(theme.ai_assistant_selected()).add_modifier(Modifier::BOLD)
+            Style::default()
+                .fg(theme.ai_assistant_selected())
+                .add_modifier(Modifier::BOLD)
         } else {
             Style::default().fg(theme.ai_assistant_text())
         };
 
         let input_widget = Paragraph::new(state.input_text.as_str())
             .style(input_style)
-            .block(Block::default().title("Describe your event").borders(Borders::ALL))
+            .block(
+                Block::default()
+                    .title("Describe your event")
+                    .borders(Borders::ALL),
+            )
             .wrap(Wrap { trim: true });
         frame.render_widget(input_widget, chunks[1]);
 
@@ -400,7 +416,13 @@ impl AICalendarUI {
         let suggestions = match &state.modification_suggestions {
             Some(suggestions) => suggestions,
             None => {
-                self.render_error(frame, area, theme, block, "No modification suggestions available");
+                self.render_error(
+                    frame,
+                    area,
+                    theme,
+                    block,
+                    "No modification suggestions available",
+                );
                 return;
             }
         };
@@ -429,13 +451,18 @@ impl AICalendarUI {
 
         // Add time suggestions
         if !suggestions.time_suggestions.is_empty() {
-            items.push(ListItem::new(Line::from(vec![
-                Span::styled("Time Suggestions:", Style::default().fg(theme.ai_assistant_section()).add_modifier(Modifier::BOLD))
-            ])));
-            
+            items.push(ListItem::new(Line::from(vec![Span::styled(
+                "Time Suggestions:",
+                Style::default()
+                    .fg(theme.ai_assistant_section())
+                    .add_modifier(Modifier::BOLD),
+            )])));
+
             for suggestion in &suggestions.time_suggestions {
                 let style = if current_index == state.selected_suggestion {
-                    Style::default().fg(theme.ai_assistant_selected()).add_modifier(Modifier::BOLD)
+                    Style::default()
+                        .fg(theme.ai_assistant_selected())
+                        .add_modifier(Modifier::BOLD)
                 } else {
                     Style::default().fg(theme.ai_assistant_text())
                 };
@@ -446,13 +473,18 @@ impl AICalendarUI {
 
         // Add location suggestions
         if !suggestions.location_suggestions.is_empty() {
-            items.push(ListItem::new(Line::from(vec![
-                Span::styled("Location Suggestions:", Style::default().fg(theme.ai_assistant_section()).add_modifier(Modifier::BOLD))
-            ])));
-            
+            items.push(ListItem::new(Line::from(vec![Span::styled(
+                "Location Suggestions:",
+                Style::default()
+                    .fg(theme.ai_assistant_section())
+                    .add_modifier(Modifier::BOLD),
+            )])));
+
             for suggestion in &suggestions.location_suggestions {
                 let style = if current_index == state.selected_suggestion {
-                    Style::default().fg(theme.ai_assistant_selected()).add_modifier(Modifier::BOLD)
+                    Style::default()
+                        .fg(theme.ai_assistant_selected())
+                        .add_modifier(Modifier::BOLD)
                 } else {
                     Style::default().fg(theme.ai_assistant_text())
                 };
@@ -463,13 +495,18 @@ impl AICalendarUI {
 
         // Add optimization tips
         if !suggestions.optimization_tips.is_empty() {
-            items.push(ListItem::new(Line::from(vec![
-                Span::styled("Optimization Tips:", Style::default().fg(theme.ai_assistant_section()).add_modifier(Modifier::BOLD))
-            ])));
-            
+            items.push(ListItem::new(Line::from(vec![Span::styled(
+                "Optimization Tips:",
+                Style::default()
+                    .fg(theme.ai_assistant_section())
+                    .add_modifier(Modifier::BOLD),
+            )])));
+
             for tip in &suggestions.optimization_tips {
                 let style = if current_index == state.selected_suggestion {
-                    Style::default().fg(theme.ai_assistant_selected()).add_modifier(Modifier::BOLD)
+                    Style::default()
+                        .fg(theme.ai_assistant_selected())
+                        .add_modifier(Modifier::BOLD)
                 } else {
                     Style::default().fg(theme.ai_assistant_text())
                 };
@@ -478,9 +515,8 @@ impl AICalendarUI {
             }
         }
 
-        let list = List::new(items)
-            .style(Style::default().fg(theme.ai_assistant_text()));
-        
+        let list = List::new(items).style(Style::default().fg(theme.ai_assistant_text()));
+
         frame.render_stateful_widget(list, chunks[1], &mut state.list_state.clone());
 
         // Instructions
@@ -500,7 +536,13 @@ impl AICalendarUI {
         block: Block,
     ) {
         if state.loading {
-            self.render_loading(frame, area, theme, block, "Analyzing optimal meeting times...");
+            self.render_loading(
+                frame,
+                area,
+                theme,
+                block,
+                "Analyzing optimal meeting times...",
+            );
             return;
         }
 
@@ -537,35 +579,41 @@ impl AICalendarUI {
         frame.render_widget(title, chunks[0]);
 
         // Optimal times
-        let time_items: Vec<ListItem> = analysis.optimal_times
+        let time_items: Vec<ListItem> = analysis
+            .optimal_times
             .iter()
             .enumerate()
             .map(|(i, time)| {
                 let style = if i == state.selected_suggestion {
-                    Style::default().fg(theme.ai_assistant_selected()).add_modifier(Modifier::BOLD)
+                    Style::default()
+                        .fg(theme.ai_assistant_selected())
+                        .add_modifier(Modifier::BOLD)
                 } else {
                     Style::default().fg(theme.ai_assistant_text())
                 };
-                
-                ListItem::new(format!("• {}", time.format("%A, %B %d at %H:%M UTC")))
-                    .style(style)
+
+                ListItem::new(format!("• {}", time.format("%A, %B %d at %H:%M UTC"))).style(style)
             })
             .collect();
 
         let times_list = List::new(time_items)
             .style(Style::default().fg(theme.ai_assistant_text()))
-            .block(Block::default().title("Optimal Meeting Times").borders(Borders::ALL));
-        
+            .block(
+                Block::default()
+                    .title("Optimal Meeting Times")
+                    .borders(Borders::ALL),
+            );
+
         frame.render_stateful_widget(times_list, chunks[1], &mut state.list_state.clone());
 
         // Recommendations
         let mut recommendations = Vec::new();
         recommendations.push(format!("Duration: {} minutes", analysis.suggested_duration));
-        
+
         if let Some(location) = &analysis.location_recommendation {
             recommendations.push(format!("Location: {}", location));
         }
-        
+
         if let Some(prep_time) = analysis.preparation_time {
             recommendations.push(format!("Preparation time: {} minutes", prep_time));
         }
@@ -573,14 +621,19 @@ impl AICalendarUI {
         let recommendations_text = recommendations.join(" • ");
         let recommendations_widget = Paragraph::new(recommendations_text)
             .style(Style::default().fg(theme.ai_assistant_context()))
-            .block(Block::default().title("Recommendations").borders(Borders::ALL))
+            .block(
+                Block::default()
+                    .title("Recommendations")
+                    .borders(Borders::ALL),
+            )
             .wrap(Wrap { trim: true });
         frame.render_widget(recommendations_widget, chunks[2]);
 
         // Instructions
-        let instructions = Paragraph::new("↑/↓: Select time • Enter: Schedule meeting • Esc: Close")
-            .style(Style::default().fg(theme.ai_assistant_help()))
-            .alignment(Alignment::Center);
+        let instructions =
+            Paragraph::new("↑/↓: Select time • Enter: Schedule meeting • Esc: Close")
+                .style(Style::default().fg(theme.ai_assistant_help()))
+                .alignment(Alignment::Center);
         frame.render_widget(instructions, chunks[3]);
     }
 
@@ -639,7 +692,11 @@ impl AICalendarUI {
         };
         let patterns_widget = Paragraph::new(format!("• {}", patterns_text))
             .style(Style::default().fg(theme.ai_assistant_text()))
-            .block(Block::default().title("Meeting Patterns").borders(Borders::ALL))
+            .block(
+                Block::default()
+                    .title("Meeting Patterns")
+                    .borders(Borders::ALL),
+            )
             .wrap(Wrap { trim: true });
         frame.render_widget(patterns_widget, chunks[1]);
 
@@ -651,7 +708,11 @@ impl AICalendarUI {
         };
         let productivity_widget = Paragraph::new(format!("• {}", productivity_text))
             .style(Style::default().fg(theme.ai_assistant_text()))
-            .block(Block::default().title("Productivity Insights").borders(Borders::ALL))
+            .block(
+                Block::default()
+                    .title("Productivity Insights")
+                    .borders(Borders::ALL),
+            )
             .wrap(Wrap { trim: true });
         frame.render_widget(productivity_widget, chunks[2]);
 
@@ -663,7 +724,11 @@ impl AICalendarUI {
         };
         let focus_widget = Paragraph::new(format!("• {}", focus_text))
             .style(Style::default().fg(theme.ai_assistant_text()))
-            .block(Block::default().title("Focus Time Recommendations").borders(Borders::ALL))
+            .block(
+                Block::default()
+                    .title("Focus Time Recommendations")
+                    .borders(Borders::ALL),
+            )
             .wrap(Wrap { trim: true });
         frame.render_widget(focus_widget, chunks[3]);
 
@@ -788,9 +853,12 @@ mod tests {
     fn test_natural_language_request_creation() {
         let mut state = AICalendarUIState::new();
         state.input_text = "Team meeting tomorrow at 2 PM".to_string();
-        
+
         let request = state.get_event_request();
         assert!(request.is_some());
-        assert_eq!(request.unwrap().description, "Team meeting tomorrow at 2 PM");
+        assert_eq!(
+            request.unwrap().description,
+            "Team meeting tomorrow at 2 PM"
+        );
     }
 }

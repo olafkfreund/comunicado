@@ -1,5 +1,5 @@
 //! Core data types for the notes plugin
-//! 
+//!
 //! This module defines the fundamental data structures used throughout the notes system,
 //! including Note, NoteFrontmatter, WikiLink, and related types.
 
@@ -80,7 +80,8 @@ impl Note {
     /// Get the note's display name (title or filename)
     pub fn display_name(&self) -> &str {
         if self.title.is_empty() {
-            self.path.file_stem()
+            self.path
+                .file_stem()
                 .and_then(|s| s.to_str())
                 .unwrap_or("Untitled")
         } else {
@@ -95,7 +96,10 @@ impl Note {
 
     /// Get all outgoing wiki links from this note
     pub fn outgoing_links(&self) -> Vec<&WikiLink> {
-        self.links.iter().filter(|link| link.source_note_id == self.id).collect()
+        self.links
+            .iter()
+            .filter(|link| link.source_note_id == self.id)
+            .collect()
     }
 }
 
@@ -503,10 +507,10 @@ mod tests {
         );
 
         let original_modified = note.modified_at;
-        
+
         // Small delay to ensure timestamp changes
         std::thread::sleep(std::time::Duration::from_millis(1));
-        
+
         note.update_content("Updated content".to_string());
 
         assert_eq!(note.content, "Updated content");
@@ -523,9 +527,9 @@ mod tests {
         );
 
         assert!(!note.is_deleted);
-        
+
         note.mark_deleted();
-        
+
         assert!(note.is_deleted);
     }
 
@@ -570,7 +574,7 @@ mod tests {
     #[test]
     fn test_frontmatter_creation() {
         let frontmatter = NoteFrontmatter::new();
-        
+
         assert!(frontmatter.title.is_none());
         assert!(frontmatter.tags.is_empty());
         assert!(frontmatter.date.is_none());
@@ -582,7 +586,7 @@ mod tests {
     #[test]
     fn test_frontmatter_with_title() {
         let frontmatter = NoteFrontmatter::with_title("My Note".to_string());
-        
+
         assert_eq!(frontmatter.title, Some("My Note".to_string()));
         assert!(frontmatter.tags.is_empty());
     }
@@ -590,11 +594,11 @@ mod tests {
     #[test]
     fn test_frontmatter_add_tags() {
         let mut frontmatter = NoteFrontmatter::new();
-        
+
         frontmatter.add_tag("rust".to_string());
         frontmatter.add_tag("programming".to_string());
         frontmatter.add_tag("rust".to_string()); // Duplicate should be ignored
-        
+
         assert_eq!(frontmatter.tags.len(), 2);
         assert!(frontmatter.tags.contains(&"rust".to_string()));
         assert!(frontmatter.tags.contains(&"programming".to_string()));
@@ -603,15 +607,15 @@ mod tests {
     #[test]
     fn test_frontmatter_metadata() {
         let mut frontmatter = NoteFrontmatter::new();
-        
+
         frontmatter.set_metadata(
             "custom_field".to_string(),
             serde_yaml::Value::String("custom_value".to_string()),
         );
-        
+
         let value = frontmatter.get_metadata("custom_field");
         assert!(value.is_some());
-        
+
         if let Some(serde_yaml::Value::String(s)) = value {
             assert_eq!(s, "custom_value");
         } else {
@@ -704,7 +708,7 @@ mod tests {
     #[test]
     fn test_notes_config_default() {
         let config = NotesConfig::default();
-        
+
         assert_eq!(config.max_search_results, 100);
         assert!(config.auto_index);
         assert!(config.vim_mode);
@@ -714,10 +718,7 @@ mod tests {
 
     #[test]
     fn test_watched_directory_creation() {
-        let dir = WatchedDirectory::new(
-            PathBuf::from("/home/user/notes"),
-            "My Notes".to_string(),
-        );
+        let dir = WatchedDirectory::new(PathBuf::from("/home/user/notes"), "My Notes".to_string());
 
         assert_eq!(dir.path, Path::new("/home/user/notes"));
         assert_eq!(dir.name, "My Notes");
@@ -729,10 +730,8 @@ mod tests {
 
     #[test]
     fn test_watched_directory_mark_scanned() {
-        let mut dir = WatchedDirectory::new(
-            PathBuf::from("/home/user/notes"),
-            "My Notes".to_string(),
-        );
+        let mut dir =
+            WatchedDirectory::new(PathBuf::from("/home/user/notes"), "My Notes".to_string());
 
         assert!(dir.last_scan.is_none());
         assert_eq!(dir.note_count, 0);
@@ -748,22 +747,19 @@ mod tests {
         assert!(glob_match("*.md", "test.md"));
         assert!(glob_match("*.md", "document.md"));
         assert!(!glob_match("*.md", "test.txt"));
-        
+
         assert!(glob_match("test*", "test.md"));
         assert!(glob_match("test*", "testing"));
         assert!(!glob_match("test*", "example.md"));
-        
+
         assert!(glob_match("exact", "exact"));
         assert!(!glob_match("exact", "inexact"));
     }
 
     #[test]
     fn test_watched_directory_should_ignore() {
-        let mut dir = WatchedDirectory::new(
-            PathBuf::from("/test"),
-            "Test".to_string(),
-        );
-        
+        let mut dir = WatchedDirectory::new(PathBuf::from("/test"), "Test".to_string());
+
         dir.ignore_patterns = vec!["*.tmp".to_string(), ".git/*".to_string()];
 
         assert!(dir.should_ignore("temp.tmp"));

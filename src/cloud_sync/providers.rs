@@ -20,31 +20,31 @@ pub enum CloudProviderType {
 pub trait CloudProvider: Send + Sync {
     /// Authenticate with the cloud provider
     async fn authenticate(&mut self) -> CloudSyncResult<()>;
-    
+
     /// Upload file to cloud storage
     async fn upload(&self, path: &str, data: &[u8]) -> CloudSyncResult<()>;
-    
+
     /// Download file from cloud storage
     async fn download(&self, path: &str) -> CloudSyncResult<Vec<u8>>;
-    
+
     /// List files matching pattern
     async fn list_files(&self, pattern: &str) -> CloudSyncResult<Vec<String>>;
-    
+
     /// Delete file from cloud storage
     async fn delete(&self, path: &str) -> CloudSyncResult<()>;
-    
+
     /// Check if file exists
     async fn exists(&self, path: &str) -> CloudSyncResult<bool>;
-    
+
     /// Get file metadata
     async fn metadata(&self, path: &str) -> CloudSyncResult<FileMetadata>;
-    
+
     /// Get storage quota information
     async fn quota(&self) -> CloudSyncResult<QuotaInfo>;
-    
+
     /// Check if provider supports real-time synchronization
     fn supports_real_time(&self) -> bool;
-    
+
     /// Get provider-specific capabilities
     fn capabilities(&self) -> ProviderCapabilities;
 }
@@ -106,24 +106,32 @@ impl CloudProvider for DropboxProvider {
         // Implementation would handle OAuth flow
         // For now, assume token is provided via environment or config
         self.access_token = std::env::var("DROPBOX_ACCESS_TOKEN").ok();
-        
+
         if self.access_token.is_none() {
-            return Err(CloudSyncError::Authentication("Dropbox token not found".to_string()));
+            return Err(CloudSyncError::Authentication(
+                "Dropbox token not found".to_string(),
+            ));
         }
-        
+
         Ok(())
     }
 
     async fn upload(&self, path: &str, data: &[u8]) -> CloudSyncResult<()> {
-        let token = self.access_token.as_ref()
+        let token = self
+            .access_token
+            .as_ref()
             .ok_or_else(|| CloudSyncError::Authentication("Not authenticated".to_string()))?;
 
         let url = self.content_api_url("/files/upload");
-        
-        let response = self.client
+
+        let response = self
+            .client
             .post(&url)
             .header("Authorization", format!("Bearer {}", token))
-            .header("Dropbox-API-Arg", format!(r#"{{"path": "/comunicado/{}", "mode": "overwrite"}}"#, path))
+            .header(
+                "Dropbox-API-Arg",
+                format!(r#"{{"path": "/comunicado/{}", "mode": "overwrite"}}"#, path),
+            )
             .header("Content-Type", "application/octet-stream")
             .body(data.to_vec())
             .send()
@@ -131,7 +139,9 @@ impl CloudProvider for DropboxProvider {
             .map_err(|e| CloudSyncError::Network(e.to_string()))?;
 
         if !response.status().is_success() {
-            let error_text = response.text().await
+            let error_text = response
+                .text()
+                .await
                 .unwrap_or_else(|_| "Unknown error".to_string());
             return Err(CloudSyncError::Provider(error_text));
         }
@@ -140,15 +150,21 @@ impl CloudProvider for DropboxProvider {
     }
 
     async fn download(&self, path: &str) -> CloudSyncResult<Vec<u8>> {
-        let token = self.access_token.as_ref()
+        let token = self
+            .access_token
+            .as_ref()
             .ok_or_else(|| CloudSyncError::Authentication("Not authenticated".to_string()))?;
 
         let url = self.content_api_url("/files/download");
-        
-        let response = self.client
+
+        let response = self
+            .client
             .post(&url)
             .header("Authorization", format!("Bearer {}", token))
-            .header("Dropbox-API-Arg", format!(r#"{{"path": "/comunicado/{}"}}"#, path))
+            .header(
+                "Dropbox-API-Arg",
+                format!(r#"{{"path": "/comunicado/{}"}}"#, path),
+            )
             .send()
             .await
             .map_err(|e| CloudSyncError::Network(e.to_string()))?;
@@ -157,29 +173,36 @@ impl CloudProvider for DropboxProvider {
             if response.status().as_u16() == 404 {
                 return Err(CloudSyncError::FileNotFound(path.to_string()));
             }
-            let error_text = response.text().await
+            let error_text = response
+                .text()
+                .await
                 .unwrap_or_else(|_| "Unknown error".to_string());
             return Err(CloudSyncError::Provider(error_text));
         }
 
-        let data = response.bytes().await
+        let data = response
+            .bytes()
+            .await
             .map_err(|e| CloudSyncError::Network(e.to_string()))?;
-        
+
         Ok(data.to_vec())
     }
 
     async fn list_files(&self, pattern: &str) -> CloudSyncResult<Vec<String>> {
-        let token = self.access_token.as_ref()
+        let token = self
+            .access_token
+            .as_ref()
             .ok_or_else(|| CloudSyncError::Authentication("Not authenticated".to_string()))?;
 
         let url = self.api_url("/files/list_folder");
-        
+
         let payload = serde_json::json!({
             "path": format!("/comunicado/{}", pattern.trim_end_matches('*')),
             "recursive": true
         });
 
-        let response = self.client
+        let response = self
+            .client
             .post(&url)
             .header("Authorization", format!("Bearer {}", token))
             .header("Content-Type", "application/json")
@@ -189,7 +212,9 @@ impl CloudProvider for DropboxProvider {
             .map_err(|e| CloudSyncError::Network(e.to_string()))?;
 
         if !response.status().is_success() {
-            let error_text = response.text().await
+            let error_text = response
+                .text()
+                .await
                 .unwrap_or_else(|_| "Unknown error".to_string());
             return Err(CloudSyncError::Provider(error_text));
         }
@@ -200,16 +225,19 @@ impl CloudProvider for DropboxProvider {
     }
 
     async fn delete(&self, path: &str) -> CloudSyncResult<()> {
-        let token = self.access_token.as_ref()
+        let token = self
+            .access_token
+            .as_ref()
             .ok_or_else(|| CloudSyncError::Authentication("Not authenticated".to_string()))?;
 
         let url = self.api_url("/files/delete_v2");
-        
+
         let payload = serde_json::json!({
             "path": format!("/comunicado/{}", path)
         });
 
-        let response = self.client
+        let response = self
+            .client
             .post(&url)
             .header("Authorization", format!("Bearer {}", token))
             .header("Content-Type", "application/json")
@@ -219,7 +247,9 @@ impl CloudProvider for DropboxProvider {
             .map_err(|e| CloudSyncError::Network(e.to_string()))?;
 
         if !response.status().is_success() {
-            let error_text = response.text().await
+            let error_text = response
+                .text()
+                .await
                 .unwrap_or_else(|_| "Unknown error".to_string());
             return Err(CloudSyncError::Provider(error_text));
         }
@@ -236,16 +266,19 @@ impl CloudProvider for DropboxProvider {
     }
 
     async fn metadata(&self, path: &str) -> CloudSyncResult<FileMetadata> {
-        let token = self.access_token.as_ref()
+        let token = self
+            .access_token
+            .as_ref()
             .ok_or_else(|| CloudSyncError::Authentication("Not authenticated".to_string()))?;
 
         let url = self.api_url("/files/get_metadata");
-        
+
         let payload = serde_json::json!({
             "path": format!("/comunicado/{}", path)
         });
 
-        let response = self.client
+        let response = self
+            .client
             .post(&url)
             .header("Authorization", format!("Bearer {}", token))
             .header("Content-Type", "application/json")
@@ -258,7 +291,9 @@ impl CloudProvider for DropboxProvider {
             if response.status().as_u16() == 404 {
                 return Err(CloudSyncError::FileNotFound(path.to_string()));
             }
-            let error_text = response.text().await
+            let error_text = response
+                .text()
+                .await
                 .unwrap_or_else(|_| "Unknown error".to_string());
             return Err(CloudSyncError::Provider(error_text));
         }
@@ -275,12 +310,15 @@ impl CloudProvider for DropboxProvider {
     }
 
     async fn quota(&self) -> CloudSyncResult<QuotaInfo> {
-        let token = self.access_token.as_ref()
+        let token = self
+            .access_token
+            .as_ref()
             .ok_or_else(|| CloudSyncError::Authentication("Not authenticated".to_string()))?;
 
         let url = self.api_url("/users/get_space_usage");
 
-        let response = self.client
+        let response = self
+            .client
             .post(&url)
             .header("Authorization", format!("Bearer {}", token))
             .header("Content-Type", "application/json")
@@ -289,7 +327,9 @@ impl CloudProvider for DropboxProvider {
             .map_err(|e| CloudSyncError::Network(e.to_string()))?;
 
         if !response.status().is_success() {
-            let error_text = response.text().await
+            let error_text = response
+                .text()
+                .await
                 .unwrap_or_else(|_| "Unknown error".to_string());
             return Err(CloudSyncError::Provider(error_text));
         }
@@ -338,11 +378,13 @@ impl GoogleDriveProvider {
 impl CloudProvider for GoogleDriveProvider {
     async fn authenticate(&mut self) -> CloudSyncResult<()> {
         self.access_token = std::env::var("GOOGLE_ACCESS_TOKEN").ok();
-        
+
         if self.access_token.is_none() {
-            return Err(CloudSyncError::Authentication("Google Drive token not found".to_string()));
+            return Err(CloudSyncError::Authentication(
+                "Google Drive token not found".to_string(),
+            ));
         }
-        
+
         Ok(())
     }
 
@@ -427,13 +469,25 @@ impl WebDAVProvider {
 // Basic implementations for other providers would follow similar patterns
 #[async_trait]
 impl CloudProvider for OneDriveProvider {
-    async fn authenticate(&mut self) -> CloudSyncResult<()> { Ok(()) }
-    async fn upload(&self, _path: &str, _data: &[u8]) -> CloudSyncResult<()> { Ok(()) }
-    async fn download(&self, _path: &str) -> CloudSyncResult<Vec<u8>> { Ok(vec![]) }
-    async fn list_files(&self, _pattern: &str) -> CloudSyncResult<Vec<String>> { Ok(vec![]) }
-    async fn delete(&self, _path: &str) -> CloudSyncResult<()> { Ok(()) }
-    async fn exists(&self, _path: &str) -> CloudSyncResult<bool> { Ok(false) }
-    async fn metadata(&self, path: &str) -> CloudSyncResult<FileMetadata> { 
+    async fn authenticate(&mut self) -> CloudSyncResult<()> {
+        Ok(())
+    }
+    async fn upload(&self, _path: &str, _data: &[u8]) -> CloudSyncResult<()> {
+        Ok(())
+    }
+    async fn download(&self, _path: &str) -> CloudSyncResult<Vec<u8>> {
+        Ok(vec![])
+    }
+    async fn list_files(&self, _pattern: &str) -> CloudSyncResult<Vec<String>> {
+        Ok(vec![])
+    }
+    async fn delete(&self, _path: &str) -> CloudSyncResult<()> {
+        Ok(())
+    }
+    async fn exists(&self, _path: &str) -> CloudSyncResult<bool> {
+        Ok(false)
+    }
+    async fn metadata(&self, path: &str) -> CloudSyncResult<FileMetadata> {
         Ok(FileMetadata {
             path: path.to_string(),
             size: 0,
@@ -442,11 +496,17 @@ impl CloudProvider for OneDriveProvider {
             content_hash: None,
         })
     }
-    async fn quota(&self) -> CloudSyncResult<QuotaInfo> { 
-        Ok(QuotaInfo { total_bytes: 0, used_bytes: 0, available_bytes: 0 })
+    async fn quota(&self) -> CloudSyncResult<QuotaInfo> {
+        Ok(QuotaInfo {
+            total_bytes: 0,
+            used_bytes: 0,
+            available_bytes: 0,
+        })
     }
-    fn supports_real_time(&self) -> bool { false }
-    fn capabilities(&self) -> ProviderCapabilities { 
+    fn supports_real_time(&self) -> bool {
+        false
+    }
+    fn capabilities(&self) -> ProviderCapabilities {
         ProviderCapabilities {
             max_file_size: 0,
             supports_versioning: false,
@@ -459,13 +519,25 @@ impl CloudProvider for OneDriveProvider {
 
 #[async_trait]
 impl CloudProvider for S3Provider {
-    async fn authenticate(&mut self) -> CloudSyncResult<()> { Ok(()) }
-    async fn upload(&self, _path: &str, _data: &[u8]) -> CloudSyncResult<()> { Ok(()) }
-    async fn download(&self, _path: &str) -> CloudSyncResult<Vec<u8>> { Ok(vec![]) }
-    async fn list_files(&self, _pattern: &str) -> CloudSyncResult<Vec<String>> { Ok(vec![]) }
-    async fn delete(&self, _path: &str) -> CloudSyncResult<()> { Ok(()) }
-    async fn exists(&self, _path: &str) -> CloudSyncResult<bool> { Ok(false) }
-    async fn metadata(&self, path: &str) -> CloudSyncResult<FileMetadata> { 
+    async fn authenticate(&mut self) -> CloudSyncResult<()> {
+        Ok(())
+    }
+    async fn upload(&self, _path: &str, _data: &[u8]) -> CloudSyncResult<()> {
+        Ok(())
+    }
+    async fn download(&self, _path: &str) -> CloudSyncResult<Vec<u8>> {
+        Ok(vec![])
+    }
+    async fn list_files(&self, _pattern: &str) -> CloudSyncResult<Vec<String>> {
+        Ok(vec![])
+    }
+    async fn delete(&self, _path: &str) -> CloudSyncResult<()> {
+        Ok(())
+    }
+    async fn exists(&self, _path: &str) -> CloudSyncResult<bool> {
+        Ok(false)
+    }
+    async fn metadata(&self, path: &str) -> CloudSyncResult<FileMetadata> {
         Ok(FileMetadata {
             path: path.to_string(),
             size: 0,
@@ -474,11 +546,17 @@ impl CloudProvider for S3Provider {
             content_hash: None,
         })
     }
-    async fn quota(&self) -> CloudSyncResult<QuotaInfo> { 
-        Ok(QuotaInfo { total_bytes: 0, used_bytes: 0, available_bytes: 0 })
+    async fn quota(&self) -> CloudSyncResult<QuotaInfo> {
+        Ok(QuotaInfo {
+            total_bytes: 0,
+            used_bytes: 0,
+            available_bytes: 0,
+        })
     }
-    fn supports_real_time(&self) -> bool { false }
-    fn capabilities(&self) -> ProviderCapabilities { 
+    fn supports_real_time(&self) -> bool {
+        false
+    }
+    fn capabilities(&self) -> ProviderCapabilities {
         ProviderCapabilities {
             max_file_size: 0,
             supports_versioning: false,
@@ -491,13 +569,25 @@ impl CloudProvider for S3Provider {
 
 #[async_trait]
 impl CloudProvider for WebDAVProvider {
-    async fn authenticate(&mut self) -> CloudSyncResult<()> { Ok(()) }
-    async fn upload(&self, _path: &str, _data: &[u8]) -> CloudSyncResult<()> { Ok(()) }
-    async fn download(&self, _path: &str) -> CloudSyncResult<Vec<u8>> { Ok(vec![]) }
-    async fn list_files(&self, _pattern: &str) -> CloudSyncResult<Vec<String>> { Ok(vec![]) }
-    async fn delete(&self, _path: &str) -> CloudSyncResult<()> { Ok(()) }
-    async fn exists(&self, _path: &str) -> CloudSyncResult<bool> { Ok(false) }
-    async fn metadata(&self, path: &str) -> CloudSyncResult<FileMetadata> { 
+    async fn authenticate(&mut self) -> CloudSyncResult<()> {
+        Ok(())
+    }
+    async fn upload(&self, _path: &str, _data: &[u8]) -> CloudSyncResult<()> {
+        Ok(())
+    }
+    async fn download(&self, _path: &str) -> CloudSyncResult<Vec<u8>> {
+        Ok(vec![])
+    }
+    async fn list_files(&self, _pattern: &str) -> CloudSyncResult<Vec<String>> {
+        Ok(vec![])
+    }
+    async fn delete(&self, _path: &str) -> CloudSyncResult<()> {
+        Ok(())
+    }
+    async fn exists(&self, _path: &str) -> CloudSyncResult<bool> {
+        Ok(false)
+    }
+    async fn metadata(&self, path: &str) -> CloudSyncResult<FileMetadata> {
         Ok(FileMetadata {
             path: path.to_string(),
             size: 0,
@@ -506,11 +596,17 @@ impl CloudProvider for WebDAVProvider {
             content_hash: None,
         })
     }
-    async fn quota(&self) -> CloudSyncResult<QuotaInfo> { 
-        Ok(QuotaInfo { total_bytes: 0, used_bytes: 0, available_bytes: 0 })
+    async fn quota(&self) -> CloudSyncResult<QuotaInfo> {
+        Ok(QuotaInfo {
+            total_bytes: 0,
+            used_bytes: 0,
+            available_bytes: 0,
+        })
     }
-    fn supports_real_time(&self) -> bool { false }
-    fn capabilities(&self) -> ProviderCapabilities { 
+    fn supports_real_time(&self) -> bool {
+        false
+    }
+    fn capabilities(&self) -> ProviderCapabilities {
         ProviderCapabilities {
             max_file_size: 0,
             supports_versioning: false,

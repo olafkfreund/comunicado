@@ -1,5 +1,5 @@
 use crate::theme::Theme;
-use crate::ui::typography::{TypographySystem, TypographyLevel, VisualHierarchy}; // InformationDensity as TypographyInformationDensity
+use crate::ui::typography::{TypographyLevel, TypographySystem, VisualHierarchy}; // InformationDensity as TypographyInformationDensity
 use ratatui::{
     layout::{Alignment, Rect},
     style::{Modifier, Style},
@@ -163,12 +163,18 @@ impl StatusSegment for CalendarStatusSegment {
                     }
                     None => String::new(),
                 };
-                format!("Cal{}: {}{} ({} today)", urgency_indicator, event, time_info, self.events_today)
+                format!(
+                    "Cal{}: {}{} ({} today)",
+                    urgency_indicator, event, time_info, self.events_today
+                )
             }
             None => {
                 if self.events_today > 0 {
                     let urgency_indicator = if self.urgent_events > 0 { "🔴" } else { "" };
-                    format!("Cal{}: {} events today", urgency_indicator, self.events_today)
+                    format!(
+                        "Cal{}: {} events today",
+                        urgency_indicator, self.events_today
+                    )
                 } else {
                     "Cal: No events".to_string()
                 }
@@ -266,28 +272,29 @@ impl StatusSegment for ModeIndicatorSegment {
     fn content(&self) -> String {
         let mode_icon = self.get_mode_icon();
         let mode_name = self.get_mode_display_name();
-        
+
         let mut content = format!("{} {}", mode_icon, mode_name);
-        
+
         if let Some(sub_mode) = &self.sub_mode {
             content.push_str(&format!(" ({})", sub_mode));
         }
-        
+
         // Add breadcrumb if there's a mode stack
         if self.mode_stack.len() > 1 {
-            let breadcrumb: Vec<String> = self.mode_stack
+            let breadcrumb: Vec<String> = self
+                .mode_stack
                 .iter()
                 .rev()
                 .take(2) // Show last 2 modes in breadcrumb
                 .skip(1) // Skip current mode (already shown)
                 .map(|m| self.get_mode_name(m))
                 .collect();
-            
+
             if !breadcrumb.is_empty() {
                 content.push_str(&format!(" ← {}", breadcrumb.join(" ← ")));
             }
         }
-        
+
         content
     }
 
@@ -307,15 +314,13 @@ impl StatusSegment for ModeIndicatorSegment {
             crate::ui::UIMode::Settings => theme.colors.palette.accent,
             crate::ui::UIMode::Calendar => theme.colors.palette.success,
             crate::ui::UIMode::EmailViewer => theme.colors.palette.info,
-            crate::ui::UIMode::EventCreate | crate::ui::UIMode::EventEdit => theme.colors.palette.warning,
+            crate::ui::UIMode::EventCreate | crate::ui::UIMode::EventEdit => {
+                theme.colors.palette.warning
+            }
             _ => theme.colors.palette.text_secondary,
         };
-        
-        Some(
-            Style::default()
-                .fg(base_color)
-                .add_modifier(Modifier::BOLD)
-        )
+
+        Some(Style::default().fg(base_color).add_modifier(Modifier::BOLD))
     }
 }
 
@@ -339,7 +344,7 @@ impl ModeIndicatorSegment {
             crate::ui::UIMode::ContextAware => "🔗",
         }
     }
-    
+
     fn get_mode_display_name(&self) -> &'static str {
         match self.current_mode {
             crate::ui::UIMode::Normal => "Mail",
@@ -359,7 +364,7 @@ impl ModeIndicatorSegment {
             crate::ui::UIMode::ContextAware => "Context",
         }
     }
-    
+
     fn get_mode_name(&self, mode: &crate::ui::UIMode) -> String {
         match mode {
             crate::ui::UIMode::Normal => "Mail".to_string(),
@@ -384,16 +389,17 @@ impl ModeIndicatorSegment {
 impl StatusSegment for ModeHintsSegment {
     fn content(&self) -> String {
         let mode_prefix = if self.is_vim_mode { "VIM" } else { "STD" };
-        
+
         if self.key_hints.is_empty() {
             format!("[{}]", mode_prefix)
         } else {
-            let hints: Vec<String> = self.key_hints
+            let hints: Vec<String> = self
+                .key_hints
                 .iter()
                 .take(3) // Limit to 3 hints to avoid crowding
                 .map(|(key, desc)| format!("{}: {}", key, desc))
                 .collect();
-            
+
             format!("[{}] {}", mode_prefix, hints.join(" | "))
         }
     }
@@ -410,7 +416,11 @@ impl StatusSegment for ModeHintsSegment {
         Some(
             Style::default()
                 .fg(theme.colors.palette.text_muted)
-                .add_modifier(if self.is_vim_mode { Modifier::ITALIC } else { Modifier::empty() })
+                .add_modifier(if self.is_vim_mode {
+                    Modifier::ITALIC
+                } else {
+                    Modifier::empty()
+                }),
         )
     }
 }
@@ -457,10 +467,10 @@ pub struct ResponsiveThresholds {
 /// Information density levels for status bar content
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum InformationDensity {
-    Minimal,   // Only critical information
-    Compact,   // Important information with abbreviated labels
-    Standard,  // Normal information display
-    Detailed,  // Full information with descriptions
+    Minimal,  // Only critical information
+    Compact,  // Important information with abbreviated labels
+    Standard, // Normal information display
+    Detailed, // Full information with descriptions
 }
 
 /// Status bar context for intelligent priority adjustment
@@ -535,7 +545,7 @@ impl StatusBar {
     pub fn update_context(&mut self, context: StatusBarContext) {
         // Clear previous context priorities
         self.context_priorities.clear();
-        
+
         match context {
             StatusBarContext::EmailFocus => {
                 self.context_priorities.insert("email".to_string(), 100);
@@ -585,7 +595,7 @@ impl StatusBar {
 
         // Determine layout mode based on available width
         let layout_mode = self.determine_layout_mode(area.width);
-        
+
         // Get priority-sorted visible segments for the current layout
         let visible_segments = self.get_prioritized_segments(layout_mode);
 
@@ -603,10 +613,10 @@ impl StatusBar {
 
         // Create segments with intelligent sizing
         let segments_content = self.create_intelligent_segments_content(
-            &visible_segments, 
-            content_width, 
-            theme, 
-            layout_mode
+            &visible_segments,
+            content_width,
+            theme,
+            layout_mode,
         );
 
         // Create the status bar block with context-appropriate styling
@@ -631,7 +641,7 @@ impl StatusBar {
             SeparatorStyle::Adaptive => 2,  // Determined at render time
         }
     }
-    
+
     fn get_separator_width_for_style(&self, style: &SeparatorStyle) -> u16 {
         match style {
             SeparatorStyle::Powerline => 3,
@@ -654,7 +664,7 @@ impl StatusBar {
             Style::default().fg(theme.colors.status_bar.section_separator),
         )
     }
-    
+
     fn get_separator_for_style(&self, style: &SeparatorStyle, theme: &Theme) -> Span {
         let separator_text = match style {
             SeparatorStyle::Powerline => " ⮰ ",
@@ -718,11 +728,11 @@ impl StatusBar {
 
     /// Enhanced render method using typography system for better visual hierarchy
     pub fn render_with_typography(
-        &self, 
-        frame: &mut Frame, 
-        area: Rect, 
-        theme: &Theme, 
-        typography: &TypographySystem
+        &self,
+        frame: &mut Frame,
+        area: Rect,
+        theme: &Theme,
+        typography: &TypographySystem,
     ) {
         if area.height == 0 {
             return;
@@ -749,10 +759,10 @@ impl StatusBar {
 
         // Create enhanced segments with typography
         let segments_content = self.create_enhanced_segments_content(
-            &visible_segments, 
-            area.width.saturating_sub(2), 
-            theme, 
-            typography
+            &visible_segments,
+            area.width.saturating_sub(2),
+            theme,
+            typography,
         );
 
         // Create the status bar block with better spacing
@@ -780,7 +790,8 @@ impl StatusBar {
         let mut spans = Vec::new();
         let spacing = typography.spacing();
         let separator_width = spacing.sm;
-        let total_separator_width = separator_width * (visible_segments.len().saturating_sub(1) as u16);
+        let total_separator_width =
+            separator_width * (visible_segments.len().saturating_sub(1) as u16);
         let content_width = available_width.saturating_sub(total_separator_width);
         let mut remaining_width = content_width;
 
@@ -839,19 +850,30 @@ impl StatusBar {
                     let parts: Vec<&str> = content.split_whitespace().collect();
                     for (j, part) in parts.iter().enumerate() {
                         if j > 0 {
-                            spans.push(typography.create_span(" ".to_string(), typography_level, theme));
+                            spans.push(typography.create_span(
+                                " ".to_string(),
+                                typography_level,
+                                theme,
+                            ));
                         }
-                        
+
                         if part.chars().all(|c| c.is_ascii_digit()) {
                             // This is likely the unread count - emphasize it
                             spans.push(typography.create_emphasis(part, theme));
                         } else {
-                            spans.push(typography.create_span(part.to_string(), typography_level, theme));
+                            spans.push(typography.create_span(
+                                part.to_string(),
+                                typography_level,
+                                theme,
+                            ));
                         }
                     }
                 } else if name.as_str() == "calendar" && content.contains("event") {
                     // Add status indicator for upcoming events
-                    spans.push(VisualHierarchy::status_indicator("📅", theme.colors.palette.info));
+                    spans.push(VisualHierarchy::status_indicator(
+                        "📅",
+                        theme.colors.palette.info,
+                    ));
                     spans.push(typography.create_span(
                         format!(" {}", content),
                         typography_level,
@@ -865,7 +887,10 @@ impl StatusBar {
                 remaining_width = remaining_width.saturating_sub(segment_width);
             } else if remaining_width > 3 {
                 // Truncate with ellipsis
-                let truncated = format!("{}…", &content[..(remaining_width.saturating_sub(1) as usize).min(content.len())]);
+                let truncated = format!(
+                    "{}…",
+                    &content[..(remaining_width.saturating_sub(1) as usize).min(content.len())]
+                );
                 spans.push(typography.create_span(truncated, typography_level, theme));
                 remaining_width = 0;
             }
@@ -888,7 +913,10 @@ impl StatusBar {
     }
 
     /// Get priority-sorted segments based on layout mode and context
-    fn get_prioritized_segments(&self, layout_mode: InformationDensity) -> Vec<(&String, &Box<dyn StatusSegment>)> {
+    fn get_prioritized_segments(
+        &self,
+        layout_mode: InformationDensity,
+    ) -> Vec<(&String, &Box<dyn StatusSegment>)> {
         let mut segments: Vec<_> = self
             .segment_order
             .iter()
@@ -914,21 +942,26 @@ impl StatusBar {
         match layout_mode {
             InformationDensity::Minimal => {
                 // Only show critical segments (priority >= 95)
-                segments.into_iter().filter(|(name, segment)| {
-                    self.get_effective_priority(name, segment) >= 95
-                }).take(2).collect()
+                segments
+                    .into_iter()
+                    .filter(|(name, segment)| self.get_effective_priority(name, segment) >= 95)
+                    .take(2)
+                    .collect()
             }
             InformationDensity::Compact => {
                 // Show important segments (priority >= 70)
-                segments.into_iter().filter(|(name, segment)| {
-                    self.get_effective_priority(name, segment) >= 70
-                }).take(4).collect()
+                segments
+                    .into_iter()
+                    .filter(|(name, segment)| self.get_effective_priority(name, segment) >= 70)
+                    .take(4)
+                    .collect()
             }
             InformationDensity::Standard => {
                 // Show all segments with priority >= 50
-                segments.into_iter().filter(|(name, segment)| {
-                    self.get_effective_priority(name, segment) >= 50
-                }).collect()
+                segments
+                    .into_iter()
+                    .filter(|(name, segment)| self.get_effective_priority(name, segment) >= 50)
+                    .collect()
             }
             InformationDensity::Detailed => segments, // Show all segments
         }
@@ -944,14 +977,12 @@ impl StatusBar {
     /// Get adaptive separator style based on layout mode
     fn get_adaptive_separator_style(&self, layout_mode: InformationDensity) -> SeparatorStyle {
         match &self.separator_style {
-            SeparatorStyle::Adaptive => {
-                match layout_mode {
-                    InformationDensity::Minimal => SeparatorStyle::Minimal,
-                    InformationDensity::Compact => SeparatorStyle::Simple,
-                    InformationDensity::Standard => SeparatorStyle::Powerline,
-                    InformationDensity::Detailed => SeparatorStyle::Powerline,
-                }
-            }
+            SeparatorStyle::Adaptive => match layout_mode {
+                InformationDensity::Minimal => SeparatorStyle::Minimal,
+                InformationDensity::Compact => SeparatorStyle::Simple,
+                InformationDensity::Standard => SeparatorStyle::Powerline,
+                InformationDensity::Detailed => SeparatorStyle::Powerline,
+            },
             other => other.clone(), // Use fixed style if not adaptive
         }
     }
@@ -959,9 +990,10 @@ impl StatusBar {
     /// Get context-appropriate border style
     fn get_context_border_style(&self, theme: &Theme) -> Style {
         // Check if any segment has high priority (indicating important status)
-        let has_critical_info = self.segments.iter().any(|(name, segment)| {
-            self.get_effective_priority(name, segment) >= 98
-        });
+        let has_critical_info = self
+            .segments
+            .iter()
+            .any(|(name, segment)| self.get_effective_priority(name, segment) >= 98);
 
         if has_critical_info {
             Style::default().fg(theme.colors.palette.warning)
@@ -981,7 +1013,8 @@ impl StatusBar {
         let mut spans = Vec::new();
         let separator_style = self.get_adaptive_separator_style(layout_mode);
         let separator_width = self.get_separator_width_for_style(&separator_style);
-        let total_separator_width = separator_width * (visible_segments.len().saturating_sub(1)) as u16;
+        let total_separator_width =
+            separator_width * (visible_segments.len().saturating_sub(1)) as u16;
         let content_width = available_width.saturating_sub(total_separator_width);
         let mut remaining_width = content_width;
 
@@ -1017,9 +1050,14 @@ impl StatusBar {
     }
 
     /// Format segment content based on information density
-    fn format_segment_content(&self, name: &str, segment: &Box<dyn StatusSegment>, layout_mode: InformationDensity) -> String {
+    fn format_segment_content(
+        &self,
+        name: &str,
+        segment: &Box<dyn StatusSegment>,
+        layout_mode: InformationDensity,
+    ) -> String {
         let raw_content = segment.content();
-        
+
         match layout_mode {
             InformationDensity::Minimal => {
                 // Ultra-compact: just essential info
@@ -1035,7 +1073,9 @@ impl StatusBar {
                 // Abbreviated labels but key info preserved
                 match name {
                     "email" => raw_content.replace("unread", "u").replace("Mail:", "M:"),
-                    "calendar" => raw_content.replace("events", "ev").replace("Calendar:", "C:"),
+                    "calendar" => raw_content
+                        .replace("events", "ev")
+                        .replace("Calendar:", "C:"),
                     _ => raw_content,
                 }
             }
@@ -1047,7 +1087,8 @@ impl StatusBar {
     fn compact_email_content(&self, content: &str) -> String {
         if content.contains("unread") {
             // Extract just the unread count
-            content.split_whitespace()
+            content
+                .split_whitespace()
                 .nth(1)
                 .map(|count| format!("✉{}", count))
                 .unwrap_or_else(|| "✉".to_string())
@@ -1059,7 +1100,8 @@ impl StatusBar {
     /// Compact calendar content for minimal display  
     fn compact_calendar_content(&self, content: &str) -> String {
         if content.contains("events today") {
-            content.split_whitespace()
+            content
+                .split_whitespace()
                 .nth(1)
                 .map(|count| format!("📅{}", count))
                 .unwrap_or_else(|| "📅".to_string())
@@ -1071,7 +1113,8 @@ impl StatusBar {
     /// Compact mode content for minimal display
     fn compact_mode_content(&self, content: &str) -> String {
         // Extract just the icon if present
-        content.split_whitespace()
+        content
+            .split_whitespace()
             .next()
             .filter(|s| s.chars().any(|c| c as u32 > 127)) // Contains emoji/unicode
             .unwrap_or("•")
@@ -1081,7 +1124,12 @@ impl StatusBar {
     /// Compact system content for minimal display
     fn compact_system_content(&self, content: &str) -> String {
         if content.contains('|') {
-            content.split('|').last().unwrap_or(content).trim().to_string()
+            content
+                .split('|')
+                .last()
+                .unwrap_or(content)
+                .trim()
+                .to_string()
         } else {
             content.to_string()
         }
@@ -1102,7 +1150,10 @@ impl StatusBar {
             "email" => {
                 // Preserve numbers (unread counts)
                 if let Some(num_pos) = content.find(char::is_numeric) {
-                    let num_end = content[num_pos..].find(char::is_whitespace).map(|i| i + num_pos).unwrap_or(content.len());
+                    let num_end = content[num_pos..]
+                        .find(char::is_whitespace)
+                        .map(|i| i + num_pos)
+                        .unwrap_or(content.len());
                     format!("{}…{}", &content[..2], &content[num_pos..num_end])
                 } else {
                     format!("{}…", &content[..max_len - 1])
@@ -1111,7 +1162,13 @@ impl StatusBar {
             "calendar" => {
                 // Preserve event indicators
                 if content.contains("🔴") {
-                    format!("🔴{}…", &content[content.find("🔴").unwrap() + 4..].chars().take(max_len - 3).collect::<String>())
+                    format!(
+                        "🔴{}…",
+                        &content[content.find("🔴").unwrap() + 4..]
+                            .chars()
+                            .take(max_len - 3)
+                            .collect::<String>()
+                    )
                 } else {
                     format!("{}…", &content[..max_len - 1])
                 }
@@ -1123,13 +1180,19 @@ impl StatusBar {
     }
 
     /// Get segment style with context-aware emphasis
-    fn get_segment_style(&self, name: &str, segment: &Box<dyn StatusSegment>, theme: &Theme, _layout_mode: InformationDensity) -> Style {
-        let base_style = segment.custom_style(theme).unwrap_or_else(|| {
-            theme.get_component_style("status_bar", false)
-        });
+    fn get_segment_style(
+        &self,
+        name: &str,
+        segment: &Box<dyn StatusSegment>,
+        theme: &Theme,
+        _layout_mode: InformationDensity,
+    ) -> Style {
+        let base_style = segment
+            .custom_style(theme)
+            .unwrap_or_else(|| theme.get_component_style("status_bar", false));
 
         let priority = self.get_effective_priority(name, segment);
-        
+
         // Add emphasis for high-priority items
         if priority >= 95 {
             base_style.add_modifier(Modifier::BOLD)
@@ -1150,7 +1213,7 @@ impl StatusBar {
             self.information_density
         )
     }
-    
+
     /// Calculate required width for status bar with current segments
     pub fn calculate_required_width(&self, _theme: &Theme) -> u16 {
         let visible_segments: Vec<_> = self
@@ -1166,21 +1229,22 @@ impl StatusBar {
                 })
             })
             .collect();
-        
+
         if visible_segments.is_empty() {
             return 0;
         }
-        
+
         let total_content_width: u16 = visible_segments
             .iter()
             .map(|(_, segment)| segment.content().len() as u16)
             .sum();
-            
-        let total_separator_width = self.get_separator_width() * (visible_segments.len().saturating_sub(1)) as u16;
-        
+
+        let total_separator_width =
+            self.get_separator_width() * (visible_segments.len().saturating_sub(1)) as u16;
+
         total_content_width + total_separator_width + 2 // +2 for borders
     }
-    
+
     /// Create a preview of status bar content for testing
     pub fn create_preview(&self, theme: &Theme, width: u16) -> String {
         let visible_segments: Vec<_> = self
@@ -1196,14 +1260,13 @@ impl StatusBar {
                 })
             })
             .collect();
-            
-        let segments_content = self.create_segments_content(
-            &visible_segments,
-            width.saturating_sub(2),
-            theme
-        );
-        
-        segments_content.spans.iter()
+
+        let segments_content =
+            self.create_segments_content(&visible_segments, width.saturating_sub(2), theme);
+
+        segments_content
+            .spans
+            .iter()
             .map(|span| span.content.as_ref())
             .collect::<Vec<_>>()
             .join("")

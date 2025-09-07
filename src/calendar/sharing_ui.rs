@@ -1,16 +1,14 @@
 //! User interface for calendar sharing management
 
 use crate::calendar::sharing::{
-    CalendarSharingManager, CalendarShare, SharingInvitation, CalendarPermission,
-    DesktopIntegrationType,
+    CalendarPermission, CalendarShare, CalendarSharingManager, DesktopIntegrationType,
+    SharingInvitation,
 };
 use crate::theme::Theme;
 use crossterm::event::{KeyCode, KeyModifiers};
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
-    widgets::{
-        Block, Borders, Clear, List, ListItem, ListState, Paragraph, Tabs, Wrap,
-    },
+    widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Tabs, Wrap},
     Frame,
 };
 use std::sync::Arc;
@@ -193,18 +191,14 @@ impl CalendarSharingUI {
                 self.previous_tab();
                 None
             }
-            KeyCode::Enter => {
-                self.handle_enter()
-            }
-            KeyCode::Char(c) if modifiers.contains(KeyModifiers::CONTROL) => {
-                match c {
-                    'n' => Some(SharingAction::CreateInvitation),
-                    'r' => Some(SharingAction::RefreshShares),
-                    'c' => self.handle_copy_url(),
-                    'e' => self.handle_export_calendar(),
-                    _ => None,
-                }
-            }
+            KeyCode::Enter => self.handle_enter(),
+            KeyCode::Char(c) if modifiers.contains(KeyModifiers::CONTROL) => match c {
+                'n' => Some(SharingAction::CreateInvitation),
+                'r' => Some(SharingAction::RefreshShares),
+                'c' => self.handle_copy_url(),
+                'e' => self.handle_export_calendar(),
+                _ => None,
+            },
             KeyCode::Char(c) => {
                 if self.state.share_editor.edit_mode {
                     match self.state.share_editor.selected_field {
@@ -257,13 +251,19 @@ impl CalendarSharingUI {
 
     fn next_tab(&mut self) {
         let tabs = SharingTab::all();
-        let current_index = tabs.iter().position(|&t| t == self.state.current_tab).unwrap_or(0);
+        let current_index = tabs
+            .iter()
+            .position(|&t| t == self.state.current_tab)
+            .unwrap_or(0);
         self.state.current_tab = tabs[(current_index + 1) % tabs.len()];
     }
 
     fn previous_tab(&mut self) {
         let tabs = SharingTab::all();
-        let current_index = tabs.iter().position(|&t| t == self.state.current_tab).unwrap_or(0);
+        let current_index = tabs
+            .iter()
+            .position(|&t| t == self.state.current_tab)
+            .unwrap_or(0);
         self.state.current_tab = tabs[(current_index + tabs.len() - 1) % tabs.len()];
     }
 
@@ -272,7 +272,9 @@ impl CalendarSharingUI {
             SharingTab::PendingInvitations => {
                 if let Some(selected) = self.state.invitations_list_state.selected() {
                     if let Some(invitation) = self.invitations.get(selected) {
-                        return Some(SharingAction::AcceptInvitation(invitation.invitation_token.clone()));
+                        return Some(SharingAction::AcceptInvitation(
+                            invitation.invitation_token.clone(),
+                        ));
                     }
                 }
             }
@@ -285,9 +287,11 @@ impl CalendarSharingUI {
                         DesktopIntegrationType::GenericCalDAV,
                         DesktopIntegrationType::DBusCalendar,
                     ];
-                    
+
                     if let Some(integration_type) = integrations.get(selected) {
-                        return Some(SharingAction::EnableDesktopIntegration(integration_type.clone()));
+                        return Some(SharingAction::EnableDesktopIntegration(
+                            integration_type.clone(),
+                        ));
                     }
                 }
             }
@@ -313,7 +317,9 @@ impl CalendarSharingUI {
     fn handle_accept_invitation(&mut self) -> Option<SharingAction> {
         if let Some(selected) = self.state.invitations_list_state.selected() {
             if let Some(invitation) = self.invitations.get(selected) {
-                return Some(SharingAction::AcceptInvitation(invitation.invitation_token.clone()));
+                return Some(SharingAction::AcceptInvitation(
+                    invitation.invitation_token.clone(),
+                ));
             }
         }
         None
@@ -322,7 +328,9 @@ impl CalendarSharingUI {
     fn handle_decline_invitation(&mut self) -> Option<SharingAction> {
         if let Some(selected) = self.state.invitations_list_state.selected() {
             if let Some(invitation) = self.invitations.get(selected) {
-                return Some(SharingAction::DeclineInvitation(invitation.invitation_token.clone()));
+                return Some(SharingAction::DeclineInvitation(
+                    invitation.invitation_token.clone(),
+                ));
             }
         }
         None
@@ -372,7 +380,9 @@ impl CalendarSharingUI {
 
     fn move_selection_up(&mut self) {
         match self.state.current_tab {
-            SharingTab::MySharedCalendars | SharingTab::SharedWithMe | SharingTab::PublicCalendars => {
+            SharingTab::MySharedCalendars
+            | SharingTab::SharedWithMe
+            | SharingTab::PublicCalendars => {
                 if let Some(selected) = self.state.shares_list_state.selected() {
                     if selected > 0 {
                         self.state.shares_list_state.select(Some(selected - 1));
@@ -399,7 +409,9 @@ impl CalendarSharingUI {
 
     fn move_selection_down(&mut self) {
         match self.state.current_tab {
-            SharingTab::MySharedCalendars | SharingTab::SharedWithMe | SharingTab::PublicCalendars => {
+            SharingTab::MySharedCalendars
+            | SharingTab::SharedWithMe
+            | SharingTab::PublicCalendars => {
                 let selected = self.state.shares_list_state.selected().unwrap_or(0);
                 if selected + 1 < self.shares.len() {
                     self.state.shares_list_state.select(Some(selected + 1));
@@ -450,11 +462,17 @@ impl CalendarSharingUI {
 
         // Render content based on current tab
         match self.state.current_tab {
-            SharingTab::MySharedCalendars => self.render_my_shared_calendars(frame, chunks[1], theme),
+            SharingTab::MySharedCalendars => {
+                self.render_my_shared_calendars(frame, chunks[1], theme)
+            }
             SharingTab::SharedWithMe => self.render_shared_with_me(frame, chunks[1], theme),
-            SharingTab::PendingInvitations => self.render_pending_invitations(frame, chunks[1], theme),
+            SharingTab::PendingInvitations => {
+                self.render_pending_invitations(frame, chunks[1], theme)
+            }
             SharingTab::PublicCalendars => self.render_public_calendars(frame, chunks[1], theme),
-            SharingTab::DesktopIntegration => self.render_desktop_integration(frame, chunks[1], theme),
+            SharingTab::DesktopIntegration => {
+                self.render_desktop_integration(frame, chunks[1], theme)
+            }
             SharingTab::Settings => self.render_settings(frame, chunks[1], theme),
         }
     }
@@ -476,16 +494,16 @@ impl CalendarSharingUI {
     }
 
     fn render_my_shared_calendars(&mut self, frame: &mut Frame, area: Rect, theme: &Theme) {
-        let items: Vec<ListItem> = self.shares
+        let items: Vec<ListItem> = self
+            .shares
             .iter()
             .map(|share| {
                 let user_count = share.shared_with.len();
                 let public_icon = if share.is_public { "🌐" } else { "🔒" };
-                
-                let line = format!("{} {} - {} users shared",
-                    public_icon,
-                    share.calendar_name,
-                    user_count
+
+                let line = format!(
+                    "{} {} - {} users shared",
+                    public_icon, share.calendar_name, user_count
                 );
 
                 ListItem::new(line)
@@ -493,9 +511,11 @@ impl CalendarSharingUI {
             .collect();
 
         let list = List::new(items)
-            .block(Block::default()
-                .title("My Shared Calendars")
-                .borders(Borders::ALL))
+            .block(
+                Block::default()
+                    .title("My Shared Calendars")
+                    .borders(Borders::ALL),
+            )
             .style(theme.get_component_style("secondary", false))
             .highlight_style(theme.get_component_style("primary", true));
 
@@ -506,9 +526,11 @@ impl CalendarSharingUI {
         let text = "Calendars Shared with You\n\nCalendars that other users have shared with you will appear here.";
 
         let paragraph = Paragraph::new(text)
-            .block(Block::default()
-                .title("Shared with Me")
-                .borders(Borders::ALL))
+            .block(
+                Block::default()
+                    .title("Shared with Me")
+                    .borders(Borders::ALL),
+            )
             .wrap(Wrap { trim: true })
             .style(theme.get_component_style("secondary", false));
 
@@ -516,13 +538,14 @@ impl CalendarSharingUI {
     }
 
     fn render_pending_invitations(&mut self, frame: &mut Frame, area: Rect, theme: &Theme) {
-        let items: Vec<ListItem> = self.invitations
+        let items: Vec<ListItem> = self
+            .invitations
             .iter()
             .filter(|inv| inv.accepted.is_none())
             .map(|invitation| {
-                let line = format!("📧 {} invited you to '{}'",
-                    invitation.from_email,
-                    invitation.calendar_name
+                let line = format!(
+                    "📧 {} invited you to '{}'",
+                    invitation.from_email, invitation.calendar_name
                 );
 
                 ListItem::new(line)
@@ -530,9 +553,11 @@ impl CalendarSharingUI {
             .collect();
 
         let list = List::new(items)
-            .block(Block::default()
-                .title("Pending Invitations")
-                .borders(Borders::ALL))
+            .block(
+                Block::default()
+                    .title("Pending Invitations")
+                    .borders(Borders::ALL),
+            )
             .style(theme.get_component_style("secondary", false))
             .highlight_style(theme.get_component_style("primary", true));
 
@@ -543,9 +568,11 @@ impl CalendarSharingUI {
         let text = "Public Calendars\n\nDiscoverable public calendars will appear here.";
 
         let paragraph = Paragraph::new(text)
-            .block(Block::default()
-                .title("Public Calendars")
-                .borders(Borders::ALL))
+            .block(
+                Block::default()
+                    .title("Public Calendars")
+                    .borders(Borders::ALL),
+            )
             .wrap(Wrap { trim: true })
             .style(theme.get_component_style("secondary", false));
 
@@ -558,7 +585,10 @@ impl CalendarSharingUI {
             ("Kontact", "KDE Kontact/KOrganizer integration"),
             ("Thunderbird", "Thunderbird/Lightning integration"),
             ("Generic CalDAV", "Generic CalDAV endpoint for any client"),
-            ("D-Bus Calendar", "D-Bus integration for desktop notifications"),
+            (
+                "D-Bus Calendar",
+                "D-Bus integration for desktop notifications",
+            ),
         ];
 
         let items: Vec<ListItem> = integration_types
@@ -570,9 +600,11 @@ impl CalendarSharingUI {
             .collect();
 
         let list = List::new(items)
-            .block(Block::default()
-                .title("Desktop Integration")
-                .borders(Borders::ALL))
+            .block(
+                Block::default()
+                    .title("Desktop Integration")
+                    .borders(Borders::ALL),
+            )
             .style(theme.get_component_style("secondary", false))
             .highlight_style(theme.get_component_style("primary", true));
 
@@ -583,9 +615,11 @@ impl CalendarSharingUI {
         let text = "Calendar Sharing Settings\n\nConfigure sharing preferences and permissions.";
 
         let paragraph = Paragraph::new(text)
-            .block(Block::default()
-                .title("Sharing Settings")
-                .borders(Borders::ALL))
+            .block(
+                Block::default()
+                    .title("Sharing Settings")
+                    .borders(Borders::ALL),
+            )
             .wrap(Wrap { trim: true })
             .style(theme.get_component_style("secondary", false));
 

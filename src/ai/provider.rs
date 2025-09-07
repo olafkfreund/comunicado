@@ -1,9 +1,9 @@
 //! AI provider trait and management system
 
-use crate::ai::{AIContext, AIResult};
 use crate::ai::config::{AIConfig, AIProviderType};
 use crate::ai::error::AIError;
 use crate::ai::service::{EmailCategory, SchedulingIntent};
+use crate::ai::{AIContext, AIResult};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -51,7 +51,8 @@ pub trait AIProvider: Send + Sync {
     async fn complete_text(&self, prompt: &str, context: Option<&AIContext>) -> AIResult<String>;
 
     /// Summarize content into a concise overview
-    async fn summarize_content(&self, content: &str, max_length: Option<usize>) -> AIResult<String>;
+    async fn summarize_content(&self, content: &str, max_length: Option<usize>)
+        -> AIResult<String>;
 
     /// Generate email reply suggestions based on email content and context
     async fn suggest_reply(&self, email_content: &str, context: &str) -> AIResult<Vec<String>>;
@@ -102,7 +103,11 @@ impl AIProviderManager {
     }
 
     /// Register a provider with the manager
-    pub fn register_provider(&mut self, provider_type: AIProviderType, provider: Box<dyn AIProvider>) {
+    pub fn register_provider(
+        &mut self,
+        provider_type: AIProviderType,
+        provider: Box<dyn AIProvider>,
+    ) {
         tracing::info!("Registering AI provider: {}", provider_type);
         self.providers.insert(provider_type, provider);
     }
@@ -154,7 +159,10 @@ impl AIProviderManager {
     }
 
     /// Test connectivity for a specific provider
-    pub async fn test_provider_connectivity(&self, provider_type: AIProviderType) -> AIResult<bool> {
+    pub async fn test_provider_connectivity(
+        &self,
+        provider_type: AIProviderType,
+    ) -> AIResult<bool> {
         if let Some(provider) = self.providers.get(&provider_type) {
             match provider.health_check().await {
                 Ok(healthy) => {
@@ -179,7 +187,10 @@ impl AIProviderManager {
     }
 
     /// Get capabilities for a specific provider
-    pub fn get_provider_capabilities(&self, provider_type: AIProviderType) -> Option<&ProviderCapabilities> {
+    pub fn get_provider_capabilities(
+        &self,
+        provider_type: AIProviderType,
+    ) -> Option<&ProviderCapabilities> {
         self.providers
             .get(&provider_type)
             .map(|provider| provider.capabilities())
@@ -201,7 +212,11 @@ impl AIProviderManager {
         let health_status = self.health_status.read().await;
 
         // If current provider is healthy, use it
-        if health_status.get(&config.provider).copied().unwrap_or(false) {
+        if health_status
+            .get(&config.provider)
+            .copied()
+            .unwrap_or(false)
+        {
             return Ok(config.provider.clone());
         }
 
@@ -227,7 +242,7 @@ impl AIProviderManager {
     /// Attempt automatic provider failover
     pub async fn attempt_failover(&mut self) -> AIResult<AIProviderType> {
         let best_provider = self.find_best_provider().await?;
-        
+
         if best_provider != self.active_provider {
             tracing::warn!(
                 "Failing over from {} to {} due to provider issues",
@@ -243,11 +258,11 @@ impl AIProviderManager {
     /// Refresh health status for all providers
     pub async fn refresh_health_status(&self) {
         let mut health_status = self.health_status.write().await;
-        
+
         for (provider_type, provider) in &self.providers {
             let is_healthy = provider.health_check().await.unwrap_or(false);
             health_status.insert(provider_type.clone(), is_healthy);
-            
+
             tracing::debug!(
                 "Provider {} health status: {}",
                 provider_type,
@@ -261,7 +276,7 @@ impl AIProviderManager {
         let health_status = self.health_status.read().await;
         let total_providers = self.providers.len();
         let healthy_providers = health_status.values().filter(|&&healthy| healthy).count();
-        
+
         ProviderStats {
             total_providers,
             healthy_providers,
@@ -284,7 +299,7 @@ pub struct ProviderStats {
 mod tests {
     use super::*;
     use crate::ai::config::AIConfig;
-    
+
     // Mock provider for testing
     struct MockProvider {
         name: String,
@@ -306,15 +321,27 @@ mod tests {
             Ok(self.healthy)
         }
 
-        async fn complete_text(&self, _prompt: &str, _context: Option<&AIContext>) -> AIResult<String> {
+        async fn complete_text(
+            &self,
+            _prompt: &str,
+            _context: Option<&AIContext>,
+        ) -> AIResult<String> {
             Ok("Mock completion".to_string())
         }
 
-        async fn summarize_content(&self, _content: &str, _max_length: Option<usize>) -> AIResult<String> {
+        async fn summarize_content(
+            &self,
+            _content: &str,
+            _max_length: Option<usize>,
+        ) -> AIResult<String> {
             Ok("Mock summary".to_string())
         }
 
-        async fn suggest_reply(&self, _email_content: &str, _context: &str) -> AIResult<Vec<String>> {
+        async fn suggest_reply(
+            &self,
+            _email_content: &str,
+            _context: &str,
+        ) -> AIResult<Vec<String>> {
             Ok(vec!["Mock reply".to_string()])
         }
 
@@ -386,8 +413,14 @@ mod tests {
         manager.register_provider(AIProviderType::Ollama, healthy_provider);
         manager.register_provider(AIProviderType::OpenAI, unhealthy_provider);
 
-        assert!(manager.test_provider_connectivity(AIProviderType::Ollama).await.unwrap());
-        assert!(!manager.test_provider_connectivity(AIProviderType::OpenAI).await.unwrap());
+        assert!(manager
+            .test_provider_connectivity(AIProviderType::Ollama)
+            .await
+            .unwrap());
+        assert!(!manager
+            .test_provider_connectivity(AIProviderType::OpenAI)
+            .await
+            .unwrap());
     }
 
     #[tokio::test]
@@ -396,7 +429,7 @@ mod tests {
         config.enabled = true;
         config.provider = AIProviderType::OpenAI;
         config.fallback_providers = vec![AIProviderType::Ollama];
-        
+
         let config = Arc::new(RwLock::new(config));
         let mut manager = AIProviderManager::new(config);
 

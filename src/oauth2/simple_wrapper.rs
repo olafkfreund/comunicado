@@ -1,6 +1,6 @@
-use crate::oauth2::{OAuth2Error, launch_simple_setup, AuthType, SecurityType};
-use crate::ui::account_setup::OAuth2SetupWizard;
+use crate::oauth2::{launch_simple_setup, AuthType, OAuth2Error, SecurityType};
 use crate::theme::Theme;
+use crate::ui::account_setup::OAuth2SetupWizard;
 use async_trait::async_trait;
 
 /// Wrapper to integrate SimpleSetupWizard with AccountSetupManager
@@ -29,11 +29,11 @@ impl OAuth2SetupWizard for SimpleSetupWrapper {
             Err(e) => Err(anyhow::anyhow!("Simple setup failed: {}", e)),
         }
     }
-    
+
     fn is_configured(&self) -> bool {
         true // Simple setup is always available
     }
-    
+
     fn supported_providers(&self) -> Vec<String> {
         vec![
             "Gmail (Quick Setup)".to_string(),
@@ -45,13 +45,28 @@ impl OAuth2SetupWizard for SimpleSetupWrapper {
 fn create_placeholder_account(account_id: &str) -> crate::oauth2::AccountConfig {
     use crate::oauth2::AccountConfig;
     use chrono::Utc;
-    
+
     let (email, provider, imap_server, smtp_server) = if account_id.contains("gmail") {
-        ("user@gmail.com", "gmail", "imap.gmail.com", "smtp.gmail.com")
+        (
+            "user@gmail.com",
+            "gmail",
+            "imap.gmail.com",
+            "smtp.gmail.com",
+        )
     } else if account_id.contains("outlook") {
-        ("user@outlook.com", "outlook", "outlook.office365.com", "smtp-mail.outlook.com")
+        (
+            "user@outlook.com",
+            "outlook",
+            "outlook.office365.com",
+            "smtp-mail.outlook.com",
+        )
     } else {
-        ("user@example.com", "unknown", "imap.example.com", "smtp.example.com")
+        (
+            "user@example.com",
+            "unknown",
+            "imap.example.com",
+            "smtp.example.com",
+        )
     };
 
     AccountConfig {

@@ -1,10 +1,10 @@
 use crate::contacts::{SenderInfo, SenderRecognitionService};
-use crate::encryption::types::MessageSecurityStatus;
-use crate::encryption::EncryptionManager;
 use crate::email::{
     EmailDatabase, EmailMessage, EmailThread, MessageId, MultiCriteriaSorter, SortCriteria,
     StoredMessage, ThreadingAlgorithm, ThreadingEngine,
 };
+use crate::encryption::types::MessageSecurityStatus;
+use crate::encryption::EncryptionManager;
 use crate::theme::Theme;
 use chrono::{DateTime, Utc};
 use ratatui::{
@@ -14,8 +14,8 @@ use ratatui::{
     widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
     Frame,
 };
-use std::sync::Arc;
 use std::collections::HashMap;
+use std::sync::Arc;
 use uuid::Uuid;
 
 #[derive(Debug, Clone)]
@@ -168,7 +168,7 @@ impl MessageList {
         if max_chars <= 3 {
             return Self::safe_truncate(text, max_chars);
         }
-        
+
         if text.chars().count() <= max_chars {
             text.to_string()
         } else {
@@ -210,9 +210,9 @@ impl MessageList {
     fn initialize_sample_messages(&mut self) {
         // Create folder-appropriate sample messages
         let folder = self.current_folder.as_deref().unwrap_or("INBOX");
-        
+
         tracing::info!("Initializing sample messages for folder: {}", folder);
-        
+
         self.messages = match folder {
             "INBOX" => vec![
                 MessageItem::new(
@@ -293,8 +293,12 @@ impl MessageList {
                 ),
             ],
         };
-        
-        tracing::info!("Initialized {} sample messages for folder '{}'", self.messages.len(), folder);
+
+        tracing::info!(
+            "Initialized {} sample messages for folder '{}'",
+            self.messages.len(),
+            folder
+        );
     }
 
     pub fn render(
@@ -313,17 +317,22 @@ impl MessageList {
                 Constraint::Min(0),    // Message list
             ])
             .split(area);
-        
+
         let header_area = chunks[0];
         let list_area = chunks[1];
 
         // Render table header
         self.render_table_header(frame, header_area, theme);
         // Reduced verbosity: only log when message count changes or folder changes
-        if self.messages.len() != self.last_logged_count.unwrap_or(usize::MAX) || 
-           self.current_folder != self.last_logged_folder {
-            tracing::debug!("MessageList::render - {} messages in {:?}/{:?}", 
-                           self.messages.len(), self.current_account, self.current_folder);
+        if self.messages.len() != self.last_logged_count.unwrap_or(usize::MAX)
+            || self.current_folder != self.last_logged_folder
+        {
+            tracing::debug!(
+                "MessageList::render - {} messages in {:?}/{:?}",
+                self.messages.len(),
+                self.current_account,
+                self.current_folder
+            );
             self.last_logged_count = Some(self.messages.len());
             self.last_logged_folder = self.current_folder.clone();
         }
@@ -337,31 +346,25 @@ impl MessageList {
 
         // Calculate column widths based on available area
         let available_width = list_area.width.saturating_sub(4) as usize; // Account for borders
-        let (subject_width, correspondents_width, date_width, between_width) = 
+        let (subject_width, correspondents_width, date_width, between_width) =
             self.calculate_column_widths(available_width);
 
         let items: Vec<ListItem> = if messages_to_display.is_empty() {
             // Show helpful empty state message
             let folder_name = self.current_folder.as_deref().unwrap_or("folder");
             vec![
-                ListItem::new(Line::from(vec![
-                    Span::styled(
-                        format!("📭 No messages in {}", folder_name),
-                        Style::default().fg(theme.colors.palette.text_secondary)
-                    )
-                ])),
-                ListItem::new(Line::from(vec![
-                    Span::styled(
-                        "Press 'R' to refresh and sync messages from server",
-                        Style::default().fg(theme.colors.palette.text_muted)
-                    )
-                ])),
-                ListItem::new(Line::from(vec![
-                    Span::styled(
-                        "Press 'F5' to trigger manual sync for all accounts",
-                        Style::default().fg(theme.colors.palette.text_muted)
-                    )
-                ])),
+                ListItem::new(Line::from(vec![Span::styled(
+                    format!("📭 No messages in {}", folder_name),
+                    Style::default().fg(theme.colors.palette.text_secondary),
+                )])),
+                ListItem::new(Line::from(vec![Span::styled(
+                    "Press 'R' to refresh and sync messages from server",
+                    Style::default().fg(theme.colors.palette.text_muted),
+                )])),
+                ListItem::new(Line::from(vec![Span::styled(
+                    "Press 'F5' to trigger manual sync for all accounts",
+                    Style::default().fg(theme.colors.palette.text_muted),
+                )])),
             ]
         } else {
             messages_to_display
@@ -369,16 +372,16 @@ impl MessageList {
                 .enumerate()
                 .map(|(i, message)| {
                     let is_selected = self.state.selected() == Some(i);
-                    
+
                     self.render_message_row(
-                        message, 
-                        is_selected, 
-                        is_focused, 
-                        theme, 
-                        subject_width, 
-                        correspondents_width, 
-                        date_width, 
-                        between_width
+                        message,
+                        is_selected,
+                        is_focused,
+                        theme,
+                        subject_width,
+                        correspondents_width,
+                        date_width,
+                        between_width,
                     )
                 })
                 .collect()
@@ -390,13 +393,13 @@ impl MessageList {
 
         frame.render_stateful_widget(list, list_area, &mut self.state.clone());
     }
-    
+
     /// Render the table header row
     fn render_table_header(&self, frame: &mut Frame, area: Rect, theme: &Theme) {
         let available_width = area.width.saturating_sub(4) as usize;
-        let (subject_width, correspondents_width, date_width, _between_width) = 
+        let (subject_width, correspondents_width, date_width, _between_width) =
             self.calculate_column_widths(available_width);
-        
+
         // Create header text with proper spacing
         let mut header_spans = vec![
             Span::raw(" "), // Small left padding
@@ -404,66 +407,68 @@ impl MessageList {
                 "Subject".to_string(),
                 Style::default()
                     .fg(theme.colors.palette.text_secondary)
-                    .add_modifier(Modifier::BOLD)
+                    .add_modifier(Modifier::BOLD),
             ),
         ];
-        
+
         // Add padding to correspondents column
         let subject_len = "Subject".len();
         if subject_len < subject_width {
             header_spans.push(Span::raw(" ".repeat(subject_width - subject_len)));
         }
-        
+
         // Correspondents column
         header_spans.push(Span::raw(" "));
         header_spans.push(Span::styled(
             "Correspondents".to_string(),
             Style::default()
                 .fg(theme.colors.palette.text_secondary)
-                .add_modifier(Modifier::BOLD)
+                .add_modifier(Modifier::BOLD),
         ));
-        
+
         // Add padding to date column
         let correspondents_len = "Correspondents".len();
         if correspondents_len < correspondents_width {
-            header_spans.push(Span::raw(" ".repeat(correspondents_width - correspondents_len)));
+            header_spans.push(Span::raw(
+                " ".repeat(correspondents_width - correspondents_len),
+            ));
         }
-        
+
         // Date column
         header_spans.push(Span::raw(" "));
         header_spans.push(Span::styled(
             "Date".to_string(),
             Style::default()
                 .fg(theme.colors.palette.text_secondary)
-                .add_modifier(Modifier::BOLD)
+                .add_modifier(Modifier::BOLD),
         ));
-        
+
         // Add padding to between column
         let date_len = "Date".len();
         if date_len < date_width {
             header_spans.push(Span::raw(" ".repeat(date_width - date_len)));
         }
-        
+
         // Between column
         header_spans.push(Span::raw(" "));
         header_spans.push(Span::styled(
             "Between".to_string(),
             Style::default()
                 .fg(theme.colors.palette.text_secondary)
-                .add_modifier(Modifier::BOLD)
+                .add_modifier(Modifier::BOLD),
         ));
-        
+
         let header_paragraph = Paragraph::new(Line::from(header_spans))
             .block(
                 Block::default()
                     .borders(Borders::BOTTOM)
-                    .border_style(Style::default().fg(theme.colors.palette.border))
+                    .border_style(Style::default().fg(theme.colors.palette.border)),
             )
             .style(Style::default().bg(theme.colors.palette.surface));
-        
+
         frame.render_widget(header_paragraph, area);
     }
-    
+
     /// Calculate optimal column widths based on available space
     fn calculate_column_widths(&self, available_width: usize) -> (usize, usize, usize, usize) {
         // Based on your screenshot proportions:
@@ -471,11 +476,17 @@ impl MessageList {
         let subject_width = (available_width * 40) / 100;
         let correspondents_width = (available_width * 30) / 100;
         let date_width = (available_width * 15) / 100;
-        let between_width = available_width.saturating_sub(subject_width + correspondents_width + date_width);
-        
-        (subject_width.max(20), correspondents_width.max(15), date_width.max(8), between_width.max(10))
+        let between_width =
+            available_width.saturating_sub(subject_width + correspondents_width + date_width);
+
+        (
+            subject_width.max(20),
+            correspondents_width.max(15),
+            date_width.max(8),
+            between_width.max(10),
+        )
     }
-    
+
     /// Render a single message row in table format
     fn render_message_row(
         &self,
@@ -490,7 +501,7 @@ impl MessageList {
     ) -> ListItem {
         // Threading visualization
         let threading_prefix = self.get_threading_prefix(message);
-        
+
         // Status indicators (unread dot, importance, attachments, security)
         let mut status_icons = String::new();
         if !message.is_read {
@@ -504,7 +515,7 @@ impl MessageList {
         if message.has_attachments {
             status_icons.push('📎'); // Attachment icon
         }
-        
+
         // Add encryption/signature status indicators
         if let Some(ref security_status) = message.security_status {
             if security_status.has_security() {
@@ -519,7 +530,9 @@ impl MessageList {
                     use crate::encryption::types::SignatureValidity;
                     match security_status.signatures.overall_validity {
                         SignatureValidity::Valid => status_icons.push('✅'), // Valid signature
-                        SignatureValidity::Invalid | SignatureValidity::BadSignature => status_icons.push('❌'), // Invalid signature
+                        SignatureValidity::Invalid | SignatureValidity::BadSignature => {
+                            status_icons.push('❌')
+                        } // Invalid signature
                         SignatureValidity::KeyNotFound => status_icons.push('❓'), // Unknown key
                         SignatureValidity::KeyExpired => status_icons.push('⏰'), // Expired key
                         SignatureValidity::KeyRevoked => status_icons.push('🚫'), // Revoked key
@@ -528,30 +541,36 @@ impl MessageList {
                 }
             }
         }
-        
+
         // Format subject with threading and truncation (Unicode-safe)
-        let subject_available = subject_width.saturating_sub(threading_prefix.len() + status_icons.len() + 2);
+        let subject_available =
+            subject_width.saturating_sub(threading_prefix.len() + status_icons.len() + 2);
         let subject_text = Self::safe_truncate_with_ellipsis(&message.subject, subject_available);
-        
+
         // Format correspondents (sender with contact info) - Unicode-safe
         let (sender_display, sender_indicators) = self.format_sender_with_contact_info(message);
-        let correspondents_text = Self::safe_truncate_with_ellipsis(&sender_display, correspondents_width.saturating_sub(2));
-        
+        let correspondents_text = Self::safe_truncate_with_ellipsis(
+            &sender_display,
+            correspondents_width.saturating_sub(2),
+        );
+
         // Format date to fit column - Unicode-safe
         let date_text = if message.date.chars().count() > date_width {
             Self::safe_truncate(&message.date, 8.min(date_width))
         } else {
             message.date.clone()
         };
-        
+
         // Create "Between" column (showing sender and current user) - Unicode-safe
-        let current_user = self.current_account.as_ref()
+        let current_user = self
+            .current_account
+            .as_ref()
             .and_then(|account| account.split('@').next())
             .unwrap_or("Me");
         let correspondents_short = Self::safe_truncate(&correspondents_text, 10);
         let between_text = format!("{} and {}", correspondents_short, current_user);
         let between_truncated = Self::safe_truncate_with_ellipsis(&between_text, between_width);
-        
+
         // Determine styles based on message state and selection
         let base_style = if is_selected && is_focused {
             Style::default()
@@ -564,7 +583,7 @@ impl MessageList {
         } else {
             Style::default()
         };
-        
+
         let subject_style = if !message.is_read && !is_selected {
             base_style
                 .fg(theme.colors.message_list.subject_unread)
@@ -574,67 +593,74 @@ impl MessageList {
         } else {
             base_style.fg(theme.colors.message_list.subject_read)
         };
-        
+
         let correspondents_style = if is_selected {
             base_style
         } else {
             base_style.fg(theme.colors.message_list.sender)
         };
-        
+
         let date_style = if is_selected {
             base_style
         } else {
             base_style.fg(theme.colors.message_list.date)
         };
-        
+
         let between_style = if is_selected {
             base_style
         } else {
             base_style.fg(theme.colors.palette.text_muted)
         };
-        
+
         // Build the line with proper spacing and alignment
         let mut spans = vec![
             // Status indicators and threading
             Span::raw(threading_prefix.clone()),
             Span::styled(status_icons.clone(), subject_style),
             Span::raw(" "),
-            
             // Subject column
             Span::styled(subject_text, subject_style),
         ];
-        
+
         // Add padding to reach correspondents column
-        let current_len = threading_prefix.len() + status_icons.len() + 1 + message.subject.len().min(subject_available);
+        let current_len = threading_prefix.len()
+            + status_icons.len()
+            + 1
+            + message.subject.len().min(subject_available);
         if current_len < subject_width {
             spans.push(Span::raw(" ".repeat(subject_width - current_len)));
         }
-        
+
         // Correspondents column
         spans.push(Span::raw(" "));
         spans.push(Span::raw(sender_indicators.clone()));
-        spans.push(Span::styled(correspondents_text.clone(), correspondents_style));
-        
+        spans.push(Span::styled(
+            correspondents_text.clone(),
+            correspondents_style,
+        ));
+
         // Add padding to reach date column
         let correspondents_len = sender_indicators.len() + correspondents_text.len();
         if correspondents_len < correspondents_width {
-            spans.push(Span::raw(" ".repeat(correspondents_width - correspondents_len)));
+            spans.push(Span::raw(
+                " ".repeat(correspondents_width - correspondents_len),
+            ));
         }
-        
+
         // Date column
         spans.push(Span::raw(" "));
         spans.push(Span::styled(date_text, date_style));
-        
+
         // Add padding to reach between column
         let date_len = message.date.len().min(date_width);
         if date_len < date_width {
             spans.push(Span::raw(" ".repeat(date_width - date_len)));
         }
-        
+
         // Between column
         spans.push(Span::raw(" "));
         spans.push(Span::styled(between_truncated, between_style));
-        
+
         ListItem::new(Line::from(spans))
     }
 
@@ -855,7 +881,9 @@ impl MessageList {
     fn build_flat_view(&mut self) {
         // Don't show sample messages - show empty state instead
         if self.messages.is_empty() {
-            tracing::info!("No messages available, showing empty state (user can press 'R' to sync)");
+            tracing::info!(
+                "No messages available, showing empty state (user can press 'R' to sync)"
+            );
             // UI will show empty state with sync instructions
         } else {
             tracing::info!(
@@ -871,7 +899,9 @@ impl MessageList {
     fn build_threaded_view(&mut self) {
         // Don't show sample messages - show empty state instead
         if self.messages.is_empty() {
-            tracing::info!("No messages available, showing empty state (user can press 'R' to sync)");
+            tracing::info!(
+                "No messages available, showing empty state (user can press 'R' to sync)"
+            );
             // UI will show empty state with sync instructions
         } else {
             tracing::info!(
@@ -927,19 +957,28 @@ impl MessageList {
     /// Enrich loaded messages with sender recognition information
     async fn enrich_with_sender_recognition(&mut self) {
         if let Some(ref sender_recognition) = self.sender_recognition {
-            tracing::info!("Enriching {} messages with sender recognition", self.messages.len());
-            
+            tracing::info!(
+                "Enriching {} messages with sender recognition",
+                self.messages.len()
+            );
+
             // Process messages in batches to avoid overwhelming the service
             const BATCH_SIZE: usize = 20;
             let total_messages = self.messages.len();
-            
+
             for (batch_start, batch) in self.messages.chunks_mut(BATCH_SIZE).enumerate() {
-                let batch_end = std::cmp::min(batch_start * BATCH_SIZE + BATCH_SIZE, total_messages);
-                tracing::debug!("Processing sender recognition batch {}-{}/{}", 
-                    batch_start * BATCH_SIZE + 1, batch_end, total_messages);
-                
+                let batch_end =
+                    std::cmp::min(batch_start * BATCH_SIZE + BATCH_SIZE, total_messages);
+                tracing::debug!(
+                    "Processing sender recognition batch {}-{}/{}",
+                    batch_start * BATCH_SIZE + 1,
+                    batch_end,
+                    total_messages
+                );
+
                 for message in batch {
-                    if let Ok(sender_info) = sender_recognition.lookup_sender(&message.sender).await {
+                    if let Ok(sender_info) = sender_recognition.lookup_sender(&message.sender).await
+                    {
                         // Update the display with contact information if available
                         if sender_info.is_known_contact {
                             // Use the contact's display name instead of email
@@ -951,7 +990,7 @@ impl MessageList {
                     }
                 }
             }
-            
+
             tracing::info!("Completed sender recognition enrichment");
         } else {
             tracing::debug!("Sender recognition service not available, skipping enrichment");
@@ -962,28 +1001,40 @@ impl MessageList {
     async fn enrich_with_security_status(&mut self) {
         if let Some(ref encryption_manager) = self.encryption_manager {
             if let Some(ref database) = self.database {
-                tracing::info!("Enriching {} messages with security status", self.messages.len());
-                
+                tracing::info!(
+                    "Enriching {} messages with security status",
+                    self.messages.len()
+                );
+
                 for message in &mut self.messages {
                     if let Some(message_id) = message.message_id {
                         // Load the full message content from database
-                        if let Ok(Some(stored_message)) = database.get_message_by_id(message_id).await {
+                        if let Ok(Some(stored_message)) =
+                            database.get_message_by_id(message_id).await
+                        {
                             // Analyze the message content for encryption/signatures
                             if let Some(ref body_text) = stored_message.body_text {
                                 match encryption_manager.decrypt_email(body_text).await {
                                     Ok(secure_content) => {
                                         message.set_security_status(secure_content.security_status);
-                                        tracing::debug!("Analyzed security for message: {}", stored_message.subject);
+                                        tracing::debug!(
+                                            "Analyzed security for message: {}",
+                                            stored_message.subject
+                                        );
                                     }
                                     Err(e) => {
-                                        tracing::debug!("Failed to analyze security for message {}: {}", stored_message.subject, e);
+                                        tracing::debug!(
+                                            "Failed to analyze security for message {}: {}",
+                                            stored_message.subject,
+                                            e
+                                        );
                                     }
                                 }
                             }
                         }
                     }
                 }
-                
+
                 tracing::info!("Completed security status enrichment");
             } else {
                 tracing::debug!("Database not available, skipping security enrichment");
@@ -998,11 +1049,11 @@ impl MessageList {
         if let Some(ref sender_info) = message.sender_info {
             let mut indicators = String::new();
             let mut display_name = sender_info.best_display_name().to_string();
-            
+
             // Add contact indicator
             if sender_info.is_known_contact {
                 indicators.push('👤'); // Person emoji for known contact
-                
+
                 // Add company info if available (abbreviated) - Unicode-safe
                 if let Some(company) = sender_info.company_info() {
                     if company.chars().count() > 10 {
@@ -1013,11 +1064,11 @@ impl MessageList {
                     }
                 }
             }
-            
+
             if !indicators.is_empty() {
                 indicators.push(' ');
             }
-            
+
             (display_name, indicators)
         } else {
             // No sender info available, use the original sender
@@ -1049,25 +1100,29 @@ impl MessageList {
         );
 
         // Check if we're switching folders - if so, clear threading cache
-        let folder_changed = self.current_account.as_ref() != Some(&account_id) 
+        let folder_changed = self.current_account.as_ref() != Some(&account_id)
             || self.current_folder.as_ref() != Some(&folder_name);
-        
+
         if folder_changed {
             self.clear_threading_cache();
         }
-        
+
         if let Some(ref database) = self.database {
             self.current_account = Some(account_id.clone());
             self.current_folder = Some(folder_name.clone());
 
             // Load messages from database
             tracing::info!("Loading messages from database...");
-            tracing::info!("Database query params: account_id='{}', folder_name='{}'", account_id, folder_name);
+            tracing::info!(
+                "Database query params: account_id='{}', folder_name='{}'",
+                account_id,
+                folder_name
+            );
             let stored_messages = database
                 .get_messages(&account_id, &folder_name, Some(100), None)
                 .await?;
             tracing::info!("Loaded {} messages from database", stored_messages.len());
-            
+
             // Debug: Log first few message subjects if any
             if !stored_messages.is_empty() {
                 tracing::info!("First 3 message subjects:");
@@ -1077,11 +1132,14 @@ impl MessageList {
             } else {
                 tracing::warn!("No messages returned from database query");
             }
-            
+
             // If no messages in database for this folder, it means it hasn't been synced yet
             // This happens for non-inbox folders that user is accessing for the first time
             if stored_messages.is_empty() {
-                tracing::info!("No cached messages for folder '{}'. User can press 'R' to fetch from IMAP.", folder_name);
+                tracing::info!(
+                    "No cached messages for folder '{}'. User can press 'R' to fetch from IMAP.",
+                    folder_name
+                );
                 // Note: The force refresh functionality (Ctrl+R) will fetch messages from IMAP
                 // This provides the user control over when to sync folders
             }
@@ -1093,17 +1151,20 @@ impl MessageList {
                 .collect();
 
             tracing::info!("Converted to {} MessageItems", self.messages.len());
-            
+
             // If database returned no messages, don't show sample messages
             // Let the UI display an empty state with instructions to sync
             if self.messages.is_empty() {
-                tracing::info!("Database returned no messages for folder '{}', showing empty state", folder_name);
+                tracing::info!(
+                    "Database returned no messages for folder '{}', showing empty state",
+                    folder_name
+                );
                 // Note: UI will show instructions to press 'R' to refresh/sync the folder
             }
 
             // Enrich messages with sender recognition
             self.enrich_with_sender_recognition().await;
-            
+
             // Enrich messages with security status
             self.enrich_with_security_status().await;
 
@@ -1133,11 +1194,21 @@ impl MessageList {
             let folder_name_clone = folder_name.clone();
             if let Some(database_clone) = self.database.clone() {
                 tokio::spawn(async move {
-                    tracing::info!("Background: Preloading threading cache for {}:{}", account_id_clone, folder_name_clone);
+                    tracing::info!(
+                        "Background: Preloading threading cache for {}:{}",
+                        account_id_clone,
+                        folder_name_clone
+                    );
                     // This runs in background without blocking folder loading
-                    match database_clone.get_messages(&account_id_clone, &folder_name_clone, Some(1000), None).await {
+                    match database_clone
+                        .get_messages(&account_id_clone, &folder_name_clone, Some(1000), None)
+                        .await
+                    {
                         Ok(messages) => {
-                            tracing::info!("Background: Cached {} messages for threading", messages.len());
+                            tracing::info!(
+                                "Background: Cached {} messages for threading",
+                                messages.len()
+                            );
                             // TODO: In a full implementation, we'd send the cached data back to the UI
                         }
                         Err(e) => {
@@ -1341,15 +1412,22 @@ impl MessageList {
                 (self.current_account.as_ref(), self.current_folder.as_ref())
             {
                 let cache_key = format!("{}:{}", account_id, folder_name);
-                
+
                 // Only load if not already cached
                 if self.threading_cache_key.as_ref() != Some(&cache_key) {
                     tracing::info!("Preloading threading cache for {}", cache_key);
-                    
-                    match database.get_messages(account_id, folder_name, Some(1000), None).await {
+
+                    match database
+                        .get_messages(account_id, folder_name, Some(1000), None)
+                        .await
+                    {
                         Ok(stored_messages) => {
-                            tracing::info!("Cached {} messages for threading", stored_messages.len());
-                            self.threading_cache.insert(cache_key.clone(), stored_messages);
+                            tracing::info!(
+                                "Cached {} messages for threading",
+                                stored_messages.len()
+                            );
+                            self.threading_cache
+                                .insert(cache_key.clone(), stored_messages);
                             self.threading_cache_key = Some(cache_key);
                         }
                         Err(e) => {
@@ -1373,7 +1451,7 @@ impl MessageList {
             (self.current_account.as_ref(), self.current_folder.as_ref())
         {
             let cache_key = format!("{}:{}", account_id, folder_name);
-            
+
             // Try to get stored messages from cache first
             if let Some(stored_messages) = self.threading_cache.get(&cache_key) {
                 tracing::info!(

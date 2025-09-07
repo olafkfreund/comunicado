@@ -1,13 +1,13 @@
 //! Database layer for notes storage
-//! 
+//!
 //! Provides SQLite-based storage with FTS5 full-text search capabilities.
 
-use super::types::{Note, WatchedDirectory, NoteSearchResult};
 use super::manager::{NoteError, NoteResult};
+use super::types::{Note, NoteSearchResult, WatchedDirectory};
 
 use chrono::{DateTime, Utc};
 use serde_json;
-use sqlx::{SqlitePool, Row};
+use sqlx::{Row, SqlitePool};
 use std::path::{Path, PathBuf};
 
 /// Database connection pool and operations for notes
@@ -21,32 +21,36 @@ impl NotesDatabase {
     pub async fn new(database_path: &Path) -> NoteResult<Self> {
         // Ensure parent directory exists
         if let Some(parent) = database_path.parent() {
-            tokio::fs::create_dir_all(parent).await
-                .map_err(|e| NoteError::Storage(format!("Failed to create database directory: {}", e)))?;
+            tokio::fs::create_dir_all(parent).await.map_err(|e| {
+                NoteError::Storage(format!("Failed to create database directory: {}", e))
+            })?;
         }
 
         // Convert path to string, ensuring it's properly formatted
-        let path_str = database_path.to_str()
-            .ok_or_else(|| NoteError::Storage("Database path contains invalid UTF-8".to_string()))?;
-        
+        let path_str = database_path.to_str().ok_or_else(|| {
+            NoteError::Storage("Database path contains invalid UTF-8".to_string())
+        })?;
+
         let database_url = format!("sqlite:{}", path_str);
-        
-        let pool = SqlitePool::connect(&database_url).await
+
+        let pool = SqlitePool::connect(&database_url)
+            .await
             .map_err(|e| NoteError::Storage(format!("Failed to connect to database: {}", e)))?;
 
         let db = Self { pool };
-        
+
         // Run migrations
         db.migrate().await?;
-        
+
         Ok(db)
     }
 
     /// Create a new in-memory database for testing
     #[cfg(test)]
     pub async fn new_in_memory() -> NoteResult<Self> {
-        let pool = SqlitePool::connect("sqlite::memory:").await
-            .map_err(|e| NoteError::Storage(format!("Failed to create in-memory database: {}", e)))?;
+        let pool = SqlitePool::connect("sqlite::memory:").await.map_err(|e| {
+            NoteError::Storage(format!("Failed to create in-memory database: {}", e))
+        })?;
 
         let db = Self { pool };
         db.migrate().await?;
@@ -57,28 +61,35 @@ impl NotesDatabase {
     async fn migrate(&self) -> NoteResult<()> {
         // Enable foreign keys and WAL mode
         sqlx::query("PRAGMA foreign_keys = ON")
-            .execute(&self.pool).await
+            .execute(&self.pool)
+            .await
             .map_err(|e| NoteError::Storage(format!("Failed to enable foreign keys: {}", e)))?;
 
         sqlx::query("PRAGMA journal_mode = WAL")
-            .execute(&self.pool).await
+            .execute(&self.pool)
+            .await
             .map_err(|e| NoteError::Storage(format!("Failed to set WAL mode: {}", e)))?;
 
         // Create schema version table
-        sqlx::query(r#"
+        sqlx::query(
+            r#"
             CREATE TABLE IF NOT EXISTS schema_version (
                 version INTEGER PRIMARY KEY,
                 applied_at INTEGER NOT NULL,
                 description TEXT
             )
-        "#)
-        .execute(&self.pool).await
+        "#,
+        )
+        .execute(&self.pool)
+        .await
         .map_err(|e| NoteError::Storage(format!("Failed to create schema_version table: {}", e)))?;
 
         // Check current schema version
-        let current_version = sqlx::query_scalar::<_, i64>("SELECT COALESCE(MAX(version), 0) FROM schema_version")
-            .fetch_one(&self.pool).await
-            .unwrap_or(0);
+        let current_version =
+            sqlx::query_scalar::<_, i64>("SELECT COALESCE(MAX(version), 0) FROM schema_version")
+                .fetch_one(&self.pool)
+                .await
+                .unwrap_or(0);
 
         // Apply migrations
         if current_version < 1 {
@@ -90,11 +101,15 @@ impl NotesDatabase {
 
     /// Migrate to schema version 1
     async fn migrate_to_v1(&self) -> NoteResult<()> {
-        let mut tx = self.pool.begin().await
+        let mut tx = self
+            .pool
+            .begin()
+            .await
             .map_err(|e| NoteError::Storage(format!("Failed to start transaction: {}", e)))?;
 
         // Watched directories table
-        sqlx::query(r#"
+        sqlx::query(
+            r#"
             CREATE TABLE watched_directories (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 path TEXT NOT NULL UNIQUE,
@@ -108,12 +123,17 @@ impl NotesDatabase {
                 updated_at INTEGER NOT NULL,
                 CHECK(path != '')
             )
-        "#)
-        .execute(&mut *tx).await
-        .map_err(|e| NoteError::Storage(format!("Failed to create watched_directories table: {}", e)))?;
+        "#,
+        )
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| {
+            NoteError::Storage(format!("Failed to create watched_directories table: {}", e))
+        })?;
 
         // Notes table
-        sqlx::query(r#"
+        sqlx::query(
+            r#"
             CREATE TABLE notes (
                 id TEXT PRIMARY KEY,
                 title TEXT NOT NULL,
@@ -129,12 +149,15 @@ impl NotesDatabase {
                 metadata TEXT,
                 FOREIGN KEY (directory_id) REFERENCES watched_directories(id) ON DELETE CASCADE
             )
-        "#)
-        .execute(&mut *tx).await
+        "#,
+        )
+        .execute(&mut *tx)
+        .await
         .map_err(|e| NoteError::Storage(format!("Failed to create notes table: {}", e)))?;
 
         // Note content table
-        sqlx::query(r#"
+        sqlx::query(
+            r#"
             CREATE TABLE note_content (
                 note_id TEXT PRIMARY KEY,
                 content TEXT NOT NULL,
@@ -143,12 +166,15 @@ impl NotesDatabase {
                 updated_at INTEGER NOT NULL,
                 FOREIGN KEY (note_id) REFERENCES notes(id) ON DELETE CASCADE
             )
-        "#)
-        .execute(&mut *tx).await
+        "#,
+        )
+        .execute(&mut *tx)
+        .await
         .map_err(|e| NoteError::Storage(format!("Failed to create note_content table: {}", e)))?;
 
         // Tags table
-        sqlx::query(r#"
+        sqlx::query(
+            r#"
             CREATE TABLE note_tags (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 note_id TEXT NOT NULL,
@@ -157,12 +183,15 @@ impl NotesDatabase {
                 FOREIGN KEY (note_id) REFERENCES notes(id) ON DELETE CASCADE,
                 UNIQUE(note_id, tag)
             )
-        "#)
-        .execute(&mut *tx).await
+        "#,
+        )
+        .execute(&mut *tx)
+        .await
         .map_err(|e| NoteError::Storage(format!("Failed to create note_tags table: {}", e)))?;
 
         // Wiki links table
-        sqlx::query(r#"
+        sqlx::query(
+            r#"
             CREATE TABLE wiki_links (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 source_note_id TEXT NOT NULL,
@@ -176,42 +205,60 @@ impl NotesDatabase {
                 FOREIGN KEY (source_note_id) REFERENCES notes(id) ON DELETE CASCADE,
                 FOREIGN KEY (target_note_id) REFERENCES notes(id) ON DELETE SET NULL
             )
-        "#)
-        .execute(&mut *tx).await
+        "#,
+        )
+        .execute(&mut *tx)
+        .await
         .map_err(|e| NoteError::Storage(format!("Failed to create wiki_links table: {}", e)))?;
 
         // FTS5 virtual table
-        sqlx::query(r#"
+        sqlx::query(
+            r#"
             CREATE VIRTUAL TABLE notes_fts USING fts5(
                 note_id UNINDEXED,
                 title,
                 content,
                 tags
             )
-        "#)
-        .execute(&mut *tx).await
+        "#,
+        )
+        .execute(&mut *tx)
+        .await
         .map_err(|e| NoteError::Storage(format!("Failed to create FTS table: {}", e)))?;
 
         // Create indexes
         sqlx::query("CREATE INDEX idx_notes_title ON notes(title)")
-            .execute(&mut *tx).await
+            .execute(&mut *tx)
+            .await
             .map_err(|e| NoteError::Storage(format!("Failed to create title index: {}", e)))?;
 
         sqlx::query("CREATE INDEX idx_notes_modified_at ON notes(modified_at DESC)")
-            .execute(&mut *tx).await
-            .map_err(|e| NoteError::Storage(format!("Failed to create modified_at index: {}", e)))?;
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| {
+                NoteError::Storage(format!("Failed to create modified_at index: {}", e))
+            })?;
 
         sqlx::query("CREATE INDEX idx_notes_directory_id ON notes(directory_id)")
-            .execute(&mut *tx).await
-            .map_err(|e| NoteError::Storage(format!("Failed to create directory_id index: {}", e)))?;
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| {
+                NoteError::Storage(format!("Failed to create directory_id index: {}", e))
+            })?;
 
         sqlx::query("CREATE INDEX idx_wiki_links_source ON wiki_links(source_note_id)")
-            .execute(&mut *tx).await
-            .map_err(|e| NoteError::Storage(format!("Failed to create wiki_links source index: {}", e)))?;
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| {
+                NoteError::Storage(format!("Failed to create wiki_links source index: {}", e))
+            })?;
 
         sqlx::query("CREATE INDEX idx_wiki_links_target ON wiki_links(target_note_id)")
-            .execute(&mut *tx).await
-            .map_err(|e| NoteError::Storage(format!("Failed to create wiki_links target index: {}", e)))?;
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| {
+                NoteError::Storage(format!("Failed to create wiki_links target index: {}", e))
+            })?;
 
         // Record migration
         let now = Utc::now().timestamp_millis();
@@ -220,7 +267,8 @@ impl NotesDatabase {
             .execute(&mut *tx).await
             .map_err(|e| NoteError::Storage(format!("Failed to record migration: {}", e)))?;
 
-        tx.commit().await
+        tx.commit()
+            .await
             .map_err(|e| NoteError::Storage(format!("Failed to commit migration: {}", e)))?;
 
         Ok(())
@@ -228,15 +276,21 @@ impl NotesDatabase {
 
     /// Store a note in the database
     pub async fn store_note(&self, note: &Note, directory_id: i64) -> NoteResult<()> {
-        let mut tx = self.pool.begin().await
+        let mut tx = self
+            .pool
+            .begin()
+            .await
             .map_err(|e| NoteError::Storage(format!("Failed to start transaction: {}", e)))?;
 
         // Store note metadata
-        let metadata_json = note.frontmatter.as_ref()
+        let metadata_json = note
+            .frontmatter
+            .as_ref()
             .map(|fm| serde_json::to_string(fm).unwrap_or_default())
             .unwrap_or_default();
 
-        sqlx::query(r#"
+        sqlx::query(
+            r#"
             INSERT INTO notes (id, title, file_path, directory_id, content_hash, word_count, 
                              created_at, modified_at, indexed_at, file_size, is_deleted, metadata)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -249,7 +303,8 @@ impl NotesDatabase {
                 file_size = excluded.file_size,
                 is_deleted = excluded.is_deleted,
                 metadata = excluded.metadata
-        "#)
+        "#,
+        )
         .bind(&note.id)
         .bind(&note.title)
         .bind(note.path.to_string_lossy().as_ref())
@@ -262,11 +317,13 @@ impl NotesDatabase {
         .bind(note.file_size as i64)
         .bind(note.is_deleted)
         .bind(metadata_json)
-        .execute(&mut *tx).await
+        .execute(&mut *tx)
+        .await
         .map_err(|e| NoteError::Storage(format!("Failed to store note: {}", e)))?;
 
         // Store note content
-        sqlx::query(r#"
+        sqlx::query(
+            r#"
             INSERT INTO note_content (note_id, content, frontmatter, parsed_links, updated_at)
             VALUES (?, ?, ?, ?, ?)
             ON CONFLICT(note_id) DO UPDATE SET
@@ -274,19 +331,26 @@ impl NotesDatabase {
                 frontmatter = excluded.frontmatter,
                 parsed_links = excluded.parsed_links,
                 updated_at = excluded.updated_at
-        "#)
+        "#,
+        )
         .bind(&note.id)
         .bind(&note.content)
-        .bind(note.frontmatter.as_ref().map(|fm| serde_json::to_string(fm).unwrap_or_default()))
+        .bind(
+            note.frontmatter
+                .as_ref()
+                .map(|fm| serde_json::to_string(fm).unwrap_or_default()),
+        )
         .bind(serde_json::to_string(&note.links).unwrap_or_default())
         .bind(Utc::now().timestamp_millis())
-        .execute(&mut *tx).await
+        .execute(&mut *tx)
+        .await
         .map_err(|e| NoteError::Storage(format!("Failed to store note content: {}", e)))?;
 
         // Store tags
         sqlx::query("DELETE FROM note_tags WHERE note_id = ?")
             .bind(&note.id)
-            .execute(&mut *tx).await
+            .execute(&mut *tx)
+            .await
             .map_err(|e| NoteError::Storage(format!("Failed to delete old tags: {}", e)))?;
 
         for tag in &note.tags {
@@ -294,14 +358,16 @@ impl NotesDatabase {
                 .bind(&note.id)
                 .bind(tag)
                 .bind(Utc::now().timestamp_millis())
-                .execute(&mut *tx).await
+                .execute(&mut *tx)
+                .await
                 .map_err(|e| NoteError::Storage(format!("Failed to store tag: {}", e)))?;
         }
 
         // Update FTS index (FTS5 doesn't support UPSERT, so delete then insert)
         sqlx::query("DELETE FROM notes_fts WHERE note_id = ?")
             .bind(&note.id)
-            .execute(&mut *tx).await
+            .execute(&mut *tx)
+            .await
             .map_err(|e| NoteError::Storage(format!("Failed to delete from FTS index: {}", e)))?;
 
         let tags_string = note.tags.join(" ");
@@ -310,10 +376,12 @@ impl NotesDatabase {
             .bind(&note.title)
             .bind(&note.content)
             .bind(tags_string)
-            .execute(&mut *tx).await
+            .execute(&mut *tx)
+            .await
             .map_err(|e| NoteError::Storage(format!("Failed to insert into FTS index: {}", e)))?;
 
-        tx.commit().await
+        tx.commit()
+            .await
             .map_err(|e| NoteError::Storage(format!("Failed to commit note storage: {}", e)))?;
 
         Ok(())
@@ -321,16 +389,19 @@ impl NotesDatabase {
 
     /// Get a note by ID
     pub async fn get_note(&self, note_id: &str) -> NoteResult<Option<Note>> {
-        let row = sqlx::query(r#"
+        let row = sqlx::query(
+            r#"
             SELECT n.id, n.title, n.file_path, n.content_hash, n.word_count,
                    n.created_at, n.modified_at, n.file_size, n.is_deleted, n.metadata,
                    nc.content, nc.frontmatter, nc.parsed_links
             FROM notes n
             LEFT JOIN note_content nc ON n.id = nc.note_id
             WHERE n.id = ? AND n.is_deleted = FALSE
-        "#)
+        "#,
+        )
         .bind(note_id)
-        .fetch_optional(&self.pool).await
+        .fetch_optional(&self.pool)
+        .await
         .map_err(|e| NoteError::Storage(format!("Failed to fetch note: {}", e)))?;
 
         if let Some(row) = row {
@@ -343,38 +414,51 @@ impl NotesDatabase {
 
     /// Delete a note
     pub async fn delete_note(&self, note_id: &str) -> NoteResult<()> {
-        let mut tx = self.pool.begin().await
+        let mut tx = self
+            .pool
+            .begin()
+            .await
             .map_err(|e| NoteError::Storage(format!("Failed to start transaction: {}", e)))?;
 
         // Soft delete the note
         sqlx::query("UPDATE notes SET is_deleted = TRUE, modified_at = ? WHERE id = ?")
             .bind(Utc::now().timestamp_millis())
             .bind(note_id)
-            .execute(&mut *tx).await
+            .execute(&mut *tx)
+            .await
             .map_err(|e| NoteError::Storage(format!("Failed to delete note: {}", e)))?;
 
         // Remove from FTS index
         sqlx::query("DELETE FROM notes_fts WHERE note_id = ?")
             .bind(note_id)
-            .execute(&mut *tx).await
+            .execute(&mut *tx)
+            .await
             .map_err(|e| NoteError::Storage(format!("Failed to remove from FTS index: {}", e)))?;
 
-        tx.commit().await
+        tx.commit()
+            .await
             .map_err(|e| NoteError::Storage(format!("Failed to commit note deletion: {}", e)))?;
 
         Ok(())
     }
 
     /// Add a watched directory
-    pub async fn add_watched_directory(&self, mut directory: WatchedDirectory) -> NoteResult<WatchedDirectory> {
-        let ignore_patterns_json = serde_json::to_string(&directory.ignore_patterns)
-            .map_err(|e| NoteError::Storage(format!("Failed to serialize ignore patterns: {}", e)))?;
+    pub async fn add_watched_directory(
+        &self,
+        mut directory: WatchedDirectory,
+    ) -> NoteResult<WatchedDirectory> {
+        let ignore_patterns_json =
+            serde_json::to_string(&directory.ignore_patterns).map_err(|e| {
+                NoteError::Storage(format!("Failed to serialize ignore patterns: {}", e))
+            })?;
 
-        let result = sqlx::query(r#"
+        let result = sqlx::query(
+            r#"
             INSERT INTO watched_directories 
                 (path, name, recursive, enabled, ignore_patterns, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?)
-        "#)
+        "#,
+        )
         .bind(directory.path.to_string_lossy().as_ref())
         .bind(&directory.name)
         .bind(directory.recursive)
@@ -382,7 +466,8 @@ impl NotesDatabase {
         .bind(ignore_patterns_json)
         .bind(directory.created_at.timestamp_millis())
         .bind(directory.updated_at.timestamp_millis())
-        .execute(&self.pool).await
+        .execute(&self.pool)
+        .await
         .map_err(|e| NoteError::Storage(format!("Failed to add watched directory: {}", e)))?;
 
         directory.id = result.last_insert_rowid();
@@ -391,22 +476,26 @@ impl NotesDatabase {
 
     /// Get all watched directories
     pub async fn get_watched_directories(&self) -> NoteResult<Vec<WatchedDirectory>> {
-        let rows = sqlx::query(r#"
+        let rows = sqlx::query(
+            r#"
             SELECT id, path, name, recursive, enabled, last_scan, note_count,
                    ignore_patterns, created_at, updated_at
             FROM watched_directories
             ORDER BY name
-        "#)
-        .fetch_all(&self.pool).await
+        "#,
+        )
+        .fetch_all(&self.pool)
+        .await
         .map_err(|e| NoteError::Storage(format!("Failed to fetch watched directories: {}", e)))?;
 
         let mut directories = Vec::new();
         for row in rows {
             let ignore_patterns_json: String = row.get("ignore_patterns");
-            let ignore_patterns: Vec<String> = serde_json::from_str(&ignore_patterns_json)
-                .unwrap_or_default();
+            let ignore_patterns: Vec<String> =
+                serde_json::from_str(&ignore_patterns_json).unwrap_or_default();
 
-            let last_scan = row.get::<Option<i64>, _>("last_scan")
+            let last_scan = row
+                .get::<Option<i64>, _>("last_scan")
                 .map(|ts| DateTime::from_timestamp_millis(ts).unwrap_or_else(|| Utc::now()));
 
             directories.push(WatchedDirectory {
@@ -418,8 +507,10 @@ impl NotesDatabase {
                 last_scan,
                 note_count: row.get::<i64, _>("note_count") as usize,
                 ignore_patterns,
-                created_at: DateTime::from_timestamp_millis(row.get("created_at")).unwrap_or_else(|| Utc::now()),
-                updated_at: DateTime::from_timestamp_millis(row.get("updated_at")).unwrap_or_else(|| Utc::now()),
+                created_at: DateTime::from_timestamp_millis(row.get("created_at"))
+                    .unwrap_or_else(|| Utc::now()),
+                updated_at: DateTime::from_timestamp_millis(row.get("updated_at"))
+                    .unwrap_or_else(|| Utc::now()),
             });
         }
 
@@ -427,10 +518,15 @@ impl NotesDatabase {
     }
 
     /// Search notes using FTS5
-    pub async fn search_notes(&self, query: &str, limit: usize) -> NoteResult<Vec<NoteSearchResult>> {
+    pub async fn search_notes(
+        &self,
+        query: &str,
+        limit: usize,
+    ) -> NoteResult<Vec<NoteSearchResult>> {
         let search_query = format!("{}*", query.trim()); // Add wildcard for prefix matching
-        
-        let rows = sqlx::query(r#"
+
+        let rows = sqlx::query(
+            r#"
             SELECT n.id, n.title, n.file_path, n.content_hash, n.word_count,
                    n.created_at, n.modified_at, n.file_size, n.is_deleted, n.metadata,
                    nc.content, nc.frontmatter, nc.parsed_links,
@@ -441,19 +537,21 @@ impl NotesDatabase {
             WHERE notes_fts MATCH ? AND n.is_deleted = FALSE
             ORDER BY fts.rank
             LIMIT ?
-        "#)
+        "#,
+        )
         .bind(&search_query)
         .bind(limit as i64)
-        .fetch_all(&self.pool).await
+        .fetch_all(&self.pool)
+        .await
         .map_err(|e| NoteError::Storage(format!("Failed to search notes: {}", e)))?;
 
         let mut results = Vec::new();
         for row in rows {
             let note = self.row_to_note(row).await?;
             let score = 1.0; // FTS5 rank would need more complex calculation
-            
+
             let mut search_result = NoteSearchResult::new(note, score);
-            
+
             // Generate simple snippets (just title and first line of content)
             search_result.add_snippet(format!("Title: {}", search_result.note.title));
             if !search_result.note.content.is_empty() {
@@ -462,15 +560,25 @@ impl NotesDatabase {
                     search_result.add_snippet(format!("Content: {}...", first_line));
                 }
             }
-            
+
             // Add matched fields
-            if search_result.note.title.to_lowercase().contains(&query.to_lowercase()) {
+            if search_result
+                .note
+                .title
+                .to_lowercase()
+                .contains(&query.to_lowercase())
+            {
                 search_result.add_matched_field("title".to_string());
             }
-            if search_result.note.content.to_lowercase().contains(&query.to_lowercase()) {
+            if search_result
+                .note
+                .content
+                .to_lowercase()
+                .contains(&query.to_lowercase())
+            {
                 search_result.add_matched_field("content".to_string());
             }
-            
+
             results.push(search_result);
         }
 
@@ -479,7 +587,8 @@ impl NotesDatabase {
 
     /// Get notes by tag
     pub async fn get_notes_by_tag(&self, tag: &str) -> NoteResult<Vec<Note>> {
-        let rows = sqlx::query(r#"
+        let rows = sqlx::query(
+            r#"
             SELECT n.id, n.title, n.file_path, n.content_hash, n.word_count,
                    n.created_at, n.modified_at, n.file_size, n.is_deleted, n.metadata,
                    nc.content, nc.frontmatter, nc.parsed_links
@@ -488,9 +597,11 @@ impl NotesDatabase {
             INNER JOIN note_tags nt ON n.id = nt.note_id
             WHERE nt.tag = ? AND n.is_deleted = FALSE
             ORDER BY n.modified_at DESC
-        "#)
+        "#,
+        )
         .bind(tag)
-        .fetch_all(&self.pool).await
+        .fetch_all(&self.pool)
+        .await
         .map_err(|e| NoteError::Storage(format!("Failed to get notes by tag: {}", e)))?;
 
         let mut notes = Vec::new();
@@ -503,7 +614,8 @@ impl NotesDatabase {
 
     /// Get recent notes
     pub async fn get_recent_notes(&self, limit: usize) -> NoteResult<Vec<Note>> {
-        let rows = sqlx::query(r#"
+        let rows = sqlx::query(
+            r#"
             SELECT n.id, n.title, n.file_path, n.content_hash, n.word_count,
                    n.created_at, n.modified_at, n.file_size, n.is_deleted, n.metadata,
                    nc.content, nc.frontmatter, nc.parsed_links
@@ -512,9 +624,11 @@ impl NotesDatabase {
             WHERE n.is_deleted = FALSE
             ORDER BY n.modified_at DESC
             LIMIT ?
-        "#)
+        "#,
+        )
         .bind(limit as i64)
-        .fetch_all(&self.pool).await
+        .fetch_all(&self.pool)
+        .await
         .map_err(|e| NoteError::Storage(format!("Failed to get recent notes: {}", e)))?;
 
         let mut notes = Vec::new();
@@ -532,19 +646,20 @@ impl NotesDatabase {
         // Get tags
         let tags_rows = sqlx::query("SELECT tag FROM note_tags WHERE note_id = ? ORDER BY tag")
             .bind(&note_id)
-            .fetch_all(&self.pool).await
+            .fetch_all(&self.pool)
+            .await
             .map_err(|e| NoteError::Storage(format!("Failed to fetch tags: {}", e)))?;
 
-        let tags: Vec<String> = tags_rows.into_iter()
-            .map(|row| row.get("tag"))
-            .collect();
+        let tags: Vec<String> = tags_rows.into_iter().map(|row| row.get("tag")).collect();
 
         // Parse frontmatter
-        let frontmatter = row.get::<Option<String>, _>("frontmatter")
+        let frontmatter = row
+            .get::<Option<String>, _>("frontmatter")
             .and_then(|fm_json| serde_json::from_str(&fm_json).ok());
 
         // Parse links
-        let links = row.get::<Option<String>, _>("parsed_links")
+        let links = row
+            .get::<Option<String>, _>("parsed_links")
             .and_then(|links_json| serde_json::from_str(&links_json).ok())
             .unwrap_or_default();
 
@@ -554,8 +669,10 @@ impl NotesDatabase {
             content: row.get::<Option<String>, _>("content").unwrap_or_default(),
             path: PathBuf::from(row.get::<String, _>("file_path")),
             frontmatter,
-            created_at: DateTime::from_timestamp_millis(row.get("created_at")).unwrap_or_else(|| Utc::now()),
-            modified_at: DateTime::from_timestamp_millis(row.get("modified_at")).unwrap_or_else(|| Utc::now()),
+            created_at: DateTime::from_timestamp_millis(row.get("created_at"))
+                .unwrap_or_else(|| Utc::now()),
+            modified_at: DateTime::from_timestamp_millis(row.get("modified_at"))
+                .unwrap_or_else(|| Utc::now()),
             word_count: row.get::<i64, _>("word_count") as usize,
             tags,
             links,
@@ -579,10 +696,12 @@ mod tests {
     #[tokio::test]
     async fn test_database_creation() {
         let db = create_test_database().await;
-        
+
         // Verify schema version was set
         let version: i64 = sqlx::query_scalar("SELECT MAX(version) FROM schema_version")
-            .fetch_one(&db.pool).await.unwrap();
+            .fetch_one(&db.pool)
+            .await
+            .unwrap();
         assert_eq!(version, 1);
     }
 
@@ -590,26 +709,28 @@ mod tests {
     async fn test_file_database_creation() {
         let temp_dir = TempDir::new().unwrap();
         let db_path = temp_dir.path().join("test.db");
-        
+
         // Use the explicit path for the test
         let result = NotesDatabase::new(&db_path).await;
-        
+
         // If this fails due to environment issues, skip the test
         if result.is_err() {
             println!("Skipping file database test due to environment limitations");
             return;
         }
-        
+
         let db = result.unwrap();
-        
+
         // Verify schema is correct
         let version: i64 = sqlx::query_scalar("SELECT MAX(version) FROM schema_version")
-            .fetch_one(&db.pool).await.unwrap();
+            .fetch_one(&db.pool)
+            .await
+            .unwrap();
         assert_eq!(version, 1);
-        
+
         // Close the database connection
         drop(db);
-        
+
         // Verify file was created (if it exists)
         if db_path.exists() {
             assert!(db_path.is_file());
@@ -619,14 +740,12 @@ mod tests {
     #[tokio::test]
     async fn test_add_watched_directory() {
         let db = create_test_database().await;
-        
-        let directory = WatchedDirectory::new(
-            PathBuf::from("/home/user/notes"),
-            "My Notes".to_string(),
-        );
+
+        let directory =
+            WatchedDirectory::new(PathBuf::from("/home/user/notes"), "My Notes".to_string());
 
         let stored_dir = db.add_watched_directory(directory.clone()).await.unwrap();
-        
+
         assert!(stored_dir.id > 0);
         assert_eq!(stored_dir.path, directory.path);
         assert_eq!(stored_dir.name, directory.name);
@@ -637,23 +756,21 @@ mod tests {
     #[tokio::test]
     async fn test_get_watched_directories() {
         let db = create_test_database().await;
-        
+
         // Add some directories
         let dir1 = WatchedDirectory::new(
             PathBuf::from("/home/user/notes"),
             "Personal Notes".to_string(),
         );
-        let dir2 = WatchedDirectory::new(
-            PathBuf::from("/home/user/work"),
-            "Work Notes".to_string(),
-        );
+        let dir2 =
+            WatchedDirectory::new(PathBuf::from("/home/user/work"), "Work Notes".to_string());
 
         db.add_watched_directory(dir1).await.unwrap();
         db.add_watched_directory(dir2).await.unwrap();
 
         let directories = db.get_watched_directories().await.unwrap();
         assert_eq!(directories.len(), 2);
-        
+
         // Should be sorted by name
         assert_eq!(directories[0].name, "Personal Notes");
         assert_eq!(directories[1].name, "Work Notes");
@@ -662,12 +779,9 @@ mod tests {
     #[tokio::test]
     async fn test_store_and_get_note() {
         let db = create_test_database().await;
-        
+
         // Add a directory first
-        let directory = WatchedDirectory::new(
-            PathBuf::from("/test"),
-            "Test Dir".to_string(),
-        );
+        let directory = WatchedDirectory::new(PathBuf::from("/test"), "Test Dir".to_string());
         let stored_dir = db.add_watched_directory(directory).await.unwrap();
 
         // Create a test note
@@ -688,7 +802,7 @@ mod tests {
         // Retrieve the note
         let retrieved = db.get_note(&note.id).await.unwrap();
         assert!(retrieved.is_some());
-        
+
         let retrieved_note = retrieved.unwrap();
         assert_eq!(retrieved_note.id, note.id);
         assert_eq!(retrieved_note.title, note.title);
@@ -709,12 +823,9 @@ mod tests {
     #[tokio::test]
     async fn test_store_note_with_frontmatter() {
         let db = create_test_database().await;
-        
+
         // Add a directory
-        let directory = WatchedDirectory::new(
-            PathBuf::from("/test"),
-            "Test Dir".to_string(),
-        );
+        let directory = WatchedDirectory::new(PathBuf::from("/test"), "Test Dir".to_string());
         let stored_dir = db.add_watched_directory(directory).await.unwrap();
 
         // Create a note with frontmatter
@@ -745,12 +856,9 @@ mod tests {
     #[tokio::test]
     async fn test_update_existing_note() {
         let db = create_test_database().await;
-        
+
         // Add directory
-        let directory = WatchedDirectory::new(
-            PathBuf::from("/test"),
-            "Test Dir".to_string(),
-        );
+        let directory = WatchedDirectory::new(PathBuf::from("/test"), "Test Dir".to_string());
         let stored_dir = db.add_watched_directory(directory).await.unwrap();
 
         // Create and store initial note
@@ -761,7 +869,7 @@ mod tests {
             PathBuf::from("/test/note3.md"),
         );
         note.tags = vec!["original".to_string()];
-        
+
         db.store_note(&note, stored_dir.id).await.unwrap();
 
         // Update the note
@@ -785,12 +893,9 @@ mod tests {
     #[tokio::test]
     async fn test_delete_note() {
         let db = create_test_database().await;
-        
+
         // Add directory and note
-        let directory = WatchedDirectory::new(
-            PathBuf::from("/test"),
-            "Test Dir".to_string(),
-        );
+        let directory = WatchedDirectory::new(PathBuf::from("/test"), "Test Dir".to_string());
         let stored_dir = db.add_watched_directory(directory).await.unwrap();
 
         let note = Note::new(
@@ -815,7 +920,7 @@ mod tests {
     #[tokio::test]
     async fn test_get_nonexistent_note() {
         let db = create_test_database().await;
-        
+
         let result = db.get_note("nonexistent-note").await.unwrap();
         assert!(result.is_none());
     }
@@ -823,7 +928,7 @@ mod tests {
     #[tokio::test]
     async fn test_foreign_key_constraints() {
         let db = create_test_database().await;
-        
+
         // Try to store a note without a valid directory
         let note = Note::new(
             "test-note-5".to_string(),
@@ -835,40 +940,40 @@ mod tests {
         // This should fail due to foreign key constraint
         let result = db.store_note(&note, 999).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("FOREIGN KEY constraint failed"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("FOREIGN KEY constraint failed"));
     }
 
     #[tokio::test]
     async fn test_unique_constraints() {
         let db = create_test_database().await;
-        
+
         // Add directory
-        let directory = WatchedDirectory::new(
-            PathBuf::from("/test"),
-            "Test Dir".to_string(),
-        );
+        let directory = WatchedDirectory::new(PathBuf::from("/test"), "Test Dir".to_string());
         let _stored_dir = db.add_watched_directory(directory).await.unwrap();
 
         // Try to add duplicate directory path
         let duplicate_dir = WatchedDirectory::new(
-            PathBuf::from("/test"),  // Same path
+            PathBuf::from("/test"), // Same path
             "Duplicate Dir".to_string(),
         );
-        
+
         let result = db.add_watched_directory(duplicate_dir).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("UNIQUE constraint failed"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("UNIQUE constraint failed"));
     }
 
     #[tokio::test]
     async fn test_search_notes() {
         let db = create_test_database().await;
-        
+
         // Add directory
-        let directory = WatchedDirectory::new(
-            PathBuf::from("/test"),
-            "Test Dir".to_string(),
-        );
+        let directory = WatchedDirectory::new(PathBuf::from("/test"), "Test Dir".to_string());
         let stored_dir = db.add_watched_directory(directory).await.unwrap();
 
         // Store some searchable notes
@@ -894,7 +999,7 @@ mod tests {
         // Search for "programming"
         let results = db.search_notes("programming", 10).await.unwrap();
         assert_eq!(results.len(), 2);
-        
+
         // Verify search results contain expected notes
         let note_ids: Vec<&str> = results.iter().map(|r| r.note.id.as_str()).collect();
         assert!(note_ids.contains(&"test-note-search-1"));
@@ -909,12 +1014,9 @@ mod tests {
     #[tokio::test]
     async fn test_get_notes_by_tag() {
         let db = create_test_database().await;
-        
+
         // Add directory
-        let directory = WatchedDirectory::new(
-            PathBuf::from("/test"),
-            "Test Dir".to_string(),
-        );
+        let directory = WatchedDirectory::new(PathBuf::from("/test"), "Test Dir".to_string());
         let stored_dir = db.add_watched_directory(directory).await.unwrap();
 
         // Store notes with different tags
@@ -949,7 +1051,7 @@ mod tests {
         // Get notes by "programming" tag
         let programming_notes = db.get_notes_by_tag("programming").await.unwrap();
         assert_eq!(programming_notes.len(), 2);
-        
+
         let titles: Vec<&str> = programming_notes.iter().map(|n| n.title.as_str()).collect();
         assert!(titles.contains(&"Rust Note"));
         assert!(titles.contains(&"Python Note"));
@@ -967,12 +1069,9 @@ mod tests {
     #[tokio::test]
     async fn test_get_recent_notes() {
         let db = create_test_database().await;
-        
+
         // Add directory
-        let directory = WatchedDirectory::new(
-            PathBuf::from("/test"),
-            "Test Dir".to_string(),
-        );
+        let directory = WatchedDirectory::new(PathBuf::from("/test"), "Test Dir".to_string());
         let stored_dir = db.add_watched_directory(directory).await.unwrap();
 
         // Store notes with different timestamps
@@ -998,7 +1097,7 @@ mod tests {
         // Get recent notes
         let recent_notes = db.get_recent_notes(10).await.unwrap();
         assert_eq!(recent_notes.len(), 2);
-        
+
         // Should be ordered by modified_at DESC, so newer note first
         assert_eq!(recent_notes[0].title, "New Note");
         assert_eq!(recent_notes[1].title, "Old Note");
@@ -1012,12 +1111,9 @@ mod tests {
     #[tokio::test]
     async fn test_fts_index_population() {
         let db = create_test_database().await;
-        
+
         // Add directory
-        let directory = WatchedDirectory::new(
-            PathBuf::from("/test"),
-            "Test Dir".to_string(),
-        );
+        let directory = WatchedDirectory::new(PathBuf::from("/test"), "Test Dir".to_string());
         let stored_dir = db.add_watched_directory(directory).await.unwrap();
 
         // Store a note
@@ -1034,15 +1130,20 @@ mod tests {
         // Verify FTS index was populated
         let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM notes_fts WHERE note_id = ?")
             .bind(&note.id)
-            .fetch_one(&db.pool).await.unwrap();
-        
+            .fetch_one(&db.pool)
+            .await
+            .unwrap();
+
         assert_eq!(count, 1);
 
         // Verify FTS content
-        let fts_content: String = sqlx::query_scalar("SELECT content FROM notes_fts WHERE note_id = ?")
-            .bind(&note.id)
-            .fetch_one(&db.pool).await.unwrap();
-        
+        let fts_content: String =
+            sqlx::query_scalar("SELECT content FROM notes_fts WHERE note_id = ?")
+                .bind(&note.id)
+                .fetch_one(&db.pool)
+                .await
+                .unwrap();
+
         assert_eq!(fts_content, note.content);
     }
 }

@@ -3,29 +3,29 @@
 //! This module provides a component-based architecture for Comunicado's UI,
 //! replacing the monolithic UI structure with focused, reusable components.
 
-pub mod traits;
-pub mod registry;
-pub mod email;
 pub mod calendar;
 pub mod contacts;
-pub mod layout;
-pub mod services;
+pub mod email;
 pub mod examples;
-pub mod modular_ui;
 pub mod integration_example;
+pub mod layout;
+pub mod modular_ui;
+pub mod registry;
+pub mod services;
+pub mod traits;
 
 // Re-export core types
-pub use traits::{
-    UIComponent, ComponentError, ComponentResult,
-    RenderContext, UIEvent, EventResult, ComponentMetrics,
-};
-pub use registry::{ComponentRegistry, ComponentHandle};
-pub use services::{UIServices, ServiceProvider};
-pub use layout::{LayoutManager, LayoutSpec, LayoutTemplate, ResponsiveRule};
+pub use calendar::{CalendarAction, CalendarComponent, CalendarPane, CalendarViewMode};
+pub use contacts::{ContactAction, ContactTab, ContactsComponent, ContactsPane, ContactsViewMode};
 pub use email::{EmailComponent, EmailComponentMode, EmailSection};
-pub use calendar::{CalendarComponent, CalendarViewMode, CalendarPane, CalendarAction};
-pub use contacts::{ContactsComponent, ContactsViewMode, ContactTab, ContactsPane, ContactAction};
-pub use modular_ui::{ModularUI, AppMode, ModularUIMetrics};
+pub use layout::{LayoutManager, LayoutSpec, LayoutTemplate, ResponsiveRule};
+pub use modular_ui::{AppMode, ModularUI, ModularUIMetrics};
+pub use registry::{ComponentHandle, ComponentRegistry};
+pub use services::{ServiceProvider, UIServices};
+pub use traits::{
+    ComponentError, ComponentMetrics, ComponentResult, EventResult, RenderContext, UIComponent,
+    UIEvent,
+};
 
 // These types are defined in this module and exported directly
 
@@ -41,17 +41,17 @@ impl ComponentId {
     pub fn new<T: UIComponent + 'static>() -> Self {
         Self(TypeId::of::<T>(), Uuid::new_v4())
     }
-    
+
     /// Create a component ID from a type and instance ID
     pub fn from_type<T: 'static>(instance_id: Uuid) -> Self {
         Self(TypeId::of::<T>(), instance_id)
     }
-    
+
     /// Get the type ID
     pub fn type_id(&self) -> TypeId {
         self.0
     }
-    
+
     /// Get the instance ID
     pub fn instance_id(&self) -> Uuid {
         self.1
@@ -80,12 +80,12 @@ impl ComponentState {
     pub fn can_handle_events(&self) -> bool {
         matches!(self, ComponentState::Ready | ComponentState::Focused)
     }
-    
+
     /// Check if the component should be rendered
     pub fn should_render(&self) -> bool {
         !matches!(self, ComponentState::Hidden | ComponentState::Destroying)
     }
-    
+
     /// Check if the component is focused
     pub fn is_focused(&self) -> bool {
         matches!(self, ComponentState::Focused)

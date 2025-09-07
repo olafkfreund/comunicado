@@ -169,7 +169,7 @@ Comunicado brings modern email features directly to your terminal with:
   - Vim-style keyboard navigation
   - Responsive three-pane layout
 
-• Rich Email Support  
+• Rich Email Support
   - HTML email rendering ✨
   - Image and animation display
   - Attachment handling
@@ -343,7 +343,9 @@ This is a sample email showcasing the modern email display format."
             let mut all_lines = Vec::new();
 
             // Do all mutable operations first to avoid borrowing conflicts
-            let html_lines = if email.content_type == ContentType::Html || crate::html::is_html_content(&email.body) {
+            let html_lines = if email.content_type == ContentType::Html
+                || crate::html::is_html_content(&email.body)
+            {
                 tracing::debug!(
                     "Content Preview: Processing HTML content (type: {:?}, length: {})",
                     email.content_type,
@@ -1152,7 +1154,7 @@ This is a sample email showcasing the modern email display format."
         }
     }
 
-    /// Handle down key press for scrolling  
+    /// Handle down key press for scrolling
     pub fn handle_down(&mut self) {
         if self.is_viewing_attachment {
             self.attachment_viewer.scroll_down();
@@ -1170,7 +1172,7 @@ This is a sample email showcasing the modern email display format."
         self.scroll = self.scroll.saturating_sub(lines);
     }
 
-    /// Scroll content down by specified lines  
+    /// Scroll content down by specified lines
     pub fn scroll_down(&mut self, lines: usize) {
         let max_scroll = self.get_max_scroll(20); // Approximate content height
         self.scroll = (self.scroll.saturating_add(lines)).min(max_scroll);
@@ -1188,7 +1190,7 @@ This is a sample email showcasing the modern email display format."
         self.scroll_up(page_size);
     }
 
-    /// Scroll by a full page down  
+    /// Scroll by a full page down
     pub fn page_down(&mut self, visible_height: usize) {
         let page_size = visible_height.saturating_sub(2); // Leave some overlap
         self.scroll_down_with_height(page_size, visible_height);
@@ -1346,7 +1348,8 @@ This is a sample email showcasing the modern email display format."
         }
 
         // Extract body using RFC-compliant email parsing to filter out all headers and metadata
-        let body = crate::ui::email_viewer::EmailViewer::filter_email_headers_and_metadata(raw_email);
+        let body =
+            crate::ui::email_viewer::EmailViewer::filter_email_headers_and_metadata(raw_email);
 
         // Parse URLs
         let parsed_urls = self.extract_urls(&body);
@@ -1774,7 +1777,10 @@ This is a sample email showcasing the modern email display format."
     }
 
     /// Convert a StoredMessage to EmailContent for display with on-demand IMAP body fetching
-    async fn convert_stored_message_to_email_content(&self, message: &StoredMessage) -> EmailContent {
+    async fn convert_stored_message_to_email_content(
+        &self,
+        message: &StoredMessage,
+    ) -> EmailContent {
         let headers = EmailHeader {
             from: format!(
                 "{} <{}>",
@@ -1814,7 +1820,9 @@ This is a sample email showcasing the modern email display format."
                     (text_body.clone(), ContentType::PlainText)
                 }
             } else {
-                tracing::debug!("Content Preview: Only empty HTML body available, attempting IMAP fetch");
+                tracing::debug!(
+                    "Content Preview: Only empty HTML body available, attempting IMAP fetch"
+                );
                 // Try to fetch body from IMAP if available
                 match self.fetch_message_body_from_imap(message).await {
                     Ok(Some((fetched_body, content_type))) => {
@@ -1827,7 +1835,10 @@ This is a sample email showcasing the modern email display format."
                     }
                     Err(e) => {
                         tracing::error!("Content Preview: Failed to fetch from IMAP: {}", e);
-                        ("No content available (IMAP fetch failed)".to_string(), ContentType::PlainText)
+                        (
+                            "No content available (IMAP fetch failed)".to_string(),
+                            ContentType::PlainText,
+                        )
                     }
                 }
             }
@@ -1860,7 +1871,10 @@ This is a sample email showcasing the modern email display format."
                 }
                 Err(e) => {
                     tracing::error!("Content Preview: Failed to fetch from IMAP: {}", e);
-                    ("No content available (IMAP fetch failed)".to_string(), ContentType::PlainText)
+                    (
+                        "No content available (IMAP fetch failed)".to_string(),
+                        ContentType::PlainText,
+                    )
                 }
             }
         };
@@ -2403,7 +2417,7 @@ This is a sample email showcasing the modern email display format."
         Ok(())
     }
 
-    /// Copy selected attachment name/path to clipboard  
+    /// Copy selected attachment name/path to clipboard
     pub fn copy_attachment_info(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         if let Some(attachment_index) = self.selected_attachment {
             if let Some(ref email) = self.email_content {
@@ -2729,53 +2743,78 @@ This is a sample email showcasing the modern email display format."
         let mut filtered_lines = Vec::new();
         let mut skip_headers = true;
         let mut found_content_start = false;
-        
+
         // Common email headers to filter out
         let header_patterns = [
-            "Message-ID:", "Date:", "From:", "To:", "Subject:", "Mime-Version:",
-            "Content-Type:", "Content-Transfer-Encoding:", "X-", "Received:",
-            "Return-Path:", "Delivered-To:", "Authentication-Results:",
-            "DKIM-Signature:", "Reply-To:", "Cc:", "Bcc:", "In-Reply-To:",
-            "References:", "Thread-Topic:", "Thread-Index:", "Precedence:",
-            "List-", "Organization:", "User-Agent:", "X-Mailer:", "Content-",
-            "MIME-", "Boundary=", "charset=", "name=", "filename=",
+            "Message-ID:",
+            "Date:",
+            "From:",
+            "To:",
+            "Subject:",
+            "Mime-Version:",
+            "Content-Type:",
+            "Content-Transfer-Encoding:",
+            "X-",
+            "Received:",
+            "Return-Path:",
+            "Delivered-To:",
+            "Authentication-Results:",
+            "DKIM-Signature:",
+            "Reply-To:",
+            "Cc:",
+            "Bcc:",
+            "In-Reply-To:",
+            "References:",
+            "Thread-Topic:",
+            "Thread-Index:",
+            "Precedence:",
+            "List-",
+            "Organization:",
+            "User-Agent:",
+            "X-Mailer:",
+            "Content-",
+            "MIME-",
+            "Boundary=",
+            "charset=",
+            "name=",
+            "filename=",
         ];
-        
+
         for line in content_lines {
             let trimmed = line.trim();
-            
+
             // Skip empty lines at the start
             if skip_headers && trimmed.is_empty() {
                 continue;
             }
-            
+
             // Check if this line looks like a header
             let is_header = header_patterns.iter().any(|pattern| {
-                trimmed.starts_with(pattern) || 
-                trimmed.to_lowercase().starts_with(&pattern.to_lowercase())
+                trimmed.starts_with(pattern)
+                    || trimmed.to_lowercase().starts_with(&pattern.to_lowercase())
             });
-            
+
             // Also check for header continuation lines (starting with whitespace)
-            let is_header_continuation = skip_headers && 
-                (trimmed.starts_with(' ') || trimmed.starts_with('\t')) &&
-                !found_content_start;
-            
+            let is_header_continuation = skip_headers
+                && (trimmed.starts_with(' ') || trimmed.starts_with('\t'))
+                && !found_content_start;
+
             if skip_headers && (is_header || is_header_continuation) {
                 continue;
             }
-            
+
             // If we find a line that doesn't look like a header, start including content
             if skip_headers && !is_header && !is_header_continuation && !trimmed.is_empty() {
                 skip_headers = false;
                 found_content_start = true;
             }
-            
+
             // Include this line if we're past the headers
             if !skip_headers {
                 filtered_lines.push(line.clone());
             }
         }
-        
+
         filtered_lines
     }
 
@@ -2783,78 +2822,123 @@ This is a sample email showcasing the modern email display format."
     fn filter_raw_headers_from_content(&self, content_lines: &[ContentLine]) -> Vec<ContentLine> {
         let mut filtered_lines = Vec::new();
         let mut in_headers = true;
-        
+
         // Comprehensive list of email headers and technical metadata to filter out
         let header_patterns = [
             // Standard email headers
-            "Message-ID:", "Date:", "From:", "To:", "Subject:", "Return-Path:",
-            "Received:", "Reply-To:", "Cc:", "Bcc:", "In-Reply-To:", "References:",
-            
+            "Message-ID:",
+            "Date:",
+            "From:",
+            "To:",
+            "Subject:",
+            "Return-Path:",
+            "Received:",
+            "Reply-To:",
+            "Cc:",
+            "Bcc:",
+            "In-Reply-To:",
+            "References:",
             // Authentication and security headers
-            "Authentication-Results:", "ARC-Authentication-Results:", "ARC-Message-Signature:",
-            "ARC-Seal:", "DKIM-Signature:", "DomainKey-Signature:", "Sender:", "X-Google-DKIM-Signature:",
-            
+            "Authentication-Results:",
+            "ARC-Authentication-Results:",
+            "ARC-Message-Signature:",
+            "ARC-Seal:",
+            "DKIM-Signature:",
+            "DomainKey-Signature:",
+            "Sender:",
+            "X-Google-DKIM-Signature:",
             // Delivery and routing headers
-            "Delivered-To:", "Envelope-To:", "Original-Recipient:", "X-Original-To:",
-            "X-Forwarded-To:", "X-Envelope-From:", "X-Sender:",
-            
+            "Delivered-To:",
+            "Envelope-To:",
+            "Original-Recipient:",
+            "X-Original-To:",
+            "X-Forwarded-To:",
+            "X-Envelope-From:",
+            "X-Sender:",
             // Content and MIME headers
-            "Content-Type:", "Content-Transfer-Encoding:", "Content-Disposition:",
-            "Content-Description:", "Content-ID:", "Content-Length:", "MIME-Version:",
-            
+            "Content-Type:",
+            "Content-Transfer-Encoding:",
+            "Content-Disposition:",
+            "Content-Description:",
+            "Content-ID:",
+            "Content-Length:",
+            "MIME-Version:",
             // Server and client identification
-            "User-Agent:", "X-Mailer:", "X-MimeOLE:", "X-Originating-IP:", "X-Source-IP:",
-            "X-Remote-IP:", "X-Forwarded-For:", "X-Real-IP:",
-            
+            "User-Agent:",
+            "X-Mailer:",
+            "X-MimeOLE:",
+            "X-Originating-IP:",
+            "X-Source-IP:",
+            "X-Remote-IP:",
+            "X-Forwarded-For:",
+            "X-Real-IP:",
             // List management
-            "List-ID:", "List-Unsubscribe:", "List-Subscribe:", "List-Archive:",
-            "List-Post:", "List-Help:", "List-Owner:",
-            
+            "List-ID:",
+            "List-Unsubscribe:",
+            "List-Subscribe:",
+            "List-Archive:",
+            "List-Post:",
+            "List-Help:",
+            "List-Owner:",
             // Threading and organization
-            "Thread-Topic:", "Thread-Index:", "Precedence:", "Priority:", "Importance:",
-            "Organization:", "X-Organization:",
-            
+            "Thread-Topic:",
+            "Thread-Index:",
+            "Precedence:",
+            "Priority:",
+            "Importance:",
+            "Organization:",
+            "X-Organization:",
             // Spam and filtering
-            "X-Spam-Status:", "X-Spam-Score:", "X-Spam-Level:", "X-Spam-Checker-Version:",
-            "X-AntiVirus:", "X-Virus-Scanned:",
-            
+            "X-Spam-Status:",
+            "X-Spam-Score:",
+            "X-Spam-Level:",
+            "X-Spam-Checker-Version:",
+            "X-AntiVirus:",
+            "X-Virus-Scanned:",
             // Microsoft specific
-            "X-MS-", "X-Exchange-", "X-Microsoft-", "Accept-Language:",
-            
-            // Google specific  
-            "X-Google-", "X-Gmail-", "X-Gm-Message-State:",
-            
+            "X-MS-",
+            "X-Exchange-",
+            "X-Microsoft-",
+            "Accept-Language:",
+            // Google specific
+            "X-Google-",
+            "X-Gmail-",
+            "X-Gm-Message-State:",
             // Yahoo specific
-            "X-Yahoo-", "X-YMail-",
-            
+            "X-Yahoo-",
+            "X-YMail-",
             // Technical metadata patterns
-            "boundary=", "charset=", "name=", "filename=", "format=",
+            "boundary=",
+            "charset=",
+            "name=",
+            "filename=",
+            "format=",
         ];
-        
+
         // Patterns for technical metadata lines (not proper headers)
         let technical_metadata_patterns = [
             // DKIM signature data
             r"^\s*[a-zA-Z0-9+/=]{20,}\s*$", // Base64 data
-            r"^\s*[bh]=", // DKIM hash
-            r"^\s*d=.*\.com.*s=", // DKIM domain/selector
-            r"^\s*t=\d{10}", // Unix timestamp
+            r"^\s*[bh]=",                   // DKIM hash
+            r"^\s*d=.*\.com.*s=",           // DKIM domain/selector
+            r"^\s*t=\d{10}",                // Unix timestamp
             r"^\s*[0-9]{2}:[0-9]{2}:[0-9]{2}\s+[+-]\d{4}", // Timezone info alone
         ];
-        
+
         for (i, content_line) in content_lines.iter().enumerate() {
             let trimmed = content_line.text.trim();
-            
+
             // Skip completely empty lines at the start
             if in_headers && trimmed.is_empty() {
                 continue;
             }
-            
+
             // Check if this looks like a standard email header
             let is_standard_header = header_patterns.iter().any(|pattern| {
-                trimmed.starts_with(pattern) || 
-                trimmed.to_lowercase().starts_with(&pattern.to_lowercase())
+                trimmed.starts_with(pattern)
+                    || trimmed.to_lowercase().starts_with(&pattern.to_lowercase())
             });
-            
+
             // Check if this looks like technical metadata (DKIM data, base64, etc.)
             let is_technical_metadata = technical_metadata_patterns.iter().any(|pattern| {
                 if let Ok(regex) = regex::Regex::new(pattern) {
@@ -2863,86 +2947,88 @@ This is a sample email showcasing the modern email display format."
                     trimmed.contains(pattern)
                 }
             });
-            
+
             // Check for header continuation lines (RFC 5322 - lines starting with space/tab)
-            let is_header_continuation = in_headers && 
-                (trimmed.starts_with(' ') || trimmed.starts_with('\t'));
-            
+            let is_header_continuation =
+                in_headers && (trimmed.starts_with(' ') || trimmed.starts_with('\t'));
+
             // Skip headers and technical metadata
-            if in_headers && (is_standard_header || is_technical_metadata || is_header_continuation) {
+            if in_headers && (is_standard_header || is_technical_metadata || is_header_continuation)
+            {
                 continue;
             }
-            
+
             // Look for content start indicators
-            let looks_like_content = !trimmed.is_empty() && 
-                !is_standard_header && 
-                !is_technical_metadata &&
-                !is_header_continuation &&
-                (
+            let looks_like_content = !trimmed.is_empty()
+                && !is_standard_header
+                && !is_technical_metadata
+                && !is_header_continuation
+                && (
                     // Common greeting patterns
                     trimmed.to_lowercase().starts_with("hi ") ||
                     trimmed.to_lowercase().starts_with("hello") ||
                     trimmed.to_lowercase().starts_with("dear ") ||
                     trimmed.to_lowercase().starts_with("greetings") ||
-                    
+
                     // Common content patterns
                     trimmed.len() > 10 && // Substantial text
                     !trimmed.contains(':') || // Not a header (headers have colons)
-                    
+
                     // If it's a sentence (ends with punctuation)
                     trimmed.ends_with('.') ||
                     trimmed.ends_with('!') ||
                     trimmed.ends_with('?') ||
-                    
+
                     // Company names or signatures
                     trimmed.to_lowercase().contains("team") ||
                     trimmed.to_lowercase().contains("regards") ||
                     trimmed.to_lowercase().contains("sincerely") ||
-                    
+
                     // URLs in body (not headers)
                     (trimmed.contains("http") && !trimmed.starts_with("List-"))
                 );
-            
+
             // Switch to content mode if we found actual content
             if in_headers && looks_like_content {
                 in_headers = false;
             }
-            
+
             // Include everything once we're in content mode
             if !in_headers {
                 filtered_lines.push(content_line.clone());
             }
-            
-            // Special case: if we're still in headers but reached the end, 
+
+            // Special case: if we're still in headers but reached the end,
             // include remaining lines as they might be content
             if in_headers && i > content_lines.len() - 5 {
                 filtered_lines.push(content_line.clone());
             }
         }
-        
+
         // If we got no content, it means our filtering was too aggressive
         // Fall back to showing everything except the most obvious technical headers
         if filtered_lines.is_empty() {
             for content_line in content_lines {
                 let trimmed = content_line.text.trim();
-                
+
                 // Only filter out the most obviously technical lines
-                let is_obvious_technical = header_patterns[0..10].iter().any(|pattern| {
-                    trimmed.starts_with(pattern)
-                }) || technical_metadata_patterns.iter().any(|pattern| {
-                    if let Ok(regex) = regex::Regex::new(pattern) {
-                        regex.is_match(trimmed)
-                    } else {
-                        false
-                    }
-                });
-                
+                let is_obvious_technical = header_patterns[0..10]
+                    .iter()
+                    .any(|pattern| trimmed.starts_with(pattern))
+                    || technical_metadata_patterns.iter().any(|pattern| {
+                        if let Ok(regex) = regex::Regex::new(pattern) {
+                            regex.is_match(trimmed)
+                        } else {
+                            false
+                        }
+                    });
+
                 if !is_obvious_technical {
                     filtered_lines.push(content_line.clone());
                 }
             }
         }
-        
+
         filtered_lines
     }
 
@@ -2977,7 +3063,11 @@ This is a sample email showcasing the modern email display format."
         let imap_client_arc = match imap_manager.get_client(&message.account_id).await {
             Ok(client) => client,
             Err(e) => {
-                tracing::error!("Failed to get IMAP client for account {}: {}", message.account_id, e);
+                tracing::error!(
+                    "Failed to get IMAP client for account {}: {}",
+                    message.account_id,
+                    e
+                );
                 return Err(format!("IMAP client unavailable: {}", e).into());
             }
         };
@@ -3008,14 +3098,18 @@ This is a sample email showcasing the modern email display format."
         // Extract body from the first (and should be only) message
         if let Some(imap_message) = fetched_messages.first() {
             if let Some(ref body) = imap_message.body {
-                tracing::info!("Successfully fetched message body from IMAP (length: {})", body.len());
-                
+                tracing::info!(
+                    "Successfully fetched message body from IMAP (length: {})",
+                    body.len()
+                );
+
                 // Parse the raw email body to extract HTML/text content
                 let (clean_body, content_type) = self.parse_email_body(body)?;
-                
+
                 // Update the database with the fetched content
-                self.update_message_body_in_database(message, &clean_body, &content_type).await?;
-                
+                self.update_message_body_in_database(message, &clean_body, &content_type)
+                    .await?;
+
                 return Ok(Some((clean_body, content_type)));
             }
         }
@@ -3025,24 +3119,27 @@ This is a sample email showcasing the modern email display format."
     }
 
     /// Parse raw email body to extract clean HTML/text content
-    fn parse_email_body(&self, raw_body: &str) -> Result<(String, ContentType), Box<dyn std::error::Error + Send + Sync>> {
+    fn parse_email_body(
+        &self,
+        raw_body: &str,
+    ) -> Result<(String, ContentType), Box<dyn std::error::Error + Send + Sync>> {
         // Use the existing email parsing logic to extract HTML/text from raw email
         // This is a simplified implementation - in a real system you'd use a proper MIME parser
-        
+
         // Look for HTML content first
         if let Some(html_start) = raw_body.find("Content-Type: text/html") {
             if let Some(html_content) = self.extract_html_from_raw_body(&raw_body[html_start..]) {
                 return Ok((html_content, ContentType::Html));
             }
         }
-        
+
         // Look for plain text content
         if let Some(text_start) = raw_body.find("Content-Type: text/plain") {
             if let Some(text_content) = self.extract_text_from_raw_body(&raw_body[text_start..]) {
                 return Ok((text_content, ContentType::PlainText));
             }
         }
-        
+
         // Fallback: try to extract any readable content from the body
         let clean_content = self.extract_fallback_content(raw_body);
         Ok((clean_content, ContentType::PlainText))
@@ -3053,7 +3150,7 @@ This is a sample email showcasing the modern email display format."
         // Look for the start of the HTML content (after headers)
         let lines: Vec<&str> = raw_section.lines().collect();
         let mut content_start = None;
-        
+
         for (i, line) in lines.iter().enumerate() {
             if line.trim().is_empty() {
                 // Empty line indicates end of headers, content starts next
@@ -3061,14 +3158,14 @@ This is a sample email showcasing the modern email display format."
                 break;
             }
         }
-        
+
         if let Some(start) = content_start {
             let html_content: String = lines[start..].join("\n");
             if !html_content.trim().is_empty() {
                 return Some(html_content);
             }
         }
-        
+
         None
     }
 
@@ -3077,21 +3174,21 @@ This is a sample email showcasing the modern email display format."
         // Similar to HTML extraction but for plain text
         let lines: Vec<&str> = raw_section.lines().collect();
         let mut content_start = None;
-        
+
         for (i, line) in lines.iter().enumerate() {
             if line.trim().is_empty() {
                 content_start = Some(i + 1);
                 break;
             }
         }
-        
+
         if let Some(start) = content_start {
             let text_content: String = lines[start..].join("\n");
             if !text_content.trim().is_empty() {
                 return Some(text_content);
             }
         }
-        
+
         None
     }
 
@@ -3101,7 +3198,7 @@ This is a sample email showcasing the modern email display format."
         let lines: Vec<&str> = raw_body.lines().collect();
         let mut content_lines = Vec::new();
         let mut in_headers = true;
-        
+
         for line in lines {
             if in_headers {
                 // Skip headers until we find an empty line
@@ -3110,18 +3207,19 @@ This is a sample email showcasing the modern email display format."
                 }
                 continue;
             }
-            
+
             // Skip technical MIME boundaries and encoding lines
-            if line.starts_with("--") || 
-               line.starts_with("Content-") ||
-               line.contains("boundary=") ||
-               line.contains("charset=") {
+            if line.starts_with("--")
+                || line.starts_with("Content-")
+                || line.contains("boundary=")
+                || line.contains("charset=")
+            {
                 continue;
             }
-            
+
             content_lines.push(line);
         }
-        
+
         content_lines.join("\n").trim().to_string()
     }
 
@@ -3133,27 +3231,36 @@ This is a sample email showcasing the modern email display format."
         content_type: &ContentType,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         if let Some(database) = &self.database {
-            tracing::info!("Updating message body in database for message ID: {}", message.id);
-            
+            tracing::info!(
+                "Updating message body in database for message ID: {}",
+                message.id
+            );
+
             // Update the database with the fetched content
             match content_type {
                 ContentType::Html => {
-                    database.update_message_body(message.id, None, Some(body_content.to_string())).await?;
+                    database
+                        .update_message_body(message.id, None, Some(body_content.to_string()))
+                        .await?;
                 }
                 ContentType::PlainText => {
-                    database.update_message_body(message.id, Some(body_content.to_string()), None).await?;
+                    database
+                        .update_message_body(message.id, Some(body_content.to_string()), None)
+                        .await?;
                 }
                 _ => {
                     // For other types, store as plain text
-                    database.update_message_body(message.id, Some(body_content.to_string()), None).await?;
+                    database
+                        .update_message_body(message.id, Some(body_content.to_string()), None)
+                        .await?;
                 }
             }
-            
+
             tracing::info!("Successfully updated message body in database");
         } else {
             tracing::warn!("Database not available for updating message body");
         }
-        
+
         Ok(())
     }
 
@@ -3168,7 +3275,8 @@ This is a sample email showcasing the modern email display format."
         save_path: Option<std::path::PathBuf>,
     ) -> Result<std::path::PathBuf, Box<dyn std::error::Error>> {
         if let Some(attachment_info) = self.attachment_viewer.get_current_attachment() {
-            self.save_attachment_from_viewer(attachment_info, save_path).await
+            self.save_attachment_from_viewer(attachment_info, save_path)
+                .await
         } else {
             Err("No attachment currently being viewed".into())
         }

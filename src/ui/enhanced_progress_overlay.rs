@@ -1,8 +1,7 @@
 /// Enhanced progress overlay with cancellation support
-/// 
+///
 /// This provides a modern progress overlay that shows background tasks and allows users to cancel them.
 /// It enhances the existing sync progress overlay with better UX and cancellation capabilities.
-
 use crate::email::sync_engine::{SyncPhase, SyncProgress};
 use crate::performance::background_processor::{BackgroundProcessor, TaskResult, TaskStatus};
 use crate::theme::Theme;
@@ -44,9 +43,16 @@ pub enum ProgressStatus {
 
 #[derive(Debug, Clone)]
 pub enum ProgressTaskType {
-    EmailSync { account_id: String, folder_name: String },
-    CalendarSync { calendar_id: String },
-    Search { query: String },
+    EmailSync {
+        account_id: String,
+        folder_name: String,
+    },
+    CalendarSync {
+        calendar_id: String,
+    },
+    Search {
+        query: String,
+    },
     Indexing,
     Export,
     Import,
@@ -89,15 +95,17 @@ impl EnhancedProgressOverlay {
     /// Add or update a progress item from sync progress
     pub fn update_sync_progress(&mut self, progress: SyncProgress) {
         // Find existing item by account and folder, or create new one
-        let existing_id = self.progress_items.iter()
+        let existing_id = self
+            .progress_items
+            .iter()
             .find(|(_, item)| {
-                matches!(&item.task_type, ProgressTaskType::EmailSync { account_id, folder_name } 
+                matches!(&item.task_type, ProgressTaskType::EmailSync { account_id, folder_name }
                     if account_id == &progress.account_id && folder_name == &progress.folder_name)
             })
             .map(|(id, _)| *id);
-        
+
         let task_id = existing_id.unwrap_or_else(|| Uuid::new_v4());
-        
+
         let item = ProgressItem {
             id: task_id,
             title: format!("Syncing {} • {}", progress.account_id, progress.folder_name),
@@ -111,26 +119,36 @@ impl EnhancedProgressOverlay {
             } else {
                 0.0
             },
-            details: format!("{}/{} messages • {}", 
-                progress.messages_processed, 
+            details: format!(
+                "{}/{} messages • {}",
+                progress.messages_processed,
                 progress.total_messages,
                 Self::format_phase(&progress.phase)
             ),
-            can_cancel: matches!(progress.phase, SyncPhase::Initializing | SyncPhase::CheckingFolders | SyncPhase::FetchingHeaders | SyncPhase::FetchingBodies | SyncPhase::ProcessingChanges),
-            started_at: Instant::now() - std::time::Duration::from_secs(
-                (Utc::now().timestamp() - progress.started_at.timestamp()) as u64
+            can_cancel: matches!(
+                progress.phase,
+                SyncPhase::Initializing
+                    | SyncPhase::CheckingFolders
+                    | SyncPhase::FetchingHeaders
+                    | SyncPhase::FetchingBodies
+                    | SyncPhase::ProcessingChanges
             ),
+            started_at: Instant::now()
+                - std::time::Duration::from_secs(
+                    (Utc::now().timestamp() - progress.started_at.timestamp()) as u64,
+                ),
             estimated_completion: progress.estimated_completion.map(|eta| {
-                Instant::now() + std::time::Duration::from_secs(
-                    (eta.timestamp() - Utc::now().timestamp()).max(0) as u64
-                )
+                Instant::now()
+                    + std::time::Duration::from_secs(
+                        (eta.timestamp() - Utc::now().timestamp()).max(0) as u64,
+                    )
             }),
             task_type: ProgressTaskType::EmailSync {
                 account_id: progress.account_id.clone(),
                 folder_name: progress.folder_name.clone(),
             },
         };
-        
+
         self.progress_items.insert(task_id, item);
         self.update_visibility();
     }
@@ -158,12 +176,13 @@ impl EnhancedProgressOverlay {
         if let Some(item) = self.progress_items.get_mut(&task_id) {
             item.progress = progress.clamp(0.0, 1.0);
             item.details = details;
-            
+
             // Update estimated completion based on progress
             if progress > 0.0 && progress < 1.0 {
                 let elapsed = item.started_at.elapsed();
                 let total_estimated = elapsed.as_secs_f64() / progress;
-                let remaining = Duration::from_secs_f64((total_estimated - elapsed.as_secs_f64()).max(0.0));
+                let remaining =
+                    Duration::from_secs_f64((total_estimated - elapsed.as_secs_f64()).max(0.0));
                 item.estimated_completion = Some(Instant::now() + remaining);
             }
         }
@@ -179,9 +198,12 @@ impl EnhancedProgressOverlay {
                 _ => item.status.clone(),
             };
             item.progress = 1.0;
-            
+
             // Remove completed/failed tasks after delay
-            if matches!(item.status, ProgressStatus::Completed | ProgressStatus::Failed(_) | ProgressStatus::Cancelled) {
+            if matches!(
+                item.status,
+                ProgressStatus::Completed | ProgressStatus::Failed(_) | ProgressStatus::Cancelled
+            ) {
                 // TODO: Schedule for removal after 3 seconds
             }
         }
@@ -194,8 +216,12 @@ impl EnhancedProgressOverlay {
             .progress_items
             .iter()
             .filter(|(_, item)| {
-                matches!(item.status, ProgressStatus::Completed | ProgressStatus::Failed(_) | ProgressStatus::Cancelled) &&
-                now.duration_since(item.started_at) > threshold
+                matches!(
+                    item.status,
+                    ProgressStatus::Completed
+                        | ProgressStatus::Failed(_)
+                        | ProgressStatus::Cancelled
+                ) && now.duration_since(item.started_at) > threshold
             })
             .map(|(id, _)| *id)
             .collect();
@@ -210,9 +236,12 @@ impl EnhancedProgressOverlay {
     /// Update visibility based on active items
     fn update_visibility(&mut self) {
         let has_active = self.progress_items.iter().any(|(_, item)| {
-            matches!(item.status, ProgressStatus::Running | ProgressStatus::Paused)
+            matches!(
+                item.status,
+                ProgressStatus::Running | ProgressStatus::Paused
+            )
         });
-        
+
         if !has_active && self.progress_items.len() <= 3 {
             // Keep overlay visible briefly after completion
             if self.last_update.elapsed() > Duration::from_secs(2) {
@@ -400,11 +429,12 @@ impl EnhancedProgressOverlay {
                 };
 
                 let progress_percent = (item.progress * 100.0) as u16;
-                let cancel_indicator = if item.can_cancel && matches!(item.status, ProgressStatus::Running) {
-                    " (ESC to cancel)"
-                } else {
-                    ""
-                };
+                let cancel_indicator =
+                    if item.can_cancel && matches!(item.status, ProgressStatus::Running) {
+                        " (ESC to cancel)"
+                    } else {
+                        ""
+                    };
 
                 let style = if index == self.selected_index {
                     Style::default()
@@ -417,10 +447,7 @@ impl EnhancedProgressOverlay {
 
                 let line = Line::from(vec![
                     Span::styled(format!("{} ", status_symbol), Style::default()),
-                    Span::styled(
-                        &item.title,
-                        Style::default().add_modifier(Modifier::BOLD),
-                    ),
+                    Span::styled(&item.title, Style::default().add_modifier(Modifier::BOLD)),
                     Span::styled(
                         format!(" ({}%){}", progress_percent, cancel_indicator),
                         Style::default().fg(theme.colors.palette.text_secondary),
@@ -448,9 +475,9 @@ impl EnhancedProgressOverlay {
             let chunks = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([
-                    Constraint::Length(6), // Progress gauge
+                    Constraint::Length(6),  // Progress gauge
                     Constraint::Length(10), // Details
-                    Constraint::Min(0),    // Controls
+                    Constraint::Min(0),     // Controls
                 ])
                 .split(area);
 
@@ -465,7 +492,13 @@ impl EnhancedProgressOverlay {
         }
     }
 
-    fn render_progress_gauge(&self, frame: &mut Frame, area: Rect, item: &ProgressItem, theme: &Theme) {
+    fn render_progress_gauge(
+        &self,
+        frame: &mut Frame,
+        area: Rect,
+        item: &ProgressItem,
+        theme: &Theme,
+    ) {
         let progress_percent = (item.progress * 100.0) as u16;
 
         let gauge_color = match &item.status {
@@ -548,7 +581,7 @@ impl EnhancedProgressOverlay {
 
     fn render_controls(&self, frame: &mut Frame, area: Rect, item: &ProgressItem, theme: &Theme) {
         let can_cancel = item.can_cancel && matches!(item.status, ProgressStatus::Running);
-        
+
         let controls_text = if can_cancel {
             "ESC: Cancel task • Q: Close overlay • ↑↓: Navigate"
         } else {
@@ -587,9 +620,11 @@ impl EnhancedProgressOverlay {
             .constraints([Constraint::Min(0), Constraint::Length(3)])
             .split(inner_area);
 
-        let message = Paragraph::new("Are you sure you want to cancel this task?\n\nThis action cannot be undone.")
-            .alignment(Alignment::Center)
-            .wrap(ratatui::widgets::Wrap { trim: true });
+        let message = Paragraph::new(
+            "Are you sure you want to cancel this task?\n\nThis action cannot be undone.",
+        )
+        .alignment(Alignment::Center)
+        .wrap(ratatui::widgets::Wrap { trim: true });
 
         let controls = Paragraph::new("ENTER: Yes, cancel • ESC: No, keep running")
             .alignment(Alignment::Center)

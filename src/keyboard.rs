@@ -309,7 +309,7 @@ pub enum KeyboardAction {
     // Message navigation
     NextMessage,
     PreviousMessage,
-    
+
     // Email viewer actions
     EmailViewerReply,
     EmailViewerReplyAll,
@@ -320,7 +320,6 @@ pub enum KeyboardAction {
     EmailViewerMarkRead,
     EmailViewerMarkUnread,
     EmailViewerClose,
-
 
     // Calendar actions
     ShowCalendar,
@@ -351,29 +350,29 @@ pub enum KeyboardAction {
     AddSenderToContacts,
     RemoveSenderFromContacts,
     ContactQuickActions,
-    
+
     // AI Assistant actions
-    AIToggleAssistant,      // Toggle AI assistant panel
-    AIEmailSuggestions,     // Show AI email suggestions
-    AIComposeSuggestions,   // Show AI compose suggestions
-    AISummarizeEmail,       // Summarize current email
-    AICalendarAssist,       // AI calendar assistance
-    AIConfigureSettings,    // Open AI configuration
-    AIQuickReply,          // Generate quick reply suggestions
-    AIEmailAnalysis,       // Analyze email content
-    AIScheduleRequest,     // Parse schedule request with AI
-    AIContentGeneration,   // Generate email content
-    
-    // Notes actions  
-    ConvertToNote,         // Convert current content to note (Ctrl+N)
-    ShowNotes,             // Switch to notes view
-    CreateNote,            // Create new note
-    
+    AIToggleAssistant,    // Toggle AI assistant panel
+    AIEmailSuggestions,   // Show AI email suggestions
+    AIComposeSuggestions, // Show AI compose suggestions
+    AISummarizeEmail,     // Summarize current email
+    AICalendarAssist,     // AI calendar assistance
+    AIConfigureSettings,  // Open AI configuration
+    AIQuickReply,         // Generate quick reply suggestions
+    AIEmailAnalysis,      // Analyze email content
+    AIScheduleRequest,    // Parse schedule request with AI
+    AIContentGeneration,  // Generate email content
+
+    // Notes actions
+    ConvertToNote, // Convert current content to note (Ctrl+N)
+    ShowNotes,     // Switch to notes view
+    CreateNote,    // Create new note
+
     // Settings and configuration
-    OpenSettings,          // Open application settings
-    
+    OpenSettings, // Open application settings
+
     // Context-aware menu system
-    ShowContextMenu,       // Show context-aware menu (replaces F-key shortcuts)
+    ShowContextMenu, // Show context-aware menu (replaces F-key shortcuts)
 }
 
 /// Configuration for keyboard shortcuts
@@ -491,7 +490,7 @@ impl KeyboardConfig {
             KeyboardShortcut::ctrl(KeyCode::Char('d')),
             KeyboardAction::ShowContextMenu,
         );
-        
+
         // Message actions - using context-aware shortcuts
         self.shortcuts.insert(
             KeyboardShortcut::ctrl(KeyCode::Char('r')),
@@ -518,10 +517,10 @@ impl KeyboardConfig {
             KeyboardAction::MarkAsUnread,
         );
         self.shortcuts.insert(
-            KeyboardShortcut::shift(KeyCode::Char('M')), 
+            KeyboardShortcut::shift(KeyCode::Char('M')),
             KeyboardAction::MarkAsRead,
         );
-        
+
         // Message navigation
         self.shortcuts.insert(
             KeyboardShortcut::simple(KeyCode::Char('n')),
@@ -542,7 +541,10 @@ impl KeyboardConfig {
             KeyboardAction::RemoveAccount,
         );
         self.shortcuts.insert(
-            KeyboardShortcut::new(KeyCode::Char('r'), KeyModifiers::CONTROL | KeyModifiers::SHIFT),
+            KeyboardShortcut::new(
+                KeyCode::Char('r'),
+                KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+            ),
             KeyboardAction::RefreshAccount,
         );
         self.shortcuts.insert(
@@ -784,7 +786,7 @@ impl KeyboardConfig {
             KeyboardShortcut::new(KeyCode::Char('k'), KeyModifiers::CONTROL),
             KeyboardAction::ContactsPopup,
         );
-        
+
         // Contact quick actions (context-aware)
         self.shortcuts.insert(
             KeyboardShortcut::simple(KeyCode::Char('i')),
@@ -809,43 +811,73 @@ impl KeyboardConfig {
 
         // AI Assistant shortcuts
         self.shortcuts.insert(
-            KeyboardShortcut::new(KeyCode::Char('i'), KeyModifiers::CONTROL | KeyModifiers::ALT),
+            KeyboardShortcut::new(
+                KeyCode::Char('i'),
+                KeyModifiers::CONTROL | KeyModifiers::ALT,
+            ),
             KeyboardAction::AIToggleAssistant,
         );
         self.shortcuts.insert(
-            KeyboardShortcut::new(KeyCode::Char('s'), KeyModifiers::CONTROL | KeyModifiers::ALT),
+            KeyboardShortcut::new(
+                KeyCode::Char('s'),
+                KeyModifiers::CONTROL | KeyModifiers::ALT,
+            ),
             KeyboardAction::AIEmailSuggestions,
         );
         self.shortcuts.insert(
-            KeyboardShortcut::new(KeyCode::Char('c'), KeyModifiers::CONTROL | KeyModifiers::ALT),
+            KeyboardShortcut::new(
+                KeyCode::Char('c'),
+                KeyModifiers::CONTROL | KeyModifiers::ALT,
+            ),
             KeyboardAction::AIComposeSuggestions,
         );
         self.shortcuts.insert(
-            KeyboardShortcut::new(KeyCode::Char('u'), KeyModifiers::CONTROL | KeyModifiers::ALT),
+            KeyboardShortcut::new(
+                KeyCode::Char('u'),
+                KeyModifiers::CONTROL | KeyModifiers::ALT,
+            ),
             KeyboardAction::AISummarizeEmail,
         );
         self.shortcuts.insert(
-            KeyboardShortcut::new(KeyCode::Char('l'), KeyModifiers::CONTROL | KeyModifiers::ALT),
+            KeyboardShortcut::new(
+                KeyCode::Char('l'),
+                KeyModifiers::CONTROL | KeyModifiers::ALT,
+            ),
             KeyboardAction::AICalendarAssist,
         );
         self.shortcuts.insert(
-            KeyboardShortcut::new(KeyCode::Char('g'), KeyModifiers::CONTROL | KeyModifiers::ALT),
+            KeyboardShortcut::new(
+                KeyCode::Char('g'),
+                KeyModifiers::CONTROL | KeyModifiers::ALT,
+            ),
             KeyboardAction::AIConfigureSettings,
         );
         self.shortcuts.insert(
-            KeyboardShortcut::new(KeyCode::Char('r'), KeyModifiers::CONTROL | KeyModifiers::ALT),
+            KeyboardShortcut::new(
+                KeyCode::Char('r'),
+                KeyModifiers::CONTROL | KeyModifiers::ALT,
+            ),
             KeyboardAction::AIQuickReply,
         );
         self.shortcuts.insert(
-            KeyboardShortcut::new(KeyCode::Char('a'), KeyModifiers::CONTROL | KeyModifiers::ALT),
+            KeyboardShortcut::new(
+                KeyCode::Char('a'),
+                KeyModifiers::CONTROL | KeyModifiers::ALT,
+            ),
             KeyboardAction::AIEmailAnalysis,
         );
         self.shortcuts.insert(
-            KeyboardShortcut::new(KeyCode::Char('t'), KeyModifiers::CONTROL | KeyModifiers::ALT),
+            KeyboardShortcut::new(
+                KeyCode::Char('t'),
+                KeyModifiers::CONTROL | KeyModifiers::ALT,
+            ),
             KeyboardAction::AIScheduleRequest,
         );
         self.shortcuts.insert(
-            KeyboardShortcut::new(KeyCode::Char('e'), KeyModifiers::CONTROL | KeyModifiers::ALT),
+            KeyboardShortcut::new(
+                KeyCode::Char('e'),
+                KeyModifiers::CONTROL | KeyModifiers::ALT,
+            ),
             KeyboardAction::AIContentGeneration,
         );
 
@@ -855,11 +887,17 @@ impl KeyboardConfig {
             KeyboardAction::ConvertToNote,
         );
         self.shortcuts.insert(
-            KeyboardShortcut::new(KeyCode::Char('n'), KeyModifiers::CONTROL | KeyModifiers::SHIFT),
+            KeyboardShortcut::new(
+                KeyCode::Char('n'),
+                KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+            ),
             KeyboardAction::ShowNotes,
         );
         self.shortcuts.insert(
-            KeyboardShortcut::new(KeyCode::Char('n'), KeyModifiers::CONTROL | KeyModifiers::ALT),
+            KeyboardShortcut::new(
+                KeyCode::Char('n'),
+                KeyModifiers::CONTROL | KeyModifiers::ALT,
+            ),
             KeyboardAction::CreateNote,
         );
     }
@@ -971,10 +1009,8 @@ impl KeyboardConfig {
             KeyboardAction::StartFolderSearch,
             "Start folder search".to_string(),
         );
-        self.action_descriptions.insert(
-            KeyboardAction::EndSearch,
-            "End current search".to_string(),
-        );
+        self.action_descriptions
+            .insert(KeyboardAction::EndSearch, "End current search".to_string());
 
         self.action_descriptions.insert(
             KeyboardAction::ToggleThreadedView,
@@ -1088,10 +1124,8 @@ impl KeyboardConfig {
             KeyboardAction::CreateEvent,
             "Create new calendar event".to_string(),
         );
-        self.action_descriptions.insert(
-            KeyboardAction::EditEvent,
-            "Edit selected event".to_string(),
-        );
+        self.action_descriptions
+            .insert(KeyboardAction::EditEvent, "Edit selected event".to_string());
         self.action_descriptions.insert(
             KeyboardAction::DeleteEvent,
             "Delete selected event".to_string(),
@@ -1246,7 +1280,7 @@ impl KeyboardConfig {
             KeyboardAction::AIContentGeneration,
             "Generate email content with AI".to_string(),
         );
-        
+
         // Notes actions
         self.action_descriptions.insert(
             KeyboardAction::ConvertToNote,
@@ -1256,11 +1290,9 @@ impl KeyboardConfig {
             KeyboardAction::ShowNotes,
             "Switch to notes view".to_string(),
         );
-        self.action_descriptions.insert(
-            KeyboardAction::CreateNote,
-            "Create new note".to_string(),
-        );
-        
+        self.action_descriptions
+            .insert(KeyboardAction::CreateNote, "Create new note".to_string());
+
         // Context-aware menu system
         self.action_descriptions.insert(
             KeyboardAction::ShowContextMenu,
@@ -1314,7 +1346,7 @@ impl KeyboardConfig {
                     continue; // Skip this shortcut if plugin is disabled
                 }
             }
-            
+
             let category = self.get_action_category(action);
             let description = self
                 .action_descriptions
@@ -1426,13 +1458,13 @@ impl KeyboardConfig {
             | KeyboardAction::CalendarMonthView
             | KeyboardAction::CalendarDayView
             | KeyboardAction::CalendarAgendaView => "Calendar".to_string(),
-            KeyboardAction::ContactsPopup 
+            KeyboardAction::ContactsPopup
             | KeyboardAction::ViewSenderContact
             | KeyboardAction::EditSenderContact
             | KeyboardAction::AddSenderToContacts
             | KeyboardAction::RemoveSenderFromContacts
             | KeyboardAction::ContactQuickActions => "Contacts".to_string(),
-            
+
             KeyboardAction::AIToggleAssistant
             | KeyboardAction::AIEmailSuggestions
             | KeyboardAction::AIComposeSuggestions
@@ -1443,7 +1475,7 @@ impl KeyboardConfig {
             | KeyboardAction::AIEmailAnalysis
             | KeyboardAction::AIScheduleRequest
             | KeyboardAction::AIContentGeneration => "AI Assistant".to_string(),
-            
+
             KeyboardAction::ConvertToNote
             | KeyboardAction::ShowNotes
             | KeyboardAction::CreateNote => "Notes".to_string(),
@@ -1451,25 +1483,31 @@ impl KeyboardConfig {
     }
 
     /// Determine if an action should be filtered out based on plugin configuration
-    fn should_filter_action(&self, action: &KeyboardAction, config: &crate::config::PluginsConfig) -> bool {
+    fn should_filter_action(
+        &self,
+        action: &KeyboardAction,
+        config: &crate::config::PluginsConfig,
+    ) -> bool {
         match action {
             // Notes plugin actions - filter if Notes plugin is disabled
             KeyboardAction::ConvertToNote
-            | KeyboardAction::ShowNotes  
-            | KeyboardAction::CreateNote => {
-                !config.notes.enabled
-            }
-            
+            | KeyboardAction::ShowNotes
+            | KeyboardAction::CreateNote => !config.notes.enabled,
+
             // KDE Connect plugin actions would go here when added
             // KeyboardAction::KdeConnectNotify | ... => !config.kde_connect.enabled,
-            
+
             // All other actions are always shown
             _ => false,
         }
     }
 
     /// Check if an action is available (not filtered) based on plugin configuration
-    pub fn is_action_available(&self, action: &KeyboardAction, config: &crate::config::PluginsConfig) -> bool {
+    pub fn is_action_available(
+        &self,
+        action: &KeyboardAction,
+        config: &crate::config::PluginsConfig,
+    ) -> bool {
         !self.should_filter_action(action, config)
     }
 
@@ -1477,7 +1515,7 @@ impl KeyboardConfig {
     pub fn get_enabled_categories(&self, config: &crate::config::PluginsConfig) -> Vec<String> {
         let mut categories = vec![
             "Global".to_string(),
-            "Navigation".to_string(), 
+            "Navigation".to_string(),
             "Selection".to_string(),
             "Email".to_string(),
             "Account Management".to_string(),
@@ -1492,32 +1530,48 @@ impl KeyboardConfig {
             "Contacts".to_string(),
             "AI Assistant".to_string(),
         ];
-        
+
         // Add plugin-specific categories only if enabled
         if config.notes.enabled {
             categories.push("Notes".to_string());
         }
-        
+
         // Future: Add KDE Connect categories when implemented
         // if config.kde_connect.enabled {
         //     categories.push("KDE Connect".to_string());
         // }
-        
+
         categories
     }
 
     /// Format shortcuts help from a categories map
-    pub fn format_shortcuts_help(&self, categories: &HashMap<String, Vec<(&KeyboardShortcut, &KeyboardAction, &str)>>) -> String {
+    pub fn format_shortcuts_help(
+        &self,
+        categories: &HashMap<String, Vec<(&KeyboardShortcut, &KeyboardAction, &str)>>,
+    ) -> String {
         let mut help_text = String::new();
-        
+
         // Define order for categories to ensure consistent display
         let category_order = vec![
-            "Global", "Navigation", "Selection", "Email", "Account Management",
-            "Search", "View Controls", "Sorting", "Content Preview", 
-            "Folder Operations", "Copy Operations", "Email Viewer", 
-            "Calendar", "Contacts", "AI Assistant", "Notes", "KDE Connect"
+            "Global",
+            "Navigation",
+            "Selection",
+            "Email",
+            "Account Management",
+            "Search",
+            "View Controls",
+            "Sorting",
+            "Content Preview",
+            "Folder Operations",
+            "Copy Operations",
+            "Email Viewer",
+            "Calendar",
+            "Contacts",
+            "AI Assistant",
+            "Notes",
+            "KDE Connect",
         ];
-        
+
         for category_name in &category_order {
             if let Some(shortcuts) = categories.get(*category_name) {
                 if !shortcuts.is_empty() {
@@ -1528,7 +1582,7 @@ impl KeyboardConfig {
                 }
             }
         }
-        
+
         help_text
     }
 
@@ -1658,7 +1712,7 @@ impl KeyboardManager {
         modifiers: KeyModifiers,
     ) -> Option<&KeyboardAction> {
         let shortcut = KeyboardShortcut::new(key_code, modifiers);
-        
+
         self.config.get_action(&shortcut)
     }
 
@@ -1751,11 +1805,14 @@ impl KeyboardManager {
         plugin_config: Option<&crate::config::PluginsConfig>,
     ) -> HashMap<String, Vec<(&KeyboardShortcut, &KeyboardAction, &str)>> {
         let categories = self.config.get_shortcuts_by_category();
-        let mut filtered_categories: HashMap<String, Vec<(&KeyboardShortcut, &KeyboardAction, &str)>> = HashMap::new();
+        let mut filtered_categories: HashMap<
+            String,
+            Vec<(&KeyboardShortcut, &KeyboardAction, &str)>,
+        > = HashMap::new();
 
         for (category, shortcuts) in categories {
             let mut filtered_shortcuts = Vec::new();
-            
+
             for (shortcut, action, description) in shortcuts {
                 // Check if this action should be filtered based on plugin configuration
                 if let Some(config) = plugin_config {
@@ -1765,7 +1822,7 @@ impl KeyboardManager {
                 }
                 filtered_shortcuts.push((shortcut, action, description));
             }
-            
+
             // Only include category if it has shortcuts
             if !filtered_shortcuts.is_empty() {
                 filtered_categories.insert(category, filtered_shortcuts);
@@ -1776,25 +1833,30 @@ impl KeyboardManager {
     }
 
     /// Determine if an action should be filtered out based on plugin configuration
-    fn should_filter_action(&self, action: &KeyboardAction, config: &crate::config::PluginsConfig) -> bool {
+    fn should_filter_action(
+        &self,
+        action: &KeyboardAction,
+        config: &crate::config::PluginsConfig,
+    ) -> bool {
         match action {
             // Notes plugin actions - filter if Notes plugin is disabled
             KeyboardAction::ConvertToNote
-            | KeyboardAction::ShowNotes  
-            | KeyboardAction::CreateNote => {
-                !config.notes.enabled
-            }
-            
+            | KeyboardAction::ShowNotes
+            | KeyboardAction::CreateNote => !config.notes.enabled,
+
             // KDE Connect plugin actions would go here when added
             // KeyboardAction::KdeConnectNotify | ... => !config.kde_connect.enabled,
-            
+
             // All other actions are always shown
             _ => false,
         }
     }
 
     /// Format shortcuts help text from filtered categories
-    pub fn format_shortcuts_help(&self, categories: &HashMap<String, Vec<(&KeyboardShortcut, &KeyboardAction, &str)>>) -> String {
+    pub fn format_shortcuts_help(
+        &self,
+        categories: &HashMap<String, Vec<(&KeyboardShortcut, &KeyboardAction, &str)>>,
+    ) -> String {
         let mut help = String::new();
         help.push_str("Keyboard Shortcuts\n");
         help.push_str("==================\n\n");
@@ -1802,7 +1864,7 @@ impl KeyboardManager {
         // Define category ordering for consistent display
         let category_order = vec![
             "Global",
-            "Navigation", 
+            "Navigation",
             "Email",
             "Accounts",
             "Calendar",
@@ -1810,12 +1872,12 @@ impl KeyboardManager {
             "Contacts",
             "AI Assistant",
             "Settings",
-            "Context Menu"
+            "Context Menu",
         ];
 
         // Process categories in order, then any remaining categories
         let mut processed_categories = std::collections::HashSet::new();
-        
+
         for preferred_category in category_order {
             if let Some(shortcuts) = categories.get(preferred_category) {
                 help.push_str(&format!("{}:\n", preferred_category));
@@ -1835,7 +1897,8 @@ impl KeyboardManager {
         }
 
         // Add any remaining categories that weren't in the preferred order
-        let mut remaining_categories: Vec<_> = categories.keys()
+        let mut remaining_categories: Vec<_> = categories
+            .keys()
             .filter(|&cat| !processed_categories.contains(cat))
             .collect();
         remaining_categories.sort();
@@ -1908,7 +1971,10 @@ mod tests {
 
         // Add a custom shortcut
         let custom_shortcut = KeyboardShortcut::ctrl(KeyCode::Char('z'));
-        config.set_shortcut(custom_shortcut.clone(), KeyboardAction::ShowKeyboardShortcuts);
+        config.set_shortcut(
+            custom_shortcut.clone(),
+            KeyboardAction::ShowKeyboardShortcuts,
+        );
 
         assert_eq!(
             config.get_action(&custom_shortcut),

@@ -115,7 +115,7 @@ fn create_test_attachments() -> Vec<TestAttachment> {
         TestAttachment {
             filename: "malware.exe".to_string(),
             content_type: "application/octet-stream".to_string(),
-            size: 1024 * 10,                                                  // 10KB
+            size: 1024 * 10,                  // 10KB
             data: b"MZ\x90\x00".repeat(2560), // Fake PE header
             expected_type: AttachmentType::Unknown,
             is_viewable: false,

@@ -4,8 +4,8 @@
 //! providing typed access to Comunicado's functionality.
 
 use super::core::{Plugin, PluginResult};
-use crate::email::StoredMessage;
 use crate::calendar::event::Event;
+use crate::email::StoredMessage;
 
 use ratatui::layout::Rect;
 use ratatui::Frame;
@@ -232,7 +232,9 @@ pub trait CalendarPlugin: Plugin {
     ) -> impl std::future::Future<Output = PluginResult<CalendarEventResult>> + Send;
 
     /// Get available calendar sources
-    fn get_calendar_sources(&self) -> impl std::future::Future<Output = PluginResult<Vec<CalendarSource>>> + Send;
+    fn get_calendar_sources(
+        &self,
+    ) -> impl std::future::Future<Output = PluginResult<Vec<CalendarSource>>> + Send;
 
     /// Sync with external calendar systems
     fn sync_calendars(

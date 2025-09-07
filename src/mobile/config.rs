@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use chrono::NaiveTime;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -101,17 +101,17 @@ impl Default for SmsSettings {
 impl Default for NotificationSettings {
     fn default() -> Self {
         let mut priority_apps = HashMap::new();
-        
+
         // High priority messaging apps
         for app in ["Messages", "SMS", "WhatsApp", "Telegram", "Signal"] {
             priority_apps.insert(app.to_string(), NotificationPriority::High);
         }
-        
+
         // Normal priority email apps
         for app in ["Email", "Gmail", "Outlook", "Mail"] {
             priority_apps.insert(app.to_string(), NotificationPriority::Normal);
         }
-        
+
         // Low priority social/news apps
         for app in ["Twitter", "Facebook", "Instagram", "News", "Reddit"] {
             priority_apps.insert(app.to_string(), NotificationPriority::Low);
@@ -155,40 +155,38 @@ impl Default for PrivacySettings {
             log_message_content: false, // Privacy-first default
             store_contact_names: true,
             notification_preview: true,
-            analytics_enabled: false, // Privacy-first default
+            analytics_enabled: false,      // Privacy-first default
             backup_include_content: false, // Privacy-first default
-            encrypt_database: true, // Security-first default
+            encrypt_database: true,        // Security-first default
         }
     }
 }
 
 impl MobileConfig {
     pub fn load_from_file(path: &str) -> crate::mobile::Result<Self> {
-        let content = std::fs::read_to_string(path)
-            .map_err(|e| crate::mobile::MobileError::IoError(e))?;
-        
+        let content =
+            std::fs::read_to_string(path).map_err(|e| crate::mobile::MobileError::IoError(e))?;
+
         let config: Self = toml::from_str(&content)
             .map_err(|e| crate::mobile::MobileError::ConfigurationError(e.to_string()))?;
-        
+
         config.validate()?;
         Ok(config)
     }
 
     pub fn save_to_file(&self, path: &str) -> crate::mobile::Result<()> {
         self.validate()?;
-        
+
         let content = toml::to_string_pretty(self)
             .map_err(|e| crate::mobile::MobileError::ConfigurationError(e.to_string()))?;
-        
+
         // Ensure directory exists
         if let Some(parent) = std::path::Path::new(path).parent() {
-            std::fs::create_dir_all(parent)
-                .map_err(|e| crate::mobile::MobileError::IoError(e))?;
+            std::fs::create_dir_all(parent).map_err(|e| crate::mobile::MobileError::IoError(e))?;
         }
-        
-        std::fs::write(path, content)
-            .map_err(|e| crate::mobile::MobileError::IoError(e))?;
-        
+
+        std::fs::write(path, content).map_err(|e| crate::mobile::MobileError::IoError(e))?;
+
         Ok(())
     }
 
@@ -196,28 +194,28 @@ impl MobileConfig {
         // Validate sync interval
         if self.sms.sync_interval_seconds == 0 {
             return Err(crate::mobile::MobileError::ConfigurationError(
-                "Sync interval cannot be zero".to_string()
+                "Sync interval cannot be zero".to_string(),
             ));
         }
 
         // Validate max conversations
         if self.sms.max_conversations == 0 {
             return Err(crate::mobile::MobileError::ConfigurationError(
-                "Max conversations must be greater than zero".to_string()
+                "Max conversations must be greater than zero".to_string(),
             ));
         }
 
         // Validate retention days
         if self.storage.retention_days <= 0 {
             return Err(crate::mobile::MobileError::ConfigurationError(
-                "Retention days must be positive".to_string()
+                "Retention days must be positive".to_string(),
             ));
         }
 
         // Validate backup settings
         if self.storage.backup_enabled && self.storage.max_backup_files == 0 {
             return Err(crate::mobile::MobileError::ConfigurationError(
-                "Max backup files must be greater than zero when backup is enabled".to_string()
+                "Max backup files must be greater than zero when backup is enabled".to_string(),
             ));
         }
 
@@ -251,7 +249,8 @@ impl MobileConfig {
     }
 
     pub fn get_notification_priority(&self, app_name: &str) -> NotificationPriority {
-        self.notifications.priority_apps
+        self.notifications
+            .priority_apps
             .get(app_name)
             .cloned()
             .unwrap_or(NotificationPriority::Normal)
@@ -272,7 +271,9 @@ impl MobileConfig {
             true
         } else {
             // Check if app is in the allowed list
-            self.notifications.filtered_apps.contains(&app_name.to_string())
+            self.notifications
+                .filtered_apps
+                .contains(&app_name.to_string())
         }
     }
 
@@ -353,11 +354,11 @@ mod tests {
     fn test_quiet_hours() {
         let mut config = MobileConfig::default();
         config.notifications.quiet_hours.enabled = true;
-        
+
         // Test same-day range (9 AM to 5 PM)
         config.notifications.quiet_hours.start_time = NaiveTime::from_hms_opt(9, 0, 0).unwrap();
         config.notifications.quiet_hours.end_time = NaiveTime::from_hms_opt(17, 0, 0).unwrap();
-        
+
         // Note: This test would need to mock the current time for proper testing
         // For now, just test that the method doesn't panic
         let _ = config.is_in_quiet_hours();
@@ -366,22 +367,37 @@ mod tests {
     #[test]
     fn test_notification_priority() {
         let config = MobileConfig::default();
-        
-        assert_eq!(config.get_notification_priority("Messages"), NotificationPriority::High);
-        assert_eq!(config.get_notification_priority("WhatsApp"), NotificationPriority::High);
-        assert_eq!(config.get_notification_priority("Gmail"), NotificationPriority::Normal);
-        assert_eq!(config.get_notification_priority("Twitter"), NotificationPriority::Low);
-        assert_eq!(config.get_notification_priority("UnknownApp"), NotificationPriority::Normal);
+
+        assert_eq!(
+            config.get_notification_priority("Messages"),
+            NotificationPriority::High
+        );
+        assert_eq!(
+            config.get_notification_priority("WhatsApp"),
+            NotificationPriority::High
+        );
+        assert_eq!(
+            config.get_notification_priority("Gmail"),
+            NotificationPriority::Normal
+        );
+        assert_eq!(
+            config.get_notification_priority("Twitter"),
+            NotificationPriority::Low
+        );
+        assert_eq!(
+            config.get_notification_priority("UnknownApp"),
+            NotificationPriority::Normal
+        );
     }
 
     #[test]
     fn test_notification_filtering() {
         let config = MobileConfig::default();
-        
+
         // Should forward apps in the filtered list
         assert!(config.should_forward_notification("Messages"));
         assert!(config.should_forward_notification("WhatsApp"));
-        
+
         // Should not forward apps not in the filtered list
         assert!(!config.should_forward_notification("Twitter"));
         assert!(!config.should_forward_notification("UnknownApp"));
@@ -390,32 +406,38 @@ mod tests {
     #[test]
     fn test_config_serialization() {
         let config = MobileConfig::default();
-        
+
         let temp_file = NamedTempFile::new().unwrap();
         let path = temp_file.path().to_str().unwrap();
-        
+
         // Test save
         config.save_to_file(path).unwrap();
-        
+
         // Test load
         let loaded_config = MobileConfig::load_from_file(path).unwrap();
-        
+
         // Compare key fields
         assert_eq!(config.enabled, loaded_config.enabled);
-        assert_eq!(config.sms.sync_interval_seconds, loaded_config.sms.sync_interval_seconds);
-        assert_eq!(config.storage.retention_days, loaded_config.storage.retention_days);
+        assert_eq!(
+            config.sms.sync_interval_seconds,
+            loaded_config.sms.sync_interval_seconds
+        );
+        assert_eq!(
+            config.storage.retention_days,
+            loaded_config.storage.retention_days
+        );
     }
 
     #[test]
     fn test_mobile_integration_toggle() {
         let mut config = MobileConfig::default();
         assert!(!config.enabled);
-        
+
         config.enable_mobile_integration();
         assert!(config.enabled);
         assert!(config.sms.enabled);
         assert!(config.notifications.enabled);
-        
+
         config.disable_mobile_integration();
         assert!(!config.enabled);
         assert!(!config.sms.enabled);

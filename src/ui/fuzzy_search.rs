@@ -1,8 +1,7 @@
 /// Advanced fuzzy search implementation with live search-as-you-type functionality
-/// 
+///
 /// Provides fast, accurate fuzzy matching for email content using multiple algorithms
 /// including Levenshtein distance, Jaro-Winkler similarity, and trigram matching.
-
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::time::Instant;
@@ -126,7 +125,10 @@ impl FuzzySearchEngine {
 
         // Get all messages from database using a broad search (we'll do fuzzy matching in memory for better control)
         // Use "*" to get all messages, or use a simple search and then filter
-        let all_messages = self.database.search_messages(account_id, "*", Some(1000)).await
+        let all_messages = self
+            .database
+            .search_messages(account_id, "*", Some(1000))
+            .await
             .unwrap_or_else(|_| {
                 // Fallback: try to get messages from common folders
                 vec![]
@@ -147,7 +149,11 @@ impl FuzzySearchEngine {
         }
 
         // Sort by relevance score (higher is better)
-        results.sort_by(|a, b| b.rank.partial_cmp(&a.rank).unwrap_or(std::cmp::Ordering::Equal));
+        results.sort_by(|a, b| {
+            b.rank
+                .partial_cmp(&a.rank)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         let _search_time = start_time.elapsed().as_millis() as u64;
 
@@ -190,37 +196,60 @@ impl FuzzySearchEngine {
     }
 
     /// Get searchable text fields based on search mode
-    fn get_searchable_texts(&self, message: &StoredMessage, mode: &SearchMode) -> Vec<(String, String)> {
+    fn get_searchable_texts(
+        &self,
+        message: &StoredMessage,
+        mode: &SearchMode,
+    ) -> Vec<(String, String)> {
         match mode {
             SearchMode::FullText => vec![
                 ("subject".to_string(), message.subject.clone()),
-                ("from_name".to_string(), message.from_name.clone().unwrap_or_default()),
+                (
+                    "from_name".to_string(),
+                    message.from_name.clone().unwrap_or_default(),
+                ),
                 ("from_addr".to_string(), message.from_addr.clone()),
-                ("body_text".to_string(), message.body_text.clone().unwrap_or_default()),
+                (
+                    "body_text".to_string(),
+                    message.body_text.clone().unwrap_or_default(),
+                ),
                 ("to_addrs".to_string(), message.to_addrs.join(" ")),
             ],
-            SearchMode::Subject => vec![
-                ("subject".to_string(), message.subject.clone()),
-            ],
+            SearchMode::Subject => vec![("subject".to_string(), message.subject.clone())],
             SearchMode::From => vec![
-                ("from_name".to_string(), message.from_name.clone().unwrap_or_default()),
+                (
+                    "from_name".to_string(),
+                    message.from_name.clone().unwrap_or_default(),
+                ),
                 ("from_addr".to_string(), message.from_addr.clone()),
             ],
-            SearchMode::Body => vec![
-                ("body_text".to_string(), message.body_text.clone().unwrap_or_default()),
-            ],
+            SearchMode::Body => vec![(
+                "body_text".to_string(),
+                message.body_text.clone().unwrap_or_default(),
+            )],
             SearchMode::Advanced => vec![
                 ("subject".to_string(), message.subject.clone()),
-                ("from_name".to_string(), message.from_name.clone().unwrap_or_default()),
+                (
+                    "from_name".to_string(),
+                    message.from_name.clone().unwrap_or_default(),
+                ),
                 ("from_addr".to_string(), message.from_addr.clone()),
-                ("body_text".to_string(), message.body_text.clone().unwrap_or_default()),
+                (
+                    "body_text".to_string(),
+                    message.body_text.clone().unwrap_or_default(),
+                ),
                 ("to_addrs".to_string(), message.to_addrs.join(" ")),
             ],
         }
     }
 
     /// Perform fuzzy matching on text using multiple algorithms
-    fn fuzzy_match_text(&self, text: &str, query: &str, field_name: &str) -> Option<(f64, SearchSnippet)> {
+    fn fuzzy_match_text(
+        &self,
+        text: &str,
+        query: &str,
+        field_name: &str,
+    ) -> Option<(f64, SearchSnippet)> {
         if text.is_empty() || query.is_empty() {
             return None;
         }
@@ -252,7 +281,11 @@ impl FuzzySearchEngine {
                 if similarity > best_score && similarity >= self.config.min_similarity {
                     best_score = similarity;
                     // Find position of this word in original text
-                    let word_start = text_lower.split_whitespace().take(i).map(|w| w.len() + 1).sum::<usize>();
+                    let word_start = text_lower
+                        .split_whitespace()
+                        .take(i)
+                        .map(|w| w.len() + 1)
+                        .sum::<usize>();
                     best_highlights = vec![(word_start, word_start + word.len())];
                 }
             }
@@ -270,11 +303,14 @@ impl FuzzySearchEngine {
         if best_score >= self.config.min_similarity {
             // Create snippet with context
             let snippet_content = self.create_snippet(text, &best_highlights, 60);
-            Some((best_score, SearchSnippet {
-                field: field_name.to_string(),
-                content: snippet_content,
-                highlights: best_highlights,
-            }))
+            Some((
+                best_score,
+                SearchSnippet {
+                    field: field_name.to_string(),
+                    content: snippet_content,
+                    highlights: best_highlights,
+                },
+            ))
         } else {
             None
         }
@@ -315,24 +351,32 @@ impl FuzzySearchEngine {
         let len1 = s1.chars().count();
         let len2 = s2.chars().count();
 
-        if len1 == 0 { return len2; }
-        if len2 == 0 { return len1; }
+        if len1 == 0 {
+            return len2;
+        }
+        if len2 == 0 {
+            return len1;
+        }
 
         let mut matrix = vec![vec![0; len2 + 1]; len1 + 1];
 
         // Initialize first row and column
-        for i in 0..=len1 { matrix[i][0] = i; }
-        for j in 0..=len2 { matrix[0][j] = j; }
+        for i in 0..=len1 {
+            matrix[i][0] = i;
+        }
+        for j in 0..=len2 {
+            matrix[0][j] = j;
+        }
 
         let chars1: Vec<char> = s1.chars().collect();
         let chars2: Vec<char> = s2.chars().collect();
 
         for i in 1..=len1 {
             for j in 1..=len2 {
-                let cost = if chars1[i-1] == chars2[j-1] { 0 } else { 1 };
-                matrix[i][j] = (matrix[i-1][j] + 1)
-                    .min(matrix[i][j-1] + 1)
-                    .min(matrix[i-1][j-1] + cost);
+                let cost = if chars1[i - 1] == chars2[j - 1] { 0 } else { 1 };
+                matrix[i][j] = (matrix[i - 1][j] + 1)
+                    .min(matrix[i][j - 1] + 1)
+                    .min(matrix[i - 1][j - 1] + cost);
             }
         }
 
@@ -341,14 +385,22 @@ impl FuzzySearchEngine {
 
     /// Calculate Jaro-Winkler similarity
     fn jaro_winkler_similarity(&self, s1: &str, s2: &str) -> f64 {
-        if s1 == s2 { return 1.0; }
-        if s1.is_empty() || s2.is_empty() { return 0.0; }
+        if s1 == s2 {
+            return 1.0;
+        }
+        if s1.is_empty() || s2.is_empty() {
+            return 0.0;
+        }
 
         let jaro = self.jaro_similarity(s1, s2);
-        if jaro < 0.7 { return jaro; }
+        if jaro < 0.7 {
+            return jaro;
+        }
 
         // Calculate common prefix length (up to 4 characters)
-        let prefix_len = s1.chars().zip(s2.chars())
+        let prefix_len = s1
+            .chars()
+            .zip(s2.chars())
             .take(4)
             .take_while(|(c1, c2)| c1 == c2)
             .count();
@@ -363,8 +415,12 @@ impl FuzzySearchEngine {
         let len1 = chars1.len();
         let len2 = chars2.len();
 
-        if len1 == 0 && len2 == 0 { return 1.0; }
-        if len1 == 0 || len2 == 0 { return 0.0; }
+        if len1 == 0 && len2 == 0 {
+            return 1.0;
+        }
+        if len1 == 0 || len2 == 0 {
+            return 0.0;
+        }
 
         let match_window = (len1.max(len2) / 2).saturating_sub(1);
         let mut matches1 = vec![false; len1];
@@ -377,7 +433,9 @@ impl FuzzySearchEngine {
             let end = (i + match_window + 1).min(len2);
 
             for j in start..end {
-                if matches2[j] || chars1[i] != chars2[j] { continue; }
+                if matches2[j] || chars1[i] != chars2[j] {
+                    continue;
+                }
                 matches1[i] = true;
                 matches2[j] = true;
                 matches += 1;
@@ -385,35 +443,49 @@ impl FuzzySearchEngine {
             }
         }
 
-        if matches == 0 { return 0.0; }
+        if matches == 0 {
+            return 0.0;
+        }
 
         // Count transpositions
         let mut transpositions = 0;
         let mut k = 0;
         for i in 0..len1 {
-            if !matches1[i] { continue; }
-            while !matches2[k] { k += 1; }
-            if chars1[i] != chars2[k] { transpositions += 1; }
+            if !matches1[i] {
+                continue;
+            }
+            while !matches2[k] {
+                k += 1;
+            }
+            if chars1[i] != chars2[k] {
+                transpositions += 1;
+            }
             k += 1;
         }
 
-        let jaro = (matches as f64 / len1 as f64 
-                  + matches as f64 / len2 as f64 
-                  + (matches as f64 - transpositions as f64 / 2.0) / matches as f64) / 3.0;
+        let jaro = (matches as f64 / len1 as f64
+            + matches as f64 / len2 as f64
+            + (matches as f64 - transpositions as f64 / 2.0) / matches as f64)
+            / 3.0;
 
         jaro
     }
 
     /// Calculate trigram similarity
     fn trigram_similarity(&self, text: &str, query: &str) -> f64 {
-        if text.len() < 3 || query.len() < 3 { return 0.0; }
+        if text.len() < 3 || query.len() < 3 {
+            return 0.0;
+        }
 
         let text_trigrams = self.get_trigrams(text);
         let query_trigrams = self.get_trigrams(query);
 
-        if text_trigrams.is_empty() || query_trigrams.is_empty() { return 0.0; }
+        if text_trigrams.is_empty() || query_trigrams.is_empty() {
+            return 0.0;
+        }
 
-        let intersection: Vec<_> = text_trigrams.iter()
+        let intersection: Vec<_> = text_trigrams
+            .iter()
             .filter(|t| query_trigrams.contains(t))
             .collect();
 
@@ -424,7 +496,8 @@ impl FuzzySearchEngine {
     /// Get trigrams from text
     fn get_trigrams(&self, text: &str) -> Vec<String> {
         let padded = format!("  {}  ", text);
-        padded.chars()
+        padded
+            .chars()
             .collect::<Vec<_>>()
             .windows(3)
             .map(|window| window.iter().collect())
@@ -445,7 +518,12 @@ impl FuzzySearchEngine {
     }
 
     /// Create snippet with context around matches
-    fn create_snippet(&self, text: &str, highlights: &[(usize, usize)], max_length: usize) -> String {
+    fn create_snippet(
+        &self,
+        text: &str,
+        highlights: &[(usize, usize)],
+        max_length: usize,
+    ) -> String {
         if highlights.is_empty() {
             return text.chars().take(max_length).collect();
         }
@@ -486,8 +564,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_levenshtein_distance() {
-        let engine = FuzzySearchEngine::new(Arc::new(EmailDatabase::new_in_memory().await.unwrap()));
-        
+        let engine =
+            FuzzySearchEngine::new(Arc::new(EmailDatabase::new_in_memory().await.unwrap()));
+
         assert_eq!(engine.levenshtein_distance("kitten", "sitting"), 3);
         assert_eq!(engine.levenshtein_distance("hello", "hello"), 0);
         assert_eq!(engine.levenshtein_distance("", "hello"), 5);
@@ -496,8 +575,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_jaro_similarity() {
-        let engine = FuzzySearchEngine::new(Arc::new(EmailDatabase::new_in_memory().await.unwrap()));
-        
+        let engine =
+            FuzzySearchEngine::new(Arc::new(EmailDatabase::new_in_memory().await.unwrap()));
+
         assert!((engine.jaro_similarity("martha", "marhta") - 0.944).abs() < 0.01);
         assert_eq!(engine.jaro_similarity("hello", "hello"), 1.0);
         assert_eq!(engine.jaro_similarity("", "hello"), 0.0);
@@ -505,27 +585,30 @@ mod tests {
 
     #[tokio::test]
     async fn test_jaro_winkler_similarity() {
-        let engine = FuzzySearchEngine::new(Arc::new(EmailDatabase::new_in_memory().await.unwrap()));
-        
+        let engine =
+            FuzzySearchEngine::new(Arc::new(EmailDatabase::new_in_memory().await.unwrap()));
+
         assert!((engine.jaro_winkler_similarity("martha", "marhta") - 0.961).abs() < 0.01);
         assert_eq!(engine.jaro_winkler_similarity("hello", "hello"), 1.0);
     }
 
     #[tokio::test]
     async fn test_trigram_similarity() {
-        let engine = FuzzySearchEngine::new(Arc::new(EmailDatabase::new_in_memory().await.unwrap()));
-        
+        let engine =
+            FuzzySearchEngine::new(Arc::new(EmailDatabase::new_in_memory().await.unwrap()));
+
         let similarity = engine.trigram_similarity("hello world", "hello");
         assert!(similarity > 0.0);
-        
+
         let exact_similarity = engine.trigram_similarity("test", "test");
         assert!(exact_similarity > similarity);
     }
 
     #[tokio::test]
     async fn test_word_boundary_match() {
-        let engine = FuzzySearchEngine::new(Arc::new(EmailDatabase::new_in_memory().await.unwrap()));
-        
+        let engine =
+            FuzzySearchEngine::new(Arc::new(EmailDatabase::new_in_memory().await.unwrap()));
+
         assert!(engine.word_boundary_match("hello world", "hel"));
         assert!(engine.word_boundary_match("hello world", "wor"));
         assert!(!engine.word_boundary_match("hello world", "llo"));
@@ -541,7 +624,7 @@ mod tests {
             debounce_delay_ms: 200,
             max_results: 50,
         };
-        
+
         assert_eq!(config.max_edit_distance, 3);
         assert_eq!(config.min_similarity, 0.5);
         assert!(!config.use_trigrams);

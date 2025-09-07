@@ -1,11 +1,11 @@
 //! Note manager implementation
-//! 
+//!
 //! Provides high-level operations for note management, coordinating between
 //! storage, indexing, and file watching components.
 
-use super::types::{Note, NoteSearchResult, NotesConfig};
-use super::storage::NoteStorage;
 use super::indexer::NoteIndexer;
+use super::storage::NoteStorage;
+use super::types::{Note, NoteSearchResult, NotesConfig};
 use super::watcher::FileWatcher;
 
 use std::sync::Arc;
@@ -16,28 +16,28 @@ use thiserror::Error;
 pub enum NoteError {
     #[error("Note not found: {0}")]
     NotFound(String),
-    
+
     #[error("Storage error: {0}")]
     Storage(String),
-    
+
     #[error("Index error: {0}")]
     Index(String),
-    
+
     #[error("File system error: {0}")]
     FileSystem(String),
-    
+
     #[error("Parse error: {0}")]
     Parse(String),
-    
+
     #[error("Search error: {0}")]
     Search(String),
-    
+
     #[error("Configuration error: {0}")]
     Config(String),
-    
+
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
-    
+
     #[error("External service error: {0}")]
     External(String),
 }
@@ -106,24 +106,27 @@ impl NoteManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     // These tests will verify error handling for unimplemented functionality
     // Real implementation tests will be added when the methods are implemented
-    
+
     #[test]
     fn test_note_error_display() {
         let error = NoteError::NotFound("test-note".to_string());
         assert_eq!(error.to_string(), "Note not found: test-note");
-        
+
         let error = NoteError::Storage("Database connection failed".to_string());
-        assert_eq!(error.to_string(), "Storage error: Database connection failed");
+        assert_eq!(
+            error.to_string(),
+            "Storage error: Database connection failed"
+        );
     }
 
     #[test]
     fn test_note_error_from_io() {
         let io_error = std::io::Error::new(std::io::ErrorKind::NotFound, "File not found");
         let note_error = NoteError::from(io_error);
-        
+
         assert!(note_error.to_string().contains("IO error"));
         assert!(note_error.to_string().contains("File not found"));
     }

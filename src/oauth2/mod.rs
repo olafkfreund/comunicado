@@ -8,7 +8,7 @@ pub mod wizard;
 
 pub use client::OAuth2Client;
 pub use providers::{OAuth2Provider, ProviderConfig, ProviderDetector};
-pub use simple_setup::{SimpleSetupWizard, launch_simple_setup};
+pub use simple_setup::{launch_simple_setup, SimpleSetupWizard};
 pub use storage::{AppConfig, SecureStorage};
 pub use token::{
     AccessToken, RefreshStats, RefreshToken, TokenDiagnosis, TokenManager, TokenRefreshScheduler,
@@ -91,7 +91,7 @@ pub enum OAuth2Scope {
 
     // Google Contacts scope
     GoogleContacts,
-    
+
     // Google Calendar scope
     GoogleCalendar,
 
@@ -256,7 +256,7 @@ impl AccountConfig {
         if self.access_token.is_empty() {
             return true;
         }
-        
+
         // Check expiration time
         if let Some(expires_at) = self.token_expires_at {
             chrono::Utc::now() > expires_at

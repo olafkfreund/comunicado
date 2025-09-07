@@ -4,8 +4,8 @@
 
 use super::{ComponentId, ComponentState};
 use crate::theme::Theme;
-use ratatui::{layout::Rect, Frame};
 use crossterm::event::{KeyEvent, MouseEvent};
+use ratatui::{layout::Rect, Frame};
 use std::any::Any;
 use std::time::{Duration, Instant};
 use thiserror::Error;
@@ -39,7 +39,7 @@ pub enum ComponentError {
 
     #[error("Layout error: {0}")]
     LayoutError(String),
-    
+
     #[error("Layout calculation error")]
     LayoutCalculationError(#[from] super::layout::LayoutError),
 
@@ -82,7 +82,7 @@ impl<'a> RenderContext<'a> {
             timestamp: Instant::now(),
         }
     }
-    
+
     /// Update the area for this context
     pub fn set_area(&mut self, area: Rect) {
         self.area = area;
@@ -109,7 +109,10 @@ pub enum UIEvent {
     /// Window/terminal resized
     Resize { width: u16, height: u16 },
     /// Custom component-specific event
-    Custom { event_type: String, data: Box<dyn Any + Send> },
+    Custom {
+        event_type: String,
+        data: Box<dyn Any + Send>,
+    },
 }
 
 impl Clone for UIEvent {
@@ -122,7 +125,10 @@ impl Clone for UIEvent {
             UIEvent::Show => UIEvent::Show,
             UIEvent::Hide => UIEvent::Hide,
             UIEvent::ThemeChanged => UIEvent::ThemeChanged,
-            UIEvent::Resize { width, height } => UIEvent::Resize { width: *width, height: *height },
+            UIEvent::Resize { width, height } => UIEvent::Resize {
+                width: *width,
+                height: *height,
+            },
             UIEvent::Custom { event_type, .. } => {
                 // Custom events with Any data cannot be cloned generically
                 // Create a new custom event with just the type
@@ -143,7 +149,7 @@ impl UIEvent {
             data: Box::new(data),
         }
     }
-    
+
     /// Try to extract custom event data
     pub fn custom_data<T: Any + Send>(&self) -> Option<&T> {
         if let UIEvent::Custom { data, .. } = self {
@@ -209,21 +215,21 @@ impl Default for ComponentMetrics {
 pub trait UIComponent: Send + Sync + std::fmt::Debug {
     /// Get the unique identifier for this component
     fn component_id(&self) -> ComponentId;
-    
+
     /// Get a human-readable name for this component
     fn component_name(&self) -> &str;
-    
+
     /// Get the current state of the component
     fn state(&self) -> ComponentState;
-    
+
     /// Initialize the component
     fn initialize(&mut self) -> ComponentResult<()> {
         Ok(())
     }
-    
+
     /// Render the component
     fn render(&mut self, context: &mut RenderContext<'_>) -> ComponentResult<()>;
-    
+
     /// Handle UI events
     fn handle_event(&mut self, event: &UIEvent) -> ComponentResult<EventResult> {
         match event {
@@ -236,53 +242,53 @@ pub trait UIComponent: Send + Sync + std::fmt::Debug {
             _ => Ok(EventResult::Ignored),
         }
     }
-    
+
     /// Called when component gains focus
     fn on_focus_gained(&mut self) -> ComponentResult<EventResult> {
         Ok(EventResult::Handled)
     }
-    
+
     /// Called when component loses focus
     fn on_focus_lost(&mut self) -> ComponentResult<EventResult> {
         Ok(EventResult::Handled)
     }
-    
+
     /// Called when component becomes visible
     fn on_show(&mut self) -> ComponentResult<EventResult> {
         Ok(EventResult::Handled)
     }
-    
+
     /// Called when component becomes hidden
     fn on_hide(&mut self) -> ComponentResult<EventResult> {
         Ok(EventResult::Handled)
     }
-    
+
     /// Called when theme changes
     fn on_theme_changed(&mut self) -> ComponentResult<EventResult> {
         Ok(EventResult::Handled)
     }
-    
+
     /// Called when terminal is resized
     fn on_resize(&mut self, _width: u16, _height: u16) -> ComponentResult<EventResult> {
         Ok(EventResult::Handled)
     }
-    
+
     /// Get performance metrics
     fn metrics(&self) -> &ComponentMetrics;
-    
+
     /// Update the component state
     fn set_state(&mut self, new_state: ComponentState) -> ComponentResult<()>;
-    
+
     /// Check if the component can accept focus
     fn can_focus(&self) -> bool {
         self.state().can_handle_events()
     }
-    
+
     /// Get component-specific configuration
     fn config(&self) -> ComponentConfig {
         ComponentConfig::default()
     }
-    
+
     /// Cleanup component resources
     fn cleanup(&mut self) -> ComponentResult<()> {
         Ok(())
@@ -320,16 +326,16 @@ impl Default for ComponentConfig {
 pub trait ContainerComponent: UIComponent {
     /// Get child components
     fn children(&self) -> Vec<ComponentId>;
-    
+
     /// Add a child component
     fn add_child(&mut self, child_id: ComponentId) -> ComponentResult<()>;
-    
+
     /// Remove a child component
     fn remove_child(&mut self, child_id: ComponentId) -> ComponentResult<()>;
-    
+
     /// Get the currently focused child (if any)
     fn focused_child(&self) -> Option<ComponentId>;
-    
+
     /// Set focus to a specific child
     fn focus_child(&mut self, child_id: ComponentId) -> ComponentResult<()>;
 }
@@ -337,10 +343,10 @@ pub trait ContainerComponent: UIComponent {
 /// Trait for components that can be serialized/deserialized for state persistence
 pub trait StatefulComponent: UIComponent {
     type State: serde::Serialize + serde::de::DeserializeOwned;
-    
+
     /// Save component state
     fn save_state(&self) -> ComponentResult<Self::State>;
-    
+
     /// Restore component state
     fn restore_state(&mut self, state: Self::State) -> ComponentResult<()>;
 }
@@ -349,7 +355,7 @@ pub trait StatefulComponent: UIComponent {
 pub trait ShortcutProvider: UIComponent {
     /// Get keyboard shortcuts provided by this component
     fn shortcuts(&self) -> Vec<crate::keyboard::KeyboardShortcut>;
-    
+
     /// Handle a shortcut activation
     fn handle_shortcut(&mut self, shortcut_id: &str) -> ComponentResult<EventResult>;
 }

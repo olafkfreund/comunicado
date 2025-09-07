@@ -13,9 +13,7 @@ use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{
-        Block, Borders, Clear, List, ListItem, ListState, Paragraph, Wrap,
-    },
+    widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Wrap},
     Frame,
 };
 use std::collections::HashMap;
@@ -23,12 +21,12 @@ use std::collections::HashMap;
 /// Keyboard bindings manager modes
 #[derive(Debug, Clone, PartialEq)]
 pub enum KeyboardBindingsMode {
-    List,             // View all bindings
-    Add,              // Add new binding
-    Edit(String),     // Edit binding by key
-    Delete(String),   // Confirm deletion
-    Import,           // Import bindings
-    Export,           // Export bindings
+    List,           // View all bindings
+    Add,            // Add new binding
+    Edit(String),   // Edit binding by key
+    Delete(String), // Confirm deletion
+    Import,         // Import bindings
+    Export,         // Export bindings
 }
 
 /// Action categories for organization
@@ -47,13 +45,13 @@ impl ActionCategory {
         match self {
             ActionCategory::Navigation => "Navigation",
             ActionCategory::Email => "Email",
-            ActionCategory::Calendar => "Calendar", 
+            ActionCategory::Calendar => "Calendar",
             ActionCategory::UI => "UI & Interface",
             ActionCategory::Application => "Application",
             ActionCategory::Custom => "Custom",
         }
     }
-    
+
     pub fn all() -> Vec<ActionCategory> {
         vec![
             ActionCategory::Navigation,
@@ -83,17 +81,17 @@ pub struct KeyboardBindingsUI {
     list_state: ListState,
     selected_category: ActionCategory,
     category_index: usize,
-    
+
     // Form fields for adding/editing bindings
     form_key_combo: String,
     form_action_id: String,
     form_description: String,
-    
+
     // UI state
     editing_field: Option<usize>, // Which field is being edited (0-2)
     input_buffer: String,
     status_message: String,
-    
+
     // Available actions
     actions: Vec<KeyAction>,
     #[allow(dead_code)]
@@ -104,30 +102,30 @@ impl KeyboardBindingsUI {
     pub fn new() -> Self {
         let mut list_state = ListState::default();
         list_state.select(Some(0));
-        
+
         let actions = Self::get_default_actions();
         let filtered_actions = actions.clone();
-        
+
         Self {
             mode: KeyboardBindingsMode::List,
             bindings: HashMap::new(),
             list_state,
             selected_category: ActionCategory::Navigation,
             category_index: 0,
-            
+
             form_key_combo: String::new(),
             form_action_id: String::new(),
             form_description: String::new(),
-            
+
             editing_field: None,
             input_buffer: String::new(),
             status_message: String::new(),
-            
+
             actions,
             filtered_actions,
         }
     }
-    
+
     /// Initialize with existing bindings
     pub fn with_bindings(bindings: HashMap<String, String>) -> Self {
         let mut ui = Self::new();
@@ -135,7 +133,7 @@ impl KeyboardBindingsUI {
         ui.status_message = format!("Loaded {} custom bindings", ui.bindings.len());
         ui
     }
-    
+
     /// Get default available actions
     fn get_default_actions() -> Vec<KeyAction> {
         vec![
@@ -182,7 +180,6 @@ impl KeyboardBindingsUI {
                 category: ActionCategory::Navigation,
                 default_key: Some("PageDown".to_string()),
             },
-            
             // Email actions
             KeyAction {
                 id: "compose_email".to_string(),
@@ -233,7 +230,6 @@ impl KeyboardBindingsUI {
                 category: ActionCategory::Email,
                 default_key: Some("s".to_string()),
             },
-            
             // Calendar actions
             KeyAction {
                 id: "new_event".to_string(),
@@ -270,7 +266,6 @@ impl KeyboardBindingsUI {
                 category: ActionCategory::Calendar,
                 default_key: Some("[".to_string()),
             },
-            
             // UI actions
             KeyAction {
                 id: "toggle_help".to_string(),
@@ -300,7 +295,6 @@ impl KeyboardBindingsUI {
                 category: ActionCategory::UI,
                 default_key: Some(",".to_string()),
             },
-            
             // Application actions
             KeyAction {
                 id: "quit".to_string(),
@@ -325,11 +319,11 @@ impl KeyboardBindingsUI {
             },
         ]
     }
-    
+
     /// Handle keyboard input
     pub fn handle_key(&mut self, key: crossterm::event::KeyCode) -> bool {
         use crossterm::event::KeyCode;
-        
+
         match (&self.mode, key) {
             // List mode navigation
             (KeyboardBindingsMode::List, KeyCode::Up) => {
@@ -347,7 +341,7 @@ impl KeyboardBindingsUI {
                 }
                 true
             }
-            
+
             // List mode actions
             (KeyboardBindingsMode::List, KeyCode::Enter) => {
                 if let Some(selected) = self.list_state.selected() {
@@ -388,7 +382,7 @@ impl KeyboardBindingsUI {
                 true
             }
             (KeyboardBindingsMode::List, KeyCode::Esc) => false, // Close bindings manager
-            
+
             // Add/Edit mode navigation
             (KeyboardBindingsMode::Add | KeyboardBindingsMode::Edit(_), KeyCode::Tab) => {
                 if self.editing_field.is_none() {
@@ -418,7 +412,7 @@ impl KeyboardBindingsUI {
                 }
                 true
             }
-            
+
             // Field editing
             (KeyboardBindingsMode::Add | KeyboardBindingsMode::Edit(_), KeyCode::Char(c)) => {
                 if self.editing_field.is_some() {
@@ -432,7 +426,7 @@ impl KeyboardBindingsUI {
                 }
                 true
             }
-            
+
             // Delete confirmation
             (KeyboardBindingsMode::Delete(_), KeyCode::Char('y')) => {
                 self.confirm_delete();
@@ -442,29 +436,31 @@ impl KeyboardBindingsUI {
                 self.mode = KeyboardBindingsMode::List;
                 true
             }
-            
+
             // Import/Export
             (KeyboardBindingsMode::Import | KeyboardBindingsMode::Export, KeyCode::Esc) => {
                 self.mode = KeyboardBindingsMode::List;
                 true
             }
-            
+
             _ => false,
         }
     }
-    
+
     /// Render the keyboard bindings interface
     pub fn render(&mut self, frame: &mut Frame, area: Rect, theme: &Theme) {
         match self.mode.clone() {
             KeyboardBindingsMode::List => self.render_bindings_list(frame, area, theme),
             KeyboardBindingsMode::Add => self.render_add_binding(frame, area, theme),
             KeyboardBindingsMode::Edit(key) => self.render_edit_binding(frame, area, theme, &key),
-            KeyboardBindingsMode::Delete(key) => self.render_delete_confirmation(frame, area, theme, &key),
+            KeyboardBindingsMode::Delete(key) => {
+                self.render_delete_confirmation(frame, area, theme, &key)
+            }
             KeyboardBindingsMode::Import => self.render_import_dialog(frame, area, theme),
             KeyboardBindingsMode::Export => self.render_export_dialog(frame, area, theme),
         }
     }
-    
+
     fn render_bindings_list(&mut self, frame: &mut Frame, area: Rect, theme: &Theme) {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
@@ -474,44 +470,57 @@ impl KeyboardBindingsUI {
                 Constraint::Length(3),
             ])
             .split(area);
-        
+
         // Category selector
         let category_text = format!("Category: {} (C to cycle)", self.selected_category.as_str());
         let category = Paragraph::new(category_text)
             .block(Block::default().borders(Borders::ALL).title("Filter"))
             .alignment(Alignment::Center);
         frame.render_widget(category, chunks[0]);
-        
+
         // Bindings list
         let filtered_bindings = self.get_filtered_bindings();
-        let items: Vec<ListItem> = filtered_bindings.iter().map(|(key, action_id)| {
-            let action_name = self.get_action_name(action_id);
-            ListItem::new(Line::from(vec![
-                Span::styled(key, Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
-                Span::raw(" → "),
-                Span::styled(action_name, Style::default().fg(Color::Cyan)),
-            ]))
-        }).collect();
-        
+        let items: Vec<ListItem> = filtered_bindings
+            .iter()
+            .map(|(key, action_id)| {
+                let action_name = self.get_action_name(action_id);
+                ListItem::new(Line::from(vec![
+                    Span::styled(
+                        key,
+                        Style::default()
+                            .fg(Color::Yellow)
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                    Span::raw(" → "),
+                    Span::styled(action_name, Style::default().fg(Color::Cyan)),
+                ]))
+            })
+            .collect();
+
         let list = List::new(items)
-            .block(Block::default()
-                .title(format!("⌨️ Keyboard Bindings ({} total)", self.bindings.len()))
-                .borders(Borders::ALL))
+            .block(
+                Block::default()
+                    .title(format!(
+                        "⌨️ Keyboard Bindings ({} total)",
+                        self.bindings.len()
+                    ))
+                    .borders(Borders::ALL),
+            )
             .highlight_style(theme.get_component_style("selected", true))
             .highlight_symbol("► ");
-        
+
         frame.render_stateful_widget(list, chunks[1], &mut self.list_state);
-        
+
         // Help text
         let help = Paragraph::new(
             "Enter: Edit • A: Add • D: Delete • I: Import • X: Export • C: Cycle Category • Esc: Close"
         )
         .block(Block::default().borders(Borders::ALL).title("Controls"))
         .wrap(Wrap { trim: true });
-        
+
         frame.render_widget(help, chunks[2]);
     }
-    
+
     fn render_add_binding(&mut self, frame: &mut Frame, area: Rect, _theme: &Theme) {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
@@ -521,21 +530,29 @@ impl KeyboardBindingsUI {
                 Constraint::Length(3),
             ])
             .split(area);
-        
+
         // Title
         let title = Paragraph::new("Add New Keyboard Binding")
-            .block(Block::default().borders(Borders::ALL).title("⌨️ Binding Setup"))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title("⌨️ Binding Setup"),
+            )
             .alignment(Alignment::Center);
         frame.render_widget(title, chunks[0]);
-        
+
         // Form fields
         let field_names = ["Key Combination", "Action ID", "Description"];
-        let field_values = [&self.form_key_combo, &self.form_action_id, &self.form_description];
-        
+        let field_values = [
+            &self.form_key_combo,
+            &self.form_action_id,
+            &self.form_description,
+        ];
+
         let mut form_lines = Vec::new();
         form_lines.push("Available actions by category:".to_string());
         form_lines.push("".to_string());
-        
+
         for i in 0..3 {
             let prefix = if self.editing_field == Some(i) {
                 format!("► {}: {} _", field_names[i], self.input_buffer)
@@ -544,26 +561,30 @@ impl KeyboardBindingsUI {
             };
             form_lines.push(prefix);
         }
-        
+
         form_lines.push("".to_string());
         form_lines.push("Example key combinations:".to_string());
         form_lines.push("  Single key: 'a', 'Enter', 'F1'".to_string());
         form_lines.push("  With modifier: 'Ctrl+a', 'Alt+Enter', 'Shift+F1'".to_string());
         form_lines.push("".to_string());
-        
+
         if self.editing_field.is_some() {
             form_lines.push("Enter: Apply • Esc: Cancel edit".to_string());
         } else {
             form_lines.push("Tab: Edit fields • Enter: Save • Esc: Cancel".to_string());
         }
-        
+
         let form_text = form_lines.join("\n");
         let form = Paragraph::new(form_text)
-            .block(Block::default().borders(Borders::ALL).title("Binding Details"))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title("Binding Details"),
+            )
             .wrap(Wrap { trim: true });
-        
+
         frame.render_widget(form, chunks[1]);
-        
+
         // Status
         if !self.status_message.is_empty() {
             let status = Paragraph::new(self.status_message.as_str())
@@ -571,21 +592,29 @@ impl KeyboardBindingsUI {
             frame.render_widget(status, chunks[2]);
         }
     }
-    
+
     fn render_edit_binding(&mut self, frame: &mut Frame, area: Rect, theme: &Theme, _key: &str) {
         // Similar to add binding but with existing data pre-filled
         self.render_add_binding(frame, area, theme);
     }
-    
-    fn render_delete_confirmation(&mut self, frame: &mut Frame, area: Rect, _theme: &Theme, key: &str) {
+
+    fn render_delete_confirmation(
+        &mut self,
+        frame: &mut Frame,
+        area: Rect,
+        _theme: &Theme,
+        key: &str,
+    ) {
         let popup_area = self.centered_rect(60, 20, area);
-        
+
         frame.render_widget(Clear, popup_area);
-        
-        let action_name = self.bindings.get(key)
+
+        let action_name = self
+            .bindings
+            .get(key)
             .and_then(|action_id| Some(self.get_action_name(action_id)))
             .unwrap_or("Unknown".to_string());
-        
+
         let confirmation = Paragraph::new(format!(
             "Are you sure you want to delete the binding?\\n\\nKey: {}\\nAction: {}\\n\\nThis cannot be undone.\\n\\nPress Y to confirm, N or Esc to cancel.",
             key, action_name
@@ -595,47 +624,51 @@ impl KeyboardBindingsUI {
             .title("⚠️  Delete Binding"))
         .alignment(Alignment::Center)
         .wrap(Wrap { trim: true });
-        
+
         frame.render_widget(confirmation, popup_area);
     }
-    
+
     fn render_import_dialog(&mut self, frame: &mut Frame, area: Rect, _theme: &Theme) {
         let popup_area = self.centered_rect(70, 30, area);
-        
+
         frame.render_widget(Clear, popup_area);
-        
+
         let import_text = "Import Keyboard Bindings\\n\\nSupported formats:\\n• JSON configuration files\\n• Vim-style keymaps\\n• Custom binding exports\\n\\nFeature implementation in progress...\\n\\nPress Esc to return";
-        
+
         let import_dialog = Paragraph::new(import_text)
-            .block(Block::default()
-                .borders(Borders::ALL)
-                .title("📥 Import Bindings"))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title("📥 Import Bindings"),
+            )
             .alignment(Alignment::Center)
             .wrap(Wrap { trim: true });
-        
+
         frame.render_widget(import_dialog, popup_area);
     }
-    
+
     fn render_export_dialog(&mut self, frame: &mut Frame, area: Rect, _theme: &Theme) {
         let popup_area = self.centered_rect(70, 30, area);
-        
+
         frame.render_widget(Clear, popup_area);
-        
+
         let export_text = format!(
             "Export Keyboard Bindings\\n\\nCurrent bindings: {}\\n\\nExport formats:\\n• JSON configuration\\n• Vim-style keymap\\n• Plain text list\\n\\nFeature implementation in progress...\\n\\nPress Esc to return",
             self.bindings.len()
         );
-        
+
         let export_dialog = Paragraph::new(export_text)
-            .block(Block::default()
-                .borders(Borders::ALL)
-                .title("📤 Export Bindings"))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title("📤 Export Bindings"),
+            )
             .alignment(Alignment::Center)
             .wrap(Wrap { trim: true });
-        
+
         frame.render_widget(export_dialog, popup_area);
     }
-    
+
     // Helper methods
     fn centered_rect(&self, percent_x: u16, percent_y: u16, r: Rect) -> Rect {
         let popup_layout = Layout::default()
@@ -646,7 +679,7 @@ impl KeyboardBindingsUI {
                 Constraint::Percentage((100 - percent_y) / 2),
             ])
             .split(r);
-        
+
         Layout::default()
             .direction(Direction::Horizontal)
             .constraints([
@@ -656,11 +689,13 @@ impl KeyboardBindingsUI {
             ])
             .split(popup_layout[1])[1]
     }
-    
+
     fn get_filtered_bindings(&self) -> Vec<(String, String)> {
-        self.bindings.iter()
+        self.bindings
+            .iter()
             .filter(|(_, action_id)| {
-                self.actions.iter()
+                self.actions
+                    .iter()
                     .find(|action| &action.id == *action_id)
                     .map(|action| action.category == self.selected_category)
                     .unwrap_or(self.selected_category == ActionCategory::Custom)
@@ -668,21 +703,22 @@ impl KeyboardBindingsUI {
             .map(|(k, v)| (k.clone(), v.clone()))
             .collect()
     }
-    
+
     fn get_action_name(&self, action_id: &str) -> String {
-        self.actions.iter()
+        self.actions
+            .iter()
             .find(|action| action.id == action_id)
             .map(|action| action.name.clone())
             .unwrap_or_else(|| action_id.to_string())
     }
-    
+
     fn cycle_category(&mut self) {
         let categories = ActionCategory::all();
         self.category_index = (self.category_index + 1) % categories.len();
         self.selected_category = categories[self.category_index].clone();
         self.list_state.select(Some(0)); // Reset selection
     }
-    
+
     fn clear_form(&mut self) {
         self.form_key_combo.clear();
         self.form_action_id.clear();
@@ -690,7 +726,7 @@ impl KeyboardBindingsUI {
         self.editing_field = None;
         self.input_buffer.clear();
     }
-    
+
     fn load_binding_for_editing(&mut self, key: &str) {
         if let Some(action_id) = self.bindings.get(key) {
             self.form_key_combo = key.to_string();
@@ -700,7 +736,7 @@ impl KeyboardBindingsUI {
             self.input_buffer.clear();
         }
     }
-    
+
     fn start_field_edit(&mut self, field_index: usize) {
         let current_value = match field_index {
             0 => self.form_key_combo.clone(),
@@ -710,7 +746,7 @@ impl KeyboardBindingsUI {
         };
         self.input_buffer = current_value;
     }
-    
+
     fn apply_field_edit(&mut self) {
         if let Some(field_index) = self.editing_field {
             let value = self.input_buffer.trim().to_string();
@@ -724,12 +760,12 @@ impl KeyboardBindingsUI {
             self.input_buffer.clear();
         }
     }
-    
+
     fn cancel_field_edit(&mut self) {
         self.editing_field = None;
         self.input_buffer.clear();
     }
-    
+
     /// Save binding (validation and ready state)
     pub fn save_binding(&mut self) {
         // Validate required fields
@@ -737,12 +773,12 @@ impl KeyboardBindingsUI {
             self.status_message = "Key combination is required".to_string();
             return;
         }
-        
+
         if self.form_action_id.trim().is_empty() {
             self.status_message = "Action ID is required".to_string();
             return;
         }
-        
+
         // Check for conflicts
         if self.bindings.contains_key(&self.form_key_combo) {
             if let KeyboardBindingsMode::Add = self.mode {
@@ -750,13 +786,14 @@ impl KeyboardBindingsUI {
                 return;
             }
         }
-        
+
         // Add/update binding
-        self.bindings.insert(self.form_key_combo.clone(), self.form_action_id.clone());
+        self.bindings
+            .insert(self.form_key_combo.clone(), self.form_action_id.clone());
         self.status_message = format!("Binding '{}' saved successfully", self.form_key_combo);
         self.mode = KeyboardBindingsMode::List;
     }
-    
+
     /// Confirm binding deletion
     pub fn confirm_delete(&mut self) {
         if let KeyboardBindingsMode::Delete(key) = &self.mode {
@@ -765,12 +802,12 @@ impl KeyboardBindingsUI {
         }
         self.mode = KeyboardBindingsMode::List;
     }
-    
+
     /// Get current bindings for saving
     pub fn get_bindings(&self) -> HashMap<String, String> {
         self.bindings.clone()
     }
-    
+
     /// Check if bindings have been modified
     pub fn is_modified(&self) -> bool {
         // This would compare against original bindings in a real implementation

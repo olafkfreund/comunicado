@@ -1,8 +1,8 @@
 use std::time::Duration;
 use tokio::sync::mpsc;
-use tracing::{info, debug, warn};
+use tracing::{debug, info, warn};
 
-use super::types::{DeviceInfo, SmsMessage, MobileNotification};
+use super::types::{DeviceInfo, MobileNotification, SmsMessage};
 
 /// Production KDE Connect client that attempts to use real D-Bus connections
 /// when KDE Connect is available, otherwise provides clear error messages
@@ -16,10 +16,10 @@ pub struct KdeConnectClient {
 impl KdeConnectClient {
     pub fn new() -> crate::mobile::Result<Self> {
         info!("Creating KDE Connect client");
-        
+
         // Check if KDE Connect is actually available
         let kde_connect_available = Self::check_kde_connect_availability();
-        
+
         if !kde_connect_available {
             warn!("KDE Connect daemon is not running or not installed");
             info!("To use SMS/MMS features, please:");
@@ -34,7 +34,7 @@ impl KdeConnectClient {
             kde_connect_available,
         })
     }
-    
+
     /// Check if KDE Connect daemon is available
     fn check_kde_connect_availability() -> bool {
         // Try to detect KDE Connect daemon
@@ -43,7 +43,7 @@ impl KdeConnectClient {
             // When D-Bus feature is enabled, try to connect to KDE Connect service
             match std::process::Command::new("kdeconnect-cli")
                 .arg("--list-available")
-                .output() 
+                .output()
             {
                 Ok(output) => {
                     if output.status.success() {
@@ -60,7 +60,7 @@ impl KdeConnectClient {
                 }
             }
         }
-        
+
         #[cfg(not(feature = "kde-connect"))]
         {
             // When D-Bus feature is not enabled, KDE Connect is not available
@@ -73,12 +73,13 @@ impl KdeConnectClient {
     pub fn discover_devices(&mut self) -> crate::mobile::Result<Vec<DeviceInfo>> {
         if !self.kde_connect_available {
             return Err(crate::mobile::MobileError::KdeConnectNotAvailable(
-                "KDE Connect is not available. Please install and configure KDE Connect.".to_string()
+                "KDE Connect is not available. Please install and configure KDE Connect."
+                    .to_string(),
             ));
         }
 
         debug!("Discovering KDE Connect devices");
-        
+
         #[cfg(feature = "kde-connect")]
         {
             // Use kdeconnect-cli to discover devices
@@ -96,16 +97,18 @@ impl KdeConnectClient {
                     } else {
                         let error_str = String::from_utf8_lossy(&output.stderr);
                         error!("KDE Connect CLI error: {}", error_str);
-                        Err(crate::mobile::MobileError::KdeConnectNotAvailable(
-                            format!("KDE Connect CLI failed: {}", error_str)
-                        ))
+                        Err(crate::mobile::MobileError::KdeConnectNotAvailable(format!(
+                            "KDE Connect CLI failed: {}",
+                            error_str
+                        )))
                     }
                 }
                 Err(e) => {
                     error!("Failed to execute kdeconnect-cli: {}", e);
-                    Err(crate::mobile::MobileError::KdeConnectNotAvailable(
-                        format!("Failed to execute kdeconnect-cli: {}", e)
-                    ))
+                    Err(crate::mobile::MobileError::KdeConnectNotAvailable(format!(
+                        "Failed to execute kdeconnect-cli: {}",
+                        e
+                    )))
                 }
             }
         }
@@ -113,7 +116,7 @@ impl KdeConnectClient {
         #[cfg(not(feature = "kde-connect"))]
         {
             Err(crate::mobile::MobileError::KdeConnectNotAvailable(
-                "KDE Connect support not compiled. Enable the 'kde-connect' feature.".to_string()
+                "KDE Connect support not compiled. Enable the 'kde-connect' feature.".to_string(),
             ))
         }
     }
@@ -121,22 +124,22 @@ impl KdeConnectClient {
     #[cfg(feature = "kde-connect")]
     fn parse_device_list(&self, output: &str) -> crate::mobile::Result<Vec<DeviceInfo>> {
         let mut devices = Vec::new();
-        
+
         for line in output.lines() {
             if line.trim().is_empty() {
                 continue;
             }
-            
+
             // Format is typically "device_id device_name"
             let parts: Vec<&str> = line.splitn(2, ' ').collect();
             if parts.len() >= 2 {
                 let id = parts[0].to_string();
                 let name = parts[1].to_string();
-                
+
                 // Get additional device info
-                let (is_reachable, has_sms_plugin, has_notification_plugin, device_type) = 
+                let (is_reachable, has_sms_plugin, has_notification_plugin, device_type) =
                     self.get_device_capabilities(&id);
-                
+
                 devices.push(DeviceInfo {
                     id,
                     name,
@@ -147,7 +150,7 @@ impl KdeConnectClient {
                 });
             }
         }
-        
+
         Ok(devices)
     }
 
@@ -165,20 +168,21 @@ impl KdeConnectClient {
         };
 
         // Check available plugins
-        let (has_sms_plugin, has_notification_plugin) = match std::process::Command::new("kdeconnect-cli")
-            .arg("--device")
-            .arg(device_id)
-            .arg("--list-available-plugins")
-            .output()
-        {
-            Ok(output) => {
-                let plugins = String::from_utf8_lossy(&output.stdout);
-                let has_sms = plugins.contains("kdeconnect_sms");
-                let has_notifications = plugins.contains("kdeconnect_notifications");
-                (has_sms, has_notifications)
-            }
-            Err(_) => (false, false),
-        };
+        let (has_sms_plugin, has_notification_plugin) =
+            match std::process::Command::new("kdeconnect-cli")
+                .arg("--device")
+                .arg(device_id)
+                .arg("--list-available-plugins")
+                .output()
+            {
+                Ok(output) => {
+                    let plugins = String::from_utf8_lossy(&output.stdout);
+                    let has_sms = plugins.contains("kdeconnect_sms");
+                    let has_notifications = plugins.contains("kdeconnect_notifications");
+                    (has_sms, has_notifications)
+                }
+                Err(_) => (false, false),
+            };
 
         // Determine device type (simplified logic)
         let device_type = if has_sms_plugin {
@@ -187,19 +191,24 @@ impl KdeConnectClient {
             DeviceType::Tablet
         };
 
-        (is_reachable, has_sms_plugin, has_notification_plugin, device_type)
+        (
+            is_reachable,
+            has_sms_plugin,
+            has_notification_plugin,
+            device_type,
+        )
     }
 
     /// Connect to a specific device
     pub fn connect_device(&mut self, device_id: String) -> crate::mobile::Result<()> {
         if !self.kde_connect_available {
             return Err(crate::mobile::MobileError::KdeConnectNotAvailable(
-                "KDE Connect is not available".to_string()
+                "KDE Connect is not available".to_string(),
             ));
         }
 
         info!("Connecting to KDE Connect device: {}", device_id);
-        
+
         #[cfg(feature = "kde-connect")]
         {
             // Verify device is available and reachable
@@ -217,16 +226,18 @@ impl KdeConnectClient {
                     } else {
                         let error_str = String::from_utf8_lossy(&output.stderr);
                         error!("Failed to connect to device {}: {}", device_id, error_str);
-                        Err(crate::mobile::MobileError::DeviceNotReachable(
-                            format!("Device {} is not reachable: {}", device_id, error_str)
-                        ))
+                        Err(crate::mobile::MobileError::DeviceNotReachable(format!(
+                            "Device {} is not reachable: {}",
+                            device_id, error_str
+                        )))
                     }
                 }
                 Err(e) => {
                     error!("Failed to ping device {}: {}", device_id, e);
-                    Err(crate::mobile::MobileError::DeviceNotReachable(
-                        format!("Failed to ping device {}: {}", device_id, e)
-                    ))
+                    Err(crate::mobile::MobileError::DeviceNotReachable(format!(
+                        "Failed to ping device {}: {}",
+                        device_id, e
+                    )))
                 }
             }
         }
@@ -234,7 +245,7 @@ impl KdeConnectClient {
         #[cfg(not(feature = "kde-connect"))]
         {
             Err(crate::mobile::MobileError::KdeConnectNotAvailable(
-                "KDE Connect support not compiled".to_string()
+                "KDE Connect support not compiled".to_string(),
             ))
         }
     }
@@ -251,8 +262,9 @@ impl KdeConnectClient {
 
     /// Get device details for connected device
     pub fn get_device_details(&self) -> crate::mobile::Result<DeviceInfo> {
-        let _device_id = self.device_id.as_ref()
-            .ok_or_else(|| crate::mobile::MobileError::DeviceNotPaired("No device connected".to_string()))?;
+        let _device_id = self.device_id.as_ref().ok_or_else(|| {
+            crate::mobile::MobileError::DeviceNotPaired("No device connected".to_string())
+        })?;
 
         #[cfg(feature = "kde-connect")]
         {
@@ -267,7 +279,7 @@ impl KdeConnectClient {
                 Err(_) => "Unknown Device".to_string(),
             };
 
-            let (is_reachable, has_sms_plugin, has_notification_plugin, device_type) = 
+            let (is_reachable, has_sms_plugin, has_notification_plugin, device_type) =
                 self.get_device_capabilities(device_id);
 
             Ok(DeviceInfo {
@@ -283,18 +295,19 @@ impl KdeConnectClient {
         #[cfg(not(feature = "kde-connect"))]
         {
             Err(crate::mobile::MobileError::KdeConnectNotAvailable(
-                "KDE Connect support not compiled".to_string()
+                "KDE Connect support not compiled".to_string(),
             ))
         }
     }
 
     /// Request conversations from connected device
     pub fn request_conversations(&mut self) -> crate::mobile::Result<()> {
-        let device_id = self.device_id.as_ref()
-            .ok_or_else(|| crate::mobile::MobileError::DeviceNotPaired("No device connected".to_string()))?;
+        let device_id = self.device_id.as_ref().ok_or_else(|| {
+            crate::mobile::MobileError::DeviceNotPaired("No device connected".to_string())
+        })?;
 
         debug!("Requesting SMS conversations from device: {}", device_id);
-        
+
         #[cfg(feature = "kde-connect")]
         {
             // Request conversations using KDE Connect SMS plugin
@@ -312,16 +325,18 @@ impl KdeConnectClient {
                     } else {
                         let error_str = String::from_utf8_lossy(&output.stderr);
                         error!("Failed to request conversations: {}", error_str);
-                        Err(crate::mobile::MobileError::MessageSendFailed(
-                            format!("Failed to request conversations: {}", error_str)
-                        ))
+                        Err(crate::mobile::MobileError::MessageSendFailed(format!(
+                            "Failed to request conversations: {}",
+                            error_str
+                        )))
                     }
                 }
                 Err(e) => {
                     error!("Failed to execute SMS command: {}", e);
-                    Err(crate::mobile::MobileError::MessageSendFailed(
-                        format!("Failed to execute SMS command: {}", e)
-                    ))
+                    Err(crate::mobile::MobileError::MessageSendFailed(format!(
+                        "Failed to execute SMS command: {}",
+                        e
+                    )))
                 }
             }
         }
@@ -329,15 +344,16 @@ impl KdeConnectClient {
         #[cfg(not(feature = "kde-connect"))]
         {
             Err(crate::mobile::MobileError::KdeConnectNotAvailable(
-                "KDE Connect support not compiled".to_string()
+                "KDE Connect support not compiled".to_string(),
             ))
         }
     }
 
     /// Send SMS message
     pub fn send_sms(&self, _message: &str, _addresses: &[String]) -> crate::mobile::Result<()> {
-        let device_id = self.device_id.as_ref()
-            .ok_or_else(|| crate::mobile::MobileError::DeviceNotPaired("No device connected".to_string()))?;
+        let device_id = self.device_id.as_ref().ok_or_else(|| {
+            crate::mobile::MobileError::DeviceNotPaired("No device connected".to_string())
+        })?;
 
         info!("Sending SMS to {:?} via device {}", _addresses, device_id);
 
@@ -359,16 +375,18 @@ impl KdeConnectClient {
                         } else {
                             let error_str = String::from_utf8_lossy(&output.stderr);
                             error!("Failed to send SMS to {}: {}", address, error_str);
-                            return Err(crate::mobile::MobileError::MessageSendFailed(
-                                format!("Failed to send SMS to {}: {}", address, error_str)
-                            ));
+                            return Err(crate::mobile::MobileError::MessageSendFailed(format!(
+                                "Failed to send SMS to {}: {}",
+                                address, error_str
+                            )));
                         }
                     }
                     Err(e) => {
                         error!("Failed to execute SMS send command: {}", e);
-                        return Err(crate::mobile::MobileError::MessageSendFailed(
-                            format!("Failed to execute SMS send command: {}", e)
-                        ));
+                        return Err(crate::mobile::MobileError::MessageSendFailed(format!(
+                            "Failed to execute SMS send command: {}",
+                            e
+                        )));
                     }
                 }
             }
@@ -378,15 +396,19 @@ impl KdeConnectClient {
         #[cfg(not(feature = "kde-connect"))]
         {
             Err(crate::mobile::MobileError::KdeConnectNotAvailable(
-                "KDE Connect support not compiled".to_string()
+                "KDE Connect support not compiled".to_string(),
             ))
         }
     }
 
     /// Listen for incoming SMS messages (placeholder - would use D-Bus in real implementation)
-    pub async fn listen_for_messages(&mut self) -> crate::mobile::Result<mpsc::UnboundedReceiver<SmsMessage>> {
+    pub async fn listen_for_messages(
+        &mut self,
+    ) -> crate::mobile::Result<mpsc::UnboundedReceiver<SmsMessage>> {
         if !self.is_connected() {
-            return Err(crate::mobile::MobileError::DeviceNotPaired("No device connected".to_string()));
+            return Err(crate::mobile::MobileError::DeviceNotPaired(
+                "No device connected".to_string(),
+            ));
         }
 
         let (tx, rx) = mpsc::unbounded_channel();
@@ -402,9 +424,13 @@ impl KdeConnectClient {
     }
 
     /// Listen for incoming mobile notifications (placeholder - would use D-Bus in real implementation)
-    pub async fn listen_for_notifications(&mut self) -> crate::mobile::Result<mpsc::UnboundedReceiver<MobileNotification>> {
+    pub async fn listen_for_notifications(
+        &mut self,
+    ) -> crate::mobile::Result<mpsc::UnboundedReceiver<MobileNotification>> {
         if !self.is_connected() {
-            return Err(crate::mobile::MobileError::DeviceNotPaired("No device connected".to_string()));
+            return Err(crate::mobile::MobileError::DeviceNotPaired(
+                "No device connected".to_string(),
+            ));
         }
 
         let (tx, rx) = mpsc::unbounded_channel();
@@ -429,18 +455,26 @@ impl KdeConnectClient {
     }
 
     /// Send reply to mobile notification
-    pub fn send_notification_reply(&self, reply_id: &str, message: &str) -> crate::mobile::Result<()> {
-        let device_id = self.device_id.as_ref()
-            .ok_or_else(|| crate::mobile::MobileError::DeviceNotPaired("No device connected".to_string()))?;
+    pub fn send_notification_reply(
+        &self,
+        reply_id: &str,
+        message: &str,
+    ) -> crate::mobile::Result<()> {
+        let device_id = self.device_id.as_ref().ok_or_else(|| {
+            crate::mobile::MobileError::DeviceNotPaired("No device connected".to_string())
+        })?;
 
-        debug!("Sending notification reply to device {}: {} -> {}", device_id, reply_id, message);
+        debug!(
+            "Sending notification reply to device {}: {} -> {}",
+            device_id, reply_id, message
+        );
 
         #[cfg(feature = "kde-connect")]
         {
             // This would require D-Bus integration for notification replies
             warn!("Notification reply not yet implemented for production KDE Connect");
             warn!("This would require D-Bus notification plugin integration");
-            
+
             // For now, return success but log that it's not implemented
             info!("Notification reply acknowledged (not actually sent)");
             Ok(())
@@ -449,7 +483,7 @@ impl KdeConnectClient {
         #[cfg(not(feature = "kde-connect"))]
         {
             Err(crate::mobile::MobileError::KdeConnectNotAvailable(
-                "KDE Connect support not compiled".to_string()
+                "KDE Connect support not compiled".to_string(),
             ))
         }
     }
@@ -468,7 +502,7 @@ mod tests {
     fn test_client_creation() {
         let client = KdeConnectClient::new();
         assert!(client.is_ok());
-        
+
         let client = client.unwrap();
         assert!(!client.is_connected());
         assert!(client.get_connected_device().is_none());
@@ -478,7 +512,7 @@ mod tests {
     fn test_kde_connect_availability_check() {
         // This test checks the availability detection logic
         let available = KdeConnectClient::check_kde_connect_availability();
-        
+
         // The result depends on whether KDE Connect is actually installed
         // So we just verify the function runs without panicking
         debug!("KDE Connect availability: {}", available);
@@ -487,14 +521,14 @@ mod tests {
     #[test]
     fn test_client_disconnect() {
         let mut client = KdeConnectClient::new().unwrap();
-        
+
         // Test disconnecting when not connected
         assert!(client.disconnect().is_ok());
-        
+
         // Test disconnecting after manual connection setup
         client.device_id = Some("test-device".to_string());
         assert!(client.device_id.is_some());
-        
+
         assert!(client.disconnect().is_ok());
         assert!(client.device_id.is_none());
     }
@@ -502,11 +536,11 @@ mod tests {
     #[tokio::test]
     async fn test_message_listening_when_not_connected() {
         let mut client = KdeConnectClient::new().unwrap();
-        
+
         // Should fail when not connected
         let result = client.listen_for_messages().await;
         assert!(result.is_err());
-        
+
         if let Err(e) = result {
             assert!(matches!(e, crate::mobile::MobileError::DeviceNotPaired(_)));
         }
@@ -515,11 +549,11 @@ mod tests {
     #[tokio::test]
     async fn test_notification_listening_when_not_connected() {
         let mut client = KdeConnectClient::new().unwrap();
-        
+
         // Should fail when not connected
         let result = client.listen_for_notifications().await;
         assert!(result.is_err());
-        
+
         if let Err(e) = result {
             assert!(matches!(e, crate::mobile::MobileError::DeviceNotPaired(_)));
         }

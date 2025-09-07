@@ -1,21 +1,21 @@
 //! Note indexing implementation
-//! 
+//!
 //! Provides full-text search indexing using SQLite FTS5 with real-time file system integration.
 
-use super::storage::NoteStorage;
-use super::manager::{NoteError, NoteResult};
-use super::types::{Note, NoteId, WatchedDirectory};
-use super::parser::MarkdownParser;
-use super::watcher::FileSystemEvent;
-use super::scanner::{DirectoryScanner, ScanResult};
 use super::integration::FileSystemMonitor;
+use super::manager::{NoteError, NoteResult};
+use super::parser::MarkdownParser;
+use super::scanner::{DirectoryScanner, ScanResult};
+use super::storage::NoteStorage;
+use super::types::{Note, NoteId, WatchedDirectory};
+use super::watcher::FileSystemEvent;
 
-use std::sync::Arc;
-use std::path::{Path, PathBuf};
-use std::fs;
 use std::collections::HashMap;
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::{RwLock, Mutex};
+use tokio::sync::{Mutex, RwLock};
 use tokio::time::sleep;
 use uuid::Uuid;
 
@@ -43,7 +43,7 @@ impl IndexingStats {
             fts_index_size: 0,
         }
     }
-    
+
     pub fn success_rate(&self) -> f64 {
         if self.total_notes == 0 {
             0.0
@@ -111,7 +111,7 @@ impl NoteIndexer {
         let config = IndexerConfig::default();
         Self::with_config(storage, config).await
     }
-    
+
     /// Create a note indexer with custom configuration
     pub async fn with_config(storage: Arc<NoteStorage>, config: IndexerConfig) -> NoteResult<Self> {
         let parser = MarkdownParser::new();
@@ -120,7 +120,7 @@ impl NoteIndexer {
         let processing_queue = Arc::new(Mutex::new(Vec::new()));
         let background_task = Arc::new(Mutex::new(None));
         let is_running = Arc::new(RwLock::new(false));
-        
+
         // Create file system monitor
         let monitor = match FileSystemMonitor::new() {
             Ok(monitor) => Arc::new(Mutex::new(Some(monitor))),
@@ -129,7 +129,7 @@ impl NoteIndexer {
                 Arc::new(Mutex::new(None))
             }
         };
-        
+
         Ok(Self {
             storage,
             parser,
@@ -142,7 +142,7 @@ impl NoteIndexer {
             is_running,
         })
     }
-    
+
     /// Start real-time indexing with file system monitoring
     pub async fn start_indexing(&self) -> NoteResult<()> {
         let mut is_running = self.is_running.write().await;
@@ -151,12 +151,12 @@ impl NoteIndexer {
         }
         *is_running = true;
         drop(is_running);
-        
+
         // Start background processing if enabled
         if self.config.background_indexing {
             self.start_background_processing().await?;
         }
-        
+
         // Start file system monitoring if available
         let mut monitor_guard = self.monitor.lock().await;
         if let Some(monitor) = monitor_guard.as_mut() {
@@ -164,23 +164,23 @@ impl NoteIndexer {
                 // Spawn task to handle file system events
                 let processing_queue = self.processing_queue.clone();
                 let config = self.config.clone();
-                
+
                 tokio::spawn(async move {
                     while let Some(batch) = event_receiver.recv().await {
                         // Add events to processing queue
                         let mut queue = processing_queue.lock().await;
                         queue.extend(batch.events);
-                        
+
                         // Apply processing delay
                         sleep(config.processing_delay).await;
                     }
                 });
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// Stop real-time indexing
     pub async fn stop_indexing(&self) -> NoteResult<()> {
         let mut is_running = self.is_running.write().await;
@@ -189,104 +189,112 @@ impl NoteIndexer {
         }
         *is_running = false;
         drop(is_running);
-        
+
         // Stop background task
         let mut task_guard = self.background_task.lock().await;
         if let Some(task) = task_guard.take() {
             task.abort();
         }
-        
+
         // Stop file system monitoring
         let mut monitor_guard = self.monitor.lock().await;
         if let Some(monitor) = monitor_guard.as_mut() {
             monitor.stop_monitoring();
         }
-        
+
         Ok(())
     }
-    
+
     /// Add a directory to monitor for changes
     pub async fn add_watched_directory(&self, directory: WatchedDirectory) -> NoteResult<()> {
         let mut monitor_guard = self.monitor.lock().await;
         if let Some(monitor) = monitor_guard.as_mut() {
             monitor.add_directory(directory)?;
-            
+
             // Perform initial indexing of the directory
             let scan_result = monitor.rescan_all().await?;
             if let Some(result) = scan_result.first() {
                 self.process_scan_result(result).await?;
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// Index a single note file
     pub async fn index_note_file(&self, file_path: &Path) -> NoteResult<Option<NoteId>> {
         if !file_path.exists() {
-            return Err(NoteError::FileSystem(format!("File does not exist: {}", file_path.display())));
+            return Err(NoteError::FileSystem(format!(
+                "File does not exist: {}",
+                file_path.display()
+            )));
         }
-        
+
         if !file_path.is_file() {
-            return Err(NoteError::FileSystem(format!("Path is not a file: {}", file_path.display())));
+            return Err(NoteError::FileSystem(format!(
+                "Path is not a file: {}",
+                file_path.display()
+            )));
         }
-        
+
         // Check file size
         let metadata = fs::metadata(file_path)
             .map_err(|e| NoteError::FileSystem(format!("Failed to read metadata: {}", e)))?;
-        
+
         if metadata.len() > self.config.max_file_size {
             return Ok(None); // Skip large files
         }
-        
+
         // Read file content
         let content = fs::read_to_string(file_path)
             .map_err(|e| NoteError::FileSystem(format!("Failed to read file: {}", e)))?;
-        
+
         // Generate note ID
         let note_id = format!("note_{}", Uuid::new_v4().simple());
-        
+
         // Parse note content
-        let note = self.parser.parse_note(note_id.clone(), file_path.to_path_buf(), &content)?;
-        
+        let note = self
+            .parser
+            .parse_note(note_id.clone(), file_path.to_path_buf(), &content)?;
+
         // Store note in database (using default directory_id of 1 for now)
         self.storage.store_note(&note, 1).await?;
-        
+
         // Update indexed notes cache
         let mut indexed = self.indexed_notes.write().await;
         indexed.insert(file_path.to_path_buf(), note.content_hash.clone());
-        
+
         // Update statistics
         let mut stats = self.stats.write().await;
         stats.indexed_notes += 1;
         stats.total_content_size += content.len();
-        
+
         Ok(Some(note_id))
     }
-    
+
     /// Index a note object directly
     pub async fn index_note(&self, note: &Note) -> NoteResult<()> {
         // Store note in database (using default directory_id of 1 for now)
         self.storage.store_note(note, 1).await?;
-        
+
         // Update indexed notes cache
         let mut indexed = self.indexed_notes.write().await;
         indexed.insert(note.path.clone(), note.content_hash.clone());
-        
+
         // Update statistics
         let mut stats = self.stats.write().await;
         stats.indexed_notes += 1;
         stats.total_content_size += note.content.len();
-        
+
         Ok(())
     }
-    
+
     /// Index multiple notes in a batch
     pub async fn index_notes_batch(&self, notes: &[Note]) -> NoteResult<usize> {
         let start_time = Instant::now();
         let mut indexed_count = 0;
         let mut failed_count = 0;
-        
+
         // Process notes in batches
         for chunk in notes.chunks(self.config.batch_size) {
             for note in chunk {
@@ -298,78 +306,86 @@ impl NoteIndexer {
                     }
                 }
             }
-            
+
             // Small delay between batches to avoid overwhelming the system
             sleep(Duration::from_millis(10)).await;
         }
-        
+
         // Update statistics
         let mut stats = self.stats.write().await;
         stats.total_notes += notes.len();
         stats.failed_notes += failed_count;
         stats.indexing_duration = start_time.elapsed();
-        
+
         if stats.total_content_size > 0 {
             stats.average_note_size = stats.total_content_size / stats.indexed_notes.max(1);
         }
-        
+
         Ok(indexed_count)
     }
-    
+
     /// Index an entire directory recursively
     pub async fn index_directory(&self, directory_path: &Path) -> NoteResult<usize> {
         let start_time = Instant::now();
-        
+
         if !directory_path.exists() {
-            return Err(NoteError::FileSystem(format!("Directory does not exist: {}", directory_path.display())));
+            return Err(NoteError::FileSystem(format!(
+                "Directory does not exist: {}",
+                directory_path.display()
+            )));
         }
-        
+
         if !directory_path.is_dir() {
-            return Err(NoteError::FileSystem(format!("Path is not a directory: {}", directory_path.display())));
+            return Err(NoteError::FileSystem(format!(
+                "Path is not a directory: {}",
+                directory_path.display()
+            )));
         }
-        
+
         let mut indexed_count = 0;
         let total_files;
-        
+
         // Use directory scanner for comprehensive file discovery
         let mut scanner = DirectoryScanner::new();
         let watched_dir = WatchedDirectory::new(
             directory_path.to_path_buf(),
             "Indexing Directory".to_string(),
         );
-        
+
         let scan_result = scanner.scan_directory(&watched_dir)?;
         total_files = scan_result.total_files;
-        
+
         // Index each discovered file
         for scanned_file in &scan_result.files {
             if scanned_file.has_note_extension() {
                 match self.index_note_file(&scanned_file.path).await {
                     Ok(Some(_note_id)) => indexed_count += 1,
-                    Ok(None) => {}, // File skipped (too large, etc.)
+                    Ok(None) => {} // File skipped (too large, etc.)
                     Err(e) => {
                         eprintln!("Failed to index {}: {}", scanned_file.path.display(), e);
                     }
                 }
             }
         }
-        
+
         // Update statistics
         let mut stats = self.stats.write().await;
         stats.total_notes += total_files;
         stats.indexing_duration = start_time.elapsed();
-        
-        println!("Indexed {} notes from {} files in {:?}", 
-                indexed_count, total_files, stats.indexing_duration);
-        
+
+        println!(
+            "Indexed {} notes from {} files in {:?}",
+            indexed_count, total_files, stats.indexing_duration
+        );
+
         Ok(indexed_count)
     }
-    
+
     /// Remove a note from the index
     pub async fn remove_note(&self, note_id: &str) -> NoteResult<()> {
         // Delete from storage
         self.storage.delete_note(&note_id.to_string()).await?;
-        
+
         // Remove from indexed notes cache
         let mut indexed = self.indexed_notes.write().await;
         indexed.retain(|_path, _hash| {
@@ -377,36 +393,36 @@ impl NoteIndexer {
             // For now, this is a simplified implementation
             true
         });
-        
+
         Ok(())
     }
-    
+
     /// Remove a note by file path
     pub async fn remove_note_by_path(&self, file_path: &Path) -> NoteResult<()> {
         // Find note by path and remove
         if let Some(note_id) = self.find_note_id_by_path(file_path).await? {
             self.remove_note(&note_id).await?;
         }
-        
+
         // Remove from indexed notes cache
         let mut indexed = self.indexed_notes.write().await;
         indexed.remove(file_path);
-        
+
         Ok(())
     }
-    
+
     /// Check if a file needs to be re-indexed (content changed)
     pub async fn needs_reindexing(&self, file_path: &Path) -> NoteResult<bool> {
         if !file_path.exists() {
             return Ok(false);
         }
-        
+
         // Calculate current content hash
         let content = fs::read_to_string(file_path)
             .map_err(|e| NoteError::FileSystem(format!("Failed to read file: {}", e)))?;
-        
+
         let current_hash = self.parser.calculate_content_hash(&content);
-        
+
         // Check against cached hash
         let indexed = self.indexed_notes.read().await;
         match indexed.get(file_path) {
@@ -414,60 +430,60 @@ impl NoteIndexer {
             None => Ok(true), // Not indexed yet
         }
     }
-    
+
     /// Get indexing statistics
     pub async fn get_stats(&self) -> IndexingStats {
         self.stats.read().await.clone()
     }
-    
+
     /// Get count of indexed notes
     pub async fn get_indexed_count(&self) -> usize {
         self.indexed_notes.read().await.len()
     }
-    
+
     /// Check if indexer is running
     pub async fn is_running(&self) -> bool {
         *self.is_running.read().await
     }
-    
+
     /// Force a full re-index of all watched directories
     pub async fn reindex_all(&self) -> NoteResult<usize> {
         let mut total_indexed = 0;
-        
+
         // Clear existing index
         self.clear_index().await?;
-        
+
         // Re-index all watched directories
         let mut monitor_guard = self.monitor.lock().await;
         if let Some(monitor) = monitor_guard.as_mut() {
             let scan_results = monitor.rescan_all().await?;
-            
+
             for result in scan_results {
                 total_indexed += self.process_scan_result(&result).await?;
             }
         }
-        
+
         Ok(total_indexed)
     }
-    
+
     /// Clear the entire index
     pub async fn clear_index(&self) -> NoteResult<()> {
         // Clear database
         // TODO: Implement clear_all_notes in storage
-        
+
         // Clear cache
         let mut indexed = self.indexed_notes.write().await;
         indexed.clear();
-        
+
         // Reset statistics
         let mut stats = self.stats.write().await;
         *stats = IndexingStats::new();
-        
+
         Ok(())
     }
-    
+
     // ==================== Private Helper Methods ====================
-    
+
     /// Start background processing task
     async fn start_background_processing(&self) -> NoteResult<()> {
         let processing_queue = self.processing_queue.clone();
@@ -475,7 +491,7 @@ impl NoteIndexer {
         let parser = self.parser.clone();
         let config = self.config.clone();
         let is_running = self.is_running.clone();
-        
+
         let task = tokio::spawn(async move {
             while *is_running.read().await {
                 // Process queued events
@@ -484,22 +500,22 @@ impl NoteIndexer {
                     let events = queue.drain(..).collect::<Vec<_>>();
                     events
                 };
-                
+
                 if !events.is_empty() {
                     Self::process_file_events(&events, &storage, &parser).await;
                 }
-                
+
                 // Sleep before next processing cycle
                 sleep(config.processing_delay).await;
             }
         });
-        
+
         let mut task_guard = self.background_task.lock().await;
         *task_guard = Some(task);
-        
+
         Ok(())
     }
-    
+
     /// Process file system events
     async fn process_file_events(
         events: &[FileSystemEvent],
@@ -508,8 +524,7 @@ impl NoteIndexer {
     ) {
         for event in events {
             match event {
-                FileSystemEvent::Created { path, .. } | 
-                FileSystemEvent::Modified { path, .. } => {
+                FileSystemEvent::Created { path, .. } | FileSystemEvent::Modified { path, .. } => {
                     if let Err(e) = Self::index_file_event(path, storage, parser).await {
                         eprintln!("Failed to index file {}: {}", path.display(), e);
                     }
@@ -530,7 +545,7 @@ impl NoteIndexer {
             }
         }
     }
-    
+
     /// Index a file from a file system event
     async fn index_file_event(
         file_path: &Path,
@@ -540,49 +555,49 @@ impl NoteIndexer {
         if !file_path.exists() || !file_path.is_file() {
             return Ok(());
         }
-        
+
         // Read and parse file
         let content = fs::read_to_string(file_path)
             .map_err(|e| NoteError::FileSystem(format!("Failed to read file: {}", e)))?;
-        
+
         let note_id = format!("note_{}", Uuid::new_v4().simple());
         let note = parser.parse_note(note_id, file_path.to_path_buf(), &content)?;
-        
+
         // Store in database (using default directory_id of 1 for now)
         storage.store_note(&note, 1).await?;
-        
+
         Ok(())
     }
-    
+
     /// Remove a file from the index
     async fn remove_file_event(file_path: &Path, _storage: &Arc<NoteStorage>) -> NoteResult<()> {
         // Find and delete note by path
         // TODO: Implement delete_note_by_path in storage
         // For now, this is a placeholder
-        
+
         println!("Removing indexed file: {}", file_path.display());
         Ok(())
     }
-    
+
     /// Process a scan result and index discovered files
     async fn process_scan_result(&self, result: &ScanResult) -> NoteResult<usize> {
         let mut indexed_count = 0;
-        
+
         for scanned_file in &result.files {
             if scanned_file.has_note_extension() {
                 match self.index_note_file(&scanned_file.path).await {
                     Ok(Some(_)) => indexed_count += 1,
-                    Ok(None) => {}, // File skipped
+                    Ok(None) => {} // File skipped
                     Err(e) => {
                         eprintln!("Failed to index {}: {}", scanned_file.path.display(), e);
                     }
                 }
             }
         }
-        
+
         Ok(indexed_count)
     }
-    
+
     /// Find note ID by file path
     async fn find_note_id_by_path(&self, _file_path: &Path) -> NoteResult<Option<String>> {
         // TODO: Implement efficient path -> note_id lookup
@@ -590,7 +605,7 @@ impl NoteIndexer {
         // 1. Additional database index
         // 2. In-memory mapping
         // 3. Search through all notes
-        
+
         // For now, return None as placeholder
         Ok(None)
     }
@@ -598,13 +613,13 @@ impl NoteIndexer {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::storage::NoteStorage;
     use super::super::types::{Note, WatchedDirectory};
-    use tempfile::TempDir;
+    use super::*;
     use std::fs::File;
     use std::io::Write;
     use std::sync::Arc;
+    use tempfile::TempDir;
     use tokio::time::Duration;
 
     async fn create_test_storage(temp_dir: &std::path::Path) -> Option<Arc<NoteStorage>> {
@@ -614,7 +629,11 @@ mod tests {
         }
     }
 
-    fn create_test_note_file(dir: &std::path::Path, name: &str, content: &str) -> std::path::PathBuf {
+    fn create_test_note_file(
+        dir: &std::path::Path,
+        name: &str,
+        content: &str,
+    ) -> std::path::PathBuf {
         let file_path = dir.join(name);
         let mut file = File::create(&file_path).unwrap();
         file.write_all(content.as_bytes()).unwrap();
@@ -624,11 +643,11 @@ mod tests {
     #[tokio::test]
     async fn test_indexer_creation() {
         let temp_dir = TempDir::new().unwrap();
-        
+
         if let Some(storage) = create_test_storage(temp_dir.path()).await {
             let indexer = NoteIndexer::new(storage).await;
             assert!(indexer.is_ok());
-            
+
             let indexer = indexer.unwrap();
             assert!(!indexer.is_running().await);
             assert_eq!(indexer.get_indexed_count().await, 0);
@@ -638,7 +657,7 @@ mod tests {
     #[tokio::test]
     async fn test_indexer_with_config() {
         let temp_dir = TempDir::new().unwrap();
-        
+
         if let Some(storage) = create_test_storage(temp_dir.path()).await {
             let config = IndexerConfig {
                 batch_size: 10,
@@ -648,8 +667,10 @@ mod tests {
                 background_indexing: false,
                 worker_threads: 1,
             };
-            
-            let indexer = NoteIndexer::with_config(storage, config.clone()).await.unwrap();
+
+            let indexer = NoteIndexer::with_config(storage, config.clone())
+                .await
+                .unwrap();
             assert_eq!(indexer.config.batch_size, 10);
             assert_eq!(indexer.config.max_file_size, 1024);
             assert!(!indexer.config.background_indexing);
@@ -659,10 +680,10 @@ mod tests {
     #[tokio::test]
     async fn test_index_single_note_file() {
         let temp_dir = TempDir::new().unwrap();
-        
+
         if let Some(storage) = create_test_storage(temp_dir.path()).await {
             let indexer = NoteIndexer::new(storage).await.unwrap();
-            
+
             let note_content = r#"---
 title: "Test Note"
 tags: ["test", "indexing"]
@@ -672,9 +693,9 @@ tags: ["test", "indexing"]
 
 This is a test note for indexing.
 "#;
-            
+
             let note_path = create_test_note_file(temp_dir.path(), "test.md", note_content);
-            
+
             let result = indexer.index_note_file(&note_path).await;
             match result {
                 Ok(Some(note_id)) => {
@@ -696,17 +717,17 @@ This is a test note for indexing.
     #[tokio::test]
     async fn test_index_note_object() {
         let temp_dir = TempDir::new().unwrap();
-        
+
         if let Some(storage) = create_test_storage(temp_dir.path()).await {
             let indexer = NoteIndexer::new(storage).await.unwrap();
-            
+
             let note = Note::new(
                 "test-note-1".to_string(),
                 "Test Note".to_string(),
                 "# Test Note\n\nThis is a test note.".to_string(),
                 temp_dir.path().join("test.md"),
             );
-            
+
             let result = indexer.index_note(&note).await;
             match result {
                 Ok(_) => {
@@ -723,10 +744,10 @@ This is a test note for indexing.
     #[tokio::test]
     async fn test_index_notes_batch() {
         let temp_dir = TempDir::new().unwrap();
-        
+
         if let Some(storage) = create_test_storage(temp_dir.path()).await {
             let indexer = NoteIndexer::new(storage).await.unwrap();
-            
+
             let notes = vec![
                 Note::new(
                     "note-1".to_string(),
@@ -747,7 +768,7 @@ This is a test note for indexing.
                     temp_dir.path().join("note3.md"),
                 ),
             ];
-            
+
             let result = indexer.index_notes_batch(&notes).await;
             match result {
                 Ok(indexed_count) => {
@@ -765,15 +786,15 @@ This is a test note for indexing.
     #[tokio::test]
     async fn test_index_directory() {
         let temp_dir = TempDir::new().unwrap();
-        
+
         // Create test notes in directory
         create_test_note_file(temp_dir.path(), "note1.md", "# Note 1\n\nContent 1");
         create_test_note_file(temp_dir.path(), "note2.md", "# Note 2\n\nContent 2");
         create_test_note_file(temp_dir.path(), "readme.txt", "Not a note file");
-        
+
         if let Some(storage) = create_test_storage(temp_dir.path()).await {
             let indexer = NoteIndexer::new(storage).await.unwrap();
-            
+
             let result = indexer.index_directory(temp_dir.path()).await;
             match result {
                 Ok(indexed_count) => {
@@ -791,28 +812,28 @@ This is a test note for indexing.
     #[tokio::test]
     async fn test_needs_reindexing() {
         let temp_dir = TempDir::new().unwrap();
-        
+
         if let Some(storage) = create_test_storage(temp_dir.path()).await {
             let indexer = NoteIndexer::new(storage).await.unwrap();
-            
+
             let note_path = create_test_note_file(temp_dir.path(), "test.md", "# Original Content");
-            
+
             // File not indexed yet - should need indexing
             let needs_indexing = indexer.needs_reindexing(&note_path).await.unwrap();
             assert!(needs_indexing);
-            
+
             // Index the file
             let _ = indexer.index_note_file(&note_path).await;
-            
+
             // Should not need re-indexing now
             let needs_indexing = indexer.needs_reindexing(&note_path).await.unwrap();
             assert!(!needs_indexing);
-            
+
             // Modify the file
             let mut file = File::create(&note_path).unwrap();
             file.write_all(b"# Modified Content").unwrap();
             drop(file);
-            
+
             // Should need re-indexing after modification
             let needs_indexing = indexer.needs_reindexing(&note_path).await.unwrap();
             assert!(needs_indexing);
@@ -822,27 +843,25 @@ This is a test note for indexing.
     #[tokio::test]
     async fn test_indexing_stats() {
         let temp_dir = TempDir::new().unwrap();
-        
+
         if let Some(storage) = create_test_storage(temp_dir.path()).await {
             let indexer = NoteIndexer::new(storage).await.unwrap();
-            
+
             let initial_stats = indexer.get_stats().await;
             assert_eq!(initial_stats.total_notes, 0);
             assert_eq!(initial_stats.indexed_notes, 0);
             assert_eq!(initial_stats.success_rate(), 0.0);
-            
+
             // Index some notes
-            let notes = vec![
-                Note::new(
-                    "note-1".to_string(),
-                    "Note 1".to_string(),
-                    "# Note 1\n\nContent.".to_string(),
-                    temp_dir.path().join("note1.md"),
-                ),
-            ];
-            
+            let notes = vec![Note::new(
+                "note-1".to_string(),
+                "Note 1".to_string(),
+                "# Note 1\n\nContent.".to_string(),
+                temp_dir.path().join("note1.md"),
+            )];
+
             let _ = indexer.index_notes_batch(&notes).await;
-            
+
             let stats = indexer.get_stats().await;
             // Stats should be updated (exact values depend on success/failure)
             assert!(stats.total_notes >= 1);
@@ -852,22 +871,22 @@ This is a test note for indexing.
     #[tokio::test]
     async fn test_start_stop_indexing() {
         let temp_dir = TempDir::new().unwrap();
-        
+
         if let Some(storage) = create_test_storage(temp_dir.path()).await {
             let indexer = NoteIndexer::new(storage).await.unwrap();
-            
+
             assert!(!indexer.is_running().await);
-            
+
             // Start indexing
             let start_result = indexer.start_indexing().await;
             match start_result {
                 Ok(_) => {
                     assert!(indexer.is_running().await);
-                    
+
                     // Try to start again - should fail
                     let restart_result = indexer.start_indexing().await;
                     assert!(restart_result.is_err());
-                    
+
                     // Stop indexing
                     let stop_result = indexer.stop_indexing().await;
                     assert!(stop_result.is_ok());
@@ -884,15 +903,13 @@ This is a test note for indexing.
     #[tokio::test]
     async fn test_add_watched_directory() {
         let temp_dir = TempDir::new().unwrap();
-        
+
         if let Some(storage) = create_test_storage(temp_dir.path()).await {
             let indexer = NoteIndexer::new(storage).await.unwrap();
-            
-            let watched_dir = WatchedDirectory::new(
-                temp_dir.path().to_path_buf(),
-                "Test Directory".to_string(),
-            );
-            
+
+            let watched_dir =
+                WatchedDirectory::new(temp_dir.path().to_path_buf(), "Test Directory".to_string());
+
             let result = indexer.add_watched_directory(watched_dir).await;
             // May succeed or fail depending on monitor availability
             match result {
@@ -905,10 +922,10 @@ This is a test note for indexing.
     #[tokio::test]
     async fn test_clear_index() {
         let temp_dir = TempDir::new().unwrap();
-        
+
         if let Some(storage) = create_test_storage(temp_dir.path()).await {
             let indexer = NoteIndexer::new(storage).await.unwrap();
-            
+
             // Index a note
             let note = Note::new(
                 "test-note".to_string(),
@@ -916,16 +933,16 @@ This is a test note for indexing.
                 "# Test Note\n\nContent.".to_string(),
                 temp_dir.path().join("test.md"),
             );
-            
+
             let _ = indexer.index_note(&note).await;
-            
+
             // Clear index
             let result = indexer.clear_index().await;
             assert!(result.is_ok());
-            
+
             // Check that cache is cleared
             assert_eq!(indexer.get_indexed_count().await, 0);
-            
+
             let stats = indexer.get_stats().await;
             assert_eq!(stats.indexed_notes, 0);
             assert_eq!(stats.total_notes, 0);
@@ -935,7 +952,7 @@ This is a test note for indexing.
     #[test]
     fn test_indexer_config_default() {
         let config = IndexerConfig::default();
-        
+
         assert_eq!(config.batch_size, 50);
         assert_eq!(config.processing_delay, Duration::from_millis(500));
         assert_eq!(config.max_file_size, 10 * 1024 * 1024);
@@ -947,18 +964,18 @@ This is a test note for indexing.
     #[test]
     fn test_indexing_stats_operations() {
         let mut stats = IndexingStats::new();
-        
+
         assert_eq!(stats.success_rate(), 0.0);
-        
+
         stats.total_notes = 10;
         stats.indexed_notes = 8;
         stats.failed_notes = 2;
-        
+
         assert_eq!(stats.success_rate(), 0.8);
-        
+
         stats.total_content_size = 1000;
         stats.average_note_size = stats.total_content_size / stats.indexed_notes.max(1);
-        
+
         assert_eq!(stats.average_note_size, 125);
     }
 }

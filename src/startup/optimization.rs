@@ -6,13 +6,13 @@
 //! - Smart initialization ordering
 //! - Resource preloading strategies
 
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 use tokio::fs;
 use tokio::sync::RwLock;
-use serde::{Deserialize, Serialize};
-use chrono::{DateTime, Utc};
 
 use crate::startup::lazy_init::LazyInitManager;
 
@@ -192,7 +192,7 @@ impl StartupOptimizer {
             config,
         }
     }
-    
+
     /// Initialize the startup optimizer
     pub async fn initialize(&mut self) -> Result<(), String> {
         // Create cache directory if it doesn't exist
@@ -201,10 +201,10 @@ impl StartupOptimizer {
                 .await
                 .map_err(|e| format!("Failed to create cache directory: {}", e))?;
         }
-        
+
         // Start profiling
         self.profiler.start_session();
-        
+
         // Load existing cache if available
         if self.config.enable_caching {
             if let Ok(cache) = self.load_cache().await {
@@ -214,16 +214,16 @@ impl StartupOptimizer {
                 }
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// Get cached data if available and valid
     pub async fn get_cache(&self) -> Option<StartupCache> {
         let cache = self.cache.read().await;
         cache.clone()
     }
-    
+
     /// Check if we have valid cached data
     pub async fn has_valid_cache(&self) -> bool {
         if let Some(cache) = self.get_cache().await {
@@ -232,18 +232,17 @@ impl StartupOptimizer {
             false
         }
     }
-    
-    
+
     /// Record an operation's performance
     pub fn record_operation(&mut self, operation: &str, duration: Duration) {
         self.profiler.record_operation(operation, duration);
     }
-    
+
     /// Get startup performance metrics
     pub fn get_performance_metrics(&self) -> PerformanceMetrics {
         self.profiler.finish_session()
     }
-    
+
     /// Update cache with current application state
     pub async fn update_cache(
         &self,
@@ -253,7 +252,7 @@ impl StartupOptimizer {
         if !self.config.enable_caching {
             return Ok(());
         }
-        
+
         let cache = StartupCache {
             version: "1.0.0".to_string(),
             created_at: Utc::now(),
@@ -266,51 +265,51 @@ impl StartupOptimizer {
             ui_preferences,
             performance_metrics: self.get_performance_metrics(),
         };
-        
+
         // Save to disk
         self.save_cache(&cache).await?;
-        
+
         // Update in-memory cache
         {
             let mut cache_guard = self.cache.write().await;
             *cache_guard = Some(cache);
         }
-        
+
         Ok(())
     }
-    
+
     /// Save cache to disk
     async fn save_cache(&self, cache: &StartupCache) -> Result<(), String> {
         let cache_file = self.config.cache_directory.join("startup_cache.json");
-        
+
         let json = serde_json::to_string_pretty(cache)
             .map_err(|e| format!("Failed to serialize cache: {}", e))?;
-        
+
         fs::write(&cache_file, json)
             .await
             .map_err(|e| format!("Failed to write cache file: {}", e))?;
-        
+
         Ok(())
     }
-    
+
     /// Load cache from disk
     async fn load_cache(&self) -> Result<StartupCache, String> {
         let cache_file = self.config.cache_directory.join("startup_cache.json");
-        
+
         if !cache_file.exists() {
             return Err("Cache file does not exist".to_string());
         }
-        
+
         let contents = fs::read_to_string(&cache_file)
             .await
             .map_err(|e| format!("Failed to read cache file: {}", e))?;
-        
+
         let cache: StartupCache = serde_json::from_str(&contents)
             .map_err(|e| format!("Failed to deserialize cache: {}", e))?;
-        
+
         Ok(cache)
     }
-    
+
     /// Check if cached data is still valid
     fn is_cache_valid(&self, cache: &StartupCache) -> bool {
         // Check cache age
@@ -318,44 +317,43 @@ impl StartupOptimizer {
         if age.to_std().unwrap_or(Duration::MAX) > self.config.cache_max_age {
             return false;
         }
-        
+
         // Check app version compatibility
         if cache.app_version != env!("CARGO_PKG_VERSION") {
             return false;
         }
-        
+
         // Check cache version
         if cache.version != "1.0.0" {
             return false;
         }
-        
+
         true
     }
-    
-    
+
     /// Finalize startup optimization and save metrics
     pub async fn finalize(&mut self) -> Result<PerformanceMetrics, String> {
         let metrics = self.profiler.finish_session();
-        
+
         // Save performance metrics for future optimization
         if self.config.enable_profiling {
             self.save_performance_metrics(&metrics).await?;
         }
-        
+
         Ok(metrics)
     }
-    
+
     /// Save performance metrics for analysis
     async fn save_performance_metrics(&self, metrics: &PerformanceMetrics) -> Result<(), String> {
         let metrics_file = self.config.cache_directory.join("performance_metrics.json");
-        
+
         let json = serde_json::to_string_pretty(metrics)
             .map_err(|e| format!("Failed to serialize metrics: {}", e))?;
-        
+
         fs::write(&metrics_file, json)
             .await
             .map_err(|e| format!("Failed to write metrics file: {}", e))?;
-        
+
         Ok(())
     }
 }
@@ -377,7 +375,7 @@ impl StartupProfiler {
             checkpoints: Vec::new(),
         }
     }
-    
+
     fn start_session(&mut self) {
         if self.enabled {
             self.session_start = Some(Instant::now());
@@ -385,26 +383,29 @@ impl StartupProfiler {
             self.checkpoints.clear();
         }
     }
-    
+
     fn record_operation(&mut self, operation: &str, duration: Duration) {
         if self.enabled {
-            self.operations.push((operation.to_string(), duration, Instant::now()));
+            self.operations
+                .push((operation.to_string(), duration, Instant::now()));
         }
     }
-    
+
     #[allow(dead_code)]
     fn checkpoint(&mut self, name: &str) {
         if self.enabled {
             self.checkpoints.push((name.to_string(), Instant::now()));
         }
     }
-    
+
     fn finish_session(&self) -> PerformanceMetrics {
-        let startup_duration = self.session_start
+        let startup_duration = self
+            .session_start
             .map(|start| start.elapsed())
             .unwrap_or_default();
-        
-        let slow_operations = self.operations
+
+        let slow_operations = self
+            .operations
             .iter()
             .filter(|(_, duration, _)| *duration > Duration::from_millis(100))
             .map(|(op, duration, _timestamp)| SlowOperation {
@@ -414,7 +415,7 @@ impl StartupProfiler {
                 optimization_hint: self.get_optimization_hint(op),
             })
             .collect();
-        
+
         PerformanceMetrics {
             startup_duration,
             database_init_duration: Duration::from_millis(0), // Would be tracked separately
@@ -424,7 +425,7 @@ impl StartupProfiler {
             slow_operations,
         }
     }
-    
+
     fn get_optimization_hint(&self, operation: &str) -> Option<String> {
         match operation {
             op if op.contains("database") => Some("Consider using connection pooling".to_string()),
@@ -447,7 +448,7 @@ mod tests {
             cache_directory: temp_dir.path().to_path_buf(),
             ..Default::default()
         };
-        
+
         let optimizer = StartupOptimizer::new(config);
         assert!(optimizer.config.enable_caching);
     }
@@ -459,10 +460,10 @@ mod tests {
             cache_directory: temp_dir.path().to_path_buf(),
             ..Default::default()
         };
-        
+
         let mut optimizer = StartupOptimizer::new(config);
         let result = optimizer.initialize().await;
-        
+
         assert!(result.is_ok());
         assert!(temp_dir.path().join(".cache/startup").exists() || temp_dir.path().exists());
     }
@@ -475,9 +476,9 @@ mod tests {
             cache_max_age: Duration::from_secs(60),
             ..Default::default()
         };
-        
+
         let optimizer = StartupOptimizer::new(config);
-        
+
         let cache = StartupCache {
             version: "1.0.0".to_string(),
             created_at: Utc::now(),
@@ -490,7 +491,7 @@ mod tests {
             ui_preferences: UiPreferences::default(),
             performance_metrics: PerformanceMetrics::default(),
         };
-        
+
         assert!(optimizer.is_cache_valid(&cache));
     }
 
@@ -501,9 +502,9 @@ mod tests {
             cache_directory: temp_dir.path().to_path_buf(),
             ..Default::default()
         };
-        
+
         let optimizer = StartupOptimizer::new(config);
-        
+
         let cache = StartupCache {
             version: "0.9.0".to_string(), // Old version
             created_at: Utc::now(),
@@ -516,14 +517,14 @@ mod tests {
             ui_preferences: UiPreferences::default(),
             performance_metrics: PerformanceMetrics::default(),
         };
-        
+
         assert!(!optimizer.is_cache_valid(&cache));
     }
 
     #[test]
     fn test_performance_metrics_creation() {
         let metrics = PerformanceMetrics::default();
-        
+
         assert_eq!(metrics.startup_duration, Duration::from_secs(0));
         assert_eq!(metrics.slow_operations.len(), 0);
         assert_eq!(metrics.memory_usage_mb, 0);
@@ -532,7 +533,7 @@ mod tests {
     #[test]
     fn test_ui_preferences_default() {
         let prefs = UiPreferences::default();
-        
+
         assert_eq!(prefs.theme, "default");
         assert_eq!(prefs.layout_mode, "three_column");
         assert_eq!(prefs.sidebar_width, 250);
@@ -544,11 +545,11 @@ mod tests {
     #[test]
     fn test_startup_profiler() {
         let mut profiler = StartupProfiler::new(true);
-        
+
         profiler.start_session();
         profiler.record_operation("test_operation", Duration::from_millis(150));
         profiler.checkpoint("test_checkpoint");
-        
+
         let metrics = profiler.finish_session();
         assert!(metrics.startup_duration > Duration::from_secs(0));
         assert_eq!(metrics.slow_operations.len(), 1);

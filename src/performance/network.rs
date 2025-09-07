@@ -23,29 +23,43 @@ impl Default for NetworkMonitor {
 }
 
 impl Default for NetworkOptimizer {
-    fn default() -> Self { Self }
+    fn default() -> Self {
+        Self
+    }
 }
 
 impl Default for ConnectionManager {
-    fn default() -> Self { Self }
+    fn default() -> Self {
+        Self
+    }
 }
 
 impl Default for RequestBatcher {
-    fn default() -> Self { Self }
+    fn default() -> Self {
+        Self
+    }
 }
 
 impl Default for CircuitBreaker {
-    fn default() -> Self { Self }
+    fn default() -> Self {
+        Self
+    }
 }
 
 impl Default for NetworkMetrics {
-    fn default() -> Self { Self }
+    fn default() -> Self {
+        Self
+    }
 }
 
 impl Default for BandwidthManager {
-    fn default() -> Self { Self }
+    fn default() -> Self {
+        Self
+    }
 }
 
 impl Default for NetworkStatistics {
-    fn default() -> Self { Self }
+    fn default() -> Self {
+        Self
+    }
 }

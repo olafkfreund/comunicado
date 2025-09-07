@@ -6,7 +6,7 @@ pub enum LayoutBreakpoint {
     /// Extra small: 40-59 columns (minimal mobile-like experience)
     ExtraSmall,
     /// Small: 60-79 columns (compact interface)
-    Small, 
+    Small,
     /// Medium: 80-119 columns (standard interface)
     Medium,
     /// Large: 120-159 columns (comfortable interface)
@@ -90,7 +90,7 @@ impl AppLayout {
     pub fn calculate_layout(&mut self, area: Rect) -> Vec<Rect> {
         // Update responsive state based on current area
         self.update_responsive_state(area);
-        
+
         match self.current_layout_mode {
             LayoutMode::ThreeColumn => self.three_column_layout(area),
             LayoutMode::TwoColumn => self.two_column_layout(area),
@@ -98,20 +98,22 @@ impl AppLayout {
             LayoutMode::Stacked => self.stacked_layout(area),
         }
     }
-    
+
     /// Update responsive state based on current terminal size
     fn update_responsive_state(&mut self, area: Rect) {
         let width = area.width;
-        
+
         // Determine current breakpoint
         self.current_breakpoint = match width {
-            w if w <= self.responsive_config.breakpoints.extra_small_max => LayoutBreakpoint::ExtraSmall,
+            w if w <= self.responsive_config.breakpoints.extra_small_max => {
+                LayoutBreakpoint::ExtraSmall
+            }
             w if w <= self.responsive_config.breakpoints.small_max => LayoutBreakpoint::Small,
             w if w <= self.responsive_config.breakpoints.medium_max => LayoutBreakpoint::Medium,
             w if w <= self.responsive_config.breakpoints.large_max => LayoutBreakpoint::Large,
             _ => LayoutBreakpoint::ExtraLarge,
         };
-        
+
         // Determine appropriate layout mode
         self.current_layout_mode = match self.current_breakpoint {
             LayoutBreakpoint::ExtraSmall => {
@@ -131,11 +133,11 @@ impl AppLayout {
             LayoutBreakpoint::Medium => LayoutMode::ThreeColumn,
             LayoutBreakpoint::Large | LayoutBreakpoint::ExtraLarge => LayoutMode::ThreeColumn,
         };
-        
+
         // Adjust component sizes based on breakpoint
         self.adjust_component_sizes();
     }
-    
+
     /// Adjust component sizes based on current breakpoint
     fn adjust_component_sizes(&mut self) {
         match self.current_breakpoint {
@@ -161,7 +163,7 @@ impl AppLayout {
             }
         }
     }
-    
+
     /// Three-column layout: [Sidebar | Messages | Content]
     fn three_column_layout(&self, area: Rect) -> Vec<Rect> {
         // First, split vertically to reserve space for status bar
@@ -189,8 +191,12 @@ impl AppLayout {
         let left_panel_chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(if self.current_breakpoint == LayoutBreakpoint::ExtraSmall { 3 } else { 4 }), // Compact account switcher
-                Constraint::Min(5),    // Remaining space for folders
+                Constraint::Length(if self.current_breakpoint == LayoutBreakpoint::ExtraSmall {
+                    3
+                } else {
+                    4
+                }), // Compact account switcher
+                Constraint::Min(5), // Remaining space for folders
             ])
             .split(horizontal_chunks[0]);
 
@@ -203,7 +209,7 @@ impl AppLayout {
             vertical_chunks[1],   // Status bar
         ]
     }
-    
+
     /// Two-column layout: [Messages | Content] (sidebar hidden)
     fn two_column_layout(&self, area: Rect) -> Vec<Rect> {
         let vertical_chunks = Layout::default()
@@ -225,14 +231,14 @@ impl AppLayout {
 
         // Return layout with hidden sidebar (empty rects for account switcher and folder tree)
         vec![
-            Rect::new(0, 0, 0, 0),    // Hidden account switcher
-            Rect::new(0, 0, 0, 0),    // Hidden folder tree
-            horizontal_chunks[0],     // Message list
-            horizontal_chunks[1],     // Content preview
-            vertical_chunks[1],       // Status bar
+            Rect::new(0, 0, 0, 0), // Hidden account switcher
+            Rect::new(0, 0, 0, 0), // Hidden folder tree
+            horizontal_chunks[0],  // Message list
+            horizontal_chunks[1],  // Content preview
+            vertical_chunks[1],    // Status bar
         ]
     }
-    
+
     /// Single column layout: Focus on one pane at a time
     fn single_column_layout(&self, area: Rect) -> Vec<Rect> {
         let vertical_chunks = Layout::default()
@@ -244,37 +250,37 @@ impl AppLayout {
             .split(area);
 
         let main_area = vertical_chunks[0];
-        
+
         // In single column, we focus on the message list primarily
         // Other panes are hidden or minimized
         vec![
-            Rect::new(0, 0, 0, 0),    // Hidden account switcher
-            Rect::new(0, 0, 0, 0),    // Hidden folder tree  
-            main_area,                // Full-width message list
-            Rect::new(0, 0, 0, 0),    // Hidden content preview
-            vertical_chunks[1],       // Status bar
+            Rect::new(0, 0, 0, 0), // Hidden account switcher
+            Rect::new(0, 0, 0, 0), // Hidden folder tree
+            main_area,             // Full-width message list
+            Rect::new(0, 0, 0, 0), // Hidden content preview
+            vertical_chunks[1],    // Status bar
         ]
     }
-    
+
     /// Stacked layout: Vertical arrangement for very narrow screens
     fn stacked_layout(&self, area: Rect) -> Vec<Rect> {
         let vertical_chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(3),    // Compact account switcher
-                Constraint::Length(8),    // Compact folder tree
-                Constraint::Min(10),      // Message list (main focus)
-                Constraint::Length(3),    // Status bar
+                Constraint::Length(3), // Compact account switcher
+                Constraint::Length(8), // Compact folder tree
+                Constraint::Min(10),   // Message list (main focus)
+                Constraint::Length(3), // Status bar
             ])
             .split(area);
 
         // Return vertically stacked layout
         vec![
-            vertical_chunks[0],       // Account switcher (top)
-            vertical_chunks[1],       // Folder tree
-            vertical_chunks[2],       // Message list (main area)
-            Rect::new(0, 0, 0, 0),    // Hidden content preview
-            vertical_chunks[3],       // Status bar (bottom)
+            vertical_chunks[0],    // Account switcher (top)
+            vertical_chunks[1],    // Folder tree
+            vertical_chunks[2],    // Message list (main area)
+            Rect::new(0, 0, 0, 0), // Hidden content preview
+            vertical_chunks[3],    // Status bar (bottom)
         ]
     }
 
@@ -285,27 +291,30 @@ impl AppLayout {
     pub fn set_message_width_ratio(&mut self, ratio: u16) {
         self.message_width_ratio = ratio;
     }
-    
+
     /// Get current responsive breakpoint
     pub fn current_breakpoint(&self) -> LayoutBreakpoint {
         self.current_breakpoint
     }
-    
+
     /// Get current layout mode
     pub fn current_layout_mode(&self) -> LayoutMode {
         self.current_layout_mode
     }
-    
+
     /// Check if sidebar should be visible in current layout
     pub fn is_sidebar_visible(&self) -> bool {
         matches!(self.current_layout_mode, LayoutMode::ThreeColumn)
     }
-    
+
     /// Check if content preview should be visible
     pub fn is_content_preview_visible(&self) -> bool {
-        !matches!(self.current_layout_mode, LayoutMode::SingleColumn | LayoutMode::Stacked)
+        !matches!(
+            self.current_layout_mode,
+            LayoutMode::SingleColumn | LayoutMode::Stacked
+        )
     }
-    
+
     /// Get adaptive spacing based on current breakpoint
     pub fn get_adaptive_spacing(&self) -> u16 {
         match self.current_breakpoint {
@@ -316,17 +325,17 @@ impl AppLayout {
             LayoutBreakpoint::ExtraLarge => 2,
         }
     }
-    
+
     /// Configure responsive behavior
     pub fn configure_responsive_behavior(&mut self, behavior: AdaptiveBehavior) {
         self.responsive_config.adaptive_behavior = behavior;
     }
-    
+
     /// Update responsive configuration
     pub fn update_responsive_config(&mut self, config: ResponsiveConfig) {
         self.responsive_config = config;
     }
-    
+
     /// Get layout summary for debugging
     pub fn get_layout_summary(&self) -> String {
         format!(

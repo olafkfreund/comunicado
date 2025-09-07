@@ -1,12 +1,12 @@
 //! Unified Sidebar for Email and Calendar Navigation
-//! 
+//!
 //! Combines email folder tree and calendar list into a single,
 //! cohesive navigation experience.
 
 use crate::{
+    calendar::Calendar,
     theme::Theme,
     ui::{AccountSyncStatus, FolderTree},
-    calendar::Calendar,
 };
 use ratatui::{
     layout::Rect,
@@ -106,7 +106,7 @@ impl UnifiedSidebar {
 
     /// Update sidebar with current data
     pub fn update_data(
-        &mut self, 
+        &mut self,
         accounts: &[(String, String, AccountSyncStatus, u32)], // (id, name, status, unread)
         folders: &[(String, String, u32, bool, usize)], // (path, name, unread, has_children, depth)
         calendars: &[Calendar],
@@ -115,10 +115,10 @@ impl UnifiedSidebar {
 
         // Add accounts section
         if self.is_section_expanded(SidebarSection::Accounts) {
-            self.items.push(NavigationItem::Separator { 
-                label: "📧 ACCOUNTS".to_string() 
+            self.items.push(NavigationItem::Separator {
+                label: "📧 ACCOUNTS".to_string(),
             });
-            
+
             for (id, name, status, unread_count) in accounts {
                 self.items.push(NavigationItem::Account {
                     id: id.clone(),
@@ -131,10 +131,10 @@ impl UnifiedSidebar {
 
         // Add email folders section
         if self.is_section_expanded(SidebarSection::EmailFolders) {
-            self.items.push(NavigationItem::Separator { 
-                label: "📁 FOLDERS".to_string() 
+            self.items.push(NavigationItem::Separator {
+                label: "📁 FOLDERS".to_string(),
             });
-            
+
             for (path, name, unread_count, has_children, depth) in folders {
                 self.items.push(NavigationItem::EmailFolder {
                     path: path.clone(),
@@ -148,27 +148,27 @@ impl UnifiedSidebar {
 
         // Add calendars section
         if self.show_calendars && self.is_section_expanded(SidebarSection::Calendars) {
-            self.items.push(NavigationItem::Separator { 
-                label: "📅 CALENDARS".to_string() 
+            self.items.push(NavigationItem::Separator {
+                label: "📅 CALENDARS".to_string(),
             });
-            
+
             for calendar in calendars {
                 self.items.push(NavigationItem::Calendar {
                     id: calendar.id.clone(),
                     name: calendar.name.clone(),
                     color: self.parse_calendar_color(&calendar.color.as_deref().unwrap_or("blue")),
                     enabled: !calendar.read_only, // Use read_only as inverse of enabled
-                    event_count: 0, // TODO: Calculate event count from calendar data
+                    event_count: 0,               // TODO: Calculate event count from calendar data
                 });
             }
         }
 
         // Add quick actions section
         if self.is_section_expanded(SidebarSection::QuickActions) {
-            self.items.push(NavigationItem::Separator { 
-                label: "⚡ QUICK ACTIONS".to_string() 
+            self.items.push(NavigationItem::Separator {
+                label: "⚡ QUICK ACTIONS".to_string(),
             });
-            
+
             self.items.extend([
                 NavigationItem::QuickAction {
                     label: "Compose Email".to_string(),
@@ -205,16 +205,23 @@ impl UnifiedSidebar {
         frame.render_widget(block, area);
 
         // Convert items to ratatui ListItems
-        let list_items: Vec<ListItem> = self.items.iter().map(|item| {
-            match item {
-                NavigationItem::Account { name, status, unread_count, .. } => {
+        let list_items: Vec<ListItem> = self
+            .items
+            .iter()
+            .map(|item| match item {
+                NavigationItem::Account {
+                    name,
+                    status,
+                    unread_count,
+                    ..
+                } => {
                     let status_icon = match status {
                         AccountSyncStatus::Online => "🟢",
                         AccountSyncStatus::Syncing => "🟡",
                         AccountSyncStatus::Error => "🔴",
                         AccountSyncStatus::Offline => "⚫",
                     };
-                    
+
                     let unread_text = if *unread_count > 0 {
                         format!(" ({})", unread_count)
                     } else {
@@ -225,14 +232,22 @@ impl UnifiedSidebar {
                         Span::raw(status_icon),
                         Span::raw(" "),
                         Span::styled(name, Style::default().add_modifier(Modifier::BOLD)),
-                        Span::styled(unread_text, Style::default().fg(theme.colors.palette.accent)),
+                        Span::styled(
+                            unread_text,
+                            Style::default().fg(theme.colors.palette.accent),
+                        ),
                     ]))
-                },
-                
-                NavigationItem::EmailFolder { name, unread_count, depth, .. } => {
+                }
+
+                NavigationItem::EmailFolder {
+                    name,
+                    unread_count,
+                    depth,
+                    ..
+                } => {
                     let indent = "  ".repeat(*depth);
                     let folder_icon = if *unread_count > 0 { "📬" } else { "📁" };
-                    
+
                     let unread_text = if *unread_count > 0 {
                         format!(" ({})", unread_count)
                     } else {
@@ -244,11 +259,20 @@ impl UnifiedSidebar {
                         Span::raw(folder_icon),
                         Span::raw(" "),
                         Span::styled(name, Style::default()),
-                        Span::styled(unread_text, Style::default().fg(theme.colors.palette.accent)),
+                        Span::styled(
+                            unread_text,
+                            Style::default().fg(theme.colors.palette.accent),
+                        ),
                     ]))
-                },
-                
-                NavigationItem::Calendar { name, color, enabled, event_count, .. } => {
+                }
+
+                NavigationItem::Calendar {
+                    name,
+                    color,
+                    enabled,
+                    event_count,
+                    ..
+                } => {
                     let calendar_icon = if *enabled { "📅" } else { "📋" };
                     let event_text = if *event_count > 0 {
                         format!(" ({})", event_count)
@@ -269,37 +293,35 @@ impl UnifiedSidebar {
                         Span::styled(name, style),
                         Span::styled(event_text, Style::default().fg(theme.colors.palette.accent)),
                     ]))
-                },
-                
-                NavigationItem::Separator { label } => {
-                    ListItem::new(Line::from(vec![
-                        Span::styled(
-                            label, 
-                            Style::default()
-                                .fg(theme.colors.palette.text_muted)
-                                .add_modifier(Modifier::BOLD)
-                        ),
-                    ]))
-                },
-                
-                NavigationItem::QuickAction { icon, label, .. } => {
-                    ListItem::new(Line::from(vec![
-                        Span::raw("  "),
-                        Span::raw(icon),
-                        Span::raw(" "),
-                        Span::styled(label, Style::default().fg(theme.colors.palette.text_secondary)),
-                    ]))
-                },
-            }
-        }).collect();
+                }
 
-        let list = List::new(list_items)
-            .highlight_style(
-                Style::default()
-                    .bg(theme.colors.palette.accent)
-                    .fg(Color::Black)
-                    .add_modifier(Modifier::BOLD)
-            );
+                NavigationItem::Separator { label } => {
+                    ListItem::new(Line::from(vec![Span::styled(
+                        label,
+                        Style::default()
+                            .fg(theme.colors.palette.text_muted)
+                            .add_modifier(Modifier::BOLD),
+                    )]))
+                }
+
+                NavigationItem::QuickAction { icon, label, .. } => ListItem::new(Line::from(vec![
+                    Span::raw("  "),
+                    Span::raw(icon),
+                    Span::raw(" "),
+                    Span::styled(
+                        label,
+                        Style::default().fg(theme.colors.palette.text_secondary),
+                    ),
+                ])),
+            })
+            .collect();
+
+        let list = List::new(list_items).highlight_style(
+            Style::default()
+                .bg(theme.colors.palette.accent)
+                .fg(Color::Black)
+                .add_modifier(Modifier::BOLD),
+        );
 
         frame.render_stateful_widget(list, inner_area, &mut self.list_state);
     }
@@ -310,21 +332,17 @@ impl UnifiedSidebar {
             crossterm::event::KeyCode::Up => {
                 self.previous_item();
                 None
-            },
+            }
             crossterm::event::KeyCode::Down => {
                 self.next_item();
                 None
-            },
-            crossterm::event::KeyCode::Enter => {
-                self.activate_current_item()
-            },
-            crossterm::event::KeyCode::Char(' ') => {
-                self.toggle_current_item()
-            },
+            }
+            crossterm::event::KeyCode::Enter => self.activate_current_item(),
+            crossterm::event::KeyCode::Char(' ') => self.toggle_current_item(),
             crossterm::event::KeyCode::Tab => {
                 self.next_section();
                 None
-            },
+            }
             _ => None,
         }
     }
@@ -335,7 +353,8 @@ impl UnifiedSidebar {
             if selected > 0 {
                 self.list_state.select(Some(selected - 1));
             } else {
-                self.list_state.select(Some(self.items.len().saturating_sub(1)));
+                self.list_state
+                    .select(Some(self.items.len().saturating_sub(1)));
             }
         } else {
             self.list_state.select(Some(0));
@@ -362,16 +381,16 @@ impl UnifiedSidebar {
                 match item {
                     NavigationItem::Account { id, .. } => {
                         Some(SidebarAction::SwitchAccount(id.clone()))
-                    },
+                    }
                     NavigationItem::EmailFolder { path, .. } => {
                         Some(SidebarAction::SelectFolder(path.clone()))
-                    },
+                    }
                     NavigationItem::Calendar { id, .. } => {
                         Some(SidebarAction::SelectCalendar(id.clone()))
-                    },
+                    }
                     NavigationItem::QuickAction { action, .. } => {
                         Some(SidebarAction::QuickAction(*action))
-                    },
+                    }
                     NavigationItem::Separator { .. } => None,
                 }
             } else {
@@ -389,7 +408,7 @@ impl UnifiedSidebar {
                 match item {
                     NavigationItem::Calendar { id, enabled, .. } => {
                         Some(SidebarAction::ToggleCalendar(id.clone(), !enabled))
-                    },
+                    }
                     _ => None,
                 }
             } else {
@@ -412,7 +431,10 @@ impl UnifiedSidebar {
 
     /// Check if a section is expanded
     fn is_section_expanded(&self, section: SidebarSection) -> bool {
-        self.expanded_sections.get(&section).copied().unwrap_or(false)
+        self.expanded_sections
+            .get(&section)
+            .copied()
+            .unwrap_or(false)
     }
 
     /// Toggle section expansion

@@ -319,7 +319,7 @@ impl CalendarUI {
         frame.render_widget(calendar_block, area);
 
         // Render custom calendar grid
-        self.render_custom_calendar_grid(frame, area.inner(&Margin::new(1, 1)), theme);
+        self.render_custom_calendar_grid(frame, area.inner(Margin::new(1, 1)), theme);
     }
 
     /// Render custom calendar grid
@@ -327,7 +327,7 @@ impl CalendarUI {
         // Calculate dimensions for calendar cells
         let cell_width = area.width / 7;
         let cell_height = (area.height - 1) / 6; // -1 for header row
-        
+
         // Render day header row
         let header_area = Rect::new(area.x, area.y, area.width, 1);
         let header_text = "Mo     Tu     We     Th     Fr     Sa     Su";
@@ -337,11 +337,9 @@ impl CalendarUI {
         frame.render_widget(header_para, header_area);
 
         // Get first day of the month and calculate start date
-        let first_of_month = NaiveDate::from_ymd_opt(
-            self.selected_date.year(), 
-            self.selected_date.month(), 
-            1
-        ).unwrap();
+        let first_of_month =
+            NaiveDate::from_ymd_opt(self.selected_date.year(), self.selected_date.month(), 1)
+                .unwrap();
         let days_from_monday = first_of_month.weekday().num_days_from_monday();
         let start_date = first_of_month - Duration::days(days_from_monday as i64);
 
@@ -353,18 +351,18 @@ impl CalendarUI {
         for week in 0..6 {
             for day in 0..7 {
                 let current_date = start_date + Duration::days((week * 7 + day) as i64);
-                
+
                 let x = area.x + (day as u16) * cell_width;
                 let y = area.y + 1 + (week as u16) * cell_height; // +1 for header
                 let cell_area = Rect::new(x, y, cell_width, cell_height);
-                
+
                 self.render_calendar_day_cell(
-                    frame, 
-                    cell_area, 
-                    current_date, 
+                    frame,
+                    cell_area,
+                    current_date,
                     &events_by_date,
                     today,
-                    theme
+                    theme,
                 );
             }
         }
@@ -384,7 +382,7 @@ impl CalendarUI {
         let is_today = date == today;
         let is_selected = date == self.selected_date;
         let is_current_month = date.month() == self.selected_date.month();
-        
+
         let border_style = if is_selected {
             theme.get_component_style("calendar_selected", true)
         } else if is_today {
@@ -407,12 +405,12 @@ impl CalendarUI {
         let cell_block = Block::default()
             .borders(Borders::ALL)
             .border_style(border_style);
-        
+
         frame.render_widget(cell_block, area);
-        
+
         // Get inner area for content
-        let inner_area = area.inner(&Margin::new(1, 1));
-        
+        let inner_area = area.inner(Margin::new(1, 1));
+
         if inner_area.height == 0 {
             return; // No space for content
         }
@@ -428,12 +426,12 @@ impl CalendarUI {
         // Render events if there's space
         if inner_area.height > 1 {
             let events_area = Rect::new(
-                inner_area.x, 
-                inner_area.y + 1, 
-                inner_area.width, 
-                inner_area.height - 1
+                inner_area.x,
+                inner_area.y + 1,
+                inner_area.width,
+                inner_area.height - 1,
             );
-            
+
             if let Some(day_events) = events_by_date.get(&date) {
                 self.render_day_cell_events(frame, events_area, day_events, theme);
             }
@@ -450,11 +448,11 @@ impl CalendarUI {
     ) {
         let max_events = area.height as usize;
         let visible_events = &events[..events.len().min(max_events)];
-        
+
         for (i, event) in visible_events.iter().enumerate() {
             let y = area.y + i as u16;
             let event_area = Rect::new(area.x, y, area.width, 1);
-            
+
             // Create event display text
             let event_text = if event.all_day {
                 if event.title.len() > area.width as usize {
@@ -475,9 +473,7 @@ impl CalendarUI {
 
             // Style based on event priority and status
             let event_style = match event.priority {
-                EventPriority::High => Style::default()
-                    .fg(Color::Red)
-                    .add_modifier(Modifier::BOLD),
+                EventPriority::High => Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
                 EventPriority::Normal => match event.status {
                     EventStatus::Confirmed => Style::default().fg(Color::Cyan),
                     EventStatus::Tentative => Style::default().fg(Color::Yellow),
@@ -488,12 +484,11 @@ impl CalendarUI {
                 EventPriority::Low => Style::default().fg(Color::Gray),
             };
 
-            let event_para = Paragraph::new(event_text)
-                .style(event_style);
-            
+            let event_para = Paragraph::new(event_text).style(event_style);
+
             frame.render_widget(event_para, event_area);
         }
-        
+
         // Show overflow indicator if there are more events
         if events.len() > max_events {
             let overflow_y = area.y + (max_events.saturating_sub(1)) as u16;
@@ -504,8 +499,6 @@ impl CalendarUI {
             frame.render_widget(overflow_para, overflow_area);
         }
     }
-
-
 
     /// Group events by date for calendar display
     fn group_events_by_date(&self) -> HashMap<NaiveDate, Vec<&Event>> {
@@ -651,7 +644,7 @@ impl CalendarUI {
                 let current_date = week_start + Duration::days(day as i64);
                 self.render_events_in_time_slot(
                     frame,
-                    day_area.inner(&Margin::new(1, 0)),
+                    day_area.inner(Margin::new(1, 0)),
                     current_date,
                     *hour,
                     theme,
@@ -747,7 +740,7 @@ impl CalendarUI {
 
         frame.render_widget(schedule_block, area);
 
-        let inner_area = area.inner(&Margin::new(1, 1));
+        let inner_area = area.inner(Margin::new(1, 1));
 
         // Render hourly grid
         for (i, hour) in hours.iter().enumerate() {
@@ -872,7 +865,7 @@ impl CalendarUI {
                     && event.start_time <= thirty_days_from_now
             })
             .collect();
-        
+
         // Sort events by start time
         upcoming_events.sort_by(|a, b| a.start_time.cmp(&b.start_time));
 
@@ -1196,10 +1189,17 @@ impl CalendarUI {
     pub fn set_events(&mut self, events: Vec<Event>) {
         tracing::info!("🎯 CalendarUI: Received {} events to store", events.len());
         for event in &events {
-            tracing::info!("📅 CalendarUI:   Event: {} (Start: {})", event.title, event.start_time);
+            tracing::info!(
+                "📅 CalendarUI:   Event: {} (Start: {})",
+                event.title,
+                event.start_time
+            );
         }
         self.events = events;
-        tracing::info!("✅ CalendarUI: {} events stored in self.events", self.events.len());
+        tracing::info!(
+            "✅ CalendarUI: {} events stored in self.events",
+            self.events.len()
+        );
     }
 
     /// Get current events

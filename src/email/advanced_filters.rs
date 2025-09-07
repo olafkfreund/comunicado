@@ -8,7 +8,7 @@
 //! - Filter templates and presets
 
 use crate::email::StoredMessage;
-use chrono::{DateTime, Utc, Datelike, Timelike};
+use chrono::{DateTime, Datelike, Timelike, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use uuid::Uuid;
@@ -78,28 +78,28 @@ pub enum AdvancedFilterField {
     Date,
     Priority,
     Folder,
-    
+
     // Advanced fields
     ReceivedDate,
     SentDate,
-    Age,                    // Days since received
-    TimeOfDay,             // Hour of day (0-23)
-    DayOfWeek,             // 0=Sunday, 6=Saturday
-    DayOfMonth,            // 1-31
-    Month,                 // 1-12
-    Year,                  // YYYY
+    Age,        // Days since received
+    TimeOfDay,  // Hour of day (0-23)
+    DayOfWeek,  // 0=Sunday, 6=Saturday
+    DayOfMonth, // 1-31
+    Month,      // 1-12
+    Year,       // YYYY
     IsRead,
     IsImportant,
     IsSpam,
-    HasFlag(String),       // Custom flag
-    ThreadCount,           // Number of messages in thread
+    HasFlag(String), // Custom flag
+    ThreadCount,     // Number of messages in thread
     AttachmentCount,
     WordCount,
-    HeaderField(String),   // Custom header field
-    ListId,                // Mailing list ID
+    HeaderField(String), // Custom header field
+    ListId,              // Mailing list ID
     FromDomain,
     ToDomain,
-    Language,              // Detected language
+    Language, // Detected language
     SpamScore,
     VirusCheckStatus,
     IsEncrypted,
@@ -121,24 +121,24 @@ pub enum AdvancedFilterOperator {
     GlobPattern,
     IsEmpty,
     IsNotEmpty,
-    
+
     // Numerical operators
     GreaterThan,
     LessThan,
     GreaterThanOrEqual,
     LessThanOrEqual,
-    NumericBetween(f64, f64),     // min, max for numbers
-    
+    NumericBetween(f64, f64), // min, max for numbers
+
     // Set operators
-    In(Vec<String>),       // Value is in list
-    NotIn(Vec<String>),    // Value is not in list
-    
+    In(Vec<String>),    // Value is in list
+    NotIn(Vec<String>), // Value is not in list
+
     // Time operators
-    Within(TimePeriod),    // Within time period
+    Within(TimePeriod), // Within time period
     Before(DateTime<Utc>),
     After(DateTime<Utc>),
     DateTimeBetween(DateTime<Utc>, DateTime<Utc>),
-    
+
     // Boolean operators
     IsTrue,
     IsFalse,
@@ -194,7 +194,7 @@ pub enum AdvancedFilterAction {
     SetFlag(String),
     RemoveFlag(String),
     StopProcessing,
-    
+
     // Advanced actions
     ForwardWithTemplate {
         to: String,
@@ -206,32 +206,35 @@ pub enum AdvancedFilterAction {
         once_per_sender: bool,
         delay_minutes: Option<u32>,
     },
-    RunScript(String),           // Execute external script
+    RunScript(String), // Execute external script
     TriggerWebhook {
         url: String,
         method: String,
         headers: HashMap<String, String>,
         body_template: Option<String>,
     },
-    PlaySound(String),           // Sound file path
+    PlaySound(String), // Sound file path
     ShowNotification {
         title: String,
         message: String,
         priority: NotificationPriority,
     },
-    AddToCalendar {              // Create calendar event from email
+    AddToCalendar {
+        // Create calendar event from email
         title_template: String,
         duration_minutes: u32,
     },
-    ExtractData {               // Extract data using regex
+    ExtractData {
+        // Extract data using regex
         field: String,
         regex: String,
         action: DataExtractionAction,
     },
     SetPriority(MessagePriority),
-    AddToAddressBook,           // Add sender to contacts
-    BlockSender,                // Add sender to blocklist
-    ConditionalAction {         // Apply action based on condition
+    AddToAddressBook, // Add sender to contacts
+    BlockSender,      // Add sender to blocklist
+    ConditionalAction {
+        // Apply action based on condition
         condition: ConditionGroup,
         action: Box<AdvancedFilterAction>,
         else_action: Option<Box<AdvancedFilterAction>>,
@@ -259,9 +262,9 @@ pub enum MessagePriority {
 /// Data extraction actions
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum DataExtractionAction {
-    SaveToFile(String),         // File path
-    SaveToDatabase(String),     // Table/collection name
-    SendToWebhook(String),      // Webhook URL
+    SaveToFile(String),     // File path
+    SaveToDatabase(String), // Table/collection name
+    SendToWebhook(String),  // Webhook URL
     LogToConsole,
 }
 
@@ -361,7 +364,10 @@ impl AdvancedFilterEngine {
                                         result.errors.push(FilterError {
                                             filter_id: filter.id,
                                             action: None,
-                                            error_message: format!("Action condition error: {}", error),
+                                            error_message: format!(
+                                                "Action condition error: {}",
+                                                error
+                                            ),
                                             timestamp: Utc::now(),
                                         });
                                         false
@@ -445,8 +451,13 @@ impl AdvancedFilterEngine {
         message: &StoredMessage,
     ) -> Result<bool, String> {
         let field_value = self.extract_advanced_field_value(&condition.field, message)?;
-        let result = self.apply_advanced_operator(&condition.operator, &field_value, &condition.value, condition.case_sensitive)?;
-        
+        let result = self.apply_advanced_operator(
+            &condition.operator,
+            &field_value,
+            &condition.value,
+            condition.case_sensitive,
+        )?;
+
         // Apply negation if specified
         Ok(if condition.negate { !result } else { result })
     }
@@ -463,40 +474,32 @@ impl AdvancedFilterEngine {
             AdvancedFilterField::To => Ok(FilterValue::String(message.to_addrs.join(", "))),
             AdvancedFilterField::Subject => Ok(FilterValue::String(message.subject.clone())),
             AdvancedFilterField::Body => Ok(FilterValue::String(
-                message.body_text.as_deref().unwrap_or("").to_string()
+                message.body_text.as_deref().unwrap_or("").to_string(),
             )),
             AdvancedFilterField::Date => Ok(FilterValue::DateTime(message.date)),
             AdvancedFilterField::Size => Ok(FilterValue::Number(
-                message.size.map(|s| s as f64).unwrap_or(0.0)
+                message.size.map(|s| s as f64).unwrap_or(0.0),
             )),
             AdvancedFilterField::IsRead => Ok(FilterValue::Boolean(
-                message.flags.contains(&"\\Seen".to_string())
+                message.flags.contains(&"\\Seen".to_string()),
             )),
             AdvancedFilterField::IsImportant => Ok(FilterValue::Boolean(
-                message.flags.contains(&"\\Flagged".to_string())
+                message.flags.contains(&"\\Flagged".to_string()),
             )),
-            
+
             // Time-based fields
             AdvancedFilterField::Age => {
                 let age_days = (Utc::now() - message.date).num_days();
                 Ok(FilterValue::Number(age_days as f64))
             }
-            AdvancedFilterField::TimeOfDay => {
-                Ok(FilterValue::Number(message.date.hour() as f64))
-            }
-            AdvancedFilterField::DayOfWeek => {
-                Ok(FilterValue::Number(message.date.weekday().num_days_from_sunday() as f64))
-            }
-            AdvancedFilterField::DayOfMonth => {
-                Ok(FilterValue::Number(message.date.day() as f64))
-            }
-            AdvancedFilterField::Month => {
-                Ok(FilterValue::Number(message.date.month() as f64))
-            }
-            AdvancedFilterField::Year => {
-                Ok(FilterValue::Number(message.date.year() as f64))
-            }
-            
+            AdvancedFilterField::TimeOfDay => Ok(FilterValue::Number(message.date.hour() as f64)),
+            AdvancedFilterField::DayOfWeek => Ok(FilterValue::Number(
+                message.date.weekday().num_days_from_sunday() as f64,
+            )),
+            AdvancedFilterField::DayOfMonth => Ok(FilterValue::Number(message.date.day() as f64)),
+            AdvancedFilterField::Month => Ok(FilterValue::Number(message.date.month() as f64)),
+            AdvancedFilterField::Year => Ok(FilterValue::Number(message.date.year() as f64)),
+
             // Attachment fields
             AdvancedFilterField::HasAttachment => {
                 Ok(FilterValue::Boolean(!message.attachments.is_empty()))
@@ -504,10 +507,15 @@ impl AdvancedFilterEngine {
             AdvancedFilterField::AttachmentCount => {
                 Ok(FilterValue::Number(message.attachments.len() as f64))
             }
-            
+
             // Domain extraction
             AdvancedFilterField::FromDomain => {
-                let domain = message.from_addr.split('@').nth(1).unwrap_or("").to_string();
+                let domain = message
+                    .from_addr
+                    .split('@')
+                    .nth(1)
+                    .unwrap_or("")
+                    .to_string();
                 Ok(FilterValue::String(domain))
             }
             AdvancedFilterField::ToDomain => {
@@ -518,13 +526,18 @@ impl AdvancedFilterEngine {
                     Ok(FilterValue::String(String::new()))
                 }
             }
-            
+
             // Word count
             AdvancedFilterField::WordCount => {
-                let word_count = message.body_text.as_deref().unwrap_or("").split_whitespace().count();
+                let word_count = message
+                    .body_text
+                    .as_deref()
+                    .unwrap_or("")
+                    .split_whitespace()
+                    .count();
                 Ok(FilterValue::Number(word_count as f64))
             }
-            
+
             _ => Err(format!("Field {:?} not yet implemented", field)),
         }
     }
@@ -540,9 +553,17 @@ impl AdvancedFilterEngine {
         match (field_value, condition_value, operator) {
             // String operations
             (FilterValue::String(field), FilterValue::String(condition), op) => {
-                let field_str = if case_sensitive { field.clone() } else { field.to_lowercase() };
-                let condition_str = if case_sensitive { condition.clone() } else { condition.to_lowercase() };
-                
+                let field_str = if case_sensitive {
+                    field.clone()
+                } else {
+                    field.to_lowercase()
+                };
+                let condition_str = if case_sensitive {
+                    condition.clone()
+                } else {
+                    condition.to_lowercase()
+                };
+
                 match op {
                     AdvancedFilterOperator::Contains => Ok(field_str.contains(&condition_str)),
                     AdvancedFilterOperator::NotContains => Ok(!field_str.contains(&condition_str)),
@@ -559,43 +580,51 @@ impl AdvancedFilterEngine {
                     _ => Err(format!("Operator {:?} not supported for string values", op)),
                 }
             }
-            
+
             // Numerical operations
-            (FilterValue::Number(field), FilterValue::Number(condition), op) => {
-                match op {
-                    AdvancedFilterOperator::GreaterThan => Ok(field > condition),
-                    AdvancedFilterOperator::LessThan => Ok(field < condition),
-                    AdvancedFilterOperator::GreaterThanOrEqual => Ok(field >= condition),
-                    AdvancedFilterOperator::LessThanOrEqual => Ok(field <= condition),
-                    AdvancedFilterOperator::Equals => Ok((field - condition).abs() < f64::EPSILON),
-                    AdvancedFilterOperator::NotEquals => Ok((field - condition).abs() >= f64::EPSILON),
-                    AdvancedFilterOperator::NumericBetween(min, max) => Ok(field >= min && field <= max),
-                    _ => Err(format!("Operator {:?} not supported for numeric values", op)),
+            (FilterValue::Number(field), FilterValue::Number(condition), op) => match op {
+                AdvancedFilterOperator::GreaterThan => Ok(field > condition),
+                AdvancedFilterOperator::LessThan => Ok(field < condition),
+                AdvancedFilterOperator::GreaterThanOrEqual => Ok(field >= condition),
+                AdvancedFilterOperator::LessThanOrEqual => Ok(field <= condition),
+                AdvancedFilterOperator::Equals => Ok((field - condition).abs() < f64::EPSILON),
+                AdvancedFilterOperator::NotEquals => Ok((field - condition).abs() >= f64::EPSILON),
+                AdvancedFilterOperator::NumericBetween(min, max) => {
+                    Ok(field >= min && field <= max)
                 }
-            }
-            
+                _ => Err(format!(
+                    "Operator {:?} not supported for numeric values",
+                    op
+                )),
+            },
+
             // Boolean operations
-            (FilterValue::Boolean(field), FilterValue::Boolean(condition), op) => {
-                match op {
-                    AdvancedFilterOperator::Equals => Ok(field == condition),
-                    AdvancedFilterOperator::NotEquals => Ok(field != condition),
-                    AdvancedFilterOperator::IsTrue => Ok(*field),
-                    AdvancedFilterOperator::IsFalse => Ok(!*field),
-                    _ => Err(format!("Operator {:?} not supported for boolean values", op)),
-                }
-            }
-            
+            (FilterValue::Boolean(field), FilterValue::Boolean(condition), op) => match op {
+                AdvancedFilterOperator::Equals => Ok(field == condition),
+                AdvancedFilterOperator::NotEquals => Ok(field != condition),
+                AdvancedFilterOperator::IsTrue => Ok(*field),
+                AdvancedFilterOperator::IsFalse => Ok(!*field),
+                _ => Err(format!(
+                    "Operator {:?} not supported for boolean values",
+                    op
+                )),
+            },
+
             // DateTime operations
-            (FilterValue::DateTime(field), FilterValue::DateTime(condition), op) => {
-                match op {
-                    AdvancedFilterOperator::Before(_) => Ok(field < condition),
-                    AdvancedFilterOperator::After(_) => Ok(field > condition),
-                    AdvancedFilterOperator::Equals => Ok(field == condition),
-                    _ => Err(format!("Operator {:?} not supported for datetime values", op)),
-                }
-            }
-            
-            _ => Err(format!("Unsupported value type combination for operator {:?}", operator)),
+            (FilterValue::DateTime(field), FilterValue::DateTime(condition), op) => match op {
+                AdvancedFilterOperator::Before(_) => Ok(field < condition),
+                AdvancedFilterOperator::After(_) => Ok(field > condition),
+                AdvancedFilterOperator::Equals => Ok(field == condition),
+                _ => Err(format!(
+                    "Operator {:?} not supported for datetime values",
+                    op
+                )),
+            },
+
+            _ => Err(format!(
+                "Unsupported value type combination for operator {:?}",
+                operator
+            )),
         }
     }
 
@@ -613,13 +642,25 @@ pub struct FilterTemplateLibrary {
 impl FilterTemplateLibrary {
     pub fn new() -> Self {
         let mut templates = HashMap::new();
-        
+
         // Add common filter templates
-        templates.insert("spam_filter".to_string(), Self::create_spam_filter_template());
-        templates.insert("newsletter_organizer".to_string(), Self::create_newsletter_organizer_template());
-        templates.insert("important_clients".to_string(), Self::create_important_clients_template());
-        templates.insert("weekend_backup".to_string(), Self::create_weekend_backup_template());
-        
+        templates.insert(
+            "spam_filter".to_string(),
+            Self::create_spam_filter_template(),
+        );
+        templates.insert(
+            "newsletter_organizer".to_string(),
+            Self::create_newsletter_organizer_template(),
+        );
+        templates.insert(
+            "important_clients".to_string(),
+            Self::create_important_clients_template(),
+        );
+        templates.insert(
+            "weekend_backup".to_string(),
+            Self::create_weekend_backup_template(),
+        );
+
         Self { templates }
     }
 
@@ -662,7 +703,10 @@ impl FilterTemplateLibrary {
                 nested_groups: vec![],
             },
             action_rules: vec![ActionRule {
-                actions: vec![AdvancedFilterAction::MarkAsSpam, AdvancedFilterAction::MoveToFolder("Spam".to_string())],
+                actions: vec![
+                    AdvancedFilterAction::MarkAsSpam,
+                    AdvancedFilterAction::MoveToFolder("Spam".to_string()),
+                ],
                 condition: None,
                 priority: 1,
                 enabled: true,
@@ -730,19 +774,17 @@ impl FilterTemplateLibrary {
             priority: 2,
             condition_group: ConditionGroup {
                 logic: BooleanLogic::Or,
-                conditions: vec![
-                    AdvancedCondition {
-                        field: AdvancedFilterField::FromDomain,
-                        operator: AdvancedFilterOperator::In(vec![
-                            "bigcorp.com".to_string(),
-                            "majorpartner.com".to_string(),
-                            "keyclient.org".to_string(),
-                        ]),
-                        value: FilterValue::List(vec![]),
-                        case_sensitive: false,
-                        negate: false,
-                    },
-                ],
+                conditions: vec![AdvancedCondition {
+                    field: AdvancedFilterField::FromDomain,
+                    operator: AdvancedFilterOperator::In(vec![
+                        "bigcorp.com".to_string(),
+                        "majorpartner.com".to_string(),
+                        "keyclient.org".to_string(),
+                    ]),
+                    value: FilterValue::List(vec![]),
+                    case_sensitive: false,
+                    negate: false,
+                }],
                 nested_groups: vec![],
             },
             action_rules: vec![ActionRule {

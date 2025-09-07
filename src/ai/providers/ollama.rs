@@ -1,10 +1,10 @@
 //! Ollama local AI provider implementation
 
-use crate::ai::{AIContext, AIResult};
 use crate::ai::config::AIConfig;
 use crate::ai::error::AIError;
 use crate::ai::provider::{AIProvider, ProviderCapabilities};
 use crate::ai::service::{EmailCategory, SchedulingIntent};
+use crate::ai::{AIContext, AIResult};
 use async_trait::async_trait;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -129,7 +129,8 @@ impl OllamaProvider {
 
     /// Create Ollama provider from config
     pub fn from_config(config: &AIConfig) -> AIResult<Self> {
-        let model = config.local_model
+        let model = config
+            .local_model
             .as_ref()
             .ok_or_else(|| AIError::config_error("No local model specified for Ollama"))?
             .clone();
@@ -153,27 +154,25 @@ impl OllamaProvider {
         };
 
         let url = format!("{}/api/generate", self.endpoint);
-        
-        let response = timeout(self.request_timeout, 
-            self.client
-                .post(&url)
-                .json(&request)
-                .send()
+
+        let response = timeout(
+            self.request_timeout,
+            self.client.post(&url).json(&request).send(),
         )
         .await
         .map_err(|_| AIError::timeout(self.request_timeout))?
         .map_err(AIError::from)?;
 
         if !response.status().is_success() {
-            return Err(AIError::provider_unavailable(
-                format!("Ollama API returned status: {}", response.status())
-            ));
+            return Err(AIError::provider_unavailable(format!(
+                "Ollama API returned status: {}",
+                response.status()
+            )));
         }
 
-        let ollama_response: OllamaResponse = response
-            .json()
-            .await
-            .map_err(|e| AIError::invalid_response(format!("Failed to parse Ollama response: {}", e)))?;
+        let ollama_response: OllamaResponse = response.json().await.map_err(|e| {
+            AIError::invalid_response(format!("Failed to parse Ollama response: {}", e))
+        })?;
 
         if !ollama_response.done {
             return Err(AIError::invalid_response("Incomplete response from Ollama"));
@@ -186,24 +185,22 @@ impl OllamaProvider {
     #[allow(dead_code)]
     async fn get_available_models(&self) -> AIResult<Vec<String>> {
         let url = format!("{}/api/tags", self.endpoint);
-        
-        let response = timeout(self.request_timeout,
-            self.client.get(&url).send()
-        )
-        .await
-        .map_err(|_| AIError::timeout(self.request_timeout))?
-        .map_err(AIError::from)?;
+
+        let response = timeout(self.request_timeout, self.client.get(&url).send())
+            .await
+            .map_err(|_| AIError::timeout(self.request_timeout))?
+            .map_err(AIError::from)?;
 
         if !response.status().is_success() {
-            return Err(AIError::provider_unavailable(
-                format!("Failed to get Ollama models: {}", response.status())
-            ));
+            return Err(AIError::provider_unavailable(format!(
+                "Failed to get Ollama models: {}",
+                response.status()
+            )));
         }
 
-        let models_response: OllamaModelsResponse = response
-            .json()
-            .await
-            .map_err(|e| AIError::invalid_response(format!("Failed to parse models response: {}", e)))?;
+        let models_response: OllamaModelsResponse = response.json().await.map_err(|e| {
+            AIError::invalid_response(format!("Failed to parse models response: {}", e))
+        })?;
 
         Ok(models_response.models.into_iter().map(|m| m.name).collect())
     }
@@ -224,17 +221,19 @@ impl OllamaProvider {
         // Extract potential title from AI response
         let title = ai_response
             .lines()
-            .find(|line| line.to_lowercase().contains("title") || line.to_lowercase().contains("subject"))
+            .find(|line| {
+                line.to_lowercase().contains("title") || line.to_lowercase().contains("subject")
+            })
             .map(|line| line.trim().to_string());
 
         // Simple confidence calculation based on keywords
-        let confidence = if text.len() > 20 && (
-            text.contains("tomorrow") || 
-            text.contains("next week") || 
-            text.contains("at ") ||
-            text.contains("pm") ||
-            text.contains("am")
-        ) {
+        let confidence = if text.len() > 20
+            && (text.contains("tomorrow")
+                || text.contains("next week")
+                || text.contains("at ")
+                || text.contains("pm")
+                || text.contains("am"))
+        {
             0.8
         } else if text.len() > 10 {
             0.6
@@ -257,26 +256,56 @@ impl OllamaProvider {
     /// Parse email category from AI response
     fn parse_category_from_response(&self, response: &str) -> EmailCategory {
         let response_lower = response.to_lowercase();
-        
-        if response_lower.contains("work") || response_lower.contains("business") || response_lower.contains("professional") {
+
+        if response_lower.contains("work")
+            || response_lower.contains("business")
+            || response_lower.contains("professional")
+        {
             EmailCategory::Work
-        } else if response_lower.contains("personal") || response_lower.contains("family") || response_lower.contains("friend") {
+        } else if response_lower.contains("personal")
+            || response_lower.contains("family")
+            || response_lower.contains("friend")
+        {
             EmailCategory::Personal
-        } else if response_lower.contains("promotional") || response_lower.contains("marketing") || response_lower.contains("advertisement") {
+        } else if response_lower.contains("promotional")
+            || response_lower.contains("marketing")
+            || response_lower.contains("advertisement")
+        {
             EmailCategory::Promotional
-        } else if response_lower.contains("social") || response_lower.contains("facebook") || response_lower.contains("twitter") {
+        } else if response_lower.contains("social")
+            || response_lower.contains("facebook")
+            || response_lower.contains("twitter")
+        {
             EmailCategory::Social
-        } else if response_lower.contains("financial") || response_lower.contains("bank") || response_lower.contains("payment") {
+        } else if response_lower.contains("financial")
+            || response_lower.contains("bank")
+            || response_lower.contains("payment")
+        {
             EmailCategory::Financial
-        } else if response_lower.contains("travel") || response_lower.contains("flight") || response_lower.contains("hotel") {
+        } else if response_lower.contains("travel")
+            || response_lower.contains("flight")
+            || response_lower.contains("hotel")
+        {
             EmailCategory::Travel
-        } else if response_lower.contains("shopping") || response_lower.contains("order") || response_lower.contains("purchase") {
+        } else if response_lower.contains("shopping")
+            || response_lower.contains("order")
+            || response_lower.contains("purchase")
+        {
             EmailCategory::Shopping
-        } else if response_lower.contains("newsletter") || response_lower.contains("subscription") || response_lower.contains("digest") {
+        } else if response_lower.contains("newsletter")
+            || response_lower.contains("subscription")
+            || response_lower.contains("digest")
+        {
             EmailCategory::Newsletter
-        } else if response_lower.contains("system") || response_lower.contains("automated") || response_lower.contains("notification") {
+        } else if response_lower.contains("system")
+            || response_lower.contains("automated")
+            || response_lower.contains("notification")
+        {
             EmailCategory::System
-        } else if response_lower.contains("spam") || response_lower.contains("suspicious") || response_lower.contains("phishing") {
+        } else if response_lower.contains("spam")
+            || response_lower.contains("suspicious")
+            || response_lower.contains("phishing")
+        {
             EmailCategory::Spam
         } else {
             EmailCategory::Uncategorized
@@ -296,7 +325,7 @@ impl AIProvider for OllamaProvider {
 
     async fn health_check(&self) -> AIResult<bool> {
         let url = format!("{}/api/version", self.endpoint);
-        
+
         match timeout(Duration::from_secs(5), self.client.get(&url).send()).await {
             Ok(Ok(response)) => Ok(response.status().is_success()),
             Ok(Err(_)) | Err(_) => Ok(false),
@@ -304,25 +333,26 @@ impl AIProvider for OllamaProvider {
     }
 
     async fn complete_text(&self, prompt: &str, context: Option<&AIContext>) -> AIResult<String> {
-        let temperature = context
-            .and_then(|c| c.creativity)
-            .unwrap_or(0.7);
+        let temperature = context.and_then(|c| c.creativity).unwrap_or(0.7);
 
         let enhanced_prompt = if let Some(ctx) = context {
             let mut full_prompt = prompt.to_string();
-            
+
             if let Some(ref email_thread) = ctx.email_thread {
                 full_prompt = format!("Email context: {}\n\nRequest: {}", email_thread, prompt);
             }
-            
+
             if let Some(ref calendar_context) = ctx.calendar_context {
                 full_prompt = format!("{}\n\nCalendar context: {}", full_prompt, calendar_context);
             }
-            
+
             if let Some(max_length) = ctx.max_length {
-                full_prompt = format!("{}\n\nPlease keep the response under {} characters.", full_prompt, max_length);
+                full_prompt = format!(
+                    "{}\n\nPlease keep the response under {} characters.",
+                    full_prompt, max_length
+                );
             }
-            
+
             full_prompt
         } else {
             prompt.to_string()
@@ -331,7 +361,11 @@ impl AIProvider for OllamaProvider {
         self.make_request(&enhanced_prompt, Some(temperature)).await
     }
 
-    async fn summarize_content(&self, content: &str, max_length: Option<usize>) -> AIResult<String> {
+    async fn summarize_content(
+        &self,
+        content: &str,
+        max_length: Option<usize>,
+    ) -> AIResult<String> {
         let max_len = max_length.unwrap_or(200);
         let prompt = format!(
             "Please summarize the following content in approximately {} characters or less. Focus on the key points and main message:\n\n{}",
@@ -348,14 +382,22 @@ impl AIProvider for OllamaProvider {
         );
 
         let response = self.make_request(&prompt, Some(0.6)).await?;
-        
+
         // Parse the numbered responses
         let suggestions: Vec<String> = response
             .lines()
             .filter_map(|line| {
                 let trimmed = line.trim();
-                if trimmed.starts_with("1.") || trimmed.starts_with("2.") || trimmed.starts_with("3.") {
-                    Some(trimmed.split_once('.').map(|(_, reply)| reply.trim().to_string()).unwrap_or_default())
+                if trimmed.starts_with("1.")
+                    || trimmed.starts_with("2.")
+                    || trimmed.starts_with("3.")
+                {
+                    Some(
+                        trimmed
+                            .split_once('.')
+                            .map(|(_, reply)| reply.trim().to_string())
+                            .unwrap_or_default(),
+                    )
                 } else {
                     None
                 }
@@ -414,7 +456,7 @@ impl AIProvider for OllamaProvider {
         );
 
         let response = self.make_request(&prompt, Some(0.3)).await?;
-        
+
         let key_points: Vec<String> = response
             .lines()
             .map(|line| line.trim().to_string())
@@ -449,19 +491,20 @@ mod tests {
     #[test]
     fn test_category_parsing() {
         let provider = create_test_provider();
-        
+
         assert_eq!(
             provider.parse_category_from_response("This appears to be a work-related email"),
             EmailCategory::Work
         );
-        
+
         assert_eq!(
             provider.parse_category_from_response("This looks like a promotional marketing email"),
             EmailCategory::Promotional
         );
-        
+
         assert_eq!(
-            provider.parse_category_from_response("This seems to be a personal message from family"),
+            provider
+                .parse_category_from_response("This seems to be a personal message from family"),
             EmailCategory::Personal
         );
     }
@@ -471,9 +514,9 @@ mod tests {
         let provider = create_test_provider();
         let intent = provider.parse_schedule_from_text(
             "Schedule a meeting for tomorrow at 3 PM",
-            "This is a meeting request for tomorrow afternoon"
+            "This is a meeting request for tomorrow afternoon",
         );
-        
+
         assert_eq!(intent.intent_type, "meeting");
         assert!(intent.confidence > 0.7);
     }
@@ -483,10 +526,10 @@ mod tests {
         let mut config = AIConfig::default();
         config.local_model = Some("llama2".to_string());
         config.ollama_endpoint = "http://localhost:11434".to_string();
-        
+
         let provider = OllamaProvider::from_config(&config);
         assert!(provider.is_ok());
-        
+
         let provider = provider.unwrap();
         assert_eq!(provider.model, "llama2");
         assert_eq!(provider.endpoint, "http://localhost:11434");

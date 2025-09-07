@@ -1,6 +1,6 @@
 //! Remote session support for SSH and Mosh connections
 
-use super::{MultiplexerResult}; // MultiplexerError
+use super::MultiplexerResult; // MultiplexerError
 use serde::{Deserialize, Serialize};
 // use std::collections::HashMap;
 
@@ -67,7 +67,7 @@ impl RemoteSession {
     pub fn detect() -> MultiplexerResult<Self> {
         let session_type = Self::detect_session_type()?;
         let connection_info = Self::gather_connection_info(&session_type)?;
-        
+
         Ok(Self {
             session_type: session_type.clone(),
             connection_info,
@@ -85,17 +85,23 @@ impl RemoteSession {
         }
     }
 
-    fn gather_connection_info(session_type: &RemoteSessionType) -> MultiplexerResult<ConnectionInfo> {
+    fn gather_connection_info(
+        session_type: &RemoteSessionType,
+    ) -> MultiplexerResult<ConnectionInfo> {
         match session_type {
             RemoteSessionType::SSH => {
                 let ssh_connection = std::env::var("SSH_CONNECTION").unwrap_or_default();
                 let parts: Vec<&str> = ssh_connection.split_whitespace().collect();
-                
+
                 Ok(ConnectionInfo {
                     hostname: std::env::var("SSH_CLIENT").ok(),
                     username: std::env::var("USER").ok(),
-                    port: if parts.len() >= 4 { parts[3].parse().ok() } else { None },
-                    latency_ms: None, // Would need to measure
+                    port: if parts.len() >= 4 {
+                        parts[3].parse().ok()
+                    } else {
+                        None
+                    },
+                    latency_ms: None,     // Would need to measure
                     bandwidth_kbps: None, // Would need to measure
                 })
             }
@@ -108,15 +114,13 @@ impl RemoteSession {
                     bandwidth_kbps: None,
                 })
             }
-            RemoteSessionType::Local => {
-                Ok(ConnectionInfo {
-                    hostname: None,
-                    username: std::env::var("USER").ok(),
-                    port: None,
-                    latency_ms: Some(0),
-                    bandwidth_kbps: None,
-                })
-            }
+            RemoteSessionType::Local => Ok(ConnectionInfo {
+                hostname: None,
+                username: std::env::var("USER").ok(),
+                port: None,
+                latency_ms: Some(0),
+                bandwidth_kbps: None,
+            }),
         }
     }
 

@@ -6,13 +6,13 @@ use thiserror::Error;
 pub enum FolderHierarchyError {
     #[error("Invalid folder path: {0}")]
     InvalidPath(String),
-    
+
     #[error("Path traversal attempt detected: {0}")]
     PathTraversal(String),
-    
+
     #[error("Reserved folder name: {0}")]
     ReservedName(String),
-    
+
     #[error("Folder name too long: {0} (max: {1})")]
     NameTooLong(String, usize),
 }
@@ -133,12 +133,12 @@ impl FolderHierarchyMapper {
         let full = full_path.as_ref();
 
         // Get the relative path from base to full
-        let relative_path = full
-            .strip_prefix(base)
-            .map_err(|_| FolderHierarchyError::InvalidPath(format!(
+        let relative_path = full.strip_prefix(base).map_err(|_| {
+            FolderHierarchyError::InvalidPath(format!(
                 "Path {:?} is not within base {:?}",
                 full, base
-            )))?;
+            ))
+        })?;
 
         let components: Vec<&str> = relative_path
             .components()
@@ -392,7 +392,9 @@ mod tests {
     #[test]
     fn test_imap_to_filesystem_special_chars() {
         let mapper = FolderHierarchyMapper::new();
-        let result = mapper.imap_to_filesystem("INBOX/Folder:With*Special?Chars").unwrap();
+        let result = mapper
+            .imap_to_filesystem("INBOX/Folder:With*Special?Chars")
+            .unwrap();
         assert_eq!(result, "INBOX__Folder_With_Special_Chars");
     }
 
@@ -407,11 +409,11 @@ mod tests {
     fn test_create_maildir_path() {
         let mapper = FolderHierarchyMapper::new();
         let temp_dir = TempDir::new().unwrap();
-        
+
         let result = mapper
             .create_maildir_path(temp_dir.path(), "user@example.com", "INBOX/Work")
             .unwrap();
-        
+
         let expected = temp_dir.path().join("user_example.com").join("INBOX__Work");
         assert_eq!(result, expected);
     }
@@ -419,15 +421,17 @@ mod tests {
     #[test]
     fn test_sanitize_folder_component() {
         let mapper = FolderHierarchyMapper::new();
-        
+
         // Normal case
         let result = mapper.sanitize_folder_component("NormalFolder").unwrap();
         assert_eq!(result, "NormalFolder");
-        
+
         // Special characters
-        let result = mapper.sanitize_folder_component("Folder/With\\Special:Chars*").unwrap();
+        let result = mapper
+            .sanitize_folder_component("Folder/With\\Special:Chars*")
+            .unwrap();
         assert_eq!(result, "Folder_With_Special_Chars_");
-        
+
         // Leading/trailing dots and spaces
         let result = mapper.sanitize_folder_component("  .folder.  ").unwrap();
         assert_eq!(result, "folder");
@@ -438,7 +442,7 @@ mod tests {
         let mapper = FolderHierarchyMapper::new();
         let result = mapper.sanitize_folder_component("con");
         assert!(result.is_err());
-        
+
         if let Err(FolderHierarchyError::ReservedName(name)) = result {
             assert_eq!(name, "con");
         } else {
@@ -457,18 +461,21 @@ mod tests {
     fn test_get_parent_folders() {
         let mapper = FolderHierarchyMapper::new();
         let parents = mapper.get_parent_folders("INBOX/Work/Project/Subfolder");
-        
-        assert_eq!(parents, vec![
-            "INBOX".to_string(),
-            "INBOX/Work".to_string(),
-            "INBOX/Work/Project".to_string(),
-        ]);
+
+        assert_eq!(
+            parents,
+            vec![
+                "INBOX".to_string(),
+                "INBOX/Work".to_string(),
+                "INBOX/Work/Project".to_string(),
+            ]
+        );
     }
 
     #[test]
     fn test_is_parent_folder() {
         let mapper = FolderHierarchyMapper::new();
-        
+
         assert!(mapper.is_parent_folder("INBOX", "INBOX/Work"));
         assert!(mapper.is_parent_folder("INBOX/Work", "INBOX/Work/Project"));
         assert!(!mapper.is_parent_folder("INBOX/Work", "INBOX/Personal"));
@@ -478,16 +485,22 @@ mod tests {
     #[test]
     fn test_get_parent_folder() {
         let mapper = FolderHierarchyMapper::new();
-        
-        assert_eq!(mapper.get_parent_folder("INBOX/Work/Project"), Some("INBOX/Work".to_string()));
-        assert_eq!(mapper.get_parent_folder("INBOX/Work"), Some("INBOX".to_string()));
+
+        assert_eq!(
+            mapper.get_parent_folder("INBOX/Work/Project"),
+            Some("INBOX/Work".to_string())
+        );
+        assert_eq!(
+            mapper.get_parent_folder("INBOX/Work"),
+            Some("INBOX".to_string())
+        );
         assert_eq!(mapper.get_parent_folder("INBOX"), None);
     }
 
     #[test]
     fn test_get_folder_name() {
         let mapper = FolderHierarchyMapper::new();
-        
+
         assert_eq!(mapper.get_folder_name("INBOX/Work/Project"), "Project");
         assert_eq!(mapper.get_folder_name("INBOX/Work"), "Work");
         assert_eq!(mapper.get_folder_name("INBOX"), "INBOX");
@@ -501,7 +514,7 @@ mod tests {
             "user_example_com/INBOX__Work".to_string(),
             1,
         );
-        
+
         assert_eq!(hierarchy.account_id, "user@example.com");
         assert_eq!(hierarchy.imap_path, "INBOX/Work");
         assert!(!hierarchy.is_root_level());
@@ -512,12 +525,14 @@ mod tests {
     fn test_extract_hierarchy_from_path() {
         let mapper = FolderHierarchyMapper::new();
         let temp_dir = TempDir::new().unwrap();
-        
+
         let base_path = temp_dir.path();
         let full_path = base_path.join("user_example_com").join("INBOX__Work");
-        
-        let hierarchy = mapper.extract_hierarchy_from_path(base_path, &full_path).unwrap();
-        
+
+        let hierarchy = mapper
+            .extract_hierarchy_from_path(base_path, &full_path)
+            .unwrap();
+
         assert_eq!(hierarchy.account_id, "user_example_com");
         assert_eq!(hierarchy.imap_path, "INBOX/Work");
         assert_eq!(hierarchy.depth, 1);
@@ -526,10 +541,10 @@ mod tests {
     #[test]
     fn test_path_traversal_detection() {
         let mapper = FolderHierarchyMapper::new();
-        
+
         let result = mapper.sanitize_folder_component("../../../etc/passwd");
         assert!(result.is_err());
-        
+
         if let Err(FolderHierarchyError::PathTraversal(_)) = result {
             // Expected
         } else {
@@ -541,10 +556,10 @@ mod tests {
     fn test_name_too_long() {
         let mapper = FolderHierarchyMapper::new();
         let long_name = "a".repeat(300);
-        
+
         let result = mapper.sanitize_folder_component(&long_name);
         assert!(result.is_err());
-        
+
         if let Err(FolderHierarchyError::NameTooLong(_, max)) = result {
             assert_eq!(max, MAX_FOLDER_NAME_LENGTH);
         } else {

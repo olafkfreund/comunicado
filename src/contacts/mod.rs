@@ -10,8 +10,8 @@ pub mod sync;
 pub mod ui;
 
 pub use advanced_search::{
-    AdvancedContactSearch, AdvancedSearchCriteria, SavedSearch, SearchHistoryEntry, 
-    SearchResult, SortDirection, SortField,
+    AdvancedContactSearch, AdvancedSearchCriteria, SavedSearch, SearchHistoryEntry, SearchResult,
+    SortDirection, SortField,
 };
 pub use advanced_search_ui::{AdvancedSearchUI, SearchAction, SearchField, SearchTab};
 pub use autocomplete::{ContactAutocomplete, ContactSuggestion};

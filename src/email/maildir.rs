@@ -329,7 +329,7 @@ impl MaildirHandler {
                 // Check if this looks like a header line (contains colon)
                 if line.contains(": ") {
                     header_found = true;
-                    
+
                     // Parse common headers
                     if let Some(value) = line.strip_prefix("Subject: ") {
                         message.subject = value.to_string();
@@ -524,8 +524,8 @@ pub struct MaildirFolderStats {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::TempDir;
     use std::fs;
+    use tempfile::TempDir;
 
     #[test]
     fn test_maildir_handler_creation() {
@@ -613,7 +613,7 @@ mod tests {
     #[test]
     fn test_path_to_folder_name() {
         let handler = MaildirHandler::new("/tmp");
-        
+
         let path = std::path::Path::new("/some/path/INBOX__Subfolder");
         let result = handler.path_to_folder_name(path).unwrap();
         assert_eq!(result, "INBOX/Subfolder");
@@ -626,7 +626,7 @@ mod tests {
     #[test]
     fn test_path_to_folder_name_invalid() {
         let handler = MaildirHandler::new("/tmp");
-        
+
         // Path with no filename
         let path = std::path::Path::new("/");
         let result = handler.path_to_folder_name(path);
@@ -638,9 +638,18 @@ mod tests {
         let handler = MaildirHandler::new("/tmp");
 
         // Test various special characters that need sanitization
-        assert_eq!(handler.sanitize_folder_name("Folder/With\\Slash"), "Folder__With__Slash");
-        assert_eq!(handler.sanitize_folder_name("Folder:With*Special?Chars"), "Folder_With_Special_Chars");
-        assert_eq!(handler.sanitize_folder_name("Folder\"With<More>Chars|"), "Folder_With_More_Chars_");
+        assert_eq!(
+            handler.sanitize_folder_name("Folder/With\\Slash"),
+            "Folder__With__Slash"
+        );
+        assert_eq!(
+            handler.sanitize_folder_name("Folder:With*Special?Chars"),
+            "Folder_With_Special_Chars"
+        );
+        assert_eq!(
+            handler.sanitize_folder_name("Folder\"With<More>Chars|"),
+            "Folder_With_More_Chars_"
+        );
     }
 
     #[test]
@@ -650,7 +659,7 @@ mod tests {
         // Test all supported flags
         let flags = vec![
             "\\Draft".to_string(),
-            "\\Flagged".to_string(), 
+            "\\Flagged".to_string(),
             "\\Answered".to_string(),
             "\\Seen".to_string(),
             "\\Deleted".to_string(),
@@ -673,11 +682,11 @@ mod tests {
     fn test_maildir_validation_with_subdirectories() {
         let temp_dir = TempDir::new().unwrap();
         let handler = MaildirHandler::new(temp_dir.path());
-        
+
         // Create nested maildir structure
         let inbox_path = temp_dir.path().join("INBOX");
         let subfolder_path = temp_dir.path().join("INBOX__Subfolder");
-        
+
         handler.ensure_maildir_structure(&inbox_path).unwrap();
         handler.ensure_maildir_structure(&subfolder_path).unwrap();
 
@@ -696,13 +705,18 @@ Message-ID: <test@example.com>
 
 This is the body of the email."#;
 
-        let message = handler.parse_message_content(content, "test_account", "INBOX", false).unwrap();
-        
+        let message = handler
+            .parse_message_content(content, "test_account", "INBOX", false)
+            .unwrap();
+
         assert_eq!(message.subject, "Test Subject");
         assert_eq!(message.from_addr, "test@example.com");
         assert_eq!(message.to_addrs, vec!["recipient@example.com"]);
         assert_eq!(message.message_id, Some("<test@example.com>".to_string()));
-        assert_eq!(message.body_text, Some("This is the body of the email.".to_string()));
+        assert_eq!(
+            message.body_text,
+            Some("This is the body of the email.".to_string())
+        );
     }
 
     #[test]
@@ -710,13 +724,18 @@ This is the body of the email."#;
         let handler = MaildirHandler::new("/tmp");
         let content = "Just a body with no headers";
 
-        let message = handler.parse_message_content(content, "test_account", "INBOX", false).unwrap();
-        
+        let message = handler
+            .parse_message_content(content, "test_account", "INBOX", false)
+            .unwrap();
+
         assert_eq!(message.subject, "");
         assert_eq!(message.from_addr, "");
         assert!(message.to_addrs.is_empty());
         assert_eq!(message.message_id, None);
-        assert_eq!(message.body_text, Some("Just a body with no headers".to_string()));
+        assert_eq!(
+            message.body_text,
+            Some("Just a body with no headers".to_string())
+        );
     }
 
     #[test]
@@ -730,7 +749,10 @@ This is the body of the email."#;
             message_id: Some("<test@example.com>".to_string()),
             thread_id: None,
             in_reply_to: None,
-            references: vec!["<ref1@example.com>".to_string(), "<ref2@example.com>".to_string()],
+            references: vec![
+                "<ref1@example.com>".to_string(),
+                "<ref2@example.com>".to_string(),
+            ],
             subject: "Test Subject".to_string(),
             from_addr: "sender@example.com".to_string(),
             from_name: None,
@@ -738,7 +760,9 @@ This is the body of the email."#;
             cc_addrs: vec!["cc@example.com".to_string()],
             bcc_addrs: vec![],
             reply_to: Some("reply@example.com".to_string()),
-            date: DateTime::parse_from_rfc3339("2020-01-01T12:00:00Z").unwrap().with_timezone(&Utc),
+            date: DateTime::parse_from_rfc3339("2020-01-01T12:00:00Z")
+                .unwrap()
+                .with_timezone(&Utc),
             body_text: Some("This is the email body".to_string()),
             body_html: None,
             attachments: vec![],
@@ -755,7 +779,7 @@ This is the body of the email."#;
         };
 
         let email_content = handler.format_message_as_email(&message).unwrap();
-        
+
         assert!(email_content.contains("Message-ID: <test@example.com>"));
         assert!(email_content.contains("Subject: Test Subject"));
         assert!(email_content.contains("From: sender@example.com"));

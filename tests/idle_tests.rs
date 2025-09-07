@@ -103,8 +103,6 @@ async fn test_idle_timeout_handling() {
 /// Integration test with account manager
 #[tokio::test]
 async fn test_idle_with_account_manager() {
-    
-
     let account_manager = ImapAccountManager::new().unwrap();
 
     // Create a test account configuration

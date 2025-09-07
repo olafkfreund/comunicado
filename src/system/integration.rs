@@ -5,7 +5,7 @@
 
 use crate::calendar::{CalendarManager, Event};
 use crate::email::database::{EmailDatabase, StoredMessage};
-use crate::notifications::{NotificationIntegrationService, NotificationConfig};
+use crate::notifications::{NotificationConfig, NotificationIntegrationService};
 use crate::plugins::{PluginManager, PluginType};
 use crate::ui::animation::AnimationManager;
 
@@ -16,7 +16,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 use thiserror::Error;
-use tokio::sync::{RwLock, broadcast};
+use tokio::sync::{broadcast, RwLock};
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
@@ -25,25 +25,25 @@ use uuid::Uuid;
 pub enum SystemIntegrationError {
     #[error("Email system error: {0}")]
     Email(String),
-    
+
     #[error("Calendar system error: {0}")]
     Calendar(String),
-    
+
     #[error("Notification system error: {0}")]
     Notification(String),
-    
+
     #[error("Plugin system error: {0}")]
     Plugin(String),
-    
+
     #[error("Search system error: {0}")]
     Search(String),
-    
+
     #[error("Configuration error: {0}")]
     Configuration(String),
-    
+
     #[error("System state error: {0}")]
     SystemState(String),
-    
+
     #[error("Integration error: {0}")]
     Integration(String),
 }
@@ -249,22 +249,22 @@ pub struct PerformanceMetric {
 /// Main system integration service
 pub struct SystemIntegrationService {
     config: SystemConfig,
-    
+
     // Core components
     email_database: Arc<EmailDatabase>,
     calendar: Arc<CalendarManager>,
     notification_service: Arc<RwLock<NotificationIntegrationService>>,
     #[allow(dead_code)]
     plugin_manager: Arc<RwLock<PluginManager>>,
-    
+
     // Animation and UI components
     #[allow(dead_code)]
     animation_manager: Option<Arc<AnimationManager>>,
-    
+
     // Event coordination
     system_event_sender: broadcast::Sender<SystemEvent>,
     performance_metrics: Arc<RwLock<Vec<PerformanceMetric>>>,
-    
+
     // State tracking
     active_syncs: Arc<RwLock<HashMap<String, SyncType>>>,
     system_health: Arc<RwLock<SystemHealth>>,
@@ -300,38 +300,41 @@ impl SystemIntegrationService {
     /// Create a new system integration service
     pub async fn new(config: SystemConfig) -> SystemResult<Self> {
         let (system_event_sender, _) = broadcast::channel(1000);
-        
+
         // Initialize core components
         let email_database = Arc::new(
             EmailDatabase::new(config.email_config.database_path.to_str().unwrap())
                 .await
-                .map_err(|e| SystemIntegrationError::Email(e.to_string()))?
+                .map_err(|e| SystemIntegrationError::Email(e.to_string()))?,
         );
-        
+
         // TODO: Calendar manager requires database and token manager - simplified for compilation
         let calendar_db = crate::calendar::database::CalendarDatabase::new(
-            config.calendar_config.database_path.to_str().unwrap()
-        ).await.map_err(|e| SystemIntegrationError::Calendar(e.to_string()))?;
-        
+            config.calendar_config.database_path.to_str().unwrap(),
+        )
+        .await
+        .map_err(|e| SystemIntegrationError::Calendar(e.to_string()))?;
+
         let token_manager = Arc::new(crate::oauth2::token::TokenManager::new());
-        
+
         let calendar = Arc::new(
             CalendarManager::new(Arc::new(calendar_db), token_manager)
                 .await
-                .map_err(|e| SystemIntegrationError::Calendar(e.to_string()))?
+                .map_err(|e| SystemIntegrationError::Calendar(e.to_string()))?,
         );
-        
-        let notification_service = Arc::new(RwLock::new(
-            NotificationIntegrationService::new(config.notification_config.clone())
-        ));
-        
+
+        let notification_service = Arc::new(RwLock::new(NotificationIntegrationService::new(
+            config.notification_config.clone(),
+        )));
+
         let plugin_manager = PluginManager::new(
             vec![config.plugin_config.plugin_directory.clone()],
             "0.1.0".to_string(),
-            std::path::PathBuf::from("./data")
-        ).map_err(|e| SystemIntegrationError::Plugin(e.to_string()))?;
+            std::path::PathBuf::from("./data"),
+        )
+        .map_err(|e| SystemIntegrationError::Plugin(e.to_string()))?;
         let plugin_manager = Arc::new(RwLock::new(plugin_manager));
-        
+
         // Initialize animation manager if enabled
         let animation_manager = if config.ui_config.enable_animations {
             Some(Arc::new(AnimationManager::new(
@@ -341,7 +344,7 @@ impl SystemIntegrationService {
         } else {
             None
         };
-        
+
         Ok(Self {
             config,
             email_database,
@@ -355,136 +358,152 @@ impl SystemIntegrationService {
             system_health: Arc::new(RwLock::new(SystemHealth::default())),
         })
     }
-    
+
     /// Start all system components
     pub async fn start(&self) -> SystemResult<()> {
         info!("Starting Comunicado system integration");
-        
+
         // Start notification service
-        self.notification_service.write().await.start()
+        self.notification_service
+            .write()
+            .await
+            .start()
             .await
             .map_err(|e| SystemIntegrationError::Notification(e.to_string()))?;
-        
+
         // Load and start plugins
         if self.config.plugin_config.enable_plugins {
             self.start_plugin_system().await?;
         }
-        
+
         // Start performance monitoring
         if self.config.performance_config.enable_performance_monitoring {
             self.start_performance_monitoring().await;
         }
-        
+
         // Start health monitoring
         self.start_health_monitoring().await;
-        
+
         // Start event coordination
         self.start_event_coordination().await;
-        
+
         info!("System integration started successfully");
         Ok(())
     }
-    
+
     /// Handle new email message
     pub async fn handle_new_email(&self, message: &StoredMessage) -> SystemResult<()> {
         // Store in database
-        self.email_database.store_message(message)
+        self.email_database
+            .store_message(message)
             .await
             .map_err(|e| SystemIntegrationError::Email(e.to_string()))?;
-        
+
         // Apply filters (placeholder - would integrate with actual filter engine)
         if self.config.email_config.enable_advanced_filters {
             debug!("Would apply filters for account: {}", message.account_id);
         }
-        
+
         // Update search index (placeholder - would integrate with actual search engine)
         if self.config.email_config.enable_search_indexing {
             debug!("Would index message: {}", message.subject);
         }
-        
+
         // Send notification
-        self.notification_service.read().await.handle_new_email(message)
+        self.notification_service
+            .read()
+            .await
+            .handle_new_email(message)
             .await
             .map_err(|e| SystemIntegrationError::Notification(e.to_string()))?;
-        
+
         // Emit system event
         let event = SystemEvent::EmailReceived {
             message: message.clone(),
             account_id: message.account_id.clone(),
         };
-        
+
         if let Err(e) = self.system_event_sender.send(event) {
             warn!("Failed to emit email received event: {}", e);
         }
-        
+
         // Record performance metric
         self.record_performance_metric(
             "email".to_string(),
             "message_processed".to_string(),
             1.0,
             "count".to_string(),
-        ).await;
-        
+        )
+        .await;
+
         debug!("Successfully processed new email: {}", message.subject);
         Ok(())
     }
-    
+
     /// Handle calendar event
     pub async fn handle_calendar_event(&self, event: &Event) -> SystemResult<()> {
         // Store in calendar
-        self.calendar.create_event(event.clone())
+        self.calendar
+            .create_event(event.clone())
             .await
             .map_err(|e| SystemIntegrationError::Calendar(e.to_string()))?;
-        
+
         // Schedule notifications if reminders are enabled
         if self.config.calendar_config.enable_reminders {
-            self.notification_service.read().await.handle_calendar_event(event)
+            self.notification_service
+                .read()
+                .await
+                .handle_calendar_event(event)
                 .await
                 .map_err(|e| SystemIntegrationError::Notification(e.to_string()))?;
         }
-        
+
         // Emit system event
         let system_event = SystemEvent::CalendarEventCreated {
             event: event.clone(),
         };
-        
+
         if let Err(e) = self.system_event_sender.send(system_event) {
             warn!("Failed to emit calendar event created: {}", e);
         }
-        
+
         debug!("Successfully processed calendar event: {}", event.title);
         Ok(())
     }
-    
+
     /// Start synchronization for an account
     pub async fn start_sync(&self, account_id: &str, sync_type: SyncType) -> SystemResult<()> {
         // Check if sync is already running
         {
             let active_syncs = self.active_syncs.read().await;
             if active_syncs.contains_key(account_id) {
-                return Err(SystemIntegrationError::SystemState(
-                    format!("Sync already running for account: {}", account_id)
-                ));
+                return Err(SystemIntegrationError::SystemState(format!(
+                    "Sync already running for account: {}",
+                    account_id
+                )));
             }
         }
-        
+
         // Record sync start
-        self.active_syncs.write().await.insert(account_id.to_string(), sync_type.clone());
-        
+        self.active_syncs
+            .write()
+            .await
+            .insert(account_id.to_string(), sync_type.clone());
+
         // Emit sync started event
         let event = SystemEvent::SyncStarted {
             account_id: account_id.to_string(),
             sync_type: sync_type.clone(),
         };
-        
+
         if let Err(e) = self.system_event_sender.send(event) {
             warn!("Failed to emit sync started event: {}", e);
         }
-        
+
         // Start actual sync process (this would be implemented based on sync type)
         self.perform_sync(account_id, sync_type).await
     }
-    
+
     /// Perform the actual synchronization
     async fn perform_sync(&self, account_id: &str, sync_type: SyncType) -> SystemResult<()> {
         let start_time = std::time::Instant::now();
@@ -494,7 +513,7 @@ impl SystemIntegrationService {
             errors: Vec::new(),
             duration: Duration::default(),
         };
-        
+
         match sync_type {
             SyncType::Email => {
                 // Perform email sync
@@ -523,106 +542,120 @@ impl SystemIntegrationService {
             SyncType::Full => {
                 // Perform both email and calendar sync
                 let mut total_processed = 0;
-                
+
                 if let Err(e) = self.sync_email_account(account_id).await {
                     result.errors.push(format!("Email sync error: {}", e));
                 } else {
                     total_processed += 1;
                 }
-                
+
                 if let Err(e) = self.sync_calendar_account(account_id).await {
                     result.errors.push(format!("Calendar sync error: {}", e));
                 } else {
                     total_processed += 1;
                 }
-                
+
                 result.success = result.errors.is_empty();
                 result.items_processed = total_processed;
             }
         }
-        
+
         result.duration = start_time.elapsed();
-        
+
         // Clean up active sync tracking
         self.active_syncs.write().await.remove(account_id);
-        
+
         // Emit sync completed event
         let event = SystemEvent::SyncCompleted {
             account_id: account_id.to_string(),
             sync_type,
             result: result.clone(),
         };
-        
+
         if let Err(e) = self.system_event_sender.send(event) {
             warn!("Failed to emit sync completed event: {}", e);
         }
-        
+
         // Send notification about sync completion
         let _message = if result.success {
-            format!("Sync completed for {} ({} items)", account_id, result.items_processed)
+            format!(
+                "Sync completed for {} ({} items)",
+                account_id, result.items_processed
+            )
         } else {
-            format!("Sync completed for {} with {} errors", account_id, result.errors.len())
+            format!(
+                "Sync completed for {} with {} errors",
+                account_id,
+                result.errors.len()
+            )
         };
-        
+
         // Send notification about sync completion
-        if let Err(e) = self.notification_service.read().await.notify_sync_complete(
-            account_id, 
-            result.items_processed, 
-            result.errors.len()
-        ).await {
+        if let Err(e) = self
+            .notification_service
+            .read()
+            .await
+            .notify_sync_complete(account_id, result.items_processed, result.errors.len())
+            .await
+        {
             warn!("Failed to send sync notification: {}", e);
         }
-        
+
         if result.success {
             Ok(())
         } else {
-            Err(SystemIntegrationError::Integration(
-                format!("Sync failed: {:?}", result.errors)
-            ))
+            Err(SystemIntegrationError::Integration(format!(
+                "Sync failed: {:?}",
+                result.errors
+            )))
         }
     }
-    
+
     /// Sync email account (placeholder implementation)
     async fn sync_email_account(&self, _account_id: &str) -> SystemResult<usize> {
         // This would contain the actual email sync logic
         // For now, return a placeholder success
         Ok(42) // Simulated processed items
     }
-    
+
     /// Sync calendar account (placeholder implementation)
     async fn sync_calendar_account(&self, _account_id: &str) -> SystemResult<usize> {
         // This would contain the actual calendar sync logic
         // For now, return a placeholder success
         Ok(7) // Simulated processed items
     }
-    
+
     /// Start plugin system
     async fn start_plugin_system(&self) -> SystemResult<()> {
         if self.config.plugin_config.auto_load_plugins {
-            let _ = self.plugin_manager.write().await.scan_plugins()
+            let _ = self
+                .plugin_manager
+                .write()
+                .await
+                .scan_plugins()
                 .await
                 .map_err(|e| SystemIntegrationError::Plugin(e.to_string()))?;
         }
-        
+
         info!("Plugin system started");
         Ok(())
     }
-    
+
     /// Start performance monitoring
     async fn start_performance_monitoring(&self) {
         let performance_metrics = Arc::clone(&self.performance_metrics);
         let system_event_sender = self.system_event_sender.clone();
-        
+
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_secs(60));
-            
+
             loop {
                 interval.tick().await;
-                
+
                 // Collect system performance metrics
                 let memory_usage = Self::get_memory_usage();
                 let cpu_usage = Self::get_cpu_usage();
-                
+
                 let metrics = vec![
                     PerformanceMetric {
                         component: "system".to_string(),
@@ -639,19 +672,19 @@ impl SystemIntegrationService {
                         timestamp: Utc::now(),
                     },
                 ];
-                
+
                 // Store metrics
                 {
                     let mut stored_metrics = performance_metrics.write().await;
                     stored_metrics.extend(metrics.clone());
-                    
+
                     // Keep only last 1000 metrics
                     if stored_metrics.len() > 1000 {
                         let len = stored_metrics.len();
                         stored_metrics.drain(0..len - 1000);
                     }
                 }
-                
+
                 // Emit metric events
                 for metric in metrics {
                     let event = SystemEvent::PerformanceMetric { metric };
@@ -662,47 +695,53 @@ impl SystemIntegrationService {
             }
         });
     }
-    
+
     /// Start health monitoring
     async fn start_health_monitoring(&self) {
         let system_health = Arc::clone(&self.system_health);
         let email_db = Arc::clone(&self.email_database);
         let calendar = Arc::clone(&self.calendar);
-        
+
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_secs(300)); // Every 5 minutes
-            
+
             loop {
                 interval.tick().await;
-                
+
                 let mut health = system_health.write().await;
                 health.last_health_check = Utc::now();
                 health.performance_issues.clear();
-                
+
                 // Check email system health
                 health.email_system_healthy = Self::check_email_health(&email_db).await;
-                
-                // Check calendar system health  
+
+                // Check calendar system health
                 health.calendar_system_healthy = Self::check_calendar_health(&calendar).await;
-                
+
                 // Check for performance issues
                 if !health.email_system_healthy {
-                    health.performance_issues.push("Email system unhealthy".to_string());
+                    health
+                        .performance_issues
+                        .push("Email system unhealthy".to_string());
                 }
                 if !health.calendar_system_healthy {
-                    health.performance_issues.push("Calendar system unhealthy".to_string());
+                    health
+                        .performance_issues
+                        .push("Calendar system unhealthy".to_string());
                 }
-                
-                debug!("Health check completed: email={}, calendar={}", 
-                      health.email_system_healthy, health.calendar_system_healthy);
+
+                debug!(
+                    "Health check completed: email={}, calendar={}",
+                    health.email_system_healthy, health.calendar_system_healthy
+                );
             }
         });
     }
-    
+
     /// Start event coordination
     async fn start_event_coordination(&self) {
         let mut event_receiver = self.system_event_sender.subscribe();
-        
+
         tokio::spawn(async move {
             while let Ok(event) = event_receiver.recv().await {
                 match event {
@@ -711,8 +750,10 @@ impl SystemIntegrationService {
                     }
                     SystemEvent::PerformanceMetric { metric } => {
                         if metric.value > 90.0 && metric.metric_name.contains("usage") {
-                            warn!("High resource usage detected: {} = {}%", 
-                                  metric.metric_name, metric.value);
+                            warn!(
+                                "High resource usage detected: {} = {}%",
+                                metric.metric_name, metric.value
+                            );
                         }
                     }
                     _ => {
@@ -722,7 +763,7 @@ impl SystemIntegrationService {
             }
         });
     }
-    
+
     /// Record a performance metric
     async fn record_performance_metric(
         &self,
@@ -738,45 +779,45 @@ impl SystemIntegrationService {
             unit,
             timestamp: Utc::now(),
         };
-        
+
         self.performance_metrics.write().await.push(metric.clone());
-        
+
         let event = SystemEvent::PerformanceMetric { metric };
         if let Err(e) = self.system_event_sender.send(event) {
             warn!("Failed to emit performance metric: {}", e);
         }
     }
-    
+
     /// Get system memory usage (placeholder)
     fn get_memory_usage() -> f64 {
         // This would use a real system monitoring library
         50.0 // Placeholder value
     }
-    
+
     /// Get system CPU usage (placeholder)
     fn get_cpu_usage() -> f64 {
         // This would use a real system monitoring library
         25.0 // Placeholder value
     }
-    
+
     /// Check email system health
     async fn check_email_health(_email_db: &EmailDatabase) -> bool {
         // This would perform actual health checks
         true // Placeholder
     }
-    
+
     /// Check calendar system health
     async fn check_calendar_health(_calendar: &CalendarManager) -> bool {
         // This would perform actual health checks
         true // Placeholder
     }
-    
+
     /// Get system statistics
     pub async fn get_system_stats(&self) -> SystemStatistics {
         let performance_metrics = self.performance_metrics.read().await;
         let system_health = self.system_health.read().await;
         let active_syncs = self.active_syncs.read().await;
-        
+
         SystemStatistics {
             total_performance_metrics: performance_metrics.len(),
             system_health: system_health.clone(),
@@ -786,28 +827,31 @@ impl SystemIntegrationService {
                 .unwrap_or_default(),
         }
     }
-    
+
     /// Update system configuration
     pub async fn update_config(&mut self, config: SystemConfig) -> SystemResult<()> {
         self.config = config.clone();
-        
+
         // Update component configurations
-        self.notification_service.write().await.update_config(config.notification_config);
-        
+        self.notification_service
+            .write()
+            .await
+            .update_config(config.notification_config);
+
         info!("System configuration updated");
         Ok(())
     }
-    
+
     /// Shutdown the system gracefully
     pub async fn shutdown(&self) -> SystemResult<()> {
         info!("Shutting down system integration");
-        
+
         // Cancel all active syncs
         self.active_syncs.write().await.clear();
-        
+
         // Shutdown components gracefully
         // This would include proper cleanup of all subsystems
-        
+
         info!("System integration shutdown completed");
         Ok(())
     }
@@ -833,7 +877,7 @@ mod tests {
         let mut config = SystemConfig::default();
         config.email_config.database_path = temp_dir.path().join("email.db");
         config.calendar_config.database_path = temp_dir.path().join("calendar.db");
-        
+
         let result = SystemIntegrationService::new(config).await;
         assert!(result.is_ok());
     }
@@ -855,7 +899,7 @@ mod tests {
             unit: "%".to_string(),
             timestamp: Utc::now(),
         };
-        
+
         assert_eq!(metric.component, "test");
         assert_eq!(metric.value, 45.5);
     }

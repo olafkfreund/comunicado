@@ -1,14 +1,13 @@
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::{mpsc, RwLock, Mutex};
+use tokio::sync::{mpsc, Mutex, RwLock};
 use tokio::time::Interval;
-use chrono::{DateTime, Utc};
-use tracing::{info, debug, warn, error};
-use serde::{Deserialize, Serialize};
+use tracing::{debug, error, info, warn};
 
 use crate::mobile::{
-    KdeConnectClient, MessageStore, MobileConfig, Result,
-    kde_connect::types::MobileNotification
+    kde_connect::types::MobileNotification, KdeConnectClient, MessageStore, MobileConfig, Result,
 };
 
 /// Background service that synchronizes SMS/MMS messages and notifications
@@ -70,7 +69,7 @@ impl MobileSyncService {
         message_store: Arc<MessageStore>,
     ) -> Result<Self> {
         let (control_tx, control_rx) = mpsc::unbounded_channel();
-        
+
         let stats = MobileSyncStats {
             is_running: false,
             total_syncs: 0,
@@ -107,7 +106,7 @@ impl MobileSyncService {
     pub async fn get_stats(&self) -> MobileSyncStats {
         let mut stats = self.stats.read().await.clone();
         stats.is_running = *self.is_running.read().await;
-        
+
         // Update storage statistics
         if let Ok(store_stats) = self.message_store.get_stats().await {
             stats.conversation_count = store_stats.conversation_count;
@@ -135,7 +134,7 @@ impl MobileSyncService {
 
         info!("Starting mobile sync service");
         *self.is_running.write().await = true;
-        
+
         let config = self.config.clone();
         let kde_connect = self.kde_connect.clone();
         let message_store = self.message_store.clone();
@@ -145,7 +144,15 @@ impl MobileSyncService {
 
         // Spawn the main service loop
         tokio::spawn(async move {
-            Self::service_loop(config, kde_connect, message_store, stats, control_rx, is_running).await;
+            Self::service_loop(
+                config,
+                kde_connect,
+                message_store,
+                stats,
+                control_rx,
+                is_running,
+            )
+            .await;
         });
 
         info!("Mobile sync service started successfully");
@@ -156,7 +163,9 @@ impl MobileSyncService {
     pub async fn stop(&self) -> Result<()> {
         info!("Stopping mobile sync service");
         self.control_tx.send(ServiceControl::Stop).map_err(|_| {
-            crate::mobile::MobileError::NotificationFailed("Failed to send stop command".to_string())
+            crate::mobile::MobileError::NotificationFailed(
+                "Failed to send stop command".to_string(),
+            )
         })?;
         Ok(())
     }
@@ -164,9 +173,13 @@ impl MobileSyncService {
     /// Force an immediate sync
     pub async fn force_sync(&self) -> Result<()> {
         debug!("Requesting immediate sync");
-        self.control_tx.send(ServiceControl::ForceSync).map_err(|_| {
-            crate::mobile::MobileError::NotificationFailed("Failed to send force sync command".to_string())
-        })?;
+        self.control_tx
+            .send(ServiceControl::ForceSync)
+            .map_err(|_| {
+                crate::mobile::MobileError::NotificationFailed(
+                    "Failed to send force sync command".to_string(),
+                )
+            })?;
         Ok(())
     }
 
@@ -174,9 +187,13 @@ impl MobileSyncService {
     pub async fn update_config(&self, new_config: MobileConfig) -> Result<()> {
         debug!("Updating mobile sync service configuration");
         *self.config.write().await = new_config.clone();
-        self.control_tx.send(ServiceControl::UpdateConfig(new_config)).map_err(|_| {
-            crate::mobile::MobileError::ConfigurationError("Failed to send config update".to_string())
-        })?;
+        self.control_tx
+            .send(ServiceControl::UpdateConfig(new_config))
+            .map_err(|_| {
+                crate::mobile::MobileError::ConfigurationError(
+                    "Failed to send config update".to_string(),
+                )
+            })?;
         Ok(())
     }
 
@@ -328,10 +345,8 @@ impl MobileSyncService {
 
         if result.messages_processed > 0 || result.notifications_processed > 0 {
             info!(
-                "Sync completed: {} messages, {} notifications in {}ms", 
-                result.messages_processed, 
-                result.notifications_processed, 
-                duration
+                "Sync completed: {} messages, {} notifications in {}ms",
+                result.messages_processed, result.notifications_processed, duration
             );
         }
     }
@@ -342,9 +357,11 @@ impl MobileSyncService {
         message_store: &Arc<MessageStore>,
     ) -> Result<u32> {
         let mut client = kde_connect.lock().await;
-        
+
         if !client.is_connected() {
-            return Err(crate::mobile::MobileError::DeviceNotPaired("Device not connected".to_string()));
+            return Err(crate::mobile::MobileError::DeviceNotPaired(
+                "Device not connected".to_string(),
+            ));
         }
 
         // Request latest conversations from device
@@ -364,7 +381,7 @@ impl MobileSyncService {
                     match maybe_message {
                         Some(message) => {
                             debug!("Received message: ID={}, Thread={}", message.id, message.thread_id);
-                            
+
                             match message_store.store_message(message).await {
                                 Ok(conversation_id) => {
                                     messages_processed += 1;
@@ -394,9 +411,11 @@ impl MobileSyncService {
     /// Sync mobile notifications
     async fn sync_notifications(kde_connect: &Arc<Mutex<KdeConnectClient>>) -> Result<u32> {
         let mut client = kde_connect.lock().await;
-        
+
         if !client.is_connected() {
-            return Err(crate::mobile::MobileError::DeviceNotPaired("Device not connected".to_string()));
+            return Err(crate::mobile::MobileError::DeviceNotPaired(
+                "Device not connected".to_string(),
+            ));
         }
 
         let mut notification_receiver = client.listen_for_notifications().await?;
@@ -412,7 +431,7 @@ impl MobileSyncService {
                     match maybe_notification {
                         Some(notification) => {
                             debug!("Received notification: {} from {}", notification.title, notification.app_name);
-                            
+
                             // Process notification (could integrate with Comunicado's notification system)
                             Self::process_mobile_notification(notification).await;
                             notifications_processed += 1;
@@ -435,23 +454,24 @@ impl MobileSyncService {
     /// Process a mobile notification
     async fn process_mobile_notification(notification: MobileNotification) {
         debug!(
-            "Processing notification: {} - {} ({})", 
-            notification.app_name, 
-            notification.title,
-            notification.text
+            "Processing notification: {} - {} ({})",
+            notification.app_name, notification.title, notification.text
         );
 
         // Here you could integrate with Comunicado's notification system
         // For now, just log the notification
         if notification.has_reply_action {
-            debug!("Notification supports reply action: {:?}", notification.reply_id);
+            debug!(
+                "Notification supports reply action: {:?}",
+                notification.reply_id
+            );
         }
     }
 
     /// Reconnect to KDE Connect device
     async fn reconnect_device(kde_connect: &Arc<Mutex<KdeConnectClient>>) -> Result<()> {
         let mut client = kde_connect.lock().await;
-        
+
         // Discover available devices
         let devices = client.discover_devices()?;
         debug!("Found {} KDE Connect devices", devices.len());
@@ -473,7 +493,9 @@ impl MobileSyncService {
             }
         }
 
-        Err(crate::mobile::MobileError::DeviceNotPaired("No suitable devices found".to_string()))
+        Err(crate::mobile::MobileError::DeviceNotPaired(
+            "No suitable devices found".to_string(),
+        ))
     }
 
     /// Update error statistics
@@ -486,21 +508,23 @@ impl MobileSyncService {
     /// Send SMS message through connected device
     pub async fn send_sms(&self, message: &str, addresses: &[String]) -> Result<()> {
         let client = self.kde_connect.lock().await;
-        
+
         if !client.is_connected() {
-            return Err(crate::mobile::MobileError::DeviceNotPaired("Device not connected".to_string()));
+            return Err(crate::mobile::MobileError::DeviceNotPaired(
+                "Device not connected".to_string(),
+            ));
         }
 
         info!("Sending SMS to {:?}: {}", addresses, message);
-        
+
         match client.send_sms(message, addresses) {
             Ok(_) => {
                 info!("SMS sent successfully");
-                
+
                 // Update stats
                 let mut stats = self.stats.write().await;
                 stats.bytes_synced += message.len() as u64;
-                
+
                 Ok(())
             }
             Err(e) => {
@@ -514,13 +538,15 @@ impl MobileSyncService {
     /// Reply to a mobile notification
     pub async fn reply_to_notification(&self, reply_id: &str, message: &str) -> Result<()> {
         let client = self.kde_connect.lock().await;
-        
+
         if !client.is_connected() {
-            return Err(crate::mobile::MobileError::DeviceNotPaired("Device not connected".to_string()));
+            return Err(crate::mobile::MobileError::DeviceNotPaired(
+                "Device not connected".to_string(),
+            ));
         }
 
         debug!("Replying to notification {}: {}", reply_id, message);
-        
+
         match client.send_notification_reply(reply_id, message) {
             Ok(_) => {
                 info!("Notification reply sent successfully");
@@ -554,19 +580,21 @@ mod tests {
 
     async fn create_test_service() -> MobileSyncService {
         let message_store = Arc::new(MessageStore::new(":memory:").await.unwrap());
-        
+
         let kde_connect = Arc::new(Mutex::new(KdeConnectClient::new().unwrap()));
         let config = MobileConfig::default();
 
-        MobileSyncService::new(config, kde_connect, message_store).await.unwrap()
+        MobileSyncService::new(config, kde_connect, message_store)
+            .await
+            .unwrap()
     }
 
     #[tokio::test]
     async fn test_service_creation() {
         let service = create_test_service().await;
-        
+
         assert!(!service.is_running().await);
-        
+
         let stats = service.get_stats().await;
         assert!(!stats.is_running);
         assert_eq!(stats.total_syncs, 0);
@@ -576,20 +604,20 @@ mod tests {
     #[tokio::test]
     async fn test_service_start_stop() {
         let service = create_test_service().await;
-        
+
         // Start the service
         service.start().await.unwrap();
-        
+
         // Give it a moment to start
         tokio::time::sleep(Duration::from_millis(100)).await;
         assert!(service.is_running().await);
-        
+
         let stats = service.get_stats().await;
         assert!(stats.is_running);
-        
+
         // Stop the service
         service.stop().await.unwrap();
-        
+
         // Give it a moment to stop
         tokio::time::sleep(Duration::from_millis(100)).await;
         assert!(!service.is_running().await);
@@ -599,40 +627,40 @@ mod tests {
     async fn test_control_commands() {
         let service = create_test_service().await;
         let control_handle = service.control_handle();
-        
+
         // Start the service
         service.start().await.unwrap();
         tokio::time::sleep(Duration::from_millis(50)).await;
-        
+
         // Test force sync command
         control_handle.send(ServiceControl::ForceSync).unwrap();
         tokio::time::sleep(Duration::from_millis(50)).await;
-        
+
         // Test pause/resume commands
         control_handle.send(ServiceControl::Pause).unwrap();
         tokio::time::sleep(Duration::from_millis(50)).await;
-        
+
         control_handle.send(ServiceControl::Resume).unwrap();
         tokio::time::sleep(Duration::from_millis(50)).await;
-        
+
         // Stop the service
         service.stop().await.unwrap();
         tokio::time::sleep(Duration::from_millis(100)).await;
-        
+
         assert!(!service.is_running().await);
     }
 
     #[tokio::test]
     async fn test_configuration_update() {
         let service = create_test_service().await;
-        
+
         // Update configuration
         let mut new_config = MobileConfig::default();
         new_config.sms.sync_interval_seconds = 120; // 2 minutes
         new_config.enabled = true;
-        
+
         service.update_config(new_config.clone()).await.unwrap();
-        
+
         // Verify configuration was updated
         let updated_config = service.config.read().await.clone();
         assert_eq!(updated_config.sms.sync_interval_seconds, 120);
@@ -642,16 +670,16 @@ mod tests {
     #[tokio::test]
     async fn test_stats_tracking() {
         let service = create_test_service().await;
-        
+
         // Start service to initialize stats tracking
         service.start().await.unwrap();
         tokio::time::sleep(Duration::from_millis(50)).await;
-        
+
         let stats = service.get_stats().await;
         assert!(stats.is_running);
         assert_eq!(stats.sync_interval_seconds, 30); // Default from config
-        // uptime_seconds is u64, so it's always >= 0
-        
+                                                     // uptime_seconds is u64, so it's always >= 0
+
         service.stop().await.unwrap();
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
@@ -659,23 +687,27 @@ mod tests {
     #[tokio::test]
     async fn test_error_handling() {
         let service = create_test_service().await;
-        
+
         // Try to send SMS without starting service or connecting device
-        let result = service.send_sms("Test message", &["+1234567890".to_string()]).await;
+        let result = service
+            .send_sms("Test message", &["+1234567890".to_string()])
+            .await;
         assert!(result.is_err());
-        
+
         // Try to reply to notification without connection
-        let result = service.reply_to_notification("test-reply", "Test reply").await;
+        let result = service
+            .reply_to_notification("test-reply", "Test reply")
+            .await;
         assert!(result.is_err());
     }
 
     #[tokio::test]
     async fn test_device_connection_status() {
         let service = create_test_service().await;
-        
+
         // Initially no device connected
         assert!(service.get_connected_device().await.is_none());
-        
+
         // Try to connect to device (will fail gracefully when KDE Connect not available)
         {
             let mut client = service.kde_connect.lock().await;
@@ -700,18 +732,18 @@ mod tests {
     #[tokio::test]
     async fn test_sync_result_tracking() {
         let service = create_test_service().await;
-        
+
         service.start().await.unwrap();
         tokio::time::sleep(Duration::from_millis(50)).await;
-        
+
         // Force a sync to test result tracking
         service.force_sync().await.unwrap();
         tokio::time::sleep(Duration::from_millis(100)).await;
-        
+
         let stats = service.get_stats().await;
         // The sync should have run at least once
         assert!(stats.total_syncs >= 1);
-        
+
         service.stop().await.unwrap();
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
@@ -719,28 +751,30 @@ mod tests {
     #[tokio::test]
     async fn test_concurrent_operations() {
         let service = Arc::new(create_test_service().await);
-        
+
         service.start().await.unwrap();
         tokio::time::sleep(Duration::from_millis(50)).await;
-        
+
         // Spawn multiple concurrent operations
-        let handles = (0..5).map(|i| {
-            let service = service.clone();
-            tokio::spawn(async move {
-                if i % 2 == 0 {
-                    service.force_sync().await
-                } else {
-                    service.get_stats().await;
-                    Ok(())
-                }
+        let handles = (0..5)
+            .map(|i| {
+                let service = service.clone();
+                tokio::spawn(async move {
+                    if i % 2 == 0 {
+                        service.force_sync().await
+                    } else {
+                        service.get_stats().await;
+                        Ok(())
+                    }
+                })
             })
-        }).collect::<Vec<_>>();
-        
+            .collect::<Vec<_>>();
+
         // Wait for all operations to complete
         for handle in handles {
             handle.await.unwrap().unwrap();
         }
-        
+
         service.stop().await.unwrap();
         tokio::time::sleep(Duration::from_millis(100)).await;
     }

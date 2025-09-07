@@ -549,7 +549,11 @@ impl ContactsDatabase {
     }
 
     /// Find contacts by partial email match (for autocomplete)
-    pub async fn find_contacts_by_email_prefix(&self, email_prefix: &str, limit: usize) -> ContactsResult<Vec<Contact>> {
+    pub async fn find_contacts_by_email_prefix(
+        &self,
+        email_prefix: &str,
+        limit: usize,
+    ) -> ContactsResult<Vec<Contact>> {
         let query = "SELECT c.*, 
                            GROUP_CONCAT(DISTINCT e.address || '|' || e.label || '|' || e.is_primary) as emails,
                            GROUP_CONCAT(DISTINCT p.number || '|' || p.label || '|' || p.is_primary) as phones
@@ -708,9 +712,7 @@ impl ContactsDatabase {
         // Parse dates - handle both SQLite datetime format and RFC3339 format
         let created_at = self.parse_datetime(&created_at_str)?;
         let updated_at = self.parse_datetime(&updated_at_str)?;
-        let synced_at = synced_at_str
-            .map(|s| self.parse_datetime(&s))
-            .transpose()?;
+        let synced_at = synced_at_str.map(|s| self.parse_datetime(&s)).transpose()?;
 
         // Parse emails
         let emails_str: Option<String> = row.try_get("emails").ok();
@@ -773,12 +775,16 @@ impl ContactsDatabase {
         }
 
         // Try SQLite datetime format (YYYY-MM-DD HH:MM:SS)
-        if let Ok(naive_dt) = chrono::NaiveDateTime::parse_from_str(datetime_str, "%Y-%m-%d %H:%M:%S") {
+        if let Ok(naive_dt) =
+            chrono::NaiveDateTime::parse_from_str(datetime_str, "%Y-%m-%d %H:%M:%S")
+        {
             return Ok(naive_dt.and_utc());
         }
 
         // Try ISO 8601 format without timezone (assume UTC)
-        if let Ok(naive_dt) = chrono::NaiveDateTime::parse_from_str(datetime_str, "%Y-%m-%dT%H:%M:%S") {
+        if let Ok(naive_dt) =
+            chrono::NaiveDateTime::parse_from_str(datetime_str, "%Y-%m-%dT%H:%M:%S")
+        {
             return Ok(naive_dt.and_utc());
         }
 

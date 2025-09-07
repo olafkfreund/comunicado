@@ -390,8 +390,8 @@ impl ThemeColors {
                 section: Color::Rgb(184, 187, 38),   // #b8bb26 - bright_green
                 context: palette.text_secondary,
                 help: palette.text_muted,
-                loading: Color::Rgb(131, 165, 152),  // #83a598 - bright_blue
-                error: Color::Rgb(251, 73, 52),      // #fb4934 - bright_red
+                loading: Color::Rgb(131, 165, 152), // #83a598 - bright_blue
+                error: Color::Rgb(251, 73, 52),     // #fb4934 - bright_red
             },
         }
     }
@@ -464,12 +464,12 @@ impl ThemeColors {
                 border: Color::Rgb(181, 118, 20), // #b57614 - dark_yellow
                 title: Color::Rgb(181, 118, 20),  // #b57614 - dark_yellow
                 text: palette.text_primary,
-                selected: Color::Rgb(7, 102, 120),   // #076678 - dark_blue
-                section: Color::Rgb(121, 116, 14),   // #79740e - dark_green
+                selected: Color::Rgb(7, 102, 120), // #076678 - dark_blue
+                section: Color::Rgb(121, 116, 14), // #79740e - dark_green
                 context: palette.text_secondary,
                 help: palette.text_muted,
-                loading: Color::Rgb(7, 102, 120),    // #076678 - dark_blue
-                error: Color::Rgb(157, 0, 6),        // #9d0006 - dark_red
+                loading: Color::Rgb(7, 102, 120), // #076678 - dark_blue
+                error: Color::Rgb(157, 0, 6),     // #9d0006 - dark_red
             },
         }
     }

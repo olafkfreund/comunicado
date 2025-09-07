@@ -8,12 +8,12 @@
 //! - Theme and UI preference setup
 //! - Plugin introduction
 
-use crate::theme::Theme;
 use super::account_setup::AccountSetupManager;
-use super::config_manager::{ConfigurationManager, AppConfigAdapter};
-use crossterm::{
-    event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
-};
+use super::config_manager::{AppConfigAdapter, ConfigurationManager};
+use super::terminal_manager::ManagedTerminal;
+use crate::theme::Theme;
+use anyhow::Result;
+use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyModifiers};
 use ratatui::{
     backend::CrosstermBackend,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -23,8 +23,6 @@ use ratatui::{
     Frame, Terminal,
 };
 use std::io;
-use anyhow::Result;
-use super::terminal_manager::ManagedTerminal;
 
 /// Onboarding flow states
 #[derive(Debug, Clone, PartialEq)]
@@ -72,21 +70,21 @@ impl OnboardingFlow {
             max_shortcuts_pages: 3,
         })
     }
-    
+
     /// Create a new onboarding flow with default dependencies
     pub fn new() -> Result<Self> {
         let config_manager = Box::new(AppConfigAdapter::load_default()?);
         let account_setup = AccountSetupManager::with_defaults()?;
         let theme = Theme::default();
-        
+
         Self::new_with_dependencies(config_manager, account_setup, theme)
     }
-    
+
     /// Toggle the display of keyboard shortcuts
     pub fn toggle_shortcuts(&mut self) {
         self.show_shortcuts = !self.show_shortcuts;
     }
-    
+
     /// Check if shortcuts are currently being shown
     pub fn shortcuts_visible(&self) -> bool {
         self.show_shortcuts
@@ -139,13 +137,13 @@ impl OnboardingFlow {
                 KeyCode::Char('q') | KeyCode::Esc => return Ok(false),
                 _ => {}
             },
-            
+
             OnboardingState::Features => match key.code {
                 KeyCode::Enter | KeyCode::Char(' ') => self.next_step(),
                 KeyCode::Esc => self.previous_step(),
                 _ => {}
             },
-            
+
             OnboardingState::Shortcuts => match key.code {
                 KeyCode::Enter | KeyCode::Char(' ') => self.next_step(),
                 KeyCode::Left | KeyCode::Char('h') => {
@@ -161,7 +159,7 @@ impl OnboardingFlow {
                 KeyCode::Esc => self.previous_step(),
                 _ => {}
             },
-            
+
             OnboardingState::AccountSetup => match key.code {
                 KeyCode::Enter | KeyCode::Char(' ') => {
                     // Launch account setup through abstraction
@@ -187,7 +185,7 @@ impl OnboardingFlow {
                 KeyCode::Esc => self.previous_step(),
                 _ => {}
             },
-            
+
             OnboardingState::ThemeSelection => match key.code {
                 KeyCode::Up | KeyCode::Char('k') => {
                     // Cycle through available themes
@@ -197,7 +195,8 @@ impl OnboardingFlow {
                         "Gruvbox" => "Solarized",
                         "Solarized" => "Nord",
                         _ => "Light",
-                    }.to_string();
+                    }
+                    .to_string();
                 }
                 KeyCode::Down | KeyCode::Char('j') => {
                     self.selected_theme = match self.selected_theme.as_str() {
@@ -206,23 +205,27 @@ impl OnboardingFlow {
                         "Solarized" => "Gruvbox",
                         "Nord" => "Solarized",
                         _ => "Dark",
-                    }.to_string();
+                    }
+                    .to_string();
                 }
                 KeyCode::Enter | KeyCode::Char(' ') => {
                     // Apply selected theme and continue
-                    let _ = self.config_manager.set_value_json("ui_theme", serde_json::Value::String(self.selected_theme.clone()));
+                    let _ = self.config_manager.set_value_json(
+                        "ui_theme",
+                        serde_json::Value::String(self.selected_theme.clone()),
+                    );
                     self.next_step();
                 }
                 KeyCode::Esc => self.previous_step(),
                 _ => {}
             },
-            
+
             OnboardingState::PluginIntro => match key.code {
                 KeyCode::Enter | KeyCode::Char(' ') => self.next_step(),
                 KeyCode::Esc => self.previous_step(),
                 _ => {}
             },
-            
+
             OnboardingState::Complete => {
                 return Ok(true); // Complete onboarding
             }
@@ -294,14 +297,14 @@ impl OnboardingFlow {
     fn complete_onboarding(&mut self) {
         // Mark onboarding as completed in config
         let _ = self.config_manager.mark_onboarding_completed();
-        
+
         // Save the updated configuration
         let _ = self.config_manager.save();
     }
 
     fn draw(&mut self, f: &mut Frame) {
-        let area = f.size();
-        
+        let area = f.area();
+
         // Main layout with progress bar at top
         let chunks = Layout::default()
             .direction(Direction::Vertical)
@@ -314,7 +317,7 @@ impl OnboardingFlow {
 
         // Draw progress bar
         self.draw_progress_bar(f, chunks[0]);
-        
+
         // Draw content based on state
         match self.state {
             OnboardingState::Welcome => self.draw_welcome(f, chunks[1]),
@@ -325,7 +328,7 @@ impl OnboardingFlow {
             OnboardingState::PluginIntro => self.draw_plugin_intro(f, chunks[1]),
             OnboardingState::Complete => self.draw_complete(f, chunks[1]),
         }
-        
+
         // Draw navigation help
         self.draw_navigation_help(f, chunks[2]);
     }
@@ -333,10 +336,17 @@ impl OnboardingFlow {
     fn draw_progress_bar(&self, f: &mut Frame, area: Rect) {
         let progress = (self.current_step as f64 / self.total_steps as f64 * 100.0) as u16;
         let gauge = Gauge::default()
-            .block(Block::default().borders(Borders::ALL).title("Onboarding Progress"))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title("Onboarding Progress"),
+            )
             .gauge_style(Style::default().fg(self.theme.colors.palette.accent))
             .percent(progress)
-            .label(format!("Step {} of {}", self.current_step, self.total_steps));
+            .label(format!(
+                "Step {} of {}",
+                self.current_step, self.total_steps
+            ));
         f.render_widget(gauge, area);
     }
 
@@ -345,7 +355,12 @@ impl OnboardingFlow {
             Line::from(""),
             Line::from(vec![
                 Span::styled("Welcome to ", Style::default()),
-                Span::styled("Comunicado", Style::default().fg(self.theme.colors.palette.accent).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    "Comunicado",
+                    Style::default()
+                        .fg(self.theme.colors.palette.accent)
+                        .add_modifier(Modifier::BOLD),
+                ),
                 Span::styled("!", Style::default()),
             ]),
             Line::from(""),
@@ -407,21 +422,25 @@ impl OnboardingFlow {
             Line::from("  • Vim-style keyboard shortcuts"),
         ];
 
-        let paragraph = Paragraph::new(text)
-            .wrap(Wrap { trim: true })
-            .block(Block::default().borders(Borders::ALL).title("What Makes Comunicado Special"));
+        let paragraph = Paragraph::new(text).wrap(Wrap { trim: true }).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title("What Makes Comunicado Special"),
+        );
 
         f.render_widget(paragraph, area);
     }
 
     fn draw_shortcuts(&self, f: &mut Frame, area: Rect) {
         let shortcuts = self.get_shortcuts_for_page(self.shortcuts_page);
-        
+
         let text: Vec<Line> = shortcuts.into_iter().map(|s| Line::from(s)).collect();
 
-        let title = format!("Essential Shortcuts (Page {} of {})", 
-                           self.shortcuts_page + 1, 
-                           self.max_shortcuts_pages);
+        let title = format!(
+            "Essential Shortcuts (Page {} of {})",
+            self.shortcuts_page + 1,
+            self.max_shortcuts_pages
+        );
 
         let paragraph = Paragraph::new(text)
             .wrap(Wrap { trim: true })
@@ -491,39 +510,55 @@ impl OnboardingFlow {
         let text = vec![
             Line::from(vec![
                 Span::styled("⚡ ", Style::default().fg(Color::Yellow)),
-                Span::styled("Quick Email Setup", Style::default().add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    "Quick Email Setup",
+                    Style::default().add_modifier(Modifier::BOLD),
+                ),
             ]),
             Line::from(""),
             Line::from("Get connected to your email in just 3 simple steps!"),
             Line::from(""),
-            Line::from(vec![
-                Span::styled("✨ One-Click Providers:", Style::default().add_modifier(Modifier::BOLD)),
-            ]),
+            Line::from(vec![Span::styled(
+                "✨ One-Click Providers:",
+                Style::default().add_modifier(Modifier::BOLD),
+            )]),
             Line::from("📧 Gmail - Auto-configured with OAuth2"),
             Line::from("📮 Outlook/Hotmail - Pre-configured servers"),
             Line::from("🔧 Auto-Detect - Smart provider detection"),
             Line::from(""),
-            Line::from(vec![
-                Span::styled("🚀 What makes it quick:", Style::default().add_modifier(Modifier::BOLD)),
-            ]),
+            Line::from(vec![Span::styled(
+                "🚀 What makes it quick:",
+                Style::default().add_modifier(Modifier::BOLD),
+            )]),
             Line::from("• No manual server configuration"),
             Line::from("• Pre-built OAuth2 credentials"),
             Line::from("• Auto-detection from email address"),
             Line::from("• One-click authentication flow"),
             Line::from("• Instant connection testing"),
             Line::from(""),
-            Line::from(vec![
-                Span::styled("🔒 Still secure:", Style::default().add_modifier(Modifier::BOLD)),
-            ]),
+            Line::from(vec![Span::styled(
+                "🔒 Still secure:",
+                Style::default().add_modifier(Modifier::BOLD),
+            )]),
             Line::from("• Modern OAuth2 standards"),
             Line::from("• No password storage"),
             Line::from("• Revocable access tokens"),
             Line::from(""),
             Line::from(vec![
                 Span::styled("Press ", Style::default()),
-                Span::styled("Enter", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    "Enter",
+                    Style::default()
+                        .fg(Color::Green)
+                        .add_modifier(Modifier::BOLD),
+                ),
                 Span::styled(" for Quick Setup or ", Style::default()),
-                Span::styled("s", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    "s",
+                    Style::default()
+                        .fg(Color::Yellow)
+                        .add_modifier(Modifier::BOLD),
+                ),
                 Span::styled(" to skip", Style::default()),
             ]),
         ];
@@ -531,14 +566,18 @@ impl OnboardingFlow {
         let paragraph = Paragraph::new(text)
             .alignment(Alignment::Center)
             .wrap(Wrap { trim: true })
-            .block(Block::default().borders(Borders::ALL).title("Account Setup"));
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title("Account Setup"),
+            );
 
         f.render_widget(paragraph, area);
     }
 
     fn draw_theme_selection(&self, f: &mut Frame, area: Rect) {
         let themes = ["Light", "Dark", "Gruvbox", "Solarized", "Nord"];
-        
+
         let items: Vec<ListItem> = themes
             .iter()
             .map(|theme| {
@@ -555,7 +594,11 @@ impl OnboardingFlow {
             .collect();
 
         let list = List::new(items)
-            .block(Block::default().borders(Borders::ALL).title("Choose Your Theme"))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title("Choose Your Theme"),
+            )
             .highlight_style(
                 Style::default()
                     .bg(self.theme.colors.palette.accent)
@@ -586,10 +629,7 @@ impl OnboardingFlow {
         // Add instructions below
         let instructions_area = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Percentage(70),
-                Constraint::Min(3),
-            ])
+            .constraints([Constraint::Percentage(70), Constraint::Min(3)])
             .split(area)[1];
 
         let instructions = Paragraph::new(vec![
@@ -634,7 +674,11 @@ impl OnboardingFlow {
         let paragraph = Paragraph::new(text)
             .alignment(Alignment::Center)
             .wrap(Wrap { trim: true })
-            .block(Block::default().borders(Borders::ALL).title("Extend Your Experience"));
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title("Extend Your Experience"),
+            );
 
         f.render_widget(paragraph, area);
     }
@@ -642,10 +686,12 @@ impl OnboardingFlow {
     fn draw_complete(&self, f: &mut Frame, area: Rect) {
         let text = vec![
             Line::from(""),
-            Line::from(vec![
-                Span::styled("🎉 Welcome to Comunicado! 🎉", 
-                    Style::default().fg(self.theme.colors.palette.accent).add_modifier(Modifier::BOLD)),
-            ]),
+            Line::from(vec![Span::styled(
+                "🎉 Welcome to Comunicado! 🎉",
+                Style::default()
+                    .fg(self.theme.colors.palette.accent)
+                    .add_modifier(Modifier::BOLD),
+            )]),
             Line::from(""),
             Line::from("You're all set to start using Comunicado!"),
             Line::from(""),
@@ -742,12 +788,12 @@ mod tests {
         assert_eq!(flow.current_step, 1);
     }
 
-    #[test] 
+    #[test]
     fn test_shortcuts_pagination() {
         let flow = OnboardingFlow::new().unwrap();
         let page_0 = flow.get_shortcuts_for_page(0);
         let page_1 = flow.get_shortcuts_for_page(1);
-        
+
         assert!(!page_0.is_empty());
         assert!(!page_1.is_empty());
         assert_ne!(page_0[0], page_1[0]); // Different content

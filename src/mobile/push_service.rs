@@ -1,6 +1,6 @@
 //! Push notification service for mobile devices
 
-use super::{MobileError, Result, NotificationPayload, PushProviderConfig, PushProviderType};
+use super::{MobileError, NotificationPayload, PushProviderConfig, PushProviderType, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tokio::sync::RwLock;
@@ -21,11 +21,11 @@ pub trait PushProvider: Send + Sync + std::fmt::Debug {
         token: &PushToken,
         payload: &NotificationPayload,
     ) -> Result<PushResult>;
-    
+
     async fn validate_token(&self, token: &PushToken) -> Result<bool>;
-    
+
     async fn get_provider_stats(&self) -> PushProviderStats;
-    
+
     fn provider_type(&self) -> PushProviderType;
 }
 
@@ -140,42 +140,34 @@ impl PushService {
             }
 
             let provider: Box<dyn PushProvider> = match config.provider_type {
-                PushProviderType::FCM => {
-                    Box::new(FCMProvider {
-                        api_key: config.api_key.clone(),
-                        project_id: "default".to_string(),
-                        client: reqwest::Client::new(),
-                        stats: RwLock::new(PushProviderStats::default()),
-                    })
-                }
-                PushProviderType::APNS => {
-                    Box::new(APNSProvider {
-                        key_id: "default".to_string(),
-                        team_id: "default".to_string(),
-                        private_key: config.api_key.clone(),
-                        is_production: false,
-                        client: reqwest::Client::new(),
-                        stats: RwLock::new(PushProviderStats::default()),
-                    })
-                }
-                PushProviderType::WebPush => {
-                    Box::new(WebPushProvider {
-                        vapid_private_key: config.api_key.clone(),
-                        vapid_public_key: "default".to_string(),
-                        subject: "default".to_string(),
-                        client: reqwest::Client::new(),
-                        stats: RwLock::new(PushProviderStats::default()),
-                    })
-                }
-                PushProviderType::Custom(_) => {
-                    Box::new(CustomProvider {
-                        endpoint_url: "https://example.com".to_string(),
-                        api_key: Some(config.api_key.clone()),
-                        headers: HashMap::new(),
-                        client: reqwest::Client::new(),
-                        stats: RwLock::new(PushProviderStats::default()),
-                    })
-                }
+                PushProviderType::FCM => Box::new(FCMProvider {
+                    api_key: config.api_key.clone(),
+                    project_id: "default".to_string(),
+                    client: reqwest::Client::new(),
+                    stats: RwLock::new(PushProviderStats::default()),
+                }),
+                PushProviderType::APNS => Box::new(APNSProvider {
+                    key_id: "default".to_string(),
+                    team_id: "default".to_string(),
+                    private_key: config.api_key.clone(),
+                    is_production: false,
+                    client: reqwest::Client::new(),
+                    stats: RwLock::new(PushProviderStats::default()),
+                }),
+                PushProviderType::WebPush => Box::new(WebPushProvider {
+                    vapid_private_key: config.api_key.clone(),
+                    vapid_public_key: "default".to_string(),
+                    subject: "default".to_string(),
+                    client: reqwest::Client::new(),
+                    stats: RwLock::new(PushProviderStats::default()),
+                }),
+                PushProviderType::Custom(_) => Box::new(CustomProvider {
+                    endpoint_url: "https://example.com".to_string(),
+                    api_key: Some(config.api_key.clone()),
+                    headers: HashMap::new(),
+                    client: reqwest::Client::new(),
+                    stats: RwLock::new(PushProviderStats::default()),
+                }),
             };
 
             providers.insert(config.provider_type.clone(), provider);
@@ -194,8 +186,10 @@ impl PushService {
         for (provider_type, provider) in &self.providers {
             // Test provider connection
             let stats = provider.get_provider_stats().await;
-            println!("Push provider {:?} initialized successfully with stats: sent={}, failed={}", 
-                     provider_type, stats.sent, stats.failed);
+            println!(
+                "Push provider {:?} initialized successfully with stats: sent={}, failed={}",
+                provider_type, stats.sent, stats.failed
+            );
         }
 
         Ok(())
@@ -206,31 +200,37 @@ impl PushService {
         // Validate token with provider
         if let Some(provider) = self.providers.get(&token.provider_type) {
             let is_valid = provider.validate_token(&token).await?;
-            
+
             let mut validated_token = token;
             validated_token.is_valid = is_valid;
             validated_token.last_validated = Some(chrono::Utc::now());
 
             // Store token
             let mut device_tokens = self.device_tokens.write().await;
-            let device_info = device_tokens.entry(device_id).or_insert_with(|| {
-                DeviceTokenInfo {
+            let device_info = device_tokens
+                .entry(device_id)
+                .or_insert_with(|| DeviceTokenInfo {
                     device_id,
                     tokens: Vec::new(),
                     primary_token: None,
                     last_updated: chrono::Utc::now(),
-                }
-            });
+                });
 
             // Remove existing token for this provider
-            device_info.tokens.retain(|t| t.provider_type != validated_token.provider_type);
-            
+            device_info
+                .tokens
+                .retain(|t| t.provider_type != validated_token.provider_type);
+
             // Add new token
             device_info.tokens.push(validated_token.clone());
-            
+
             // Set as primary if first token or if it's FCM/APNS
-            if device_info.primary_token.is_none() || 
-               matches!(validated_token.provider_type, PushProviderType::FCM | PushProviderType::APNS) {
+            if device_info.primary_token.is_none()
+                || matches!(
+                    validated_token.provider_type,
+                    PushProviderType::FCM | PushProviderType::APNS
+                )
+            {
                 device_info.primary_token = Some(validated_token);
             }
 
@@ -238,9 +238,10 @@ impl PushService {
 
             Ok(())
         } else {
-            Err(MobileError::PushService(
-                format!("Provider {:?} not configured", token.provider_type)
-            ))
+            Err(MobileError::PushService(format!(
+                "Provider {:?} not configured",
+                token.provider_type
+            )))
         }
     }
 
@@ -251,16 +252,21 @@ impl PushService {
         notification: NotificationPayload,
     ) -> Result<()> {
         let device_tokens = self.device_tokens.read().await;
-        let device_info = device_tokens.get(&device_id)
+        let device_info = device_tokens
+            .get(&device_id)
             .ok_or_else(|| MobileError::DeviceNotFound(device_id.to_string()))?;
 
         // Try primary token first
         if let Some(primary_token) = &device_info.primary_token {
             if primary_token.is_valid {
                 if let Some(provider) = self.providers.get(&primary_token.provider_type) {
-                    match provider.send_notification(primary_token, &notification).await {
+                    match provider
+                        .send_notification(primary_token, &notification)
+                        .await
+                    {
                         Ok(result) => {
-                            self.update_statistics(&primary_token.provider_type, &result).await;
+                            self.update_statistics(&primary_token.provider_type, &result)
+                                .await;
                             if result.success {
                                 return Ok(());
                             }
@@ -295,7 +301,7 @@ impl PushService {
         }
 
         Err(MobileError::PushService(
-            "All push attempts failed".to_string()
+            "All push attempts failed".to_string(),
         ))
     }
 
@@ -334,10 +340,13 @@ impl PushService {
     // Private methods
     async fn update_statistics(&self, provider_type: &PushProviderType, result: &PushResult) {
         let mut stats = self.statistics.write().await;
-        
+
         // Update provider stats
         {
-            let provider_stats = stats.by_provider.entry(provider_type.clone()).or_insert_with(Default::default);
+            let provider_stats = stats
+                .by_provider
+                .entry(provider_type.clone())
+                .or_insert_with(Default::default);
             provider_stats.sent += 1;
             if result.success {
                 provider_stats.delivered += 1;
@@ -392,7 +401,8 @@ impl PushProvider for FCMProvider {
             }
         });
 
-        let response = self.client
+        let response = self
+            .client
             .post("https://fcm.googleapis.com/fcm/send")
             .header("Authorization", format!("key={}", self.api_key))
             .header("Content-Type", "application/json")
@@ -402,7 +412,9 @@ impl PushProvider for FCMProvider {
             .map_err(|e| MobileError::Network(e.to_string()))?;
 
         if response.status().is_success() {
-            let response_data: serde_json::Value = response.json().await
+            let response_data: serde_json::Value = response
+                .json()
+                .await
                 .map_err(|e| MobileError::PushService(e.to_string()))?;
 
             Ok(PushResult {
@@ -441,11 +453,12 @@ impl PushProvider for FCMProvider {
 
 impl APNSProvider {
     pub fn new(config: &PushProviderConfig) -> Result<Self> {
-        let api_secret = config.api_secret.as_ref()
-            .ok_or_else(|| MobileError::ConfigurationError("APNS private key required".to_string()))?;
+        let api_secret = config.api_secret.as_ref().ok_or_else(|| {
+            MobileError::ConfigurationError("APNS private key required".to_string())
+        })?;
 
         Ok(Self {
-            key_id: "default".to_string(), // Should be in config
+            key_id: "default".to_string(),  // Should be in config
             team_id: "default".to_string(), // Should be in config
             private_key: api_secret.clone(),
             is_production: true, // Should be in config
@@ -485,23 +498,30 @@ impl PushProvider for APNSProvider {
 
         // Generate JWT token for APNS authentication using key_id, team_id, and private_key
         let auth_token = self.generate_jwt_token()?;
-        
-        let response = self.client
-            .post(&url)
-            .header("authorization", format!("bearer {}", auth_token))
-            .header("apns-topic", &token.app_id)
-            .header("apns-priority", match payload.priority {
-                super::NotificationPriority::Critical | super::NotificationPriority::High => "10",
-                _ => "5"
-            })
-            .json(&apns_payload)
-            .send()
-            .await
-            .map_err(|e| MobileError::Network(e.to_string()))?;
+
+        let response =
+            self.client
+                .post(&url)
+                .header("authorization", format!("bearer {}", auth_token))
+                .header("apns-topic", &token.app_id)
+                .header(
+                    "apns-priority",
+                    match payload.priority {
+                        super::NotificationPriority::Critical
+                        | super::NotificationPriority::High => "10",
+                        _ => "5",
+                    },
+                )
+                .json(&apns_payload)
+                .send()
+                .await
+                .map_err(|e| MobileError::Network(e.to_string()))?;
 
         Ok(PushResult {
             success: response.status().is_success(),
-            message_id: response.headers().get("apns-id")
+            message_id: response
+                .headers()
+                .get("apns-id")
                 .and_then(|v| v.to_str().ok())
                 .map(|s| s.to_string()),
             error: if !response.status().is_success() {
@@ -534,7 +554,12 @@ impl APNSProvider {
         // In a real implementation, this would use the private_key, key_id, and team_id
         // to generate a proper JWT token using libraries like jsonwebtoken
         // For now, return a placeholder that demonstrates the fields are used
-        let token_data = format!("{}:{}:{}", self.key_id, self.team_id, self.private_key.len());
+        let token_data = format!(
+            "{}:{}:{}",
+            self.key_id,
+            self.team_id,
+            self.private_key.len()
+        );
         Ok(format!("jwt_token_for_{}", token_data))
     }
 }
@@ -542,8 +567,9 @@ impl APNSProvider {
 impl WebPushProvider {
     pub fn new(config: &PushProviderConfig) -> Result<Self> {
         let api_key = &config.api_key;
-        let api_secret = config.api_secret.as_ref()
-            .ok_or_else(|| MobileError::ConfigurationError("Web Push VAPID private key required".to_string()))?;
+        let api_secret = config.api_secret.as_ref().ok_or_else(|| {
+            MobileError::ConfigurationError("Web Push VAPID private key required".to_string())
+        })?;
 
         Ok(Self {
             vapid_private_key: api_secret.clone(),
@@ -573,18 +599,19 @@ impl PushProvider for WebPushProvider {
 
         // Generate VAPID headers using private/public keys and subject
         let vapid_headers = self.generate_vapid_headers(&token.token)?;
-        
+
         // Parse the token as a Web Push endpoint
-        let mut request = self.client
+        let mut request = self
+            .client
             .post(&token.token)
             .header("Content-Type", "application/json")
             .header("TTL", "86400"); // 24 hours
-            
+
         // Add VAPID authorization headers
         for (key, value) in vapid_headers {
             request = request.header(&key, &value);
         }
-        
+
         let response = request
             .json(&web_push_payload)
             .send()
@@ -625,21 +652,32 @@ impl WebPushProvider {
         // to generate proper VAPID headers using cryptographic libraries
         // For now, return placeholder headers that demonstrate the fields are used
         let mut headers = HashMap::new();
-        
+
         // VAPID signature would be generated from private key and endpoint
-        let signature = format!("signature_from_{}_{}", self.vapid_private_key.len(), endpoint.len());
-        headers.insert("Authorization".to_string(), format!("vapid t={}, k={}", signature, self.vapid_public_key));
-        headers.insert("Crypto-Key".to_string(), format!("p256ecdsa={}", self.vapid_public_key));
+        let signature = format!(
+            "signature_from_{}_{}",
+            self.vapid_private_key.len(),
+            endpoint.len()
+        );
+        headers.insert(
+            "Authorization".to_string(),
+            format!("vapid t={}, k={}", signature, self.vapid_public_key),
+        );
+        headers.insert(
+            "Crypto-Key".to_string(),
+            format!("p256ecdsa={}", self.vapid_public_key),
+        );
         headers.insert("Subject".to_string(), self.subject.clone());
-        
+
         Ok(headers)
     }
 }
 
 impl CustomProvider {
     pub fn new(config: &PushProviderConfig) -> Result<Self> {
-        let endpoint_url = config.endpoint_url.as_ref()
-            .ok_or_else(|| MobileError::ConfigurationError("Custom provider endpoint required".to_string()))?;
+        let endpoint_url = config.endpoint_url.as_ref().ok_or_else(|| {
+            MobileError::ConfigurationError("Custom provider endpoint required".to_string())
+        })?;
 
         Ok(Self {
             endpoint_url: endpoint_url.clone(),
@@ -668,7 +706,8 @@ impl PushProvider for CustomProvider {
             }
         });
 
-        let mut request = self.client
+        let mut request = self
+            .client
             .post(&self.endpoint_url)
             .header("Content-Type", "application/json");
 

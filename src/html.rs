@@ -3,8 +3,8 @@ use ratatui::{
     style::{Color, Modifier, Style},
     text::{Line, Span, Text},
 };
-use scraper::{ElementRef, Html, Selector};
 use regex::Regex;
+use scraper::{ElementRef, Html, Selector};
 
 /// HTML to terminal text converter for email content
 pub struct HtmlRenderer {
@@ -138,7 +138,7 @@ impl HtmlRenderer {
         let style_regex = Regex::new(r#"\s*style\s*=\s*["'][^"']*["']"#).unwrap();
         cleaned = style_regex.replace_all(&cleaned, "").to_string();
 
-        // Remove class attributes with regex for better coverage  
+        // Remove class attributes with regex for better coverage
         let class_regex = Regex::new(r#"\s*class\s*=\s*["'][^"']*["']"#).unwrap();
         cleaned = class_regex.replace_all(&cleaned, "").to_string();
 
@@ -305,7 +305,8 @@ impl HtmlRenderer {
                                         .chars()
                                         .last()
                                         .and_then(|c| c.to_digit(10))
-                                        .unwrap_or(1) as usize;
+                                        .unwrap_or(1)
+                                        as usize;
                                     let style = match level {
                                         1 => Style::default()
                                             .fg(Color::Yellow)
@@ -467,21 +468,23 @@ impl HtmlRenderer {
                                 // Handle image tags - show placeholder with image info
                                 let src = element_ref.value().attr("src").unwrap_or("");
                                 let alt = element_ref.value().attr("alt").unwrap_or("Image");
-                                
+
                                 if !src.is_empty() {
                                     // Determine image type
                                     let image_type = if src.to_lowercase().contains(".gif") {
                                         "🎞️ GIF"
                                     } else if src.to_lowercase().ends_with(".png") {
                                         "🖼️ PNG"
-                                    } else if src.to_lowercase().ends_with(".jpg") || src.to_lowercase().ends_with(".jpeg") {
+                                    } else if src.to_lowercase().ends_with(".jpg")
+                                        || src.to_lowercase().ends_with(".jpeg")
+                                    {
                                         "📷 JPG"
                                     } else if src.starts_with("data:image/") {
                                         "📊 Embedded Image"
                                     } else {
                                         "🖼️ Image"
                                     };
-                                    
+
                                     // Create a styled placeholder for the image
                                     current_line.push(Span::styled(
                                         format!("[{}: {}]", image_type, alt),
@@ -489,7 +492,7 @@ impl HtmlRenderer {
                                             .fg(Color::Cyan)
                                             .add_modifier(Modifier::BOLD),
                                     ));
-                                    
+
                                     // Add image URL if it's not a data URL (for reference)
                                     if !src.starts_with("data:") && src.len() > 50 {
                                         current_line.push(Span::styled(
@@ -506,7 +509,7 @@ impl HtmlRenderer {
                                                 .add_modifier(Modifier::DIM),
                                         ));
                                     }
-                                    
+
                                     // Add line break after image for better formatting
                                     self.flush_current_line(lines, current_line);
                                 }
@@ -556,7 +559,7 @@ impl HtmlRenderer {
     pub fn html_to_plain_text_optimized(&self, html_content: &str) -> String {
         // First clean the HTML content to remove styling and unnecessary elements
         let cleaned_html = self.clean_and_sanitize_html(html_content);
-        
+
         // Use html2text for conversion with proper width (industry best practice)
         let result = html2text::from_read(cleaned_html.as_bytes(), self.max_width);
 
@@ -566,17 +569,18 @@ impl HtmlRenderer {
             .map(|line| {
                 let trimmed = line.trim_end();
                 // Remove lines that contain only styling remnants or HTML artifacts
-                if trimmed.contains("font-family:") || 
-                   trimmed.contains("font-size:") ||
-                   trimmed.contains("color:") ||
-                   trimmed.contains("margin:") ||
-                   trimmed.contains("padding:") ||
-                   trimmed.contains("border:") ||
-                   trimmed.contains("width:") ||
-                   trimmed.contains("height:") ||
-                   trimmed.starts_with("style=") ||
-                   trimmed.starts_with("class=") ||
-                   (trimmed.starts_with("<") && trimmed.ends_with(">") && trimmed.len() < 100) {
+                if trimmed.contains("font-family:")
+                    || trimmed.contains("font-size:")
+                    || trimmed.contains("color:")
+                    || trimmed.contains("margin:")
+                    || trimmed.contains("padding:")
+                    || trimmed.contains("border:")
+                    || trimmed.contains("width:")
+                    || trimmed.contains("height:")
+                    || trimmed.starts_with("style=")
+                    || trimmed.starts_with("class=")
+                    || (trimmed.starts_with("<") && trimmed.ends_with(">") && trimmed.len() < 100)
+                {
                     ""
                 } else {
                     trimmed
@@ -836,7 +840,7 @@ pub fn is_html_content(content: &str) -> bool {
     for tag in &html_tags {
         if content_lower.contains(tag) {
             tag_count += 1;
-            // Special case for self-closing tags like <br> 
+            // Special case for self-closing tags like <br>
             if tag.starts_with("<br") || tag.starts_with("<img") || tag_count >= 2 {
                 return true;
             }
@@ -923,13 +927,20 @@ mod tests {
 
         // Should have content with image placeholders
         assert!(!result.lines.is_empty());
-        
+
         // Convert to string to check content
-        let content = result.lines.iter()
-            .map(|line| line.spans.iter().map(|span| span.content.as_ref()).collect::<String>())
+        let content = result
+            .lines
+            .iter()
+            .map(|line| {
+                line.spans
+                    .iter()
+                    .map(|span| span.content.as_ref())
+                    .collect::<String>()
+            })
             .collect::<Vec<String>>()
             .join("\n");
-        
+
         // Should contain image placeholders
         assert!(content.contains("📷 JPG: Test Image"));
         assert!(content.contains("📊 Embedded Image: Animated GIF"));

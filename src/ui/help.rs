@@ -1,8 +1,10 @@
+use crate::tea::message::ViewMode;
+use crate::theme::Theme;
+use crate::ui::typography::{TypographyLevel, TypographySystem, VisualHierarchy};
 /// Contextual help overlay system for providing context-aware assistance
-/// 
+///
 /// Displays help information based on current view mode with keyboard shortcuts,
 /// feature descriptions, and navigation tips. Uses Ctrl+H and '?' for universal compatibility.
-
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::Style,
@@ -10,9 +12,6 @@ use ratatui::{
     widgets::{Block, Borders, Clear, Paragraph, Wrap},
     Frame,
 };
-use crate::theme::Theme;
-use crate::ui::typography::{TypographySystem, TypographyLevel, VisualHierarchy};
-use crate::tea::message::ViewMode;
 
 /// Help overlay component with context-aware content
 #[derive(Debug, Clone)]
@@ -93,7 +92,13 @@ impl HelpOverlay {
     }
 
     /// Render help overlay
-    pub fn render(&self, frame: &mut Frame, area: Rect, theme: &Theme, typography: &TypographySystem) {
+    pub fn render(
+        &self,
+        frame: &mut Frame,
+        area: Rect,
+        theme: &Theme,
+        typography: &TypographySystem,
+    ) {
         if !self.visible {
             return;
         }
@@ -136,12 +141,15 @@ impl HelpOverlay {
     }
 
     /// Render help description
-    fn render_description(&self, frame: &mut Frame, area: Rect, theme: &Theme, typography: &TypographySystem) {
-        let description_text = typography.create_text(
-            &self.help_content.description,
-            TypographyLevel::Body,
-            theme,
-        );
+    fn render_description(
+        &self,
+        frame: &mut Frame,
+        area: Rect,
+        theme: &Theme,
+        typography: &TypographySystem,
+    ) {
+        let description_text =
+            typography.create_text(&self.help_content.description, TypographyLevel::Body, theme);
 
         let description_paragraph = Paragraph::new(description_text)
             .wrap(Wrap { trim: true })
@@ -151,7 +159,13 @@ impl HelpOverlay {
     }
 
     /// Render help content with sections
-    fn render_content(&self, frame: &mut Frame, area: Rect, theme: &Theme, typography: &TypographySystem) {
+    fn render_content(
+        &self,
+        frame: &mut Frame,
+        area: Rect,
+        theme: &Theme,
+        typography: &TypographySystem,
+    ) {
         let mut lines = Vec::new();
 
         // Add sections
@@ -161,19 +175,19 @@ impl HelpOverlay {
             }
 
             // Section title
-            lines.push(Line::from(vec![
-                typography.create_span(
-                    section.title.clone(),
-                    TypographyLevel::Heading3,
-                    theme,
-                )
-            ]));
+            lines.push(Line::from(vec![typography.create_span(
+                section.title.clone(),
+                TypographyLevel::Heading3,
+                theme,
+            )]));
 
             // Section description
             if let Some(desc) = &section.description {
-                lines.push(Line::from(vec![
-                    typography.create_span(desc.clone(), TypographyLevel::Caption, theme)
-                ]));
+                lines.push(Line::from(vec![typography.create_span(
+                    desc.clone(),
+                    TypographyLevel::Caption,
+                    theme,
+                )]));
                 lines.push(Line::from(""));
             }
 
@@ -189,13 +203,11 @@ impl HelpOverlay {
             lines.push(VisualHierarchy::subtle_divider(theme));
             lines.push(Line::from(""));
 
-            lines.push(Line::from(vec![
-                typography.create_span(
-                    "Global Shortcuts".to_string(),
-                    TypographyLevel::Heading3,
-                    theme,
-                )
-            ]));
+            lines.push(Line::from(vec![typography.create_span(
+                "Global Shortcuts".to_string(),
+                TypographyLevel::Heading3,
+                theme,
+            )]));
 
             for shortcut in &self.help_content.global_shortcuts {
                 lines.push(self.create_shortcut_line(shortcut, theme, typography));
@@ -211,7 +223,12 @@ impl HelpOverlay {
     }
 
     /// Create a formatted line for a keyboard shortcut
-    fn create_shortcut_line(&self, shortcut: &KeyBinding, theme: &Theme, typography: &TypographySystem) -> Line {
+    fn create_shortcut_line(
+        &self,
+        shortcut: &KeyBinding,
+        theme: &Theme,
+        typography: &TypographySystem,
+    ) -> Line {
         let mut spans = Vec::new();
 
         // Add spacing based on density
@@ -235,13 +252,23 @@ impl HelpOverlay {
     }
 
     /// Render footer with close instructions
-    fn render_footer(&self, frame: &mut Frame, area: Rect, theme: &Theme, typography: &TypographySystem) {
+    fn render_footer(
+        &self,
+        frame: &mut Frame,
+        area: Rect,
+        theme: &Theme,
+        typography: &TypographySystem,
+    ) {
         let footer_text = Line::from(vec![
             typography.create_span("Press ".to_string(), TypographyLevel::Caption, theme),
             typography.create_emphasis("Ctrl+H", theme),
             typography.create_span(" or ".to_string(), TypographyLevel::Caption, theme),
             typography.create_emphasis("?", theme),
-            typography.create_span(" to close help, ".to_string(), TypographyLevel::Caption, theme),
+            typography.create_span(
+                " to close help, ".to_string(),
+                TypographyLevel::Caption,
+                theme,
+            ),
             typography.create_emphasis("Esc", theme),
             typography.create_span(" to close".to_string(), TypographyLevel::Caption, theme),
         ]);
@@ -615,7 +642,8 @@ impl HelpOverlay {
     fn create_contacts_help() -> HelpContent {
         HelpContent {
             title: "Contacts".to_string(),
-            description: "Manage your contacts and address book with these keyboard shortcuts.".to_string(),
+            description: "Manage your contacts and address book with these keyboard shortcuts."
+                .to_string(),
             sections: vec![
                 HelpSection {
                     title: "Contact Navigation".to_string(),
@@ -922,7 +950,6 @@ impl HelpOverlay {
                 description: "Cancel current action/close dialogs".to_string(),
                 category: KeyBindingCategory::System,
             },
-            
             // Contacts popup shortcuts (when Ctrl+K popup is open)
             KeyBinding {
                 keys: "f".to_string(),
@@ -973,11 +1000,11 @@ mod tests {
     #[test]
     fn test_help_overlay_toggle() {
         let mut help = HelpOverlay::new();
-        
+
         help.toggle(ViewMode::Calendar);
         assert!(help.is_visible());
         assert_eq!(help.current_view, ViewMode::Calendar);
-        
+
         help.toggle(ViewMode::Calendar);
         assert!(!help.is_visible());
     }
@@ -998,10 +1025,9 @@ mod tests {
     fn test_global_shortcuts() {
         let global_shortcuts = HelpOverlay::get_global_shortcuts();
         assert!(!global_shortcuts.is_empty());
-        
+
         // Check that help shortcut exists
-        let help_shortcut = global_shortcuts.iter()
-            .find(|s| s.keys.contains("Ctrl+H"));
+        let help_shortcut = global_shortcuts.iter().find(|s| s.keys.contains("Ctrl+H"));
         assert!(help_shortcut.is_some());
     }
 }

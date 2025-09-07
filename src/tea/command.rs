@@ -1,8 +1,7 @@
 /// Command system for TEA pattern
-/// 
+///
 /// Commands represent side effects that should be executed as a result of
 /// model updates. They are processed asynchronously and may generate new messages.
-
 use crate::tea::Message;
 use tokio::sync::mpsc;
 use uuid::Uuid;
@@ -12,34 +11,34 @@ use uuid::Uuid;
 pub enum Command {
     /// No operation - used when no side effects are needed
     None,
-    
+
     /// Send a message back to the update loop
     SendMessage(Message),
-    
+
     /// Execute an async task
     Task(TaskCommand),
-    
+
     /// Batch multiple commands
     Batch(Vec<Command>),
-    
+
     /// Database operations
     Database(DatabaseCommand),
-    
+
     /// Network operations
     Network(NetworkCommand),
-    
+
     /// File system operations
     FileSystem(FileSystemCommand),
-    
+
     /// UI operations
     UI(UICommand),
-    
+
     /// System operations
     System(SystemCommand),
-    
+
     /// Notes operations
     Notes(NotesCommand),
-    
+
     /// KDE Connect operations
     KdeConnect(KdeConnectCommand),
 }
@@ -64,34 +63,34 @@ pub trait AsyncTask: Send + Sync + std::fmt::Debug {
 pub enum DatabaseCommand {
     /// Initialize database
     Initialize,
-    
+
     /// Load messages from folder
     LoadMessages(String),
-    
+
     /// Save message
     SaveMessage(Box<crate::email::EmailMessage>),
-    
+
     /// Delete message
     DeleteMessage(String),
-    
+
     /// Update message flags
     UpdateMessageFlags(String, Vec<String>),
-    
+
     /// Load contacts
     LoadContacts,
-    
+
     /// Save contact
     SaveContact(Box<crate::contacts::Contact>),
-    
+
     /// Delete contact
     DeleteContact(String),
-    
+
     /// Load events
     LoadEvents(chrono::NaiveDate, chrono::NaiveDate),
-    
+
     /// Save event
     SaveEvent(Box<crate::calendar::Event>),
-    
+
     /// Delete event
     DeleteEvent(String),
 }
@@ -101,22 +100,22 @@ pub enum DatabaseCommand {
 pub enum NetworkCommand {
     /// Connect to IMAP server
     ConnectIMAP(String), // account_id
-    
+
     /// Sync IMAP folder
     SyncIMAPFolder(String, String), // account_id, folder_name
-    
+
     /// Send email via SMTP
     SendEmail(Box<crate::email::EmailMessage>),
-    
+
     /// Sync calendar with CalDAV
     SyncCalendar(String), // calendar_id
-    
+
     /// Sync contacts with CardDAV
     SyncContacts(String), // account_id
-    
+
     /// Refresh OAuth tokens
     RefreshTokens(String), // account_id
-    
+
     /// Test network connectivity
     TestConnectivity,
 }
@@ -126,25 +125,25 @@ pub enum NetworkCommand {
 pub enum FileSystemCommand {
     /// Read file
     ReadFile(String),
-    
+
     /// Write file
     WriteFile(String, Vec<u8>),
-    
+
     /// Delete file
     DeleteFile(String),
-    
+
     /// Create directory
     CreateDirectory(String),
-    
+
     /// Load configuration
     LoadConfig,
-    
+
     /// Save configuration
     SaveConfig,
-    
+
     /// Export data
     ExportData(String, ExportFormat),
-    
+
     /// Import data
     ImportData(String, ImportFormat),
 }
@@ -175,25 +174,25 @@ pub enum ImportFormat {
 pub enum UICommand {
     /// Show toast notification
     ShowToast(String, crate::tea::message::ToastLevel),
-    
+
     /// Hide toast notification
     HideToast(String),
-    
+
     /// Show modal dialog
     ShowModal(ModalConfig),
-    
+
     /// Hide modal dialog
     HideModal,
-    
+
     /// Focus UI element
     Focus(String),
-    
+
     /// Scroll to position
     ScrollTo(ScrollTarget),
-    
+
     /// Resize window
     Resize(u16, u16),
-    
+
     /// Refresh view
     Refresh,
 }
@@ -221,22 +220,22 @@ pub enum ScrollTarget {
 pub enum SystemCommand {
     /// Open external URL
     OpenURL(String),
-    
+
     /// Open file with default application
     OpenFile(String),
-    
+
     /// Copy to clipboard
     CopyToClipboard(String),
-    
+
     /// Paste from clipboard
     PasteFromClipboard,
-    
+
     /// Show desktop notification
     ShowDesktopNotification(String, String),
-    
+
     /// Play notification sound
     PlaySound(String),
-    
+
     /// Exit application
     Exit(i32),
 }
@@ -246,28 +245,28 @@ pub enum SystemCommand {
 pub enum NotesCommand {
     /// Load all notes
     LoadNotes,
-    
+
     /// Create note with content
     CreateNoteWithContent(String, String), // title, content
-    
+
     /// Delete note
     DeleteNote(String), // note_id
-    
+
     /// Save note
     SaveNote(String, String), // note_id, content
-    
+
     /// Search notes
     Search(String),
-    
+
     /// Convert email to note
     ConvertEmailToNote(String), // email_id
-    
+
     /// Convert event to note
     ConvertEventToNote(String), // event_id
-    
+
     /// Convert KDE Connect message to note
     ConvertKdeMessageToNote(String, String), // title, content
-    
+
     /// Sync notes
     SyncNotes,
 }
@@ -277,41 +276,41 @@ pub enum NotesCommand {
 pub enum KdeConnectCommand {
     /// Initialize KDE Connect integration
     Initialize,
-    
+
     /// Enable KDE Connect integration
     Enable,
-    
+
     /// Disable KDE Connect integration
     Disable,
-    
+
     /// Refresh available devices
     RefreshDevices,
-    
+
     /// Connect to device
     ConnectDevice(String), // device_id
-    
+
     /// Pair with device
     PairDevice(String), // device_id
-    
+
     /// Unpair from device
     UnpairDevice(String), // device_id
-    
+
     /// Send notification to device
     SendNotification {
         notification_id: String,
         title: String,
         message: String,
     },
-    
+
     /// Find phone (ring device)
     FindPhone,
-    
+
     /// Share file with device
     ShareFile(String), // file_path
-    
+
     /// Update configuration
     UpdateConfig(crate::integrations::KdeConnectConfig),
-    
+
     /// Check connection status
     CheckStatus,
 }
@@ -326,7 +325,7 @@ impl CommandExecutor {
     pub fn new(message_sender: mpsc::UnboundedSender<Message>) -> Self {
         Self { message_sender }
     }
-    
+
     /// Execute a command
     pub async fn execute(&self, command: Command) {
         match command {
@@ -369,50 +368,50 @@ impl CommandExecutor {
             }
         }
     }
-    
+
     /// Execute a task command
     async fn execute_task(&self, task_command: TaskCommand) {
         tracing::debug!("Executing task: {}", task_command.name);
-        
+
         let messages = task_command.task.execute().await;
-        
+
         for message in messages {
             if let Err(e) = self.message_sender.send(message) {
                 tracing::error!("Failed to send task result message: {}", e);
             }
         }
     }
-    
+
     /// Execute database command
     async fn execute_database_command(&self, _command: DatabaseCommand) {
         // TODO: Implement database command execution
         tracing::debug!("Database command execution not yet implemented");
     }
-    
+
     /// Execute network command
     async fn execute_network_command(&self, _command: NetworkCommand) {
         // TODO: Implement network command execution
         tracing::debug!("Network command execution not yet implemented");
     }
-    
+
     /// Execute filesystem command
     async fn execute_filesystem_command(&self, _command: FileSystemCommand) {
         // TODO: Implement filesystem command execution
         tracing::debug!("Filesystem command execution not yet implemented");
     }
-    
+
     /// Execute UI command
     async fn execute_ui_command(&self, _command: UICommand) {
         // TODO: Implement UI command execution
         tracing::debug!("UI command execution not yet implemented");
     }
-    
+
     /// Execute system command
     async fn execute_system_command(&self, _command: SystemCommand) {
         // TODO: Implement system command execution
         tracing::debug!("System command execution not yet implemented");
     }
-    
+
     /// Execute a notes command
     async fn execute_notes_command(&self, command: NotesCommand) {
         match command {
@@ -422,7 +421,11 @@ impl CommandExecutor {
             }
             NotesCommand::CreateNoteWithContent(title, content) => {
                 // TODO: Create note with conversion service
-                tracing::debug!("Creating note: {} with content: {}", title, &content[..content.len().min(50)]);
+                tracing::debug!(
+                    "Creating note: {} with content: {}",
+                    title,
+                    &content[..content.len().min(50)]
+                );
             }
             NotesCommand::DeleteNote(note_id) => {
                 // TODO: Delete note by ID
@@ -430,7 +433,11 @@ impl CommandExecutor {
             }
             NotesCommand::SaveNote(note_id, content) => {
                 // TODO: Save note content
-                tracing::debug!("Saving note: {} with content: {}", note_id, &content[..content.len().min(50)]);
+                tracing::debug!(
+                    "Saving note: {} with content: {}",
+                    note_id,
+                    &content[..content.len().min(50)]
+                );
             }
             NotesCommand::Search(query) => {
                 // TODO: Search notes and send results
@@ -446,7 +453,11 @@ impl CommandExecutor {
             }
             NotesCommand::ConvertKdeMessageToNote(title, content) => {
                 // TODO: Convert KDE Connect message to note
-                tracing::debug!("Converting KDE message to note: {} - {}", title, &content[..content.len().min(50)]);
+                tracing::debug!(
+                    "Converting KDE message to note: {} - {}",
+                    title,
+                    &content[..content.len().min(50)]
+                );
             }
             NotesCommand::SyncNotes => {
                 // TODO: Sync notes with external sources
@@ -486,9 +497,18 @@ impl CommandExecutor {
                 // TODO: Unpair from device
                 tracing::debug!("Unpairing from KDE Connect device: {}", device_id);
             }
-            KdeConnectCommand::SendNotification { notification_id, title, message } => {
+            KdeConnectCommand::SendNotification {
+                notification_id,
+                title,
+                message,
+            } => {
                 // TODO: Send notification to device
-                tracing::debug!("Sending KDE Connect notification {}: {} - {}", notification_id, title, &message[..message.len().min(50)]);
+                tracing::debug!(
+                    "Sending KDE Connect notification {}: {} - {}",
+                    notification_id,
+                    title,
+                    &message[..message.len().min(50)]
+                );
             }
             KdeConnectCommand::FindPhone => {
                 // TODO: Find phone (ring device)
@@ -500,7 +520,10 @@ impl CommandExecutor {
             }
             KdeConnectCommand::UpdateConfig(config) => {
                 // TODO: Update KDE Connect configuration
-                tracing::debug!("Updating KDE Connect configuration: enabled={}", config.enabled);
+                tracing::debug!(
+                    "Updating KDE Connect configuration: enabled={}",
+                    config.enabled
+                );
             }
             KdeConnectCommand::CheckStatus => {
                 // TODO: Check KDE Connect connection status
@@ -516,19 +539,19 @@ impl Command {
     pub fn none() -> Self {
         Command::None
     }
-    
+
     /// Create a command to send a message
     pub fn message(msg: Message) -> Self {
         Command::SendMessage(msg)
     }
-    
+
     /// Create a batch of commands
     pub fn batch(commands: Vec<Command>) -> Self {
         Command::Batch(commands)
     }
-    
+
     /// Create a task command
-    pub fn task<T>(name: String, task: T) -> Self 
+    pub fn task<T>(name: String, task: T) -> Self
     where
         T: AsyncTask + 'static,
     {
@@ -538,37 +561,37 @@ impl Command {
             task: Box::new(task),
         })
     }
-    
+
     /// Create a database command
     pub fn database(command: DatabaseCommand) -> Self {
         Command::Database(command)
     }
-    
+
     /// Create a network command
     pub fn network(command: NetworkCommand) -> Self {
         Command::Network(command)
     }
-    
+
     /// Create a filesystem command
     pub fn filesystem(command: FileSystemCommand) -> Self {
         Command::FileSystem(command)
     }
-    
+
     /// Create a UI command
     pub fn ui(command: UICommand) -> Self {
         Command::UI(command)
     }
-    
+
     /// Create a system command
     pub fn system(command: SystemCommand) -> Self {
         Command::System(command)
     }
-    
+
     /// Create a notes command
     pub fn notes(command: NotesCommand) -> Self {
         Command::Notes(command)
     }
-    
+
     /// Create a KDE Connect command
     pub fn kde_connect(command: KdeConnectCommand) -> Self {
         Command::KdeConnect(command)

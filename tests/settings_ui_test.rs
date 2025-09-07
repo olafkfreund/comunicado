@@ -8,11 +8,11 @@ use crossterm::event::KeyCode;
 #[test]
 fn test_ctrl_comma_keyboard_shortcut() {
     let keyboard_config = KeyboardConfig::new();
-    
+
     // Test that Ctrl+, is mapped to OpenSettings
     let ctrl_comma = KeyboardShortcut::ctrl(KeyCode::Char(','));
     let action = keyboard_config.get_action(&ctrl_comma);
-    
+
     assert_eq!(action, Some(&KeyboardAction::OpenSettings));
 }
 

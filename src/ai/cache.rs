@@ -2,11 +2,11 @@
 
 use crate::ai::error::{AIError, AIResult};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tokio::sync::RwLock;
-use sha2::{Digest, Sha256};
 use tracing::{debug, info, warn};
 
 /// Cache invalidation strategy
@@ -30,7 +30,7 @@ pub enum CachePriority {
     /// Low priority - evicted first
     Low,
     /// Normal priority - default
-    Normal, 
+    Normal,
     /// High priority - kept longer
     High,
     /// Critical priority - never evicted automatically
@@ -73,7 +73,7 @@ impl CachedResponse {
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs();
-        
+
         now < self.cached_at + self.ttl
     }
 
@@ -88,7 +88,7 @@ impl CachedResponse {
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs();
-        
+
         now.saturating_sub(self.cached_at)
     }
 
@@ -119,8 +119,8 @@ impl CachedResponse {
                 InvalidationStrategy::LeastRecentlyUsed => self.seconds_since_last_access() > 3600, // 1 hour
                 InvalidationStrategy::LeastFrequentlyUsed => self.access_count < 5,
                 InvalidationStrategy::ContentBased => false, // Handled separately
-                InvalidationStrategy::Manual => false, // Only manual invalidation
-            }
+                InvalidationStrategy::Manual => false,       // Only manual invalidation
+            },
         }
     }
 
@@ -135,12 +135,7 @@ impl CachedResponse {
     }
 
     /// Create a new cached response with default values
-    pub fn new(
-        content: String,
-        prompt_hash: String,
-        provider: String,
-        ttl_seconds: u64,
-    ) -> Self {
+    pub fn new(content: String, prompt_hash: String, provider: String, ttl_seconds: u64) -> Self {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
@@ -191,7 +186,7 @@ impl Default for CacheConfig {
         Self {
             max_entries: 1000,
             default_ttl: Duration::from_secs(3600), // 1 hour
-            max_memory_bytes: 50 * 1024 * 1024, // 50MB
+            max_memory_bytes: 50 * 1024 * 1024,     // 50MB
             cleanup_interval: Duration::from_secs(300), // 5 minutes
             default_strategy: InvalidationStrategy::TimeBasedTTL,
             enable_warming: true,
@@ -276,7 +271,7 @@ impl AIResponseCache {
         let mut config = CacheConfig::default();
         config.max_entries = max_entries;
         config.default_ttl = default_ttl;
-        
+
         Self::with_config(config)
     }
 
@@ -296,7 +291,7 @@ impl AIResponseCache {
     fn default_common_prompts() -> Vec<String> {
         vec![
             "Summarize this email".to_string(),
-            "Generate a professional reply".to_string(), 
+            "Generate a professional reply".to_string(),
             "What are the key points?".to_string(),
             "Schedule a meeting".to_string(),
             "Categorize this email".to_string(),
@@ -324,34 +319,34 @@ impl AIResponseCache {
         self.maybe_cleanup().await;
 
         let mut cache = self.cache.write().await;
-        
+
         if let Some(mut response) = cache.get(prompt_hash).cloned() {
             if response.is_valid() {
                 response.increment_access();
                 cache.insert(prompt_hash.to_string(), response.clone());
-                
+
                 // Update hit statistics
                 let mut stats = self.stats.write().await;
                 stats.hits += 1;
-                
+
                 tracing::debug!("Cache hit for prompt hash: {}", prompt_hash);
                 Some(response)
             } else {
                 // Remove expired entry
                 cache.remove(prompt_hash);
                 tracing::debug!("Removed expired cache entry: {}", prompt_hash);
-                
+
                 // Update miss statistics
                 let mut stats = self.stats.write().await;
                 stats.misses += 1;
-                
+
                 None
             }
         } else {
             // Update miss statistics
             let mut stats = self.stats.write().await;
             stats.misses += 1;
-            
+
             tracing::debug!("Cache miss for prompt hash: {}", prompt_hash);
             None
         }
@@ -372,7 +367,8 @@ impl AIResponseCache {
             ttl,
             CachePriority::Normal,
             vec![],
-        ).await
+        )
+        .await
     }
 
     /// Cache a response with priority and tags
@@ -387,42 +383,41 @@ impl AIResponseCache {
     ) -> AIResult<()> {
         let config = self.config.read().await;
         let ttl = ttl.unwrap_or(config.default_ttl);
-        
+
         let mut cached_response = CachedResponse::new(
             response.to_string(),
             prompt_hash.to_string(),
             provider.to_string(),
             ttl.as_secs(),
         );
-        
+
         cached_response.priority = priority.clone();
         cached_response.invalidation_strategy = config.default_strategy.clone();
-        
+
         for tag in tags {
             cached_response.add_tag(tag);
         }
 
         let mut cache = self.cache.write().await;
-        
+
         // Check memory limits and entry limits
         let current_memory = self.calculate_memory_usage(&cache).await;
         let entry_memory = cached_response.size_bytes;
-        
+
         if current_memory + entry_memory > config.max_memory_bytes && config.max_memory_bytes > 0 {
             self.evict_by_memory(&mut cache, entry_memory).await;
         } else if cache.len() >= config.max_entries {
-            self.evict_by_strategy(&mut cache, &config.default_strategy).await;
+            self.evict_by_strategy(&mut cache, &config.default_strategy)
+                .await;
         }
 
         cache.insert(prompt_hash.to_string(), cached_response);
-        
+
         debug!(
             "Cached response for prompt hash: {} (TTL: {:?}, Priority: {:?})",
-            prompt_hash,
-            ttl,
-            priority
+            prompt_hash, ttl, priority
         );
-        
+
         Ok(())
     }
 
@@ -430,7 +425,7 @@ impl AIResponseCache {
     pub async fn invalidate_cache(&self, pattern: &str) -> AIResult<usize> {
         let mut cache = self.cache.write().await;
         let initial_size = cache.len();
-        
+
         if pattern == "*" {
             // Clear all cache
             cache.clear();
@@ -440,7 +435,7 @@ impl AIResponseCache {
             cache.retain(|key, _| !key.contains(pattern));
             tracing::info!("Invalidated cache entries matching pattern: {}", pattern);
         }
-        
+
         let removed_count = initial_size - cache.len();
         Ok(removed_count)
     }
@@ -451,7 +446,7 @@ impl AIResponseCache {
         let stats = self.stats.read().await;
         let config = self.config.read().await;
         let warming_active = *self.warming_active.read().await;
-        
+
         let mut valid_entries = 0;
         let mut expired_entries = 0;
         let mut memory_usage = 0;
@@ -459,43 +454,43 @@ impl AIResponseCache {
         let mut entries_by_priority = HashMap::new();
         let mut entries_by_strategy = HashMap::new();
         let mut total_age_seconds = 0u64;
-        
+
         for (key, response) in cache.iter() {
             if response.is_expired() {
                 expired_entries += 1;
             } else {
                 valid_entries += 1;
             }
-            
+
             // Accurate memory usage from cached response
             memory_usage += response.size_bytes;
-            
+
             // Collect access counts for top entries
             top_entries.push((key.clone(), response.access_count));
-            
+
             // Count by priority
             let priority_str = format!("{:?}", response.priority);
             *entries_by_priority.entry(priority_str).or_insert(0) += 1;
-            
+
             // Count by strategy
             let strategy_str = format!("{:?}", response.invalidation_strategy);
             *entries_by_strategy.entry(strategy_str).or_insert(0) += 1;
-            
+
             // Accumulate age for average calculation
             total_age_seconds += response.age_seconds();
         }
-        
+
         // Sort by access count and take top 10
         top_entries.sort_by(|a, b| b.1.cmp(&a.1));
         top_entries.truncate(10);
-        
+
         let total_requests = stats.hits + stats.misses;
         let hit_rate = if total_requests > 0 {
             stats.hits as f64 / total_requests as f64
         } else {
             0.0
         };
-        
+
         let avg_response_size = if !cache.is_empty() {
             memory_usage / cache.len()
         } else {
@@ -510,16 +505,16 @@ impl AIResponseCache {
 
         // Calculate efficiency score based on hit rate, memory usage, and entry utilization
         let entry_utilization = cache.len() as f64 / config.max_entries as f64;
-        let efficiency_score = (hit_rate * 0.5) + 
-                              ((1.0 - memory_usage_percent.min(1.0)) * 0.3) + 
-                              (entry_utilization.min(1.0) * 0.2);
+        let efficiency_score = (hit_rate * 0.5)
+            + ((1.0 - memory_usage_percent.min(1.0)) * 0.3)
+            + (entry_utilization.min(1.0) * 0.2);
 
         let avg_entry_age_seconds = if !cache.is_empty() {
             total_age_seconds as f64 / cache.len() as f64
         } else {
             0.0
         };
-        
+
         CacheStatistics {
             total_entries: cache.len(),
             valid_entries,
@@ -547,21 +542,21 @@ impl AIResponseCache {
     pub async fn cleanup_expired(&self) -> usize {
         let mut cache = self.cache.write().await;
         let initial_size = cache.len();
-        
+
         cache.retain(|_, response| response.is_valid());
-        
+
         let removed_count = initial_size - cache.len();
-        
+
         if removed_count > 0 {
             tracing::info!("Cleaned up {} expired cache entries", removed_count);
-            
+
             let mut stats = self.stats.write().await;
             stats.cleanups += 1;
         }
-        
+
         let mut last_cleanup = self.last_cleanup.write().await;
         *last_cleanup = Instant::now();
-        
+
         removed_count
     }
 
@@ -569,7 +564,7 @@ impl AIResponseCache {
     async fn maybe_cleanup(&self) {
         let last_cleanup = *self.last_cleanup.read().await;
         let config = self.config.read().await;
-        
+
         if last_cleanup.elapsed() >= config.cleanup_interval {
             drop(config); // Release config lock before cleanup
             self.cleanup_expired().await;
@@ -582,15 +577,24 @@ impl AIResponseCache {
     }
 
     /// Evict entries by memory usage
-    async fn evict_by_memory(&self, cache: &mut HashMap<String, CachedResponse>, needed_bytes: usize) {
+    async fn evict_by_memory(
+        &self,
+        cache: &mut HashMap<String, CachedResponse>,
+        needed_bytes: usize,
+    ) {
         let mut total_freed = 0;
         let target_freed = needed_bytes + (needed_bytes / 4); // Free 25% extra
-        
+
         // Collect entries sorted by priority and age
         let mut entries: Vec<(String, CachePriority, u64, usize)> = cache
             .iter()
             .map(|(key, response)| {
-                (key.clone(), response.priority.clone(), response.age_seconds(), response.size_bytes)
+                (
+                    key.clone(),
+                    response.priority.clone(),
+                    response.age_seconds(),
+                    response.size_bytes,
+                )
             })
             .collect();
 
@@ -602,8 +606,9 @@ impl AIResponseCache {
                 CachePriority::High => 2,
                 CachePriority::Critical => 3,
             };
-            
-            priority_order(&a.1).cmp(&priority_order(&b.1))
+
+            priority_order(&a.1)
+                .cmp(&priority_order(&b.1))
                 .then(b.2.cmp(&a.2)) // Age (oldest first)
                 .then(b.3.cmp(&a.3)) // Size (largest first)
         });
@@ -613,19 +618,22 @@ impl AIResponseCache {
             if priority == CachePriority::Critical {
                 continue; // Never evict critical entries
             }
-            
+
             if total_freed >= target_freed {
                 break;
             }
-            
+
             cache.remove(&key);
             total_freed += size;
             evicted_count += 1;
         }
 
         if evicted_count > 0 {
-            info!("Evicted {} entries to free {} bytes of memory", evicted_count, total_freed);
-            
+            info!(
+                "Evicted {} entries to free {} bytes of memory",
+                evicted_count, total_freed
+            );
+
             if let Ok(mut stats) = self.stats.try_write() {
                 stats.evictions += evicted_count;
             }
@@ -633,26 +641,31 @@ impl AIResponseCache {
     }
 
     /// Evict entries based on invalidation strategy
-    async fn evict_by_strategy(&self, cache: &mut HashMap<String, CachedResponse>, strategy: &InvalidationStrategy) {
+    async fn evict_by_strategy(
+        &self,
+        cache: &mut HashMap<String, CachedResponse>,
+        strategy: &InvalidationStrategy,
+    ) {
         let evict_count = cache.len() / 4; // Evict 25% of entries
-        
+
         // Collect entries based on strategy
         let mut entries: Vec<(String, u64)> = match strategy {
-            InvalidationStrategy::LeastRecentlyUsed => {
-                cache.iter()
-                    .filter(|(_, entry)| entry.priority != CachePriority::Critical)
-                    .map(|(key, entry)| (key.clone(), entry.seconds_since_last_access()))
-                    .collect()
-            },
+            InvalidationStrategy::LeastRecentlyUsed => cache
+                .iter()
+                .filter(|(_, entry)| entry.priority != CachePriority::Critical)
+                .map(|(key, entry)| (key.clone(), entry.seconds_since_last_access()))
+                .collect(),
             InvalidationStrategy::LeastFrequentlyUsed => {
-                cache.iter()
+                cache
+                    .iter()
                     .filter(|(_, entry)| entry.priority != CachePriority::Critical)
                     .map(|(key, entry)| (key.clone(), u64::MAX - entry.access_count)) // Invert for sorting
                     .collect()
-            },
+            }
             _ => {
                 // Default to age-based eviction (oldest first)
-                cache.iter()
+                cache
+                    .iter()
                     .filter(|(_, entry)| entry.priority != CachePriority::Critical)
                     .map(|(key, entry)| (key.clone(), entry.age_seconds()))
                     .collect()
@@ -670,14 +683,16 @@ impl AIResponseCache {
         }
 
         if evicted_count > 0 {
-            debug!("Evicted {} cache entries using {:?} strategy", evicted_count, strategy);
-            
+            debug!(
+                "Evicted {} cache entries using {:?} strategy",
+                evicted_count, strategy
+            );
+
             if let Ok(mut stats) = self.stats.try_write() {
                 stats.evictions += evicted_count as u64;
             }
         }
     }
-
 
     /// Get cache entry by exact key
     pub async fn get_entry(&self, key: &str) -> Option<CachedResponse> {
@@ -704,12 +719,15 @@ impl AIResponseCache {
         metadata: HashMap<String, String>,
     ) -> AIResult<()> {
         let mut cache = self.cache.write().await;
-        
+
         if let Some(entry) = cache.get_mut(key) {
             entry.metadata = metadata;
             Ok(())
         } else {
-            Err(AIError::cache_error(format!("Cache entry not found: {}", key)))
+            Err(AIError::cache_error(format!(
+                "Cache entry not found: {}",
+                key
+            )))
         }
     }
 
@@ -717,17 +735,18 @@ impl AIResponseCache {
     pub async fn invalidate_by_tags(&self, tags: &[String]) -> AIResult<usize> {
         let mut cache = self.cache.write().await;
         let initial_size = cache.len();
-        
-        cache.retain(|_, entry| {
-            !tags.iter().any(|tag| entry.has_tag(tag))
-        });
-        
+
+        cache.retain(|_, entry| !tags.iter().any(|tag| entry.has_tag(tag)));
+
         let removed_count = initial_size - cache.len();
-        
+
         if removed_count > 0 {
-            info!("Invalidated {} cache entries by tags: {:?}", removed_count, tags);
+            info!(
+                "Invalidated {} cache entries by tags: {:?}",
+                removed_count, tags
+            );
         }
-        
+
         Ok(removed_count)
     }
 
@@ -735,15 +754,18 @@ impl AIResponseCache {
     pub async fn invalidate_by_provider(&self, provider: &str) -> AIResult<usize> {
         let mut cache = self.cache.write().await;
         let initial_size = cache.len();
-        
+
         cache.retain(|_, entry| entry.provider != provider);
-        
+
         let removed_count = initial_size - cache.len();
-        
+
         if removed_count > 0 {
-            info!("Invalidated {} cache entries for provider: {}", removed_count, provider);
+            info!(
+                "Invalidated {} cache entries for provider: {}",
+                removed_count, provider
+            );
         }
-        
+
         Ok(removed_count)
     }
 
@@ -760,7 +782,9 @@ impl AIResponseCache {
 
         let mut warming_active = self.warming_active.write().await;
         if *warming_active {
-            return Err(AIError::cache_error("Cache warming already in progress".to_string()));
+            return Err(AIError::cache_error(
+                "Cache warming already in progress".to_string(),
+            ));
         }
         *warming_active = true;
         drop(warming_active);
@@ -770,30 +794,33 @@ impl AIResponseCache {
         drop(config);
 
         let mut warmed_count = 0;
-        
+
         for chunk in common_prompts.chunks(batch_size) {
             for prompt in chunk {
                 let prompt_hash = self.generate_prompt_hash(prompt, None);
-                
+
                 // Skip if already cached
                 if self.get_cached_response(&prompt_hash).await.is_some() {
                     continue;
                 }
-                
+
                 // Execute warming request
                 let ai_provider_clone = ai_provider.clone();
                 let prompt_clone = prompt.clone();
-                
+
                 match ai_provider_clone(prompt_clone).await {
                     Ok(response) => {
-                        if let Err(e) = self.cache_response_with_priority(
-                            &prompt_hash,
-                            &response,
-                            "warming",
-                            None,
-                            CachePriority::Low,
-                            vec!["warming".to_string()],
-                        ).await {
+                        if let Err(e) = self
+                            .cache_response_with_priority(
+                                &prompt_hash,
+                                &response,
+                                "warming",
+                                None,
+                                CachePriority::Low,
+                                vec!["warming".to_string()],
+                            )
+                            .await
+                        {
                             warn!("Failed to cache warming response: {}", e);
                         } else {
                             warmed_count += 1;
@@ -856,16 +883,16 @@ mod tests {
     async fn test_cache_basic_operations() {
         let cache = AIResponseCache::new(100, Duration::from_secs(60));
         let prompt_hash = cache.generate_prompt_hash("test prompt", None);
-        
+
         // Cache miss initially
         assert!(cache.get_cached_response(&prompt_hash).await.is_none());
-        
+
         // Cache response
         cache
             .cache_response(&prompt_hash, "test response", "test_provider", None)
             .await
             .unwrap();
-        
+
         // Cache hit
         let cached = cache.get_cached_response(&prompt_hash).await.unwrap();
         assert_eq!(cached.content, "test response");
@@ -877,7 +904,7 @@ mod tests {
     async fn test_cache_expiration() {
         let cache = AIResponseCache::new(100, Duration::from_secs(60));
         let prompt_hash = cache.generate_prompt_hash("test prompt", None);
-        
+
         // Cache response with very short TTL (1 second)
         cache
             .cache_response(
@@ -888,17 +915,17 @@ mod tests {
             )
             .await
             .unwrap();
-        
+
         // Should be available immediately
         assert!(cache.get_cached_response(&prompt_hash).await.is_some());
-        
+
         // Wait for expiration
         sleep(Duration::from_millis(1100)).await;
-        
+
         // Manually trigger cleanup to verify expiration logic
         let removed_count = cache.cleanup_expired().await;
         assert!(removed_count > 0);
-        
+
         // Should be expired and removed now
         assert!(cache.get_cached_response(&prompt_hash).await.is_none());
     }
@@ -907,7 +934,7 @@ mod tests {
     async fn test_cache_statistics() {
         let cache = AIResponseCache::new(100, Duration::from_secs(60));
         let prompt_hash = cache.generate_prompt_hash("test prompt", None);
-        
+
         // Generate some cache activity
         cache.get_cached_response(&prompt_hash).await; // Miss
         cache
@@ -916,7 +943,7 @@ mod tests {
             .unwrap();
         cache.get_cached_response(&prompt_hash).await; // Hit
         cache.get_cached_response(&prompt_hash).await; // Hit
-        
+
         let stats = cache.get_cache_stats().await;
         assert_eq!(stats.total_hits, 2);
         assert_eq!(stats.total_misses, 1);
@@ -928,18 +955,23 @@ mod tests {
     #[tokio::test]
     async fn test_cache_invalidation() {
         let cache = AIResponseCache::new(100, Duration::from_secs(60));
-        
+
         // Cache multiple responses
         for i in 0..5 {
             let prompt_hash = cache.generate_prompt_hash(&format!("test prompt {}", i), None);
             cache
-                .cache_response(&prompt_hash, &format!("response {}", i), "test_provider", None)
+                .cache_response(
+                    &prompt_hash,
+                    &format!("response {}", i),
+                    "test_provider",
+                    None,
+                )
                 .await
                 .unwrap();
         }
-        
+
         assert_eq!(cache.get_cache_stats().await.total_entries, 5);
-        
+
         // Invalidate all
         let removed = cache.invalidate_cache("*").await.unwrap();
         assert_eq!(removed, 5);
@@ -949,12 +981,12 @@ mod tests {
     #[test]
     fn test_prompt_hash_generation() {
         let cache = AIResponseCache::new(100, Duration::from_secs(60));
-        
+
         let hash1 = cache.generate_prompt_hash("test prompt", None);
         let hash2 = cache.generate_prompt_hash("test prompt", None);
         let hash3 = cache.generate_prompt_hash("different prompt", None);
         let hash4 = cache.generate_prompt_hash("test prompt", Some("context"));
-        
+
         assert_eq!(hash1, hash2);
         assert_ne!(hash1, hash3);
         assert_ne!(hash1, hash4);

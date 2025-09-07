@@ -5,18 +5,18 @@
 //! startup synchronization, and configurable sync intervals.
 
 use crate::email::async_sync_service::AsyncSyncService;
-use crate::email::sync_engine::{SyncStrategy, SyncProgress};
 use crate::email::notifications::EmailNotificationManager;
+use crate::email::sync_engine::{SyncProgress, SyncStrategy};
 use crate::imap::ImapAccountManager;
+use chrono::{DateTime, Utc};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::{mpsc, RwLock, Mutex};
+use tokio::sync::{mpsc, Mutex, RwLock};
 use tokio::task::JoinHandle;
 use tokio::time::{interval, sleep, Instant};
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
-use chrono::{DateTime, Utc};
 
 /// Configuration for automatic email synchronization
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -148,7 +148,10 @@ impl AutoSyncScheduler {
             return Ok(());
         }
 
-        info!("Starting automatic email sync scheduler (interval: {} minutes)", config.sync_interval_minutes);
+        info!(
+            "Starting automatic email sync scheduler (interval: {} minutes)",
+            config.sync_interval_minutes
+        );
 
         // Initialize account schedules
         self.initialize_account_schedules().await?;
@@ -211,7 +214,10 @@ impl AutoSyncScheduler {
     }
 
     /// Update the synchronization configuration
-    pub async fn update_config(&self, new_config: AutoSyncConfig) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn update_config(
+        &self,
+        new_config: AutoSyncConfig,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let was_enabled = {
             let config = self.config.read().await;
             config.enabled
@@ -252,14 +258,18 @@ impl AutoSyncScheduler {
 
         let scheduled_syncs = self.scheduled_syncs.read().await;
         for account_id in scheduled_syncs.keys() {
-            self.trigger_account_sync(account_id.clone(), strategy.clone()).await?;
+            self.trigger_account_sync(account_id.clone(), strategy.clone())
+                .await?;
         }
 
         Ok(())
     }
 
     /// Force sync a specific account
-    pub async fn force_sync_account(&self, account_id: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn force_sync_account(
+        &self,
+        account_id: &str,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         info!("Force syncing account: {}", account_id);
 
         let config = self.config.read().await;
@@ -269,7 +279,8 @@ impl AutoSyncScheduler {
             SyncStrategy::Full
         };
 
-        self.trigger_account_sync(account_id.to_string(), strategy).await?;
+        self.trigger_account_sync(account_id.to_string(), strategy)
+            .await?;
         Ok(())
     }
 
@@ -286,7 +297,9 @@ impl AutoSyncScheduler {
     }
 
     /// Initialize schedules for all configured accounts
-    async fn initialize_account_schedules(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    async fn initialize_account_schedules(
+        &self,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let accounts = self.account_manager.get_all_accounts().await;
 
         let config = self.config.read().await;
@@ -295,8 +308,8 @@ impl AutoSyncScheduler {
         let mut scheduled_syncs = self.scheduled_syncs.write().await;
 
         for account in accounts {
-            let next_sync = Utc::now() + chrono::Duration::from_std(sync_interval)
-                .map_err(|_| "Invalid sync interval")?;
+            let next_sync = Utc::now()
+                + chrono::Duration::from_std(sync_interval).map_err(|_| "Invalid sync interval")?;
 
             let scheduled_sync = ScheduledSync {
                 account_id: account.account_id.clone(),
@@ -308,10 +321,16 @@ impl AutoSyncScheduler {
             };
 
             scheduled_syncs.insert(account.account_id.clone(), scheduled_sync);
-            debug!("Scheduled sync for account {} at {}", account.account_id, next_sync);
+            debug!(
+                "Scheduled sync for account {} at {}",
+                account.account_id, next_sync
+            );
         }
 
-        info!("Initialized sync schedules for {} accounts", scheduled_syncs.len());
+        info!(
+            "Initialized sync schedules for {} accounts",
+            scheduled_syncs.len()
+        );
         Ok(())
     }
 
@@ -333,8 +352,11 @@ impl AutoSyncScheduler {
             if i > 0 {
                 sleep(Duration::from_secs(2)).await; // 2-second stagger
             }
-            
-            if let Err(e) = self.trigger_account_sync(account_id.clone(), strategy.clone()).await {
+
+            if let Err(e) = self
+                .trigger_account_sync(account_id.clone(), strategy.clone())
+                .await
+            {
                 warn!("Failed startup sync for account {}: {}", account_id, e);
             }
         }
@@ -378,7 +400,7 @@ impl AutoSyncScheduler {
 
                 // Check which accounts need syncing
                 let mut accounts_to_sync = Vec::new();
-                
+
                 for (account_id, scheduled_sync) in scheduled_syncs_guard.iter() {
                     if now >= scheduled_sync.next_sync {
                         accounts_to_sync.push(account_id.clone());
@@ -386,10 +408,8 @@ impl AutoSyncScheduler {
                 }
 
                 // Update next sync time for stats
-                stats_guard.next_sync_time = scheduled_syncs_guard
-                    .values()
-                    .map(|s| s.next_sync)
-                    .min();
+                stats_guard.next_sync_time =
+                    scheduled_syncs_guard.values().map(|s| s.next_sync).min();
 
                 drop(scheduled_syncs_guard);
                 drop(stats_guard);
@@ -410,23 +430,33 @@ impl AutoSyncScheduler {
 
                     let sync_handle = tokio::spawn(async move {
                         let start_time = Instant::now();
-                        
-                        match sync_service.sync_account_async(account_id_clone.clone(), strategy_clone).await {
+
+                        match sync_service
+                            .sync_account_async(account_id_clone.clone(), strategy_clone)
+                            .await
+                        {
                             Ok(task_id) => {
-                                info!("Started automatic sync for account {} (task: {})", account_id_clone, task_id);
-                                
+                                info!(
+                                    "Started automatic sync for account {} (task: {})",
+                                    account_id_clone, task_id
+                                );
+
                                 // Update scheduled sync
                                 {
                                     let mut scheduled_syncs = scheduled_syncs_clone.write().await;
-                                    if let Some(scheduled_sync) = scheduled_syncs.get_mut(&account_id_clone) {
+                                    if let Some(scheduled_sync) =
+                                        scheduled_syncs.get_mut(&account_id_clone)
+                                    {
                                         scheduled_sync.task_id = Some(task_id);
                                         scheduled_sync.last_sync = Some(Utc::now());
-                                        scheduled_sync.next_sync = Utc::now() + chrono::Duration::from_std(sync_interval_clone).unwrap_or(chrono::Duration::minutes(15));
+                                        scheduled_sync.next_sync = Utc::now()
+                                            + chrono::Duration::from_std(sync_interval_clone)
+                                                .unwrap_or(chrono::Duration::minutes(15));
                                         scheduled_sync.retry_count = 0;
-                                        
+
                                         let duration = start_time.elapsed();
                                         scheduled_sync.sync_duration_history.push(duration);
-                                        
+
                                         // Keep only last 10 durations for average calculation
                                         if scheduled_sync.sync_duration_history.len() > 10 {
                                             scheduled_sync.sync_duration_history.drain(0..1);
@@ -439,34 +469,45 @@ impl AutoSyncScheduler {
                                     let mut stats = stats_clone.write().await;
                                     stats.total_syncs_completed += 1;
                                     stats.last_sync_time = Some(Utc::now());
-                                    
+
                                     // Calculate average duration
                                     let all_durations: Vec<Duration> = {
                                         let scheduled_syncs = scheduled_syncs_clone.read().await;
-                                        scheduled_syncs.values()
+                                        scheduled_syncs
+                                            .values()
                                             .flat_map(|s| s.sync_duration_history.iter())
                                             .cloned()
                                             .collect()
                                     };
-                                    
+
                                     if !all_durations.is_empty() {
                                         let total: Duration = all_durations.iter().sum();
-                                        stats.average_sync_duration = Some(total / all_durations.len() as u32);
+                                        stats.average_sync_duration =
+                                            Some(total / all_durations.len() as u32);
                                     }
                                 }
                             }
                             Err(e) => {
-                                error!("Failed to start automatic sync for account {}: {}", account_id_clone, e);
-                                
+                                error!(
+                                    "Failed to start automatic sync for account {}: {}",
+                                    account_id_clone, e
+                                );
+
                                 // Update retry count and schedule retry
                                 {
                                     let mut scheduled_syncs = scheduled_syncs_clone.write().await;
-                                    if let Some(scheduled_sync) = scheduled_syncs.get_mut(&account_id_clone) {
+                                    if let Some(scheduled_sync) =
+                                        scheduled_syncs.get_mut(&account_id_clone)
+                                    {
                                         scheduled_sync.retry_count += 1;
-                                        
+
                                         // Schedule retry with exponential backoff
-                                        let retry_delay = Duration::from_secs(30 * (1 << scheduled_sync.retry_count.min(5)));
-                                        scheduled_sync.next_sync = Utc::now() + chrono::Duration::from_std(retry_delay).unwrap_or(chrono::Duration::minutes(1));
+                                        let retry_delay = Duration::from_secs(
+                                            30 * (1 << scheduled_sync.retry_count.min(5)),
+                                        );
+                                        scheduled_sync.next_sync = Utc::now()
+                                            + chrono::Duration::from_std(retry_delay)
+                                                .unwrap_or(chrono::Duration::minutes(1));
                                     }
                                 }
 
@@ -477,13 +518,16 @@ impl AutoSyncScheduler {
                                 }
                             }
                         }
-                        
+
                         // Remove from active tasks
                         active_tasks_clone.lock().await.remove(&account_id_clone);
                     });
 
                     // Add to active tasks
-                    active_sync_tasks.lock().await.insert(account_id, sync_handle);
+                    active_sync_tasks
+                        .lock()
+                        .await
+                        .insert(account_id, sync_handle);
                 }
 
                 // Update active sync count in stats
@@ -499,46 +543,66 @@ impl AutoSyncScheduler {
     }
 
     /// Start monitoring sync progress
-    async fn start_progress_monitoring(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    async fn start_progress_monitoring(
+        &self,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         // Progress monitoring would be implemented here
         // For now, this is a placeholder as the sync service handles its own progress
         Ok(())
     }
 
     /// Trigger sync for a specific account
-    async fn trigger_account_sync(&self, account_id: String, strategy: SyncStrategy) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    async fn trigger_account_sync(
+        &self,
+        account_id: String,
+        strategy: SyncStrategy,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         // Send sync started notification
-        self.notification_manager.notify_sync_started(account_id.clone(), "All Folders".to_string()).await;
+        self.notification_manager
+            .notify_sync_started(account_id.clone(), "All Folders".to_string())
+            .await;
 
-        match self.async_sync_service.sync_account_async(account_id.clone(), strategy).await {
+        match self
+            .async_sync_service
+            .sync_account_async(account_id.clone(), strategy)
+            .await
+        {
             Ok(task_id) => {
-                debug!("Triggered sync for account {} (task: {})", account_id, task_id);
+                debug!(
+                    "Triggered sync for account {} (task: {})",
+                    account_id, task_id
+                );
                 Ok(())
             }
             Err(e) => {
                 error!("Failed to trigger sync for account {}: {}", account_id, e);
-                
+
                 // Send sync failed notification
-                self.notification_manager.notify_sync_failed(
-                    account_id,
-                    "All Folders".to_string(),
-                    format!("Sync failed: {}", e)
-                ).await;
-                
+                self.notification_manager
+                    .notify_sync_failed(
+                        account_id,
+                        "All Folders".to_string(),
+                        format!("Sync failed: {}", e),
+                    )
+                    .await;
+
                 Err(e.into())
             }
         }
     }
 
     /// Reschedule all accounts with updated configuration
-    async fn reschedule_all_accounts(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    async fn reschedule_all_accounts(
+        &self,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let config = self.config.read().await;
         let sync_interval = Duration::from_secs(config.sync_interval_minutes * 60);
 
         let mut scheduled_syncs = self.scheduled_syncs.write().await;
         for scheduled_sync in scheduled_syncs.values_mut() {
             // Update next sync time based on new interval
-            let time_since_last = scheduled_sync.last_sync
+            let time_since_last = scheduled_sync
+                .last_sync
                 .map(|last| Utc::now().signed_duration_since(last))
                 .and_then(|d| d.to_std().ok())
                 .unwrap_or(Duration::ZERO);
@@ -549,12 +613,15 @@ impl AutoSyncScheduler {
             } else {
                 // Schedule for remaining interval
                 let remaining = sync_interval - time_since_last;
-                scheduled_sync.next_sync = Utc::now() + chrono::Duration::from_std(remaining)
-                    .unwrap_or(chrono::Duration::minutes(1));
+                scheduled_sync.next_sync = Utc::now()
+                    + chrono::Duration::from_std(remaining).unwrap_or(chrono::Duration::minutes(1));
             }
         }
 
-        info!("Rescheduled {} accounts with new sync interval", scheduled_syncs.len());
+        info!(
+            "Rescheduled {} accounts with new sync interval",
+            scheduled_syncs.len()
+        );
         Ok(())
     }
 }
@@ -600,7 +667,7 @@ mod tests {
             last_sync_time: None,
             average_sync_duration: None,
         };
-        
+
         assert!(!stats.is_active);
         assert_eq!(stats.monitored_accounts, 0);
     }

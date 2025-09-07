@@ -205,7 +205,8 @@ impl ImapError {
                 "Check TLS/SSL configuration".to_string(),
                 "Verify server certificates are valid".to_string(),
                 "Try disabling SSL verification temporarily for testing".to_string(),
-                "Update system certificates: sudo apt update && sudo apt install ca-certificates".to_string(),
+                "Update system certificates: sudo apt update && sudo apt install ca-certificates"
+                    .to_string(),
             ],
             ImapError::Timeout => vec![
                 "Operation timed out - server may be slow".to_string(),

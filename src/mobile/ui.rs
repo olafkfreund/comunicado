@@ -1,20 +1,20 @@
-use std::sync::Arc;
+use chrono::Local;
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{
-        Block, Borders, Clear, List, ListItem, ListState, Paragraph, Wrap,
-        Scrollbar, ScrollbarOrientation, ScrollbarState,
+        Block, Borders, Clear, List, ListItem, ListState, Paragraph, Scrollbar,
+        ScrollbarOrientation, ScrollbarState, Wrap,
     },
     Frame,
 };
-use chrono::Local;
-use tokio::sync::{RwLock, Mutex};
+use std::sync::Arc;
+use tokio::sync::{Mutex, RwLock};
 
 use crate::mobile::{
+    kde_connect::types::{SmsConversation, SmsMessage},
     MessageStore, MobileSyncStats,
-    kde_connect::types::{SmsMessage, SmsConversation}
 };
 
 /// Main SMS/MMS UI component
@@ -169,7 +169,10 @@ impl SmsUi {
     }
 
     /// Load conversations from message store
-    pub async fn load_conversations(&self, message_store: &MessageStore) -> Result<(), crate::mobile::MobileError> {
+    pub async fn load_conversations(
+        &self,
+        message_store: &MessageStore,
+    ) -> Result<(), crate::mobile::MobileError> {
         let query = crate::mobile::storage::MessageQuery {
             limit: Some(100),
             offset: Some(0),
@@ -178,19 +181,23 @@ impl SmsUi {
 
         let conversations = message_store.get_conversations(&query).await?;
         *self.conversations.write().await = conversations;
-        
+
         // Update scroll state
         let conv_count = self.conversations.read().await.len();
-        let _ = self.conversation_scroll_state.lock().await.content_length(conv_count);
+        let _ = self
+            .conversation_scroll_state
+            .lock()
+            .await
+            .content_length(conv_count);
 
         Ok(())
     }
 
     /// Load messages for a specific conversation
     pub async fn load_conversation_messages(
-        &self, 
-        message_store: &MessageStore, 
-        thread_id: i64
+        &self,
+        message_store: &MessageStore,
+        thread_id: i64,
     ) -> Result<(), crate::mobile::MobileError> {
         let query = crate::mobile::storage::MessageQuery {
             limit: Some(50),
@@ -199,15 +206,19 @@ impl SmsUi {
         };
 
         let messages = message_store.get_messages(thread_id, &query).await?;
-        
+
         // Find and update the conversation with loaded messages
         let mut conversations = self.conversations.write().await;
         if let Some(conversation) = conversations.iter_mut().find(|c| c.thread_id == thread_id) {
             conversation.messages = messages;
             *self.selected_conversation.write().await = Some(conversation.clone());
-            
+
             // Update scroll state
-            let _ = self.message_scroll_state.lock().await.content_length(conversation.messages.len());
+            let _ = self
+                .message_scroll_state
+                .lock()
+                .await
+                .content_length(conversation.messages.len());
         }
 
         Ok(())
@@ -231,26 +242,23 @@ impl SmsUi {
     /// Handle navigation input (arrow keys, enter, etc.)
     pub async fn handle_navigation(&self, key: char) -> Result<(), crate::mobile::MobileError> {
         let current_mode = self.get_view_mode().await;
-        
+
         match current_mode {
-            SmsViewMode::ConversationList => {
-                self.handle_conversation_navigation(key).await
-            }
-            SmsViewMode::MessageThread => {
-                self.handle_message_navigation(key).await
-            }
-            SmsViewMode::Compose => {
-                self.handle_composition_input(key).await
-            }
+            SmsViewMode::ConversationList => self.handle_conversation_navigation(key).await,
+            SmsViewMode::MessageThread => self.handle_message_navigation(key).await,
+            SmsViewMode::Compose => self.handle_composition_input(key).await,
             _ => Ok(()),
         }
     }
 
     /// Handle conversation list navigation
-    async fn handle_conversation_navigation(&self, key: char) -> Result<(), crate::mobile::MobileError> {
+    async fn handle_conversation_navigation(
+        &self,
+        key: char,
+    ) -> Result<(), crate::mobile::MobileError> {
         let conversations = self.conversations.read().await;
         let mut state = self.conversation_list_state.lock().await;
-        
+
         match key {
             'j' | '↓' => {
                 let i = match state.selected() {
@@ -304,7 +312,8 @@ impl SmsUi {
                 // Reply to conversation
                 if let Some(conversation) = &*self.selected_conversation.read().await {
                     let mut composition = self.composition.write().await;
-                    composition.recipients = conversation.participants
+                    composition.recipients = conversation
+                        .participants
                         .iter()
                         .map(|p| p.address.clone())
                         .collect();
@@ -321,7 +330,7 @@ impl SmsUi {
     /// Handle composition input
     async fn handle_composition_input(&self, key: char) -> Result<(), crate::mobile::MobileError> {
         let mut composition = self.composition.write().await;
-        
+
         if composition.editing_recipients {
             match key {
                 '\n' => {
@@ -377,23 +386,13 @@ impl SmsUi {
         config: &SmsRenderConfig,
     ) -> Result<(), crate::mobile::MobileError> {
         let current_mode = self.get_view_mode().await;
-        
+
         match current_mode {
-            SmsViewMode::ConversationList => {
-                self.render_conversation_list(f, area, config).await
-            }
-            SmsViewMode::MessageThread => {
-                self.render_message_thread(f, area, config).await
-            }
-            SmsViewMode::Compose => {
-                self.render_composition(f, area, config).await
-            }
-            SmsViewMode::ServiceStatus => {
-                self.render_service_status(f, area, config).await
-            }
-            SmsViewMode::MessageDetail => {
-                self.render_message_detail(f, area, config).await
-            }
+            SmsViewMode::ConversationList => self.render_conversation_list(f, area, config).await,
+            SmsViewMode::MessageThread => self.render_message_thread(f, area, config).await,
+            SmsViewMode::Compose => self.render_composition(f, area, config).await,
+            SmsViewMode::ServiceStatus => self.render_service_status(f, area, config).await,
+            SmsViewMode::MessageDetail => self.render_message_detail(f, area, config).await,
         }
     }
 
@@ -416,12 +415,12 @@ impl SmsUi {
             .block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .title(" SMS Conversations ")
+                    .title(" SMS Conversations "),
             )
             .highlight_style(
                 Style::default()
                     .fg(config.colors.selected_conversation)
-                    .add_modifier(Modifier::BOLD)
+                    .add_modifier(Modifier::BOLD),
             );
 
         f.render_stateful_widget(list, area, &mut *state.lock().await);
@@ -435,7 +434,7 @@ impl SmsUi {
 
             f.render_stateful_widget(
                 scrollbar,
-                area.inner(&ratatui::layout::Margin {
+                area.inner(ratatui::layout::Margin {
                     vertical: 1,
                     horizontal: 0,
                 }),
@@ -466,7 +465,11 @@ impl SmsUi {
                 conversation.messages.len()
             );
             let header = Paragraph::new(header_text)
-                .block(Block::default().borders(Borders::ALL).title(" Message Thread "))
+                .block(
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .title(" Message Thread "),
+                )
                 .wrap(Wrap { trim: true });
 
             f.render_widget(header, chunks[0]);
@@ -478,10 +481,13 @@ impl SmsUi {
                 .map(|msg| self.format_message_item(msg, config))
                 .collect();
 
-            let message_list = List::new(messages)
-                .block(Block::default().borders(Borders::ALL));
+            let message_list = List::new(messages).block(Block::default().borders(Borders::ALL));
 
-            f.render_stateful_widget(message_list, chunks[1], &mut *self.message_list_state.lock().await);
+            f.render_stateful_widget(
+                message_list,
+                chunks[1],
+                &mut *self.message_list_state.lock().await,
+            );
 
             // Render scrollbar for messages
             if conversation.messages.len() > chunks[1].height as usize {
@@ -492,7 +498,7 @@ impl SmsUi {
 
                 f.render_stateful_widget(
                     scrollbar,
-                    chunks[1].inner(&ratatui::layout::Margin {
+                    chunks[1].inner(ratatui::layout::Margin {
                         vertical: 1,
                         horizontal: 0,
                     }),
@@ -549,20 +555,19 @@ impl SmsUi {
             "Type your message. Ctrl+S to send, Esc to cancel."
         };
 
-        let help_widget = Paragraph::new(help_text)
-            .block(Block::default().borders(Borders::ALL).title(" Help "));
+        let help_widget =
+            Paragraph::new(help_text).block(Block::default().borders(Borders::ALL).title(" Help "));
 
         f.render_widget(help_widget, chunks[2]);
 
         // Show error if any
         if let Some(error) = &composition.error_message {
-            let error_popup = Paragraph::new(error.as_str())
-                .block(
-                    Block::default()
-                        .borders(Borders::ALL)
-                        .title(" Error ")
-                        .style(Style::default().fg(config.colors.error_message))
-                );
+            let error_popup = Paragraph::new(error.as_str()).block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(" Error ")
+                    .style(Style::default().fg(config.colors.error_message)),
+            );
 
             let popup_area = Self::centered_rect(60, 20, area);
             f.render_widget(Clear, popup_area);
@@ -583,9 +588,9 @@ impl SmsUi {
             let chunks = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([
-                    Constraint::Length(8),  // Connection status
-                    Constraint::Length(6),  // Statistics
-                    Constraint::Min(0),     // Recent activity
+                    Constraint::Length(8), // Connection status
+                    Constraint::Length(6), // Statistics
+                    Constraint::Min(0),    // Recent activity
                 ])
                 .split(area);
 
@@ -604,8 +609,12 @@ impl SmsUi {
                 Line::from(vec![
                     Span::raw("Service Status: "),
                     Span::styled(
-                        if stats.is_running { "Running" } else { "Stopped" },
-                        Style::default().fg(status_color)
+                        if stats.is_running {
+                            "Running"
+                        } else {
+                            "Stopped"
+                        },
+                        Style::default().fg(status_color),
                     ),
                 ]),
                 Line::from(vec![
@@ -622,8 +631,11 @@ impl SmsUi {
                 ]),
             ];
 
-            let status_widget = Paragraph::new(status_text)
-                .block(Block::default().borders(Borders::ALL).title(" Service Status "));
+            let status_widget = Paragraph::new(status_text).block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(" Service Status "),
+            );
 
             f.render_widget(status_widget, chunks[0]);
 
@@ -643,10 +655,10 @@ impl SmsUi {
 
             // Recent Activity
             let mut activity_lines = Vec::new();
-            
+
             if let Some(last_sync) = &stats.last_sync_time {
                 activity_lines.push(Line::from(format!(
-                    "Last Sync: {}", 
+                    "Last Sync: {}",
                     last_sync.with_timezone(&Local).format(&config.time_format)
                 )));
             }
@@ -662,8 +674,11 @@ impl SmsUi {
                 activity_lines.push(Line::from("No recent activity"));
             }
 
-            let activity_widget = Paragraph::new(activity_lines)
-                .block(Block::default().borders(Borders::ALL).title(" Recent Activity "));
+            let activity_widget = Paragraph::new(activity_lines).block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(" Recent Activity "),
+            );
 
             f.render_widget(activity_widget, chunks[2]);
         }
@@ -689,7 +704,11 @@ impl SmsUi {
     }
 
     /// Format a conversation item for the list
-    fn format_conversation_item(&self, conversation: &SmsConversation, config: &SmsRenderConfig) -> ListItem {
+    fn format_conversation_item(
+        &self,
+        conversation: &SmsConversation,
+        config: &SmsRenderConfig,
+    ) -> ListItem {
         let style = if conversation.has_unread() {
             Style::default().fg(config.colors.unread_conversation)
         } else {
@@ -715,7 +734,10 @@ impl SmsUi {
         };
 
         let line = Line::from(vec![
-            Span::styled(conversation.display_name.clone(), style.add_modifier(Modifier::BOLD)),
+            Span::styled(
+                conversation.display_name.clone(),
+                style.add_modifier(Modifier::BOLD),
+            ),
             Span::styled(unread_indicator, style),
             Span::styled(timestamp, Style::default().fg(config.colors.timestamp)),
             Span::raw(" - "),
@@ -726,7 +748,11 @@ impl SmsUi {
     }
 
     /// Format a message item for the list
-    fn format_message_item<'a>(&self, message: &'a SmsMessage, config: &SmsRenderConfig) -> ListItem<'a> {
+    fn format_message_item<'a>(
+        &self,
+        message: &'a SmsMessage,
+        config: &SmsRenderConfig,
+    ) -> ListItem<'a> {
         let style = if message.is_outgoing() {
             Style::default().fg(config.colors.outgoing_message)
         } else {
@@ -752,11 +778,17 @@ impl SmsUi {
         let timestamp = message.formatted_date();
 
         let line = Line::from(vec![
-            Span::styled(format!("[{}]", timestamp), Style::default().fg(config.colors.timestamp)),
+            Span::styled(
+                format!("[{}]", timestamp),
+                Style::default().fg(config.colors.timestamp),
+            ),
             Span::raw(" "),
             Span::styled(sender_prefix, style.add_modifier(Modifier::BOLD)),
             Span::styled(message.body.clone(), style),
-            Span::styled(attachment_indicator, Style::default().fg(config.colors.attachment_indicator)),
+            Span::styled(
+                attachment_indicator,
+                Style::default().fg(config.colors.attachment_indicator),
+            ),
         ]);
 
         ListItem::new(line)
@@ -820,20 +852,28 @@ impl SmsUi {
 
     /// Get selected conversation ID
     pub async fn get_selected_conversation_id(&self) -> Option<i64> {
-        self.selected_conversation.read().await.as_ref().map(|c| c.id)
+        self.selected_conversation
+            .read()
+            .await
+            .as_ref()
+            .map(|c| c.id)
     }
 
     /// Get currently selected conversation thread ID
     pub async fn get_selected_thread_id(&self) -> Option<i64> {
-        self.selected_conversation.read().await.as_ref().map(|c| c.thread_id)
+        self.selected_conversation
+            .read()
+            .await
+            .as_ref()
+            .map(|c| c.thread_id)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::mobile::kde_connect::types::{Attachment, ContactInfo, MessageType};
     use chrono::Utc;
-    use crate::mobile::kde_connect::types::{ContactInfo, MessageType, Attachment};
 
     async fn create_test_ui() -> SmsUi {
         SmsUi::new()
@@ -844,7 +884,10 @@ mod tests {
             id: 1,
             thread_id: 1,
             display_name: "Test Contact".to_string(),
-            participants: vec![ContactInfo::new("+1234567890".to_string(), Some("Test Contact".to_string()))],
+            participants: vec![ContactInfo::new(
+                "+1234567890".to_string(),
+                Some("Test Contact".to_string()),
+            )],
             message_count: 3,
             unread_count: 1,
             last_message_date: Utc::now(),
@@ -900,7 +943,7 @@ mod tests {
     #[tokio::test]
     async fn test_ui_creation() {
         let ui = create_test_ui().await;
-        
+
         assert_eq!(ui.get_view_mode().await, SmsViewMode::ConversationList);
         assert!(ui.conversations.read().await.is_empty());
         assert!(ui.selected_conversation.read().await.is_none());
@@ -909,17 +952,17 @@ mod tests {
     #[tokio::test]
     async fn test_view_mode_changes() {
         let ui = create_test_ui().await;
-        
+
         // Test initial state
         assert_eq!(ui.get_view_mode().await, SmsViewMode::ConversationList);
-        
+
         // Test mode changes
         ui.set_view_mode(SmsViewMode::MessageThread).await;
         assert_eq!(ui.get_view_mode().await, SmsViewMode::MessageThread);
-        
+
         ui.set_view_mode(SmsViewMode::Compose).await;
         assert_eq!(ui.get_view_mode().await, SmsViewMode::Compose);
-        
+
         ui.set_view_mode(SmsViewMode::ServiceStatus).await;
         assert_eq!(ui.get_view_mode().await, SmsViewMode::ServiceStatus);
     }
@@ -928,16 +971,16 @@ mod tests {
     async fn test_conversation_loading() {
         let ui = create_test_ui().await;
         let message_store = create_test_message_store().await;
-        
+
         // Store a test conversation
         let test_conversation = create_test_conversation().await;
         for message in &test_conversation.messages {
             message_store.store_message(message.clone()).await.unwrap();
         }
-        
+
         // Load conversations into UI
         ui.load_conversations(&message_store).await.unwrap();
-        
+
         let conversations = ui.conversations.read().await;
         assert!(!conversations.is_empty());
     }
@@ -945,7 +988,7 @@ mod tests {
     #[tokio::test]
     async fn test_conversation_navigation() {
         let ui = create_test_ui().await;
-        
+
         // Add test conversations
         let mut conversations = ui.conversations.write().await;
         conversations.push(create_test_conversation().await);
@@ -957,11 +1000,11 @@ mod tests {
             conv
         });
         drop(conversations);
-        
+
         // Test navigation
         ui.handle_navigation('j').await.unwrap(); // Down
         ui.handle_navigation('k').await.unwrap(); // Up
-        
+
         // Test entering conversation
         ui.handle_navigation('\n').await.unwrap(); // Enter
         assert_eq!(ui.get_view_mode().await, SmsViewMode::MessageThread);
@@ -971,20 +1014,20 @@ mod tests {
     async fn test_message_thread_navigation() {
         let ui = create_test_ui().await;
         ui.set_view_mode(SmsViewMode::MessageThread).await;
-        
+
         // Set up a selected conversation
         let test_conversation = create_test_conversation().await;
         *ui.selected_conversation.write().await = Some(test_conversation);
-        
+
         // Test navigation back to conversation list
         ui.handle_navigation('q').await.unwrap();
         assert_eq!(ui.get_view_mode().await, SmsViewMode::ConversationList);
-        
+
         // Reset and test reply
         ui.set_view_mode(SmsViewMode::MessageThread).await;
         ui.handle_navigation('r').await.unwrap();
         assert_eq!(ui.get_view_mode().await, SmsViewMode::Compose);
-        
+
         // Check that recipients were populated
         let composition = ui.get_composition().await;
         assert!(!composition.recipients.is_empty());
@@ -995,25 +1038,25 @@ mod tests {
     async fn test_composition_input() {
         let ui = create_test_ui().await;
         ui.set_view_mode(SmsViewMode::Compose).await;
-        
+
         // Test recipient input
         ui.handle_navigation('+').await.unwrap();
         ui.handle_navigation('1').await.unwrap();
         ui.handle_navigation('\n').await.unwrap(); // Add recipient
-        
+
         let composition = ui.get_composition().await;
         assert_eq!(composition.recipients.len(), 1);
         assert!(!composition.editing_recipients);
-        
+
         // Test message input
         ui.handle_navigation('H').await.unwrap();
         ui.handle_navigation('i').await.unwrap();
         ui.handle_navigation('\n').await.unwrap(); // New line
-        
+
         let composition = ui.get_composition().await;
         assert_eq!(composition.message_body, "Hi\n");
         assert_eq!(composition.cursor_position, 3);
-        
+
         // Test backspace
         ui.handle_navigation('\x08').await.unwrap();
         let composition = ui.get_composition().await;
@@ -1024,7 +1067,7 @@ mod tests {
     #[tokio::test]
     async fn test_service_stats_update() {
         let ui = create_test_ui().await;
-        
+
         let test_stats = MobileSyncStats {
             is_running: true,
             total_syncs: 42,
@@ -1040,12 +1083,12 @@ mod tests {
             bytes_synced: 1024,
             uptime_seconds: 3665, // 1h 1m 5s
         };
-        
+
         ui.update_service_stats(test_stats.clone()).await;
-        
+
         let stored_stats = ui.service_stats.read().await.clone();
         assert!(stored_stats.is_some());
-        
+
         let stats = stored_stats.unwrap();
         assert_eq!(stats.total_syncs, 42);
         assert_eq!(stats.connected_device_name, Some("Test Phone".to_string()));
@@ -1057,9 +1100,9 @@ mod tests {
         let ui = create_test_ui().await;
         let config = SmsRenderConfig::default();
         let conversation = create_test_conversation().await;
-        
+
         let formatted = ui.format_conversation_item(&conversation, &config);
-        
+
         // The formatted item should contain the conversation name and unread indicator
         // This is a basic test - in a real scenario you'd test the rendered output
         assert!(!format!("{:?}", formatted).is_empty());
@@ -1071,9 +1114,9 @@ mod tests {
         let config = SmsRenderConfig::default();
         let conversation = create_test_conversation().await;
         let message = &conversation.messages[0];
-        
+
         let formatted = ui.format_message_item(message, &config);
-        
+
         // The formatted item should contain message content
         assert!(!format!("{:?}", formatted).is_empty());
     }
@@ -1081,12 +1124,15 @@ mod tests {
     #[tokio::test]
     async fn test_error_handling() {
         let ui = create_test_ui().await;
-        
+
         // Test setting and clearing errors
         ui.set_error("Test error message".to_string()).await;
         let composition = ui.get_composition().await;
-        assert_eq!(composition.error_message, Some("Test error message".to_string()));
-        
+        assert_eq!(
+            composition.error_message,
+            Some("Test error message".to_string())
+        );
+
         ui.clear_error().await;
         let composition = ui.get_composition().await;
         assert!(composition.error_message.is_none());
@@ -1095,7 +1141,7 @@ mod tests {
     #[tokio::test]
     async fn test_composition_clearing() {
         let ui = create_test_ui().await;
-        
+
         // Set up some composition data
         {
             let mut composition = ui.composition.write().await;
@@ -1104,10 +1150,10 @@ mod tests {
             composition.cursor_position = 5;
             composition.editing_recipients = false;
         }
-        
+
         // Clear composition
         ui.clear_composition().await;
-        
+
         let composition = ui.get_composition().await;
         assert!(composition.recipients.is_empty());
         assert!(composition.message_body.is_empty());
@@ -1119,13 +1165,13 @@ mod tests {
     async fn test_conversation_selection() {
         let ui = create_test_ui().await;
         let test_conversation = create_test_conversation().await;
-        
+
         // Set selected conversation
         *ui.selected_conversation.write().await = Some(test_conversation.clone());
-        
+
         assert_eq!(ui.get_selected_conversation_id().await, Some(1));
         assert_eq!(ui.get_selected_thread_id().await, Some(1));
-        
+
         // Clear selection
         *ui.selected_conversation.write().await = None;
         assert!(ui.get_selected_conversation_id().await.is_none());
@@ -1143,7 +1189,7 @@ mod tests {
     #[tokio::test]
     async fn test_color_scheme_defaults() {
         let config = SmsRenderConfig::default();
-        
+
         assert_eq!(config.colors.unread_conversation, Color::White);
         assert_eq!(config.colors.read_conversation, Color::Gray);
         assert_eq!(config.colors.selected_conversation, Color::Cyan);
@@ -1155,7 +1201,7 @@ mod tests {
     #[tokio::test]
     async fn test_render_config_defaults() {
         let config = SmsRenderConfig::default();
-        
+
         assert_eq!(config.max_preview_length, 50);
         assert!(config.show_timestamps);
         assert!(config.show_unread_counts);
@@ -1167,22 +1213,24 @@ mod tests {
     async fn test_message_loading() {
         let ui = create_test_ui().await;
         let message_store = create_test_message_store().await;
-        
+
         // Store test messages
         let test_conversation = create_test_conversation().await;
         for message in &test_conversation.messages {
             message_store.store_message(message.clone()).await.unwrap();
         }
-        
+
         // Load conversations first to populate the conversation list
         ui.load_conversations(&message_store).await.unwrap();
-        
+
         // Load messages for the conversation - this should populate the selected conversation
-        ui.load_conversation_messages(&message_store, 1).await.unwrap();
-        
+        ui.load_conversation_messages(&message_store, 1)
+            .await
+            .unwrap();
+
         let selected = ui.selected_conversation.read().await;
         assert!(selected.is_some());
-        
+
         let conversation = selected.as_ref().unwrap();
         assert!(!conversation.messages.is_empty());
         assert_eq!(conversation.thread_id, 1);
@@ -1192,7 +1240,7 @@ mod tests {
     fn test_centered_rect() {
         let area = Rect::new(0, 0, 100, 50);
         let centered = SmsUi::centered_rect(50, 20, area);
-        
+
         // Should be centered horizontally and vertically
         assert_eq!(centered.width, 50);
         assert_eq!(centered.height, 10); // 20% of 50

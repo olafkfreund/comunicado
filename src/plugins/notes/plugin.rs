@@ -1,21 +1,21 @@
 //! Notes plugin implementation
-//! 
+//!
 //! This module implements the main plugin interface for the notes system,
 //! integrating with Comunicado's plugin architecture.
 
-use crate::plugins::core::{
-    Plugin, PluginConfig, PluginError, PluginInfo, PluginResult, PluginType, PluginHealthStatus,
-};
-use super::types::{NotesConfig, Note, NoteSearchResult};
-use super::manager::NoteManager;
-use super::storage::NoteStorage;
-use super::indexer::NoteIndexer;
-use super::watcher::FileWatcher;
 use super::advanced_search::AdvancedSearchEngine;
-use super::tui::NoteTUI;
-use super::email_integration::EmailIntegrationService;
-use super::mobile_integration::MobileNotesIntegration;
 use super::calendar_integration::CalendarNotesIntegration;
+use super::email_integration::EmailIntegrationService;
+use super::indexer::NoteIndexer;
+use super::manager::NoteManager;
+use super::mobile_integration::MobileNotesIntegration;
+use super::storage::NoteStorage;
+use super::tui::NoteTUI;
+use super::types::{Note, NoteSearchResult, NotesConfig};
+use super::watcher::FileWatcher;
+use crate::plugins::core::{
+    Plugin, PluginConfig, PluginError, PluginHealthStatus, PluginInfo, PluginResult, PluginType,
+};
 
 use std::any::Any;
 use std::sync::Arc;
@@ -131,10 +131,13 @@ impl NotesPlugin {
     pub async fn create_note(&self, title: String, content: String) -> PluginResult<Note> {
         let manager = self.manager.read().await;
         if let Some(ref mgr) = *manager {
-            mgr.create_note(title, content).await
+            mgr.create_note(title, content)
+                .await
                 .map_err(|e| PluginError::ExecutionFailed(e.to_string()))
         } else {
-            Err(PluginError::ExecutionFailed("Plugin not initialized".to_string()))
+            Err(PluginError::ExecutionFailed(
+                "Plugin not initialized".to_string(),
+            ))
         }
     }
 
@@ -142,10 +145,13 @@ impl NotesPlugin {
     pub async fn search_notes(&self, query: &str) -> PluginResult<Vec<NoteSearchResult>> {
         let manager = self.manager.read().await;
         if let Some(ref mgr) = *manager {
-            mgr.search_notes(query).await
+            mgr.search_notes(query)
+                .await
                 .map_err(|e| PluginError::ExecutionFailed(e.to_string()))
         } else {
-            Err(PluginError::ExecutionFailed("Plugin not initialized".to_string()))
+            Err(PluginError::ExecutionFailed(
+                "Plugin not initialized".to_string(),
+            ))
         }
     }
 
@@ -153,10 +159,13 @@ impl NotesPlugin {
     pub async fn get_note(&self, note_id: &str) -> PluginResult<Option<Note>> {
         let manager = self.manager.read().await;
         if let Some(ref mgr) = *manager {
-            mgr.get_note(note_id).await
+            mgr.get_note(note_id)
+                .await
                 .map_err(|e| PluginError::ExecutionFailed(e.to_string()))
         } else {
-            Err(PluginError::ExecutionFailed("Plugin not initialized".to_string()))
+            Err(PluginError::ExecutionFailed(
+                "Plugin not initialized".to_string(),
+            ))
         }
     }
 
@@ -168,14 +177,16 @@ impl NotesPlugin {
             // For now, just return success as this would be handled by the main application
             Ok(())
         } else {
-            Err(PluginError::ExecutionFailed("TUI not initialized".to_string()))
+            Err(PluginError::ExecutionFailed(
+                "TUI not initialized".to_string(),
+            ))
         }
     }
 
     /// Update plugin configuration
     pub async fn update_config(&mut self, new_config: NotesConfig) -> PluginResult<()> {
         self.config = new_config;
-        
+
         // Reinitialize with new config if already running
         let mut manager = self.manager.write().await;
         if manager.is_some() {
@@ -183,7 +194,7 @@ impl NotesPlugin {
             drop(manager);
             self.initialize_components().await?;
         }
-        
+
         Ok(())
     }
 
@@ -192,22 +203,27 @@ impl NotesPlugin {
         // Initialize storage
         let storage = NoteStorage::new(&self.config.default_directory)
             .await
-            .map_err(|e| PluginError::InitializationFailed(format!("Failed to initialize storage: {}", e)))?;
+            .map_err(|e| {
+                PluginError::InitializationFailed(format!("Failed to initialize storage: {}", e))
+            })?;
         let storage_arc = Arc::new(storage.clone());
 
         // Initialize indexer
-        let indexer = NoteIndexer::new(storage_arc.clone())
-            .await
-            .map_err(|e| PluginError::InitializationFailed(format!("Failed to initialize indexer: {}", e)))?;
+        let indexer = NoteIndexer::new(storage_arc.clone()).await.map_err(|e| {
+            PluginError::InitializationFailed(format!("Failed to initialize indexer: {}", e))
+        })?;
 
         // Initialize file watcher
-        let watcher = FileWatcher::new()
-            .map_err(|e| PluginError::InitializationFailed(format!("Failed to initialize file watcher: {}", e)))?;
+        let watcher = FileWatcher::new().map_err(|e| {
+            PluginError::InitializationFailed(format!("Failed to initialize file watcher: {}", e))
+        })?;
 
         // Initialize manager
         let manager = NoteManager::new(storage, indexer, watcher, self.config.clone())
             .await
-            .map_err(|e| PluginError::InitializationFailed(format!("Failed to initialize manager: {}", e)))?;
+            .map_err(|e| {
+                PluginError::InitializationFailed(format!("Failed to initialize manager: {}", e))
+            })?;
 
         // Initialize advanced search engine
         let search_engine = AdvancedSearchEngine::new(storage_arc.clone());
@@ -215,12 +231,14 @@ impl NotesPlugin {
         // Initialize TUI
         let tui = NoteTUI::new(storage_arc.clone(), Arc::new(search_engine))
             .await
-            .map_err(|e| PluginError::InitializationFailed(format!("Failed to initialize TUI: {}", e)))?;
+            .map_err(|e| {
+                PluginError::InitializationFailed(format!("Failed to initialize TUI: {}", e))
+            })?;
 
         // Initialize integrations (simplified for plugin system)
         // Note: In a real deployment, these would be initialized with proper dependencies
         let email_integration = EmailIntegrationService::new(storage_arc.clone());
-        
+
         // For now, skip mobile and calendar integrations as they require external dependencies
         // that aren't available in the plugin context
         let mobile_integration = None;
@@ -275,7 +293,7 @@ impl Plugin for NotesPlugin {
         // Initialize the plugin asynchronously
         // Note: In a real implementation, we'd need to handle async initialization properly
         // This is a simplified version for the plugin interface
-        
+
         Ok(())
     }
 
@@ -293,7 +311,7 @@ impl Plugin for NotesPlugin {
         let email_integration = self.email_integration.clone();
         let mobile_integration = self.mobile_integration.clone();
         let calendar_integration = self.calendar_integration.clone();
-        
+
         tokio::spawn(async move {
             // Clean up all components
             {
@@ -321,7 +339,7 @@ impl Plugin for NotesPlugin {
                 *ci = None;
             }
         });
-        
+
         Ok(())
     }
 
@@ -397,12 +415,12 @@ impl Plugin for NotesPlugin {
         if let Some(default_dir) = config.get("default_directory") {
             if !default_dir.is_string() {
                 return Err(PluginError::ConfigurationError(
-                    "default_directory must be a string".to_string()
+                    "default_directory must be a string".to_string(),
                 ));
             }
         } else {
             return Err(PluginError::ConfigurationError(
-                "default_directory is required".to_string()
+                "default_directory is required".to_string(),
             ));
         }
 
@@ -410,12 +428,12 @@ impl Plugin for NotesPlugin {
             if let Some(n) = max_results.as_u64() {
                 if n == 0 || n > 1000 {
                     return Err(PluginError::ConfigurationError(
-                        "max_search_results must be between 1 and 1000".to_string()
+                        "max_search_results must be between 1 and 1000".to_string(),
                     ));
                 }
             } else {
                 return Err(PluginError::ConfigurationError(
-                    "max_search_results must be a number".to_string()
+                    "max_search_results must be a number".to_string(),
                 ));
             }
         }
@@ -429,17 +447,17 @@ impl Plugin for NotesPlugin {
             // Use async runtime to update config
             let manager = self.manager.clone();
             let _new_config = notes_config.clone();
-            
+
             tokio::spawn(async move {
                 // This is a simplified approach - in reality we'd need proper error handling
                 let mut mgr = manager.write().await;
                 *mgr = None;
                 // Reinitialize with new config would happen here
             });
-            
+
             self.config = notes_config;
         }
-        
+
         Ok(())
     }
 
@@ -465,7 +483,7 @@ mod tests {
     fn test_plugin_creation() {
         let plugin = NotesPlugin::new();
         let info = plugin.info();
-        
+
         assert_eq!(info.name, "Comunicado Notes");
         assert_eq!(info.version, "1.0.0");
         assert_eq!(info.plugin_type, PluginType::Utility);
@@ -476,7 +494,7 @@ mod tests {
     fn test_plugin_with_config() {
         let config = NotesConfig::test_default();
         let plugin = NotesPlugin::with_config(config.clone());
-        
+
         assert_eq!(plugin.config, config);
     }
 
@@ -484,7 +502,7 @@ mod tests {
     fn test_config_schema() {
         let plugin = NotesPlugin::new();
         let schema = plugin.config_schema();
-        
+
         assert!(schema.is_some());
         let schema_obj = schema.unwrap();
         assert!(schema_obj.get("properties").is_some());
@@ -499,7 +517,7 @@ mod tests {
             "max_search_results": 50,
             "auto_index": true
         });
-        
+
         assert!(plugin.validate_config(&config).is_ok());
     }
 
@@ -509,10 +527,13 @@ mod tests {
         let config = serde_json::json!({
             "max_search_results": 50
         });
-        
+
         let result = plugin.validate_config(&config);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("default_directory is required"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("default_directory is required"));
     }
 
     #[test]
@@ -522,7 +543,7 @@ mod tests {
             "default_directory": 123,
             "max_search_results": "not_a_number"
         });
-        
+
         let result = plugin.validate_config(&config);
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("must be a string"));
@@ -535,31 +556,40 @@ mod tests {
             "default_directory": "/tmp",
             "max_search_results": 2000
         });
-        
+
         let result = plugin.validate_config(&config);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("between 1 and 1000"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("between 1 and 1000"));
     }
 
     #[tokio::test]
     async fn test_plugin_lifecycle() {
         let mut plugin = NotesPlugin::new();
         let config = PluginConfig::new(uuid::Uuid::new_v4());
-        
+
         // Test initialization
         assert!(plugin.initialize(&config).is_ok());
-        
+
         // Test start
         assert!(plugin.start().is_ok());
-        
+
         // Test pause
         assert!(plugin.pause().is_ok());
-        assert!(matches!(plugin.health_check().unwrap(), PluginHealthStatus::Degraded(_)));
-        
+        assert!(matches!(
+            plugin.health_check().unwrap(),
+            PluginHealthStatus::Degraded(_)
+        ));
+
         // Test resume
         assert!(plugin.resume().is_ok());
-        assert!(matches!(plugin.health_check().unwrap(), PluginHealthStatus::Healthy));
-        
+        assert!(matches!(
+            plugin.health_check().unwrap(),
+            PluginHealthStatus::Healthy
+        ));
+
         // Test stop
         assert!(plugin.stop().is_ok());
     }
@@ -567,15 +597,17 @@ mod tests {
     #[tokio::test]
     async fn test_uninitialized_operations() {
         let plugin = NotesPlugin::new();
-        
+
         // Operations should fail when not initialized
-        let result = plugin.create_note("Test".to_string(), "Content".to_string()).await;
+        let result = plugin
+            .create_note("Test".to_string(), "Content".to_string())
+            .await;
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("not initialized"));
-        
+
         let result = plugin.search_notes("test").await;
         assert!(result.is_err());
-        
+
         let result = plugin.get_note("test-id").await;
         assert!(result.is_err());
     }
@@ -585,19 +617,19 @@ mod tests {
         // Test that the plugin can be used through the plugin system trait
         let plugin = NotesPlugin::new();
         let info = plugin.info();
-        
+
         // Verify plugin is properly integrated
         assert_eq!(info.name, "Comunicado Notes");
         assert_eq!(info.plugin_type, PluginType::Utility);
         assert!(info.capabilities.contains(&"markdown_support".to_string()));
         assert!(info.capabilities.contains(&"tui_interface".to_string()));
         assert!(info.capabilities.contains(&"email_integration".to_string()));
-        
+
         // Test that it can be cast as Plugin trait object
         let plugin_trait: &dyn Plugin = &plugin;
         let plugin_info = plugin_trait.info();
         assert_eq!(plugin_info.name, "Comunicado Notes");
-        
+
         // Test health check
         let health = plugin_trait.health_check().unwrap();
         assert_eq!(health, PluginHealthStatus::Healthy);

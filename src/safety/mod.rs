@@ -1,7 +1,7 @@
 //! Safety and stability module for preventing system crashes
 
 use std::time::{Duration, Instant};
-use tracing::{warn, error};
+use tracing::{error, warn};
 
 /// Resource monitor to prevent system overload
 pub struct ResourceMonitor {
@@ -27,7 +27,7 @@ impl ResourceMonitor {
             self.check_memory_usage();
             self.last_memory_check = Instant::now();
         }
-        
+
         // If we've had too many memory warnings, be more conservative
         self.high_memory_warnings < 5
     }
@@ -42,9 +42,12 @@ impl ResourceMonitor {
                         if mb > self.memory_limit_mb {
                             warn!("High memory usage detected: {} MB", mb);
                             self.high_memory_warnings += 1;
-                            
+
                             if mb > self.memory_limit_mb * 2 {
-                                error!("Excessive memory usage: {} MB - system may be unstable", mb);
+                                error!(
+                                    "Excessive memory usage: {} MB - system may be unstable",
+                                    mb
+                                );
                             }
                         } else if self.high_memory_warnings > 0 {
                             // Memory usage is back to normal
@@ -88,7 +91,10 @@ impl SafeEventLoop {
 
         // Check iteration limit
         if self.current_iterations >= self.max_iterations {
-            error!("Event loop iteration limit reached: {}", self.max_iterations);
+            error!(
+                "Event loop iteration limit reached: {}",
+                self.max_iterations
+            );
             return false;
         }
 
@@ -100,7 +106,10 @@ impl SafeEventLoop {
 
         // Reset iteration count periodically
         if self.current_iterations % 1000 == 0 {
-            warn!("Event loop high iteration count: {}", self.current_iterations);
+            warn!(
+                "Event loop high iteration count: {}",
+                self.current_iterations
+            );
         }
 
         true

@@ -8,7 +8,7 @@
 //! - Health checks and monitoring
 //! - Resource management and scaling
 
-use crate::deployment::{Platform, DeploymentArtifact, ArtifactType};
+use crate::deployment::{ArtifactType, DeploymentArtifact, Platform};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -21,31 +21,31 @@ use uuid::Uuid;
 pub enum ContainerError {
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
-    
+
     #[error("Docker not available")]
     DockerNotAvailable,
-    
+
     #[error("Podman not available")]
     PodmanNotAvailable,
-    
+
     #[error("Build failed: {0}")]
     BuildFailed(String),
-    
+
     #[error("Runtime not supported: {0:?}")]
     RuntimeNotSupported(ContainerRuntime),
-    
+
     #[error("Registry error: {0}")]
     RegistryError(String),
-    
+
     #[error("Image not found: {0}")]
     ImageNotFound(String),
-    
+
     #[error("Container not found: {0}")]
     ContainerNotFound(String),
-    
+
     #[error("Command execution failed: {0}")]
     CommandFailed(String),
-    
+
     #[error("Invalid configuration: {0}")]
     InvalidConfiguration(String),
 }
@@ -187,7 +187,7 @@ pub enum RuntimeConfig {
 impl ContainerManager {
     pub fn new() -> ContainerResult<Self> {
         let mut runtime_configs = HashMap::new();
-        
+
         // Check available runtimes and configure them
         if Self::is_docker_available() {
             runtime_configs.insert(
@@ -195,7 +195,7 @@ impl ContainerManager {
                 RuntimeConfig::Docker(DockerConfig::default()),
             );
         }
-        
+
         if Self::is_podman_available() {
             runtime_configs.insert(
                 ContainerRuntime::Podman,
@@ -227,7 +227,10 @@ impl ContainerManager {
     }
 
     /// Build a container image
-    pub async fn build_image(&self, config: &ContainerConfig) -> ContainerResult<DeploymentArtifact> {
+    pub async fn build_image(
+        &self,
+        config: &ContainerConfig,
+    ) -> ContainerResult<DeploymentArtifact> {
         if !self.runtime_configs.contains_key(&config.runtime) {
             return Err(ContainerError::RuntimeNotSupported(config.runtime.clone()));
         }
@@ -302,44 +305,91 @@ impl ContainerManager {
     }
 
     /// Start deployment containers
-    pub async fn start_deployment(&self, deployment_id: Uuid, _artifacts: &[DeploymentArtifact]) -> ContainerResult<()> {
-        println!("Starting deployment containers for deployment: {}", deployment_id);
+    pub async fn start_deployment(
+        &self,
+        deployment_id: Uuid,
+        _artifacts: &[DeploymentArtifact],
+    ) -> ContainerResult<()> {
+        println!(
+            "Starting deployment containers for deployment: {}",
+            deployment_id
+        );
         Ok(())
     }
 
     /// Perform rolling update
-    pub async fn rolling_update(&self, deployment_id: Uuid, _artifacts: &[DeploymentArtifact]) -> ContainerResult<()> {
-        println!("Performing rolling update for deployment: {}", deployment_id);
+    pub async fn rolling_update(
+        &self,
+        deployment_id: Uuid,
+        _artifacts: &[DeploymentArtifact],
+    ) -> ContainerResult<()> {
+        println!(
+            "Performing rolling update for deployment: {}",
+            deployment_id
+        );
         Ok(())
     }
 
     /// Deploy to green environment for blue-green deployment
-    pub async fn deploy_to_green_environment(&self, deployment_id: Uuid, _artifacts: &[DeploymentArtifact]) -> ContainerResult<()> {
-        println!("Deploying to green environment for deployment: {}", deployment_id);
+    pub async fn deploy_to_green_environment(
+        &self,
+        deployment_id: Uuid,
+        _artifacts: &[DeploymentArtifact],
+    ) -> ContainerResult<()> {
+        println!(
+            "Deploying to green environment for deployment: {}",
+            deployment_id
+        );
         Ok(())
     }
 
     /// Switch traffic from blue to green
     pub async fn switch_blue_green_traffic(&self, deployment_id: Uuid) -> ContainerResult<()> {
-        println!("Switching blue-green traffic for deployment: {}", deployment_id);
+        println!(
+            "Switching blue-green traffic for deployment: {}",
+            deployment_id
+        );
         Ok(())
     }
 
     /// Deploy canary version
-    pub async fn deploy_canary(&self, deployment_id: Uuid, _artifacts: &[DeploymentArtifact], percentage: u8) -> ContainerResult<()> {
-        println!("Deploying canary ({}%) for deployment: {}", percentage, deployment_id);
+    pub async fn deploy_canary(
+        &self,
+        deployment_id: Uuid,
+        _artifacts: &[DeploymentArtifact],
+        percentage: u8,
+    ) -> ContainerResult<()> {
+        println!(
+            "Deploying canary ({}%) for deployment: {}",
+            percentage, deployment_id
+        );
         Ok(())
     }
 
     /// Update canary traffic percentage
-    pub async fn update_canary_traffic(&self, deployment_id: Uuid, percentage: u8) -> ContainerResult<()> {
-        println!("Updating canary traffic to {}% for deployment: {}", percentage, deployment_id);
+    pub async fn update_canary_traffic(
+        &self,
+        deployment_id: Uuid,
+        percentage: u8,
+    ) -> ContainerResult<()> {
+        println!(
+            "Updating canary traffic to {}% for deployment: {}",
+            percentage, deployment_id
+        );
         Ok(())
     }
 
     /// Deploy with custom strategy
-    pub async fn deploy_with_custom_strategy(&self, deployment_id: Uuid, _artifacts: &[DeploymentArtifact], _config: &serde_json::Value) -> ContainerResult<()> {
-        println!("Deploying with custom strategy for deployment: {}", deployment_id);
+    pub async fn deploy_with_custom_strategy(
+        &self,
+        deployment_id: Uuid,
+        _artifacts: &[DeploymentArtifact],
+        _config: &serde_json::Value,
+    ) -> ContainerResult<()> {
+        println!(
+            "Deploying with custom strategy for deployment: {}",
+            deployment_id
+        );
         Ok(())
     }
 
@@ -358,10 +408,13 @@ impl ContainerManager {
             .is_ok()
     }
 
-    async fn build_docker_image(&self, config: &ContainerConfig) -> ContainerResult<DeploymentArtifact> {
+    async fn build_docker_image(
+        &self,
+        config: &ContainerConfig,
+    ) -> ContainerResult<DeploymentArtifact> {
         // Implementation placeholder for Docker build
         let image_name = format!("{}:{}", config.name, config.version);
-        
+
         let artifact = DeploymentArtifact {
             id: config.id,
             name: image_name.clone(),
@@ -378,10 +431,13 @@ impl ContainerManager {
         Ok(artifact)
     }
 
-    async fn build_podman_image(&self, config: &ContainerConfig) -> ContainerResult<DeploymentArtifact> {
+    async fn build_podman_image(
+        &self,
+        config: &ContainerConfig,
+    ) -> ContainerResult<DeploymentArtifact> {
         // Implementation placeholder for Podman build
         let image_name = format!("{}:{}", config.name, config.version);
-        
+
         let artifact = DeploymentArtifact {
             id: config.id,
             name: image_name.clone(),
@@ -398,22 +454,38 @@ impl ContainerManager {
         Ok(artifact)
     }
 
-    async fn push_docker_image(&self, _image_name: &str, _registry_config: &RegistryConfig) -> ContainerResult<()> {
+    async fn push_docker_image(
+        &self,
+        _image_name: &str,
+        _registry_config: &RegistryConfig,
+    ) -> ContainerResult<()> {
         // Implementation placeholder
         Ok(())
     }
 
-    async fn push_podman_image(&self, _image_name: &str, _registry_config: &RegistryConfig) -> ContainerResult<()> {
+    async fn push_podman_image(
+        &self,
+        _image_name: &str,
+        _registry_config: &RegistryConfig,
+    ) -> ContainerResult<()> {
         // Implementation placeholder
         Ok(())
     }
 
-    async fn pull_docker_image(&self, _image_name: &str, _registry_config: &RegistryConfig) -> ContainerResult<()> {
+    async fn pull_docker_image(
+        &self,
+        _image_name: &str,
+        _registry_config: &RegistryConfig,
+    ) -> ContainerResult<()> {
         // Implementation placeholder
         Ok(())
     }
 
-    async fn pull_podman_image(&self, _image_name: &str, _registry_config: &RegistryConfig) -> ContainerResult<()> {
+    async fn pull_podman_image(
+        &self,
+        _image_name: &str,
+        _registry_config: &RegistryConfig,
+    ) -> ContainerResult<()> {
         // Implementation placeholder
         Ok(())
     }
@@ -440,7 +512,12 @@ impl ContainerManager {
 }
 
 impl ContainerConfig {
-    pub fn new(name: String, version: String, platform: Platform, runtime: ContainerRuntime) -> Self {
+    pub fn new(
+        name: String,
+        version: String,
+        platform: Platform,
+        runtime: ContainerRuntime,
+    ) -> Self {
         Self {
             id: Uuid::new_v4(),
             name,
@@ -476,8 +553,13 @@ impl ContainerConfig {
         config.multi_stage = true;
 
         // Set environment variables
-        config.environment.insert("RUST_LOG".to_string(), "info".to_string());
-        config.environment.insert("COMUNICADO_CONFIG_DIR".to_string(), "/app/config".to_string());
+        config
+            .environment
+            .insert("RUST_LOG".to_string(), "info".to_string());
+        config.environment.insert(
+            "COMUNICADO_CONFIG_DIR".to_string(),
+            "/app/config".to_string(),
+        );
 
         // Add health check
         config.health_check = Some(HealthCheckConfig {
@@ -500,9 +582,15 @@ impl ContainerConfig {
         };
 
         // Add labels
-        config.labels.insert("app".to_string(), "comunicado".to_string());
-        config.labels.insert("version".to_string(), config.version.clone());
-        config.labels.insert("maintainer".to_string(), "Comunicado Team".to_string());
+        config
+            .labels
+            .insert("app".to_string(), "comunicado".to_string());
+        config
+            .labels
+            .insert("version".to_string(), config.version.clone());
+        config
+            .labels
+            .insert("maintainer".to_string(), "Comunicado Team".to_string());
 
         config
     }

@@ -117,19 +117,27 @@ impl SenderRecognitionService {
         let email_address = self.extract_email_address(&normalized_email);
 
         // Look up in contacts database
-        let sender_info = match self.contacts_manager.find_contact_by_email(&email_address).await? {
+        let sender_info = match self
+            .contacts_manager
+            .find_contact_by_email(&email_address)
+            .await?
+        {
             Some(contact) => SenderInfo::from_contact(&contact, &email_address),
             None => SenderInfo::from_email(email),
         };
 
         // Update cache
-        self.update_cache(normalized_email, sender_info.clone()).await;
+        self.update_cache(normalized_email, sender_info.clone())
+            .await;
 
         Ok(sender_info)
     }
 
     /// Look up multiple senders at once (batch operation)
-    pub async fn lookup_senders(&self, emails: &[String]) -> ContactsResult<HashMap<String, SenderInfo>> {
+    pub async fn lookup_senders(
+        &self,
+        emails: &[String],
+    ) -> ContactsResult<HashMap<String, SenderInfo>> {
         let mut results = HashMap::new();
 
         for email in emails {
@@ -179,8 +187,14 @@ impl SenderRecognitionService {
     }
 
     /// Find contacts that could match an email for suggestion purposes
-    pub async fn suggest_contacts_for_email(&self, email_prefix: &str, limit: usize) -> ContactsResult<Vec<Contact>> {
-        self.contacts_manager.find_contacts_by_email_prefix(email_prefix, limit).await
+    pub async fn suggest_contacts_for_email(
+        &self,
+        email_prefix: &str,
+        limit: usize,
+    ) -> ContactsResult<Vec<Contact>> {
+        self.contacts_manager
+            .find_contacts_by_email_prefix(email_prefix, limit)
+            .await
     }
 }
 
@@ -195,28 +209,28 @@ mod tests {
         let temp_dir = tempfile::tempdir().unwrap();
         let db_path = temp_dir.path().join("test_contacts.db");
         let database_url = format!("sqlite:{}", db_path.display());
-        
+
         let database = ContactsDatabase::new(&database_url).await.unwrap();
         let token_manager = TokenManager::new();
         let contacts_manager = ContactsManager::new(database, token_manager).await.unwrap();
-        
+
         SenderRecognitionService::new(Arc::new(contacts_manager))
     }
 
     #[tokio::test]
     async fn test_extract_email_address() {
         let service = create_test_service().await;
-        
+
         assert_eq!(
             service.extract_email_address("john@example.com"),
             "john@example.com"
         );
-        
+
         assert_eq!(
             service.extract_email_address("John Doe <john@example.com>"),
             "john@example.com"
         );
-        
+
         assert_eq!(
             service.extract_email_address("\"John Doe\" <john@example.com>"),
             "john@example.com"
@@ -245,7 +259,10 @@ mod tests {
         contact.first_name = Some("John".to_string());
         contact.last_name = Some("Doe".to_string());
         contact.company = Some("Acme Corp".to_string());
-        contact.emails.push(ContactEmail::new("john@example.com".to_string(), "work".to_string()));
+        contact.emails.push(ContactEmail::new(
+            "john@example.com".to_string(),
+            "work".to_string(),
+        ));
 
         let sender_info = SenderInfo::from_contact(&contact, "john@example.com");
         assert_eq!(sender_info.display_name, "John Doe");

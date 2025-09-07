@@ -21,21 +21,31 @@ impl Default for Profiler {
 }
 
 impl Default for ProfileResult {
-    fn default() -> Self { Self }
+    fn default() -> Self {
+        Self
+    }
 }
 
 impl Default for FlameGraph {
-    fn default() -> Self { Self }
+    fn default() -> Self {
+        Self
+    }
 }
 
 impl Default for HotspotAnalyzer {
-    fn default() -> Self { Self }
+    fn default() -> Self {
+        Self
+    }
 }
 
 impl Default for ProfilerConfig {
-    fn default() -> Self { Self }
+    fn default() -> Self {
+        Self
+    }
 }
 
 impl Default for ProfilingSession {
-    fn default() -> Self { Self }
+    fn default() -> Self {
+        Self
+    }
 }

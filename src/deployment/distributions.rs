@@ -8,11 +8,11 @@
 //! - Scoop packages for Windows
 //! - Package submission and maintenance automation
 
-use crate::deployment::{Platform, DeploymentArtifact, OperatingSystem, ArtifactType};
+use crate::deployment::{ArtifactType, DeploymentArtifact, OperatingSystem, Platform};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::{PathBuf}; // Path
+use std::path::PathBuf; // Path
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -21,34 +21,34 @@ use uuid::Uuid;
 pub enum DistributionError {
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
-    
+
     #[error("Unsupported distribution: {0:?}")]
     UnsupportedDistribution(DistributionType),
-    
+
     #[error("Build failed: {0}")]
     BuildFailed(String),
-    
+
     #[error("Missing dependency: {0}")]
     MissingDependency(String),
-    
+
     #[error("Missing tool: {0}")]
     MissingTool(String),
-    
+
     #[error("Invalid metadata: {0}")]
     InvalidMetadata(String),
-    
+
     #[error("Platform not supported: {0:?}")]
     PlatformNotSupported(Platform),
-    
+
     #[error("Template error: {0}")]
     TemplateError(String),
-    
+
     #[error("Git error: {0}")]
     GitError(String),
-    
+
     #[error("Network error: {0}")]
     NetworkError(String),
-    
+
     #[error("Authentication error: {0}")]
     AuthError(String),
 }
@@ -135,17 +135,24 @@ pub trait DistributionBuilder: Send + Sync {
     fn build(&self, config: &DistributionConfig) -> DistributionResult<DeploymentArtifact>;
     fn supports_platform(&self, platform: &Platform) -> bool;
     fn validate_config(&self, config: &DistributionConfig) -> DistributionResult<()>;
-    fn submit_package(&self, config: &DistributionConfig, artifact: &DeploymentArtifact) -> DistributionResult<()>;
+    fn submit_package(
+        &self,
+        config: &DistributionConfig,
+        artifact: &DeploymentArtifact,
+    ) -> DistributionResult<()>;
 }
 
 impl DistributionManager {
     pub fn new() -> DistributionResult<Self> {
         let mut builders: HashMap<DistributionType, Box<dyn DistributionBuilder>> = HashMap::new();
-        
+
         // Register distribution builders
         builders.insert(DistributionType::Aur, Box::new(AurPackage::new()?));
         builders.insert(DistributionType::Nix, Box::new(NixPackage::new()?));
-        builders.insert(DistributionType::Homebrew, Box::new(HomebrewPackage::new()?));
+        builders.insert(
+            DistributionType::Homebrew,
+            Box::new(HomebrewPackage::new()?),
+        );
         builders.insert(DistributionType::Snap, Box::new(SnapPackage::new()?));
 
         Ok(Self {
@@ -155,17 +162,22 @@ impl DistributionManager {
     }
 
     /// Build a distribution package
-    pub async fn build_package(&self, config: DistributionConfig) -> DistributionResult<DeploymentArtifact> {
-        let builder = self.builders
-            .get(&config.distribution)
-            .ok_or_else(|| DistributionError::UnsupportedDistribution(config.distribution.clone()))?;
+    pub async fn build_package(
+        &self,
+        config: DistributionConfig,
+    ) -> DistributionResult<DeploymentArtifact> {
+        let builder = self.builders.get(&config.distribution).ok_or_else(|| {
+            DistributionError::UnsupportedDistribution(config.distribution.clone())
+        })?;
 
         // Validate configuration
         builder.validate_config(&config)?;
 
         // Check platform support
         if !builder.supports_platform(&config.platform) {
-            return Err(DistributionError::PlatformNotSupported(config.platform.clone()));
+            return Err(DistributionError::PlatformNotSupported(
+                config.platform.clone(),
+            ));
         }
 
         // Build package
@@ -178,9 +190,9 @@ impl DistributionManager {
         config: &DistributionConfig,
         artifact: &DeploymentArtifact,
     ) -> DistributionResult<()> {
-        let builder = self.builders
-            .get(&config.distribution)
-            .ok_or_else(|| DistributionError::UnsupportedDistribution(config.distribution.clone()))?;
+        let builder = self.builders.get(&config.distribution).ok_or_else(|| {
+            DistributionError::UnsupportedDistribution(config.distribution.clone())
+        })?;
 
         builder.submit_package(config, artifact)
     }
@@ -200,8 +212,16 @@ impl DistributionManager {
     }
 
     /// Register deployed version in distribution systems
-    pub async fn register_deployed_version(&self, version: &str, artifacts: &[DeploymentArtifact]) -> DistributionResult<()> {
-        println!("Distribution Manager: Registering deployed version {} with {} artifacts", version, artifacts.len());
+    pub async fn register_deployed_version(
+        &self,
+        version: &str,
+        artifacts: &[DeploymentArtifact],
+    ) -> DistributionResult<()> {
+        println!(
+            "Distribution Manager: Registering deployed version {} with {} artifacts",
+            version,
+            artifacts.len()
+        );
         // Implementation would update package repositories with new version
         Ok(())
     }
@@ -249,7 +269,7 @@ impl DistributionConfig {
     /// Create configuration for Comunicado
     pub fn for_comunicado(distribution: DistributionType, platform: Platform) -> Self {
         let source_url = "https://github.com/comunicado/comunicado".to_string();
-        
+
         let mut config = Self::new(
             "comunicado".to_string(),
             env!("CARGO_PKG_VERSION").to_string(),
@@ -258,7 +278,8 @@ impl DistributionConfig {
             source_url,
         );
 
-        config.description = "Modern TUI email and calendar client for terminal enthusiasts".to_string();
+        config.description =
+            "Modern TUI email and calendar client for terminal enthusiasts".to_string();
         config.maintainer = "Comunicado Team <contact@comunicado.app>".to_string();
         config.homepage = Some("https://github.com/comunicado/comunicado".to_string());
         config.license = "MIT".to_string();
@@ -266,32 +287,16 @@ impl DistributionConfig {
         // Add distribution-specific dependencies
         match distribution {
             DistributionType::Aur => {
-                config.dependencies = vec![
-                    "gcc".to_string(),
-                    "openssl".to_string(),
-                ];
-                config.build_dependencies = vec![
-                    "rust".to_string(),
-                    "cargo".to_string(),
-                ];
+                config.dependencies = vec!["gcc".to_string(), "openssl".to_string()];
+                config.build_dependencies = vec!["rust".to_string(), "cargo".to_string()];
             }
             DistributionType::Nix => {
-                config.dependencies = vec![
-                    "openssl".to_string(),
-                    "pkg-config".to_string(),
-                ];
-                config.build_dependencies = vec![
-                    "rustc".to_string(),
-                    "cargo".to_string(),
-                ];
+                config.dependencies = vec!["openssl".to_string(), "pkg-config".to_string()];
+                config.build_dependencies = vec!["rustc".to_string(), "cargo".to_string()];
             }
             DistributionType::Homebrew => {
-                config.dependencies = vec![
-                    "openssl@1.1".to_string(),
-                ];
-                config.build_dependencies = vec![
-                    "rust".to_string(),
-                ];
+                config.dependencies = vec!["openssl@1.1".to_string()];
+                config.build_dependencies = vec!["rust".to_string()];
             }
             _ => {}
         }
@@ -319,12 +324,14 @@ impl AurPackage {
 impl DistributionBuilder for AurPackage {
     fn build(&self, config: &DistributionConfig) -> DistributionResult<DeploymentArtifact> {
         if !self.tools_available {
-            return Err(DistributionError::MissingTool("makepkg not found - install base-devel package".to_string()));
+            return Err(DistributionError::MissingTool(
+                "makepkg not found - install base-devel package".to_string(),
+            ));
         }
-        
+
         // Generate PKGBUILD file for AUR
         let pkgbuild_content = self.generate_pkgbuild(config)?;
-        
+
         let artifact = DeploymentArtifact {
             id: config.id,
             name: format!("{}-{}.tar.gz", config.name, config.version),
@@ -353,7 +360,11 @@ impl DistributionBuilder for AurPackage {
         Ok(())
     }
 
-    fn submit_package(&self, _config: &DistributionConfig, _artifact: &DeploymentArtifact) -> DistributionResult<()> {
+    fn submit_package(
+        &self,
+        _config: &DistributionConfig,
+        _artifact: &DeploymentArtifact,
+    ) -> DistributionResult<()> {
         // Submit to AUR - would clone AUR repository, update PKGBUILD, and push
         Ok(())
     }
@@ -361,7 +372,8 @@ impl DistributionBuilder for AurPackage {
 
 impl AurPackage {
     fn generate_pkgbuild(&self, config: &DistributionConfig) -> DistributionResult<String> {
-        let pkgbuild = format!(r#"# Maintainer: {}
+        let pkgbuild = format!(
+            r#"# Maintainer: {}
 
 pkgname={}
 pkgver={}
@@ -393,8 +405,18 @@ package() {{
             config.description,
             config.homepage.as_ref().unwrap_or(&String::new()),
             config.license,
-            config.dependencies.iter().map(|d| format!("'{}'", d)).collect::<Vec<_>>().join(" "),
-            config.build_dependencies.iter().map(|d| format!("'{}'", d)).collect::<Vec<_>>().join(" "),
+            config
+                .dependencies
+                .iter()
+                .map(|d| format!("'{}'", d))
+                .collect::<Vec<_>>()
+                .join(" "),
+            config
+                .build_dependencies
+                .iter()
+                .map(|d| format!("'{}'", d))
+                .collect::<Vec<_>>()
+                .join(" "),
             config.source_url,
             config.source_checksum,
         );
@@ -422,12 +444,14 @@ impl NixPackage {
 impl DistributionBuilder for NixPackage {
     fn build(&self, config: &DistributionConfig) -> DistributionResult<DeploymentArtifact> {
         if !self.tools_available {
-            return Err(DistributionError::MissingTool("nix-build not found - install Nix package manager".to_string()));
+            return Err(DistributionError::MissingTool(
+                "nix-build not found - install Nix package manager".to_string(),
+            ));
         }
-        
+
         // Generate Nix derivation
         let derivation_content = self.generate_derivation(config)?;
-        
+
         let artifact = DeploymentArtifact {
             id: config.id,
             name: format!("{}.nix", config.name),
@@ -456,7 +480,11 @@ impl DistributionBuilder for NixPackage {
         Ok(())
     }
 
-    fn submit_package(&self, _config: &DistributionConfig, _artifact: &DeploymentArtifact) -> DistributionResult<()> {
+    fn submit_package(
+        &self,
+        _config: &DistributionConfig,
+        _artifact: &DeploymentArtifact,
+    ) -> DistributionResult<()> {
         // Submit to nixpkgs repository
         Ok(())
     }
@@ -464,7 +492,8 @@ impl DistributionBuilder for NixPackage {
 
 impl NixPackage {
     fn generate_derivation(&self, config: &DistributionConfig) -> DistributionResult<String> {
-        let derivation = format!(r#"{{ lib, rustPlatform, fetchFromGitHub, pkg-config, openssl }}:
+        let derivation = format!(
+            r#"{{ lib, rustPlatform, fetchFromGitHub, pkg-config, openssl }}:
 
 rustPlatform.buildRustPackage rec {{
   pname = "{}";
@@ -521,12 +550,14 @@ impl HomebrewPackage {
 impl DistributionBuilder for HomebrewPackage {
     fn build(&self, config: &DistributionConfig) -> DistributionResult<DeploymentArtifact> {
         if !self.tools_available {
-            return Err(DistributionError::MissingTool("brew not found - install Homebrew".to_string()));
+            return Err(DistributionError::MissingTool(
+                "brew not found - install Homebrew".to_string(),
+            ));
         }
-        
+
         // Generate Homebrew formula
         let formula_content = self.generate_formula(config)?;
-        
+
         let artifact = DeploymentArtifact {
             id: config.id,
             name: format!("{}.rb", config.name),
@@ -554,7 +585,11 @@ impl DistributionBuilder for HomebrewPackage {
         Ok(())
     }
 
-    fn submit_package(&self, _config: &DistributionConfig, _artifact: &DeploymentArtifact) -> DistributionResult<()> {
+    fn submit_package(
+        &self,
+        _config: &DistributionConfig,
+        _artifact: &DeploymentArtifact,
+    ) -> DistributionResult<()> {
         // Submit to Homebrew tap
         Ok(())
     }
@@ -562,7 +597,8 @@ impl DistributionBuilder for HomebrewPackage {
 
 impl HomebrewPackage {
     fn generate_formula(&self, config: &DistributionConfig) -> DistributionResult<String> {
-        let formula = format!(r#"class {} < Formula
+        let formula = format!(
+            r#"class {} < Formula
   desc "{}"
   homepage "{}"
   url "{}/archive/v{}.tar.gz"
@@ -581,7 +617,14 @@ impl HomebrewPackage {
   end
 end
 "#,
-            config.name.chars().next().unwrap().to_uppercase().chain(config.name.chars().skip(1)).collect::<String>(),
+            config
+                .name
+                .chars()
+                .next()
+                .unwrap()
+                .to_uppercase()
+                .chain(config.name.chars().skip(1))
+                .collect::<String>(),
             config.description,
             config.homepage.as_ref().unwrap_or(&String::new()),
             config.source_url,
@@ -614,9 +657,11 @@ impl SnapPackage {
 impl DistributionBuilder for SnapPackage {
     fn build(&self, config: &DistributionConfig) -> DistributionResult<DeploymentArtifact> {
         if !self.tools_available {
-            return Err(DistributionError::MissingTool("snapcraft not found - install snapcraft".to_string()));
+            return Err(DistributionError::MissingTool(
+                "snapcraft not found - install snapcraft".to_string(),
+            ));
         }
-        
+
         let artifact = DeploymentArtifact {
             id: config.id,
             name: format!("{}.snap", config.name),
@@ -641,7 +686,11 @@ impl DistributionBuilder for SnapPackage {
         Ok(())
     }
 
-    fn submit_package(&self, _config: &DistributionConfig, _artifact: &DeploymentArtifact) -> DistributionResult<()> {
+    fn submit_package(
+        &self,
+        _config: &DistributionConfig,
+        _artifact: &DeploymentArtifact,
+    ) -> DistributionResult<()> {
         // Submit to Snap Store
         Ok(())
     }

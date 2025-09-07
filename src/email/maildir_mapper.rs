@@ -9,13 +9,13 @@ use uuid::Uuid;
 pub enum MaildirMapperError {
     #[error("Invalid flag format: {0}")]
     InvalidFlag(String),
-    
+
     #[error("Invalid filename format: {0}")]
     InvalidFilename(String),
-    
+
     #[error("Unsupported maildir version: {0}")]
     UnsupportedVersion(String),
-    
+
     #[error("Metadata conversion error: {0}")]
     ConversionError(String),
 }
@@ -111,9 +111,12 @@ impl MaildirMapper {
         maildir_char: char,
     ) -> MaildirMapperResult<()> {
         let imap_flag = imap_flag.into();
-        
+
         // Validate that the character isn't already used
-        if self.flag_mappings.iter().any(|m| m.maildir_char == maildir_char)
+        if self
+            .flag_mappings
+            .iter()
+            .any(|m| m.maildir_char == maildir_char)
             || self.custom_mappings.values().any(|&c| c == maildir_char)
         {
             return Err(MaildirMapperError::InvalidFlag(format!(
@@ -153,7 +156,11 @@ impl MaildirMapper {
 
         for flag_char in maildir_flags.chars() {
             // Check standard mappings
-            if let Some(mapping) = self.flag_mappings.iter().find(|m| m.maildir_char == flag_char) {
+            if let Some(mapping) = self
+                .flag_mappings
+                .iter()
+                .find(|m| m.maildir_char == flag_char)
+            {
                 imap_flags.push(mapping.imap_flag.clone());
             }
             // Check custom mappings
@@ -194,7 +201,10 @@ impl MaildirMapper {
     }
 
     /// Parse a Maildir filename to extract metadata
-    pub fn parse_maildir_filename(&self, filename: &str) -> MaildirMapperResult<MaildirFilenameInfo> {
+    pub fn parse_maildir_filename(
+        &self,
+        filename: &str,
+    ) -> MaildirMapperResult<MaildirFilenameInfo> {
         // Split on the first colon to separate filename from flags
         let (base_part, flags_part) = if let Some(colon_pos) = filename.find(':') {
             let (base, rest) = filename.split_at(colon_pos);
@@ -212,12 +222,12 @@ impl MaildirMapper {
             )));
         }
 
-        let timestamp = parts[0]
-            .parse::<i64>()
-            .map_err(|_| MaildirMapperError::InvalidFilename(format!(
+        let timestamp = parts[0].parse::<i64>().map_err(|_| {
+            MaildirMapperError::InvalidFilename(format!(
                 "Invalid timestamp in filename: {}",
                 filename
-            )))?;
+            ))
+        })?;
 
         let unique_id = parts[1];
         let hostname = parts[2..].join(".");
@@ -235,10 +245,9 @@ impl MaildirMapper {
         };
 
         let datetime = DateTime::from_timestamp(timestamp, 0)
-            .ok_or_else(|| MaildirMapperError::InvalidFilename(format!(
-                "Invalid timestamp: {}",
-                timestamp
-            )))?
+            .ok_or_else(|| {
+                MaildirMapperError::InvalidFilename(format!("Invalid timestamp: {}", timestamp))
+            })?
             .with_timezone(&Utc);
 
         Ok(MaildirFilenameInfo {
@@ -269,7 +278,7 @@ impl MaildirMapper {
     ) {
         // Update flags from filename
         message.flags = filename_info.flags.clone();
-        
+
         // If the message doesn't have a date, use the one from filename
         if message.date == Utc::now() || message.date.timestamp() == 0 {
             message.date = filename_info.timestamp;
@@ -338,13 +347,13 @@ mod tests {
     #[test]
     fn test_imap_to_maildir_flags() {
         let mapper = MaildirMapper::new();
-        
+
         let flags = vec![
             "\\Seen".to_string(),
             "\\Flagged".to_string(),
             "\\Draft".to_string(),
         ];
-        
+
         let result = mapper.imap_flags_to_maildir(&flags);
         assert_eq!(result, "DFS"); // Sorted: Draft, Flagged, Seen
     }
@@ -352,10 +361,10 @@ mod tests {
     #[test]
     fn test_maildir_to_imap_flags() {
         let mapper = MaildirMapper::new();
-        
+
         let flags = "DFS";
         let result = mapper.maildir_flags_to_imap(flags);
-        
+
         assert_eq!(result.len(), 3);
         assert!(result.contains(&"\\Draft".to_string()));
         assert!(result.contains(&"\\Flagged".to_string()));
@@ -365,13 +374,13 @@ mod tests {
     #[test]
     fn test_custom_flag_mapping() {
         let mut mapper = MaildirMapper::new();
-        
+
         mapper.add_custom_mapping("\\CustomFlag", 'C').unwrap();
-        
+
         let flags = vec!["\\CustomFlag".to_string()];
         let result = mapper.imap_flags_to_maildir(&flags);
         assert_eq!(result, "C");
-        
+
         let imap_flags = mapper.maildir_flags_to_imap("C");
         assert_eq!(imap_flags, vec!["\\CustomFlag".to_string()]);
     }
@@ -379,7 +388,7 @@ mod tests {
     #[test]
     fn test_duplicate_custom_flag_error() {
         let mut mapper = MaildirMapper::new();
-        
+
         // Try to add a mapping with already used character 'D'
         let result = mapper.add_custom_mapping("\\CustomFlag", 'D');
         assert!(result.is_err());
@@ -388,10 +397,10 @@ mod tests {
     #[test]
     fn test_generate_maildir_filename_new() {
         let mapper = MaildirMapper::with_hostname("test.example.com");
-        
+
         let message = create_test_message();
         let filename = mapper.generate_maildir_filename(&message, false).unwrap();
-        
+
         assert!(filename.contains("test.example.com"));
         assert!(!filename.contains(":2,")); // No flags in new/ directory
     }
@@ -399,12 +408,12 @@ mod tests {
     #[test]
     fn test_generate_maildir_filename_cur() {
         let mapper = MaildirMapper::with_hostname("test.example.com");
-        
+
         let mut message = create_test_message();
         message.flags = vec!["\\Seen".to_string(), "\\Flagged".to_string()];
-        
+
         let filename = mapper.generate_maildir_filename(&message, true).unwrap();
-        
+
         assert!(filename.contains("test.example.com"));
         assert!(filename.contains(":2,FS")); // Flags in cur/ directory
     }
@@ -412,10 +421,10 @@ mod tests {
     #[test]
     fn test_parse_maildir_filename_basic() {
         let mapper = MaildirMapper::new();
-        
+
         let filename = "1609459200.abc123.test.example.com";
         let info = mapper.parse_maildir_filename(filename).unwrap();
-        
+
         assert_eq!(info.unique_id, "abc123");
         assert_eq!(info.hostname, "test.example.com");
         assert!(info.flags.is_empty());
@@ -425,10 +434,10 @@ mod tests {
     #[test]
     fn test_parse_maildir_filename_with_flags() {
         let mapper = MaildirMapper::new();
-        
+
         let filename = "1609459200.abc123.test.example.com:2,FS";
         let info = mapper.parse_maildir_filename(filename).unwrap();
-        
+
         assert_eq!(info.unique_id, "abc123");
         assert_eq!(info.hostname, "test.example.com");
         assert_eq!(info.flags.len(), 2);
@@ -440,7 +449,7 @@ mod tests {
     #[test]
     fn test_parse_invalid_filename() {
         let mapper = MaildirMapper::new();
-        
+
         let filename = "invalid";
         let result = mapper.parse_maildir_filename(filename);
         assert!(result.is_err());
@@ -450,7 +459,7 @@ mod tests {
     fn test_update_message_from_maildir() {
         let mapper = MaildirMapper::new();
         let mut message = create_test_message();
-        
+
         let filename_info = MaildirFilenameInfo {
             timestamp: Utc.with_ymd_and_hms(2021, 1, 1, 12, 0, 0).unwrap(),
             unique_id: "test123".to_string(),
@@ -458,9 +467,9 @@ mod tests {
             flags: vec!["\\Seen".to_string()],
             is_in_cur: true,
         };
-        
+
         mapper.update_message_from_maildir(&mut message, &filename_info);
-        
+
         assert_eq!(message.flags, vec!["\\Seen".to_string()]);
     }
 

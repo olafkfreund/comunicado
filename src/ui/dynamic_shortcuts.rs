@@ -1,19 +1,18 @@
 /// Dynamic keyboard shortcut hints system
-/// 
+///
 /// Provides context-aware keyboard shortcut hints that change based on the current
 /// UI state, focused element, and available actions. Shows relevant shortcuts
 /// in a non-intrusive way to help users discover and remember key bindings.
-
 use ratatui::{
-    layout::{Constraint, Direction, Layout, Rect, Alignment},
+    layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, List, ListItem, Paragraph, Wrap, Clear},
+    widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Wrap},
     Frame,
 };
 
 use crate::theme::Theme;
-use crate::ui::typography::{TypographySystem, TypographyLevel};
+use crate::ui::typography::{TypographyLevel, TypographySystem};
 use std::collections::HashMap;
 
 /// Keyboard shortcut information
@@ -85,7 +84,7 @@ impl ShortcutCategory {
         match self {
             Self::Navigation => "Navigation",
             Self::Email => "Email",
-            Self::Calendar => "Calendar", 
+            Self::Calendar => "Calendar",
             Self::Contacts => "Contacts",
             Self::General => "General",
             Self::Search => "Search",
@@ -133,10 +132,7 @@ pub enum ShortcutContext {
         can_create: bool,
     },
     /// Contacts view
-    Contacts {
-        has_selection: bool,
-        can_edit: bool,
-    },
+    Contacts { has_selection: bool, can_edit: bool },
     /// Search interface
     Search {
         is_active: bool,
@@ -150,10 +146,7 @@ pub enum ShortcutContext {
         can_send: bool,
     },
     /// Settings view
-    Settings {
-        section: String,
-        can_save: bool,
-    },
+    Settings { section: String, can_save: bool },
     /// General application context
     General,
 }
@@ -230,98 +223,405 @@ impl DynamicShortcutsManager {
     fn initialize_default_shortcuts(&mut self) {
         // General shortcuts (always available)
         let general_shortcuts = vec![
-            KeyboardShortcut::new("Ctrl+Q".to_string(), "Quit application".to_string(), ShortcutCategory::System).with_priority(100),
-            KeyboardShortcut::new("Ctrl+H".to_string(), "Show help".to_string(), ShortcutCategory::General).with_priority(90),
-            KeyboardShortcut::new("F1".to_string(), "Context help".to_string(), ShortcutCategory::General).with_priority(85),
-            KeyboardShortcut::new("Tab".to_string(), "Switch pane".to_string(), ShortcutCategory::Navigation).with_priority(80),
-            KeyboardShortcut::new("F5".to_string(), "Refresh".to_string(), ShortcutCategory::General).with_priority(70),
+            KeyboardShortcut::new(
+                "Ctrl+Q".to_string(),
+                "Quit application".to_string(),
+                ShortcutCategory::System,
+            )
+            .with_priority(100),
+            KeyboardShortcut::new(
+                "Ctrl+H".to_string(),
+                "Show help".to_string(),
+                ShortcutCategory::General,
+            )
+            .with_priority(90),
+            KeyboardShortcut::new(
+                "F1".to_string(),
+                "Context help".to_string(),
+                ShortcutCategory::General,
+            )
+            .with_priority(85),
+            KeyboardShortcut::new(
+                "Tab".to_string(),
+                "Switch pane".to_string(),
+                ShortcutCategory::Navigation,
+            )
+            .with_priority(80),
+            KeyboardShortcut::new(
+                "F5".to_string(),
+                "Refresh".to_string(),
+                ShortcutCategory::General,
+            )
+            .with_priority(70),
         ];
-        self.shortcuts.insert("general".to_string(), general_shortcuts);
+        self.shortcuts
+            .insert("general".to_string(), general_shortcuts);
 
         // Email list shortcuts
         let email_list_shortcuts = vec![
-            KeyboardShortcut::new("N".to_string(), "New email".to_string(), ShortcutCategory::Email).with_priority(100),
-            KeyboardShortcut::new("R".to_string(), "Reply".to_string(), ShortcutCategory::Email).with_priority(95),
-            KeyboardShortcut::new("Shift+R".to_string(), "Reply all".to_string(), ShortcutCategory::Email).with_priority(90),
-            KeyboardShortcut::new("F".to_string(), "Forward".to_string(), ShortcutCategory::Email).with_priority(85),
-            KeyboardShortcut::new("Del".to_string(), "Delete".to_string(), ShortcutCategory::Email).with_priority(80),
-            KeyboardShortcut::new("A".to_string(), "Archive".to_string(), ShortcutCategory::Email).with_priority(75),
-            KeyboardShortcut::new("U".to_string(), "Mark unread".to_string(), ShortcutCategory::Email).with_priority(70),
-            KeyboardShortcut::new("M".to_string(), "Move to folder".to_string(), ShortcutCategory::Email).with_priority(65),
-            KeyboardShortcut::new("↑/↓".to_string(), "Navigate messages".to_string(), ShortcutCategory::Navigation).with_priority(60),
-            KeyboardShortcut::new("Enter".to_string(), "Open message".to_string(), ShortcutCategory::Navigation).with_priority(55),
+            KeyboardShortcut::new(
+                "N".to_string(),
+                "New email".to_string(),
+                ShortcutCategory::Email,
+            )
+            .with_priority(100),
+            KeyboardShortcut::new(
+                "R".to_string(),
+                "Reply".to_string(),
+                ShortcutCategory::Email,
+            )
+            .with_priority(95),
+            KeyboardShortcut::new(
+                "Shift+R".to_string(),
+                "Reply all".to_string(),
+                ShortcutCategory::Email,
+            )
+            .with_priority(90),
+            KeyboardShortcut::new(
+                "F".to_string(),
+                "Forward".to_string(),
+                ShortcutCategory::Email,
+            )
+            .with_priority(85),
+            KeyboardShortcut::new(
+                "Del".to_string(),
+                "Delete".to_string(),
+                ShortcutCategory::Email,
+            )
+            .with_priority(80),
+            KeyboardShortcut::new(
+                "A".to_string(),
+                "Archive".to_string(),
+                ShortcutCategory::Email,
+            )
+            .with_priority(75),
+            KeyboardShortcut::new(
+                "U".to_string(),
+                "Mark unread".to_string(),
+                ShortcutCategory::Email,
+            )
+            .with_priority(70),
+            KeyboardShortcut::new(
+                "M".to_string(),
+                "Move to folder".to_string(),
+                ShortcutCategory::Email,
+            )
+            .with_priority(65),
+            KeyboardShortcut::new(
+                "↑/↓".to_string(),
+                "Navigate messages".to_string(),
+                ShortcutCategory::Navigation,
+            )
+            .with_priority(60),
+            KeyboardShortcut::new(
+                "Enter".to_string(),
+                "Open message".to_string(),
+                ShortcutCategory::Navigation,
+            )
+            .with_priority(55),
         ];
-        self.shortcuts.insert("email_list".to_string(), email_list_shortcuts);
+        self.shortcuts
+            .insert("email_list".to_string(), email_list_shortcuts);
 
         // Email reading shortcuts
         let email_reading_shortcuts = vec![
-            KeyboardShortcut::new("R".to_string(), "Reply".to_string(), ShortcutCategory::Email).with_priority(100),
-            KeyboardShortcut::new("Shift+R".to_string(), "Reply all".to_string(), ShortcutCategory::Email).with_priority(95),
-            KeyboardShortcut::new("F".to_string(), "Forward".to_string(), ShortcutCategory::Email).with_priority(90),
-            KeyboardShortcut::new("Del".to_string(), "Delete".to_string(), ShortcutCategory::Email).with_priority(85),
-            KeyboardShortcut::new("A".to_string(), "Archive".to_string(), ShortcutCategory::Email).with_priority(80),
-            KeyboardShortcut::new("U".to_string(), "Toggle read status".to_string(), ShortcutCategory::Email).with_priority(75),
-            KeyboardShortcut::new("Esc".to_string(), "Back to list".to_string(), ShortcutCategory::Navigation).with_priority(70),
-            KeyboardShortcut::new("↑/↓".to_string(), "Previous/Next message".to_string(), ShortcutCategory::Navigation).with_priority(65),
-            KeyboardShortcut::new("Space".to_string(), "Scroll down".to_string(), ShortcutCategory::View).with_priority(60),
-            KeyboardShortcut::new("Shift+Space".to_string(), "Scroll up".to_string(), ShortcutCategory::View).with_priority(55),
+            KeyboardShortcut::new(
+                "R".to_string(),
+                "Reply".to_string(),
+                ShortcutCategory::Email,
+            )
+            .with_priority(100),
+            KeyboardShortcut::new(
+                "Shift+R".to_string(),
+                "Reply all".to_string(),
+                ShortcutCategory::Email,
+            )
+            .with_priority(95),
+            KeyboardShortcut::new(
+                "F".to_string(),
+                "Forward".to_string(),
+                ShortcutCategory::Email,
+            )
+            .with_priority(90),
+            KeyboardShortcut::new(
+                "Del".to_string(),
+                "Delete".to_string(),
+                ShortcutCategory::Email,
+            )
+            .with_priority(85),
+            KeyboardShortcut::new(
+                "A".to_string(),
+                "Archive".to_string(),
+                ShortcutCategory::Email,
+            )
+            .with_priority(80),
+            KeyboardShortcut::new(
+                "U".to_string(),
+                "Toggle read status".to_string(),
+                ShortcutCategory::Email,
+            )
+            .with_priority(75),
+            KeyboardShortcut::new(
+                "Esc".to_string(),
+                "Back to list".to_string(),
+                ShortcutCategory::Navigation,
+            )
+            .with_priority(70),
+            KeyboardShortcut::new(
+                "↑/↓".to_string(),
+                "Previous/Next message".to_string(),
+                ShortcutCategory::Navigation,
+            )
+            .with_priority(65),
+            KeyboardShortcut::new(
+                "Space".to_string(),
+                "Scroll down".to_string(),
+                ShortcutCategory::View,
+            )
+            .with_priority(60),
+            KeyboardShortcut::new(
+                "Shift+Space".to_string(),
+                "Scroll up".to_string(),
+                ShortcutCategory::View,
+            )
+            .with_priority(55),
         ];
-        self.shortcuts.insert("email_reading".to_string(), email_reading_shortcuts);
+        self.shortcuts
+            .insert("email_reading".to_string(), email_reading_shortcuts);
 
         // Calendar shortcuts
         let calendar_shortcuts = vec![
-            KeyboardShortcut::new("N".to_string(), "New event".to_string(), ShortcutCategory::Calendar).with_priority(100),
-            KeyboardShortcut::new("E".to_string(), "Edit event".to_string(), ShortcutCategory::Calendar).with_priority(95),
-            KeyboardShortcut::new("Del".to_string(), "Delete event".to_string(), ShortcutCategory::Calendar).with_priority(90),
-            KeyboardShortcut::new("D".to_string(), "Day view".to_string(), ShortcutCategory::View).with_priority(85),
-            KeyboardShortcut::new("W".to_string(), "Week view".to_string(), ShortcutCategory::View).with_priority(80),
-            KeyboardShortcut::new("M".to_string(), "Month view".to_string(), ShortcutCategory::View).with_priority(75),
-            KeyboardShortcut::new("G".to_string(), "Agenda view".to_string(), ShortcutCategory::View).with_priority(70),
-            KeyboardShortcut::new("T".to_string(), "Go to today".to_string(), ShortcutCategory::Navigation).with_priority(65),
-            KeyboardShortcut::new("←/→".to_string(), "Previous/Next period".to_string(), ShortcutCategory::Navigation).with_priority(60),
-            KeyboardShortcut::new("↑/↓".to_string(), "Navigate events".to_string(), ShortcutCategory::Navigation).with_priority(55),
+            KeyboardShortcut::new(
+                "N".to_string(),
+                "New event".to_string(),
+                ShortcutCategory::Calendar,
+            )
+            .with_priority(100),
+            KeyboardShortcut::new(
+                "E".to_string(),
+                "Edit event".to_string(),
+                ShortcutCategory::Calendar,
+            )
+            .with_priority(95),
+            KeyboardShortcut::new(
+                "Del".to_string(),
+                "Delete event".to_string(),
+                ShortcutCategory::Calendar,
+            )
+            .with_priority(90),
+            KeyboardShortcut::new(
+                "D".to_string(),
+                "Day view".to_string(),
+                ShortcutCategory::View,
+            )
+            .with_priority(85),
+            KeyboardShortcut::new(
+                "W".to_string(),
+                "Week view".to_string(),
+                ShortcutCategory::View,
+            )
+            .with_priority(80),
+            KeyboardShortcut::new(
+                "M".to_string(),
+                "Month view".to_string(),
+                ShortcutCategory::View,
+            )
+            .with_priority(75),
+            KeyboardShortcut::new(
+                "G".to_string(),
+                "Agenda view".to_string(),
+                ShortcutCategory::View,
+            )
+            .with_priority(70),
+            KeyboardShortcut::new(
+                "T".to_string(),
+                "Go to today".to_string(),
+                ShortcutCategory::Navigation,
+            )
+            .with_priority(65),
+            KeyboardShortcut::new(
+                "←/→".to_string(),
+                "Previous/Next period".to_string(),
+                ShortcutCategory::Navigation,
+            )
+            .with_priority(60),
+            KeyboardShortcut::new(
+                "↑/↓".to_string(),
+                "Navigate events".to_string(),
+                ShortcutCategory::Navigation,
+            )
+            .with_priority(55),
         ];
-        self.shortcuts.insert("calendar".to_string(), calendar_shortcuts);
+        self.shortcuts
+            .insert("calendar".to_string(), calendar_shortcuts);
 
         // Contacts shortcuts
         let contacts_shortcuts = vec![
-            KeyboardShortcut::new("N".to_string(), "New contact".to_string(), ShortcutCategory::Contacts).with_priority(100),
-            KeyboardShortcut::new("E".to_string(), "Edit contact".to_string(), ShortcutCategory::Contacts).with_priority(95),
-            KeyboardShortcut::new("Del".to_string(), "Delete contact".to_string(), ShortcutCategory::Contacts).with_priority(90),
-            KeyboardShortcut::new("Ctrl+E".to_string(), "Send email".to_string(), ShortcutCategory::Email).with_priority(85),
-            KeyboardShortcut::new("Ctrl+C".to_string(), "Copy contact".to_string(), ShortcutCategory::General).with_priority(80),
-            KeyboardShortcut::new("↑/↓".to_string(), "Navigate contacts".to_string(), ShortcutCategory::Navigation).with_priority(75),
-            KeyboardShortcut::new("Enter".to_string(), "View contact".to_string(), ShortcutCategory::Navigation).with_priority(70),
-            KeyboardShortcut::new("/".to_string(), "Search contacts".to_string(), ShortcutCategory::Search).with_priority(65),
+            KeyboardShortcut::new(
+                "N".to_string(),
+                "New contact".to_string(),
+                ShortcutCategory::Contacts,
+            )
+            .with_priority(100),
+            KeyboardShortcut::new(
+                "E".to_string(),
+                "Edit contact".to_string(),
+                ShortcutCategory::Contacts,
+            )
+            .with_priority(95),
+            KeyboardShortcut::new(
+                "Del".to_string(),
+                "Delete contact".to_string(),
+                ShortcutCategory::Contacts,
+            )
+            .with_priority(90),
+            KeyboardShortcut::new(
+                "Ctrl+E".to_string(),
+                "Send email".to_string(),
+                ShortcutCategory::Email,
+            )
+            .with_priority(85),
+            KeyboardShortcut::new(
+                "Ctrl+C".to_string(),
+                "Copy contact".to_string(),
+                ShortcutCategory::General,
+            )
+            .with_priority(80),
+            KeyboardShortcut::new(
+                "↑/↓".to_string(),
+                "Navigate contacts".to_string(),
+                ShortcutCategory::Navigation,
+            )
+            .with_priority(75),
+            KeyboardShortcut::new(
+                "Enter".to_string(),
+                "View contact".to_string(),
+                ShortcutCategory::Navigation,
+            )
+            .with_priority(70),
+            KeyboardShortcut::new(
+                "/".to_string(),
+                "Search contacts".to_string(),
+                ShortcutCategory::Search,
+            )
+            .with_priority(65),
         ];
-        self.shortcuts.insert("contacts".to_string(), contacts_shortcuts);
+        self.shortcuts
+            .insert("contacts".to_string(), contacts_shortcuts);
 
         // Search shortcuts
         let search_shortcuts = vec![
-            KeyboardShortcut::new("/".to_string(), "Start search".to_string(), ShortcutCategory::Search).with_priority(100),
-            KeyboardShortcut::new("Ctrl+F".to_string(), "Find in page".to_string(), ShortcutCategory::Search).with_priority(95),
-            KeyboardShortcut::new("F3".to_string(), "Find next".to_string(), ShortcutCategory::Search).with_priority(90),
-            KeyboardShortcut::new("Shift+F3".to_string(), "Find previous".to_string(), ShortcutCategory::Search).with_priority(85),
-            KeyboardShortcut::new("Esc".to_string(), "Clear search".to_string(), ShortcutCategory::Search).with_priority(80),
-            KeyboardShortcut::new("F5".to_string(), "Toggle fuzzy search".to_string(), ShortcutCategory::Search).with_priority(75),
-            KeyboardShortcut::new("Enter".to_string(), "Select result".to_string(), ShortcutCategory::Navigation).with_priority(70),
-            KeyboardShortcut::new("↑/↓".to_string(), "Navigate results".to_string(), ShortcutCategory::Navigation).with_priority(65),
+            KeyboardShortcut::new(
+                "/".to_string(),
+                "Start search".to_string(),
+                ShortcutCategory::Search,
+            )
+            .with_priority(100),
+            KeyboardShortcut::new(
+                "Ctrl+F".to_string(),
+                "Find in page".to_string(),
+                ShortcutCategory::Search,
+            )
+            .with_priority(95),
+            KeyboardShortcut::new(
+                "F3".to_string(),
+                "Find next".to_string(),
+                ShortcutCategory::Search,
+            )
+            .with_priority(90),
+            KeyboardShortcut::new(
+                "Shift+F3".to_string(),
+                "Find previous".to_string(),
+                ShortcutCategory::Search,
+            )
+            .with_priority(85),
+            KeyboardShortcut::new(
+                "Esc".to_string(),
+                "Clear search".to_string(),
+                ShortcutCategory::Search,
+            )
+            .with_priority(80),
+            KeyboardShortcut::new(
+                "F5".to_string(),
+                "Toggle fuzzy search".to_string(),
+                ShortcutCategory::Search,
+            )
+            .with_priority(75),
+            KeyboardShortcut::new(
+                "Enter".to_string(),
+                "Select result".to_string(),
+                ShortcutCategory::Navigation,
+            )
+            .with_priority(70),
+            KeyboardShortcut::new(
+                "↑/↓".to_string(),
+                "Navigate results".to_string(),
+                ShortcutCategory::Navigation,
+            )
+            .with_priority(65),
         ];
-        self.shortcuts.insert("search".to_string(), search_shortcuts);
+        self.shortcuts
+            .insert("search".to_string(), search_shortcuts);
 
         // Compose shortcuts
         let compose_shortcuts = vec![
-            KeyboardShortcut::new("Ctrl+Enter".to_string(), "Send email".to_string(), ShortcutCategory::Compose).with_priority(100),
-            KeyboardShortcut::new("Ctrl+S".to_string(), "Save draft".to_string(), ShortcutCategory::Compose).with_priority(95),
-            KeyboardShortcut::new("Ctrl+A".to_string(), "Add attachment".to_string(), ShortcutCategory::Compose).with_priority(90),
-            KeyboardShortcut::new("Ctrl+K".to_string(), "Add hyperlink".to_string(), ShortcutCategory::Compose).with_priority(85),
-            KeyboardShortcut::new("Tab".to_string(), "Next field".to_string(), ShortcutCategory::Navigation).with_priority(80),
-            KeyboardShortcut::new("Shift+Tab".to_string(), "Previous field".to_string(), ShortcutCategory::Navigation).with_priority(75),
-            KeyboardShortcut::new("Esc".to_string(), "Cancel compose".to_string(), ShortcutCategory::Navigation).with_priority(70),
-            KeyboardShortcut::new("Ctrl+Z".to_string(), "Undo".to_string(), ShortcutCategory::Compose).with_priority(65),
-            KeyboardShortcut::new("Ctrl+Y".to_string(), "Redo".to_string(), ShortcutCategory::Compose).with_priority(60),
+            KeyboardShortcut::new(
+                "Ctrl+Enter".to_string(),
+                "Send email".to_string(),
+                ShortcutCategory::Compose,
+            )
+            .with_priority(100),
+            KeyboardShortcut::new(
+                "Ctrl+S".to_string(),
+                "Save draft".to_string(),
+                ShortcutCategory::Compose,
+            )
+            .with_priority(95),
+            KeyboardShortcut::new(
+                "Ctrl+A".to_string(),
+                "Add attachment".to_string(),
+                ShortcutCategory::Compose,
+            )
+            .with_priority(90),
+            KeyboardShortcut::new(
+                "Ctrl+K".to_string(),
+                "Add hyperlink".to_string(),
+                ShortcutCategory::Compose,
+            )
+            .with_priority(85),
+            KeyboardShortcut::new(
+                "Tab".to_string(),
+                "Next field".to_string(),
+                ShortcutCategory::Navigation,
+            )
+            .with_priority(80),
+            KeyboardShortcut::new(
+                "Shift+Tab".to_string(),
+                "Previous field".to_string(),
+                ShortcutCategory::Navigation,
+            )
+            .with_priority(75),
+            KeyboardShortcut::new(
+                "Esc".to_string(),
+                "Cancel compose".to_string(),
+                ShortcutCategory::Navigation,
+            )
+            .with_priority(70),
+            KeyboardShortcut::new(
+                "Ctrl+Z".to_string(),
+                "Undo".to_string(),
+                ShortcutCategory::Compose,
+            )
+            .with_priority(65),
+            KeyboardShortcut::new(
+                "Ctrl+Y".to_string(),
+                "Redo".to_string(),
+                ShortcutCategory::Compose,
+            )
+            .with_priority(60),
         ];
-        self.shortcuts.insert("compose".to_string(), compose_shortcuts);
+        self.shortcuts
+            .insert("compose".to_string(), compose_shortcuts);
     }
 
     /// Set current context and update available shortcuts
@@ -447,51 +747,69 @@ impl DynamicShortcutsManager {
     }
 
     /// Filter shortcuts based on context state
-    fn filter_shortcuts_by_context(&self, shortcuts: Vec<KeyboardShortcut>, context: &ShortcutContext) -> Vec<KeyboardShortcut> {
-        shortcuts.into_iter().map(|mut shortcut| {
-            // Update availability based on context
-            shortcut.available = match context {
-                ShortcutContext::EmailList { has_selection, can_compose, .. } => {
-                    match shortcut.key.as_str() {
+    fn filter_shortcuts_by_context(
+        &self,
+        shortcuts: Vec<KeyboardShortcut>,
+        context: &ShortcutContext,
+    ) -> Vec<KeyboardShortcut> {
+        shortcuts
+            .into_iter()
+            .map(|mut shortcut| {
+                // Update availability based on context
+                shortcut.available = match context {
+                    ShortcutContext::EmailList {
+                        has_selection,
+                        can_compose,
+                        ..
+                    } => match shortcut.key.as_str() {
                         "R" | "Shift+R" | "F" | "Del" | "A" | "U" | "M" => *has_selection,
                         "N" => *can_compose,
                         _ => true,
-                    }
-                }
-                ShortcutContext::EmailReading { is_draft, has_attachments, can_reply, .. } => {
-                    match shortcut.key.as_str() {
+                    },
+                    ShortcutContext::EmailReading {
+                        is_draft,
+                        has_attachments,
+                        can_reply,
+                        ..
+                    } => match shortcut.key.as_str() {
                         "R" | "Shift+R" => *can_reply,
                         "F" => !*is_draft,
                         "Ctrl+A" => *has_attachments,
                         _ => true,
-                    }
-                }
-                ShortcutContext::Calendar { has_selection, can_create, .. } => {
-                    match shortcut.key.as_str() {
+                    },
+                    ShortcutContext::Calendar {
+                        has_selection,
+                        can_create,
+                        ..
+                    } => match shortcut.key.as_str() {
                         "E" | "Del" => *has_selection,
                         "N" => *can_create,
                         _ => true,
-                    }
-                }
-                ShortcutContext::Search { is_active, has_results, .. } => {
-                    match shortcut.key.as_str() {
+                    },
+                    ShortcutContext::Search {
+                        is_active,
+                        has_results,
+                        ..
+                    } => match shortcut.key.as_str() {
                         "F3" | "Shift+F3" | "Enter" | "↑/↓" => *has_results,
                         "Esc" => *is_active,
                         "/" | "Ctrl+F" => !*is_active,
                         _ => true,
-                    }
-                }
-                ShortcutContext::Compose { has_content, can_send, .. } => {
-                    match shortcut.key.as_str() {
+                    },
+                    ShortcutContext::Compose {
+                        has_content,
+                        can_send,
+                        ..
+                    } => match shortcut.key.as_str() {
                         "Ctrl+Enter" => *can_send,
                         "Ctrl+S" | "Ctrl+Z" | "Ctrl+Y" => *has_content,
                         _ => true,
-                    }
-                }
-                _ => true,
-            };
-            shortcut
-        }).collect()
+                    },
+                    _ => true,
+                };
+                shortcut
+            })
+            .collect()
     }
 }
 
@@ -534,7 +852,7 @@ impl DynamicShortcutsRenderer {
                 shortcut.key.clone(),
                 Style::default()
                     .fg(theme.colors.palette.accent)
-                    .add_modifier(Modifier::BOLD)
+                    .add_modifier(Modifier::BOLD),
             ));
 
             spans.push(Span::raw(": "));
@@ -542,7 +860,7 @@ impl DynamicShortcutsRenderer {
             // Description in normal color
             spans.push(Span::styled(
                 shortcut.description.clone(),
-                typography.get_typography_style(TypographyLevel::Caption, theme)
+                typography.get_typography_style(TypographyLevel::Caption, theme),
             ));
         }
 
@@ -605,7 +923,7 @@ impl DynamicShortcutsRenderer {
                         format!("{:12}", shortcut.key),
                         Style::default()
                             .fg(theme.colors.palette.accent)
-                            .add_modifier(Modifier::BOLD)
+                            .add_modifier(Modifier::BOLD),
                     ),
                     Span::raw(" "),
                     Span::styled(
@@ -614,7 +932,7 @@ impl DynamicShortcutsRenderer {
                             typography.get_typography_style(TypographyLevel::Body, theme)
                         } else {
                             Style::default().fg(theme.colors.palette.text_muted)
-                        }
+                        },
                     ),
                 ];
                 ListItem::new(Line::from(spans))
@@ -653,7 +971,13 @@ impl DynamicShortcutsRenderer {
 
         // Calculate layout for categories
         let category_count = shortcuts_by_category.len();
-        let cols = if category_count <= 2 { 1 } else if category_count <= 4 { 2 } else { 3 };
+        let cols = if category_count <= 2 {
+            1
+        } else if category_count <= 4 {
+            2
+        } else {
+            3
+        };
         let rows = (category_count + cols - 1) / cols;
 
         let col_constraints: Vec<Constraint> = (0..cols)
@@ -675,9 +999,8 @@ impl DynamicShortcutsRenderer {
                 continue;
             }
 
-            let row_constraints: Vec<Constraint> = (start_idx..end_idx)
-                .map(|_| Constraint::Min(5))
-                .collect();
+            let row_constraints: Vec<Constraint> =
+                (start_idx..end_idx).map(|_| Constraint::Min(5)).collect();
 
             let rows_layout = Layout::default()
                 .direction(Direction::Vertical)
@@ -685,8 +1008,13 @@ impl DynamicShortcutsRenderer {
                 .split(*column_area);
 
             for (row_idx, &category) in categories[start_idx..end_idx].iter().enumerate() {
-                if let (Some(row_area), Some(shortcuts)) = (rows_layout.get(row_idx), shortcuts_by_category.get(&category)) {
-                    Self::render_category_section(*row_area, category, shortcuts, theme, typography, frame);
+                if let (Some(row_area), Some(shortcuts)) = (
+                    rows_layout.get(row_idx),
+                    shortcuts_by_category.get(&category),
+                ) {
+                    Self::render_category_section(
+                        *row_area, category, shortcuts, theme, typography, frame,
+                    );
                 }
             }
         }
@@ -711,7 +1039,7 @@ impl DynamicShortcutsRenderer {
             Span::raw(" "),
             Span::styled(
                 category.display_name(),
-                typography.get_typography_style(TypographyLevel::Heading3, theme)
+                typography.get_typography_style(TypographyLevel::Heading3, theme),
             ),
         ]));
 
@@ -731,7 +1059,7 @@ impl DynamicShortcutsRenderer {
                             format!("{:10}", shortcut.key),
                             Style::default()
                                 .fg(theme.colors.palette.accent)
-                                .add_modifier(Modifier::BOLD)
+                                .add_modifier(Modifier::BOLD),
                         ),
                         Span::raw(" "),
                         Span::styled(
@@ -740,7 +1068,7 @@ impl DynamicShortcutsRenderer {
                                 typography.get_typography_style(TypographyLevel::Caption, theme)
                             } else {
                                 Style::default().fg(theme.colors.palette.text_muted)
-                            }
+                            },
                         ),
                     ];
                     ListItem::new(Line::from(spans))
@@ -770,7 +1098,7 @@ impl DynamicShortcutsRenderer {
                 shortcut.key.clone(),
                 Style::default()
                     .fg(theme.colors.palette.accent)
-                    .add_modifier(Modifier::BOLD)
+                    .add_modifier(Modifier::BOLD),
             ),
             Span::raw(")"),
         ];
@@ -791,8 +1119,10 @@ mod tests {
         let shortcut = KeyboardShortcut::new(
             "Ctrl+N".to_string(),
             "New email".to_string(),
-            ShortcutCategory::Email
-        ).with_priority(100).available(true);
+            ShortcutCategory::Email,
+        )
+        .with_priority(100)
+        .available(true);
 
         assert_eq!(shortcut.key, "Ctrl+N");
         assert_eq!(shortcut.description, "New email");
@@ -804,19 +1134,19 @@ mod tests {
     #[test]
     fn test_context_shortcuts() {
         let mut manager = DynamicShortcutsManager::new();
-        
+
         let context = ShortcutContext::EmailList {
             has_selection: true,
             can_compose: true,
             folder_name: "INBOX".to_string(),
         };
-        
+
         manager.set_context(context);
         let shortcuts = manager.get_contextual_shortcuts();
-        
+
         // Should have general + email list shortcuts
         assert!(!shortcuts.is_empty());
-        
+
         // Should have reply shortcut available
         let has_reply = shortcuts.iter().any(|s| s.key == "R" && s.available);
         assert!(has_reply);
@@ -825,23 +1155,23 @@ mod tests {
     #[test]
     fn test_shortcut_filtering() {
         let mut manager = DynamicShortcutsManager::new();
-        
+
         // Context with no selection should disable selection-dependent shortcuts
         let context = ShortcutContext::EmailList {
             has_selection: false,
             can_compose: true,
             folder_name: "INBOX".to_string(),
         };
-        
+
         manager.set_context(context);
         let shortcuts = manager.get_contextual_shortcuts();
-        
+
         // Reply shortcut should be unavailable
         let reply_shortcut = shortcuts.iter().find(|s| s.key == "R");
         if let Some(shortcut) = reply_shortcut {
             assert!(!shortcut.available);
         }
-        
+
         // New email shortcut should be available
         let new_shortcut = shortcuts.iter().find(|s| s.key == "N");
         if let Some(shortcut) = new_shortcut {
@@ -857,17 +1187,17 @@ mod tests {
             can_compose: true,
             folder_name: "INBOX".to_string(),
         };
-        
+
         let mut test_manager = manager;
         test_manager.set_context(context);
         let grouped = test_manager.get_shortcuts_by_category();
-        
+
         // Should have multiple categories
         assert!(!grouped.is_empty());
-        
+
         // Should have email category
         assert!(grouped.contains_key(&ShortcutCategory::Email));
-        
+
         // Should have navigation category
         assert!(grouped.contains_key(&ShortcutCategory::Navigation));
     }
@@ -875,19 +1205,19 @@ mod tests {
     #[test]
     fn test_custom_shortcuts() {
         let mut manager = DynamicShortcutsManager::new();
-        
+
         let custom_shortcut = KeyboardShortcut::new(
             "Ctrl+T".to_string(),
             "Custom action".to_string(),
-            ShortcutCategory::General
+            ShortcutCategory::General,
         );
-        
+
         manager.add_custom_shortcut("custom_test".to_string(), custom_shortcut);
-        
+
         let shortcuts = manager.get_contextual_shortcuts();
         let has_custom = shortcuts.iter().any(|s| s.key == "Ctrl+T");
         assert!(has_custom);
-        
+
         manager.remove_custom_shortcut("custom_test");
         let shortcuts = manager.get_contextual_shortcuts();
         let has_custom = shortcuts.iter().any(|s| s.key == "Ctrl+T");
@@ -898,19 +1228,20 @@ mod tests {
     fn test_auto_hide_timer() {
         let mut manager = DynamicShortcutsManager::new();
         manager.hint_duration_ms = 100; // 100ms for test
-        
+
         // Initially should show
         assert!(manager.should_show_hints());
-        
+
         // Set context to start timer
         manager.set_context(ShortcutContext::General);
         assert!(manager.should_show_hints());
-        
+
         // Wait for auto-hide (would require actual delay in real test)
         // For unit test, we can manually set the timestamp
-        manager.last_context_change = Some(std::time::Instant::now() - std::time::Duration::from_millis(200));
+        manager.last_context_change =
+            Some(std::time::Instant::now() - std::time::Duration::from_millis(200));
         assert!(!manager.should_show_hints());
-        
+
         // Force show should reset timer
         manager.show_hints();
         assert!(manager.should_show_hints());

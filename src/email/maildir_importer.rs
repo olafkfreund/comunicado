@@ -1,5 +1,5 @@
 use crate::email::{
-    EmailDatabase, FolderHierarchyMapper, MaildirErrorHandler, MaildirMapper, 
+    EmailDatabase, FolderHierarchyMapper, MaildirErrorHandler, MaildirMapper,
     MaildirOperationContext, StoredMessage, TimestampUtils,
 };
 use anyhow::Result;
@@ -16,22 +16,22 @@ use walkdir::WalkDir;
 pub enum MaildirImportError {
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
-    
+
     #[error("Database error: {0}")]
     Database(String),
-    
+
     #[error("Invalid Maildir structure: {0}")]
     InvalidStructure(String),
-    
+
     #[error("Email parsing error: {0}")]
     EmailParsing(String),
-    
+
     #[error("Folder mapping error: {0}")]
     FolderMapping(String),
-    
+
     #[error("Import cancelled by user")]
     Cancelled,
-    
+
     #[error("Permission denied: {0}")]
     Permission(String),
 }
@@ -66,7 +66,7 @@ impl ImportStats {
             (self.messages_imported as f64 / self.messages_found as f64) * 100.0
         }
     }
-    
+
     /// Check if import was successful overall
     pub fn is_successful(&self) -> bool {
         self.messages_failed == 0 && !self.errors.is_empty() == false
@@ -163,7 +163,8 @@ impl MaildirImporter {
 
     /// Cancel the current import operation
     pub fn cancel(&self) {
-        self.cancelled.store(true, std::sync::atomic::Ordering::Relaxed);
+        self.cancelled
+            .store(true, std::sync::atomic::Ordering::Relaxed);
     }
 
     /// Check if import has been cancelled
@@ -178,14 +179,17 @@ impl MaildirImporter {
         account_id: &str,
     ) -> MaildirImportResult<ImportStats> {
         let path = maildir_path.as_ref();
-        
+
         // Create operation context for this import
         let mut operation_context = MaildirOperationContext::new("Maildir Import".to_string())
             .with_paths(Some(path.to_path_buf()), None);
 
         // Validate path with enhanced error handling
         if let Err(io_error) = std::fs::metadata(path) {
-            let maildir_error = self.error_handler.classify_error(io_error, path, "validating import path").await;
+            let maildir_error = self
+                .error_handler
+                .classify_error(io_error, path, "validating import path")
+                .await;
             let detailed_error = operation_context.create_detailed_error(maildir_error);
             return Err(MaildirImportError::InvalidStructure(detailed_error));
         }
@@ -204,9 +208,9 @@ impl MaildirImporter {
             None
         };
 
-        // First pass: scan directory structure 
+        // First pass: scan directory structure
         let maildir_folders = self.scan_maildir_structure(path, &mut stats).await?;
-        
+
         if let Some(ref pb) = progress_bar {
             pb.set_length(stats.messages_found as u64);
             pb.set_message("Importing messages...");
@@ -220,17 +224,21 @@ impl MaildirImporter {
 
             // Update progress context
             operation_context.update_progress(
-                folder_index, 
-                maildir_folders.len(), 
-                Some(folder_info.imap_name.clone())
+                folder_index,
+                maildir_folders.len(),
+                Some(folder_info.imap_name.clone()),
             );
 
             // Import folder with error recovery
-            match self.import_folder_with_retry(&folder_info, account_id, &mut stats, &progress_bar).await {
-                Ok(_) => {},
+            match self
+                .import_folder_with_retry(&folder_info, account_id, &mut stats, &progress_bar)
+                .await
+            {
+                Ok(_) => {}
                 Err(e) => {
                     // Log error but continue with other folders
-                    let error_msg = format!("Failed to import folder '{}': {}", folder_info.imap_name, e);
+                    let error_msg =
+                        format!("Failed to import folder '{}': {}", folder_info.imap_name, e);
                     stats.errors.push(error_msg);
                     stats.messages_failed += folder_info.message_count;
                 }
@@ -260,7 +268,7 @@ impl MaildirImporter {
 
             let entry = entry.map_err(|e| MaildirImportError::Io(e.into()))?;
             let path = entry.path();
-            
+
             stats.directories_scanned += 1;
 
             if self.is_valid_maildir_folder(path).await? {
@@ -277,7 +285,7 @@ impl MaildirImporter {
     /// Check if a directory is a valid Maildir folder
     async fn is_valid_maildir_folder<P: AsRef<Path>>(&self, path: P) -> MaildirImportResult<bool> {
         let path = path.as_ref();
-        
+
         if !path.is_dir() {
             return Ok(false);
         }
@@ -319,16 +327,19 @@ impl MaildirImporter {
     }
 
     /// Count messages in a directory
-    async fn count_messages_in_dir<P: AsRef<Path>>(&self, dir_path: P) -> MaildirImportResult<usize> {
+    async fn count_messages_in_dir<P: AsRef<Path>>(
+        &self,
+        dir_path: P,
+    ) -> MaildirImportResult<usize> {
         let path = dir_path.as_ref();
-        
+
         if !path.exists() {
             return Ok(0);
         }
 
         let mut count = 0;
         let mut entries = fs::read_dir(path).await?;
-        
+
         while let Some(entry) = entries.next_entry().await? {
             if entry.file_type().await?.is_file() {
                 count += 1;
@@ -347,7 +358,8 @@ impl MaildirImporter {
         progress_bar: &Option<ProgressBar>,
     ) -> MaildirImportResult<()> {
         // Ensure folder exists in database
-        self.ensure_folder_exists(account_id, &folder_info.imap_name).await?;
+        self.ensure_folder_exists(account_id, &folder_info.imap_name)
+            .await?;
 
         // Import messages from new/ directory
         self.import_messages_from_dir(
@@ -357,7 +369,8 @@ impl MaildirImporter {
             false, // new messages don't have flags
             stats,
             progress_bar,
-        ).await?;
+        )
+        .await?;
 
         // Import messages from cur/ directory
         self.import_messages_from_dir(
@@ -367,7 +380,8 @@ impl MaildirImporter {
             true, // cur messages may have flags
             stats,
             progress_bar,
-        ).await?;
+        )
+        .await?;
 
         Ok(())
     }
@@ -383,25 +397,23 @@ impl MaildirImporter {
         progress_bar: &Option<ProgressBar>,
     ) -> MaildirImportResult<()> {
         let path = dir_path.as_ref();
-        
+
         if !path.exists() {
             return Ok(());
         }
 
         let mut entries = fs::read_dir(path).await?;
-        
+
         while let Some(entry) = entries.next_entry().await? {
             if self.is_cancelled() {
                 return Err(MaildirImportError::Cancelled);
             }
 
             if entry.file_type().await?.is_file() {
-                match self.import_message_file(
-                    &entry.path(),
-                    account_id,
-                    folder_name,
-                    parse_flags,
-                ).await {
+                match self
+                    .import_message_file(&entry.path(), account_id, folder_name, parse_flags)
+                    .await
+                {
                     Ok(imported) => {
                         if imported {
                             stats.messages_imported += 1;
@@ -458,7 +470,8 @@ impl MaildirImporter {
         if parse_flags {
             if let Some(filename) = path.file_name().and_then(|n| n.to_str()) {
                 if let Ok(filename_info) = self.mapper.parse_maildir_filename(filename) {
-                    self.mapper.update_message_from_maildir(&mut message, &filename_info);
+                    self.mapper
+                        .update_message_from_maildir(&mut message, &filename_info);
                 }
             }
         }
@@ -544,7 +557,7 @@ impl MaildirImporter {
                 // Check if this looks like a header line
                 if line.contains(": ") {
                     header_found = true;
-                    
+
                     if let Some(value) = line.strip_prefix("Subject: ") {
                         message.subject = value.to_string();
                     } else if let Some(value) = line.strip_prefix("From: ") {
@@ -562,7 +575,8 @@ impl MaildirImporter {
                     } else if let Some(value) = line.strip_prefix("In-Reply-To: ") {
                         message.in_reply_to = Some(value.to_string());
                     } else if let Some(value) = line.strip_prefix("References: ") {
-                        message.references = value.split_whitespace().map(|s| s.to_string()).collect();
+                        message.references =
+                            value.split_whitespace().map(|s| s.to_string()).collect();
                     }
                 } else if !header_found {
                     // If we haven't found any headers yet and this doesn't look like a header,
@@ -606,14 +620,22 @@ impl MaildirImporter {
     }
 
     /// Check if a message already exists in the database
-    async fn message_exists(&self, _account_id: &str, _message_id: &str) -> MaildirImportResult<bool> {
+    async fn message_exists(
+        &self,
+        _account_id: &str,
+        _message_id: &str,
+    ) -> MaildirImportResult<bool> {
         // This would need to be implemented in EmailDatabase
         // For now, return false (assume no duplicates)
         Ok(false)
     }
 
     /// Ensure folder exists in database
-    async fn ensure_folder_exists(&self, _account_id: &str, _folder_name: &str) -> MaildirImportResult<()> {
+    async fn ensure_folder_exists(
+        &self,
+        _account_id: &str,
+        _folder_name: &str,
+    ) -> MaildirImportResult<()> {
         // This would need to be implemented to create folder if it doesn't exist
         // For now, assume folder exists
         Ok(())
@@ -624,7 +646,9 @@ impl MaildirImporter {
         let pb = ProgressBar::new(0);
         pb.set_style(
             ProgressStyle::default_bar()
-                .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} {msg}")
+                .template(
+                    "{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} {msg}",
+                )
                 .unwrap()
                 .progress_chars("#>-"),
         );
@@ -651,7 +675,8 @@ impl MaildirImporter {
         progress_bar: &Option<ProgressBar>,
     ) -> MaildirImportResult<()> {
         // For now, call import_folder directly - full retry would need refactoring
-        self.import_folder(folder_info, account_id, stats, progress_bar).await
+        self.import_folder(folder_info, account_id, stats, progress_bar)
+            .await
     }
 
     /// Create user-friendly error report for import failures
@@ -674,11 +699,17 @@ impl MaildirImporter {
     }
 
     /// Save import progress for resume capability
-    pub async fn save_progress_checkpoint(&self, stats: &ImportStats, current_folder: &str) -> MaildirImportResult<()> {
+    pub async fn save_progress_checkpoint(
+        &self,
+        stats: &ImportStats,
+        current_folder: &str,
+    ) -> MaildirImportResult<()> {
         // Implementation would save progress to a resume file
         // For now, this is a placeholder for the resume capability
-        println!("Progress checkpoint: {}/{} messages imported, current folder: {}", 
-                stats.messages_imported, stats.messages_found, current_folder);
+        println!(
+            "Progress checkpoint: {}/{} messages imported, current folder: {}",
+            stats.messages_imported, stats.messages_found, current_folder
+        );
         Ok(())
     }
 
@@ -730,15 +761,30 @@ mod tests {
         // Create INBOX folder
         let inbox_path = base_path.join("INBOX");
         create_maildir_folder(&inbox_path).await?;
-        
+
         // Add sample messages to INBOX
-        create_test_message(&inbox_path.join("new"), "1234567890.msg1.hostname", TEST_EMAIL_1).await?;
-        create_test_message(&inbox_path.join("cur"), "1234567891.msg2.hostname:2,S", TEST_EMAIL_2).await?;
-        
+        create_test_message(
+            &inbox_path.join("new"),
+            "1234567890.msg1.hostname",
+            TEST_EMAIL_1,
+        )
+        .await?;
+        create_test_message(
+            &inbox_path.join("cur"),
+            "1234567891.msg2.hostname:2,S",
+            TEST_EMAIL_2,
+        )
+        .await?;
+
         // Create a subfolder
         let work_path = base_path.join("INBOX__Work");
         create_maildir_folder(&work_path).await?;
-        create_test_message(&work_path.join("new"), "1234567892.msg3.hostname", TEST_EMAIL_3).await?;
+        create_test_message(
+            &work_path.join("new"),
+            "1234567892.msg3.hostname",
+            TEST_EMAIL_3,
+        )
+        .await?;
 
         Ok(())
     }
@@ -809,7 +855,7 @@ This is a work-related message."#;
     async fn test_cancellation() {
         let database = create_test_database().await;
         let importer = MaildirImporter::new(database);
-        
+
         assert!(!importer.is_cancelled());
         importer.cancel();
         assert!(importer.is_cancelled());
@@ -820,18 +866,21 @@ This is a work-related message."#;
         let temp_dir = TempDir::new().unwrap();
         let database = create_test_database().await;
         let importer = MaildirImporter::new(database);
-        
+
         // Create valid Maildir structure
         let valid_path = temp_dir.path().join("valid");
         create_maildir_folder(&valid_path).await.unwrap();
-        
+
         assert!(importer.is_valid_maildir_folder(&valid_path).await.unwrap());
-        
+
         // Test invalid structure (missing directories)
         let invalid_path = temp_dir.path().join("invalid");
         fs::create_dir_all(&invalid_path).await.unwrap();
-        
-        assert!(!importer.is_valid_maildir_folder(&invalid_path).await.unwrap());
+
+        assert!(!importer
+            .is_valid_maildir_folder(&invalid_path)
+            .await
+            .unwrap());
     }
 
     #[tokio::test]
@@ -839,17 +888,17 @@ This is a work-related message."#;
         let temp_dir = TempDir::new().unwrap();
         let database = create_test_database().await;
         let importer = MaildirImporter::new(database);
-        
+
         let test_dir = temp_dir.path().join("test");
         fs::create_dir_all(&test_dir).await.unwrap();
-        
+
         // Initially empty
         assert_eq!(importer.count_messages_in_dir(&test_dir).await.unwrap(), 0);
-        
+
         // Add some files
         fs::write(test_dir.join("msg1"), "content1").await.unwrap();
         fs::write(test_dir.join("msg2"), "content2").await.unwrap();
-        
+
         assert_eq!(importer.count_messages_in_dir(&test_dir).await.unwrap(), 2);
     }
 
@@ -858,20 +907,26 @@ This is a work-related message."#;
         let temp_dir = TempDir::new().unwrap();
         let database = create_test_database().await;
         let importer = MaildirImporter::new(database);
-        
+
         let base_path = temp_dir.path();
         let folder_path = base_path.join("test_account").join("INBOX");
-        
+
         create_maildir_folder(&folder_path).await.unwrap();
-        create_test_message(&folder_path.join("new"), "msg1", "content1").await.unwrap();
-        create_test_message(&folder_path.join("cur"), "msg2", "content2").await.unwrap();
-        create_test_message(&folder_path.join("cur"), "msg3", "content3").await.unwrap();
-        
+        create_test_message(&folder_path.join("new"), "msg1", "content1")
+            .await
+            .unwrap();
+        create_test_message(&folder_path.join("cur"), "msg2", "content2")
+            .await
+            .unwrap();
+        create_test_message(&folder_path.join("cur"), "msg3", "content3")
+            .await
+            .unwrap();
+
         let folder_info = importer
             .analyze_maildir_folder(base_path, &folder_path)
             .await
             .unwrap();
-        
+
         assert_eq!(folder_info.message_count, 3);
         assert_eq!(folder_info.new_messages, 1);
         assert_eq!(folder_info.cur_messages, 2);
@@ -882,46 +937,52 @@ This is a work-related message."#;
     async fn test_parse_email_content_with_headers() {
         let database = create_test_database().await;
         let importer = MaildirImporter::new(database);
-        
+
         let message = importer
             .parse_email_content(TEST_EMAIL_1, "test_account", "INBOX")
             .unwrap();
-        
+
         assert_eq!(message.subject, "Test Message 1");
         assert_eq!(message.from_addr, "sender1@example.com");
         assert_eq!(message.to_addrs, vec!["recipient@example.com"]);
         assert_eq!(message.message_id, Some("<test1@example.com>".to_string()));
-        assert_eq!(message.body_text, Some("This is the body of test message 1.".to_string()));
+        assert_eq!(
+            message.body_text,
+            Some("This is the body of test message 1.".to_string())
+        );
     }
 
     #[tokio::test]
     async fn test_parse_email_content_no_headers() {
         let database = create_test_database().await;
         let mut importer = MaildirImporter::new(database);
-        
+
         // Disable validation for this test
         importer.config.validate_format = false;
-        
+
         let content = "Just a body with no headers";
         let message = importer
             .parse_email_content(content, "test_account", "INBOX")
             .unwrap();
-        
+
         assert_eq!(message.subject, "");
         assert_eq!(message.from_addr, "");
         assert!(message.to_addrs.is_empty());
         assert_eq!(message.message_id, None);
-        assert_eq!(message.body_text, Some("Just a body with no headers".to_string()));
+        assert_eq!(
+            message.body_text,
+            Some("Just a body with no headers".to_string())
+        );
     }
 
     #[tokio::test]
     async fn test_validate_message_format() {
         let database = create_test_database().await;
         let mut importer = MaildirImporter::new(database);
-        
+
         // Configure validation
         importer.config.validate_format = true;
-        
+
         // Valid message
         let valid_message = StoredMessage {
             id: Uuid::new_v4(),
@@ -954,13 +1015,13 @@ This is a work-related message."#;
             is_draft: false,
             is_deleted: false,
         };
-        
+
         assert!(importer.validate_message_format(&valid_message).is_ok());
-        
+
         // Invalid message (no from address)
         let mut invalid_message = valid_message.clone();
         invalid_message.from_addr = String::new();
-        
+
         assert!(importer.validate_message_format(&invalid_message).is_err());
     }
 
@@ -969,15 +1030,15 @@ This is a work-related message."#;
         let temp_dir = TempDir::new().unwrap();
         let database = create_test_database().await;
         let importer = MaildirImporter::new(database);
-        
+
         create_mock_maildir(temp_dir.path()).await.unwrap();
-        
+
         let mut stats = ImportStats::default();
         let folders = importer
             .scan_maildir_structure(temp_dir.path(), &mut stats)
             .await
             .unwrap();
-        
+
         assert_eq!(folders.len(), 2); // INBOX and INBOX__Work
         assert_eq!(stats.maildir_folders_found, 2);
         assert_eq!(stats.messages_found, 3); // Total messages across all folders
@@ -991,9 +1052,9 @@ This is a work-related message."#;
         stats.messages_imported = 80;
         stats.messages_failed = 5;
         stats.duplicates_skipped = 15;
-        
+
         assert_eq!(stats.success_rate(), 80.0);
-        
+
         // Test with no messages
         let empty_stats = ImportStats::default();
         assert_eq!(empty_stats.success_rate(), 0.0);
@@ -1014,14 +1075,17 @@ This is a work-related message."#;
     async fn test_progress_callback() {
         let database = create_test_database().await;
         let mut importer = MaildirImporter::new(database);
-        
+
         let progress_data = Arc::new(std::sync::Mutex::new(Vec::new()));
         let progress_data_clone = progress_data.clone();
-        
+
         importer.set_progress_callback(Box::new(move |current, total, message| {
-            progress_data_clone.lock().unwrap().push((current, total, message.to_string()));
+            progress_data_clone
+                .lock()
+                .unwrap()
+                .push((current, total, message.to_string()));
         }));
-        
+
         assert!(importer.progress_callback.is_some());
     }
 
@@ -1029,11 +1093,11 @@ This is a work-related message."#;
     async fn test_import_from_nonexistent_directory() {
         let database = create_test_database().await;
         let importer = MaildirImporter::new(database);
-        
+
         let result = importer
             .import_from_directory("/nonexistent/path", "test_account")
             .await;
-        
+
         assert!(result.is_err());
         if let Err(MaildirImportError::InvalidStructure(msg)) = result {
             assert!(msg.contains("does not exist"));
@@ -1047,15 +1111,15 @@ This is a work-related message."#;
         let temp_dir = TempDir::new().unwrap();
         let database = create_test_database().await;
         let importer = MaildirImporter::new(database);
-        
+
         // Create a file instead of directory
         let file_path = temp_dir.path().join("not_a_directory");
         fs::write(&file_path, "content").await.unwrap();
-        
+
         let result = importer
             .import_from_directory(&file_path, "test_account")
             .await;
-        
+
         assert!(result.is_err());
         if let Err(MaildirImportError::InvalidStructure(msg)) = result {
             assert!(msg.contains("not a directory"));

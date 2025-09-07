@@ -1,14 +1,14 @@
 // RFC Standards Implementation for vCard and iCalendar parsing
 // Using calcard crate for RFC 6350 (vCard) and RFC 5545 (iCalendar) compliance
 
-use crate::calendar::{Event, EventStatus, EventPriority};
+use crate::calendar::{Event, EventPriority, EventStatus};
 use crate::contacts::{Contact, ContactEmail, ContactPhone, ContactSource};
-use calcard::{Parser, Entry};
-use calcard::vcard::{VCard, VCardProperty, VCardValue, VCardParameter};
 use calcard::icalendar::ICalendar;
+use calcard::vcard::{VCard, VCardParameter, VCardProperty, VCardValue};
+use calcard::{Entry, Parser};
 use chrono::{DateTime, Utc};
+use tracing::{debug, error, warn};
 use uuid::Uuid;
-use tracing::{debug, warn, error};
 
 /// RFC standards parser for vCard and iCalendar data
 #[allow(dead_code)]
@@ -22,7 +22,7 @@ impl RfcStandardsParser {
         source: ContactSource,
     ) -> Result<Vec<Contact>, RfcStandardsError> {
         debug!("Parsing vCard data with RFC 6350 compliance");
-        
+
         let mut parser = Parser::new(vcard_data);
         let mut contacts = Vec::new();
 
@@ -47,7 +47,7 @@ impl RfcStandardsParser {
 
         if contacts.is_empty() {
             return Err(RfcStandardsError::ParseError(
-                "No valid vCard entries found".to_string()
+                "No valid vCard entries found".to_string(),
             ));
         }
 
@@ -62,7 +62,9 @@ impl RfcStandardsParser {
     ) -> Result<Contact, RfcStandardsError> {
         // Helper function to extract property value as string
         let get_property_value = |prop: &VCardProperty| -> Option<String> {
-            vcard.entries.iter()
+            vcard
+                .entries
+                .iter()
                 .find(|entry| entry.name == *prop)
                 .and_then(|entry| entry.values.first())
                 .map(|value| match value {
@@ -79,12 +81,12 @@ impl RfcStandardsParser {
         };
 
         // Extract UID or generate one
-        let external_id = get_property_value(&VCardProperty::Uid)
-            .unwrap_or_else(|| Uuid::new_v4().to_string());
+        let external_id =
+            get_property_value(&VCardProperty::Uid).unwrap_or_else(|| Uuid::new_v4().to_string());
 
         // Extract formatted name
-        let display_name = get_property_value(&VCardProperty::Fn)
-            .unwrap_or_else(|| "Unknown".to_string());
+        let display_name =
+            get_property_value(&VCardProperty::Fn).unwrap_or_else(|| "Unknown".to_string());
 
         let mut contact = Contact::new(external_id, source, display_name);
 
@@ -106,15 +108,21 @@ impl RfcStandardsParser {
             if entry.name == VCardProperty::Email {
                 if let Some(VCardValue::Text(address)) = entry.values.first() {
                     // Parse TYPE parameter to determine label
-                    let label = entry.params.iter()
+                    let label = entry
+                        .params
+                        .iter()
                         .find_map(|param| match param {
-                            VCardParameter::Type(types) => types.first().map(|t| format!("{:?}", t).to_lowercase()),
+                            VCardParameter::Type(types) => {
+                                types.first().map(|t| format!("{:?}", t).to_lowercase())
+                            }
                             _ => None,
                         })
                         .unwrap_or_else(|| "other".to_string());
 
                     // Check for PREF parameter
-                    let is_primary = entry.params.iter()
+                    let is_primary = entry
+                        .params
+                        .iter()
                         .any(|param| matches!(param, VCardParameter::Pref(_)));
 
                     contact.emails.push(ContactEmail {
@@ -131,15 +139,21 @@ impl RfcStandardsParser {
             if entry.name == VCardProperty::Tel {
                 if let Some(VCardValue::Text(number)) = entry.values.first() {
                     // Parse TYPE parameter to determine label
-                    let label = entry.params.iter()
+                    let label = entry
+                        .params
+                        .iter()
                         .find_map(|param| match param {
-                            VCardParameter::Type(types) => types.first().map(|t| format!("{:?}", t).to_lowercase()),
+                            VCardParameter::Type(types) => {
+                                types.first().map(|t| format!("{:?}", t).to_lowercase())
+                            }
                             _ => None,
                         })
                         .unwrap_or_else(|| "other".to_string());
 
                     // Check for PREF parameter
-                    let is_primary = entry.params.iter()
+                    let is_primary = entry
+                        .params
+                        .iter()
                         .any(|param| matches!(param, VCardParameter::Pref(_)));
 
                     contact.phones.push(ContactPhone {
@@ -184,61 +198,70 @@ impl RfcStandardsParser {
             }
         }
 
-        debug!("Successfully parsed vCard for contact: {}", contact.display_name);
+        debug!(
+            "Successfully parsed vCard for contact: {}",
+            contact.display_name
+        );
         Ok(contact)
     }
 
     /// Convert Contact to vCard format (RFC 6350)
     pub fn contact_to_vcard(contact: &Contact) -> Result<String, RfcStandardsError> {
-        debug!("Converting contact to RFC 6350 vCard format: {}", contact.display_name);
+        debug!(
+            "Converting contact to RFC 6350 vCard format: {}",
+            contact.display_name
+        );
 
         // TODO: Implement Contact to vCard conversion using calcard writer
         // For now, return a basic vCard string manually
         let mut vcard_lines = Vec::new();
-        
+
         vcard_lines.push("BEGIN:VCARD".to_string());
         vcard_lines.push("VERSION:4.0".to_string());
         vcard_lines.push(format!("UID:{}", contact.external_id));
         vcard_lines.push(format!("FN:{}", contact.display_name));
-        
+
         // Add name components
         if contact.first_name.is_some() || contact.last_name.is_some() {
             let family_name = contact.last_name.as_deref().unwrap_or("");
             let given_name = contact.first_name.as_deref().unwrap_or("");
             vcard_lines.push(format!("N:{};{};;;", family_name, given_name));
         }
-        
+
         // Add email addresses
         for email in &contact.emails {
             let pref = if email.is_primary { ";PREF=1" } else { "" };
-            vcard_lines.push(format!("EMAIL;TYPE={}{}:{}", email.label, pref, email.address));
+            vcard_lines.push(format!(
+                "EMAIL;TYPE={}{}:{}",
+                email.label, pref, email.address
+            ));
         }
-        
+
         // Add phone numbers
         for phone in &contact.phones {
             let pref = if phone.is_primary { ";PREF=1" } else { "" };
             vcard_lines.push(format!("TEL;TYPE={}{}:{}", phone.label, pref, phone.number));
         }
-        
+
         // Add organization
         if let Some(company) = &contact.company {
             vcard_lines.push(format!("ORG:{}", company));
         }
-        
+
         // Add title
         if let Some(title) = &contact.job_title {
             vcard_lines.push(format!("TITLE:{}", title));
         }
-        
+
         // Add photo URL
         if let Some(photo_url) = &contact.photo_url {
             vcard_lines.push(format!("PHOTO:{}", photo_url));
         }
-        
+
         // Set revision timestamp
         vcard_lines.push(format!("REV:{}", contact.updated_at.to_rfc3339()));
         vcard_lines.push("END:VCARD".to_string());
-        
+
         let vcard_string = vcard_lines.join("\r\n");
         debug!("Successfully converted contact to vCard format");
         Ok(vcard_string)
@@ -280,7 +303,10 @@ impl RfcStandardsParser {
 
     /// Convert Event to iCalendar format (RFC 5545)
     pub fn event_to_icalendar(events: &[Event]) -> Result<String, RfcStandardsError> {
-        debug!("Converting {} events to RFC 5545 iCalendar format", events.len());
+        debug!(
+            "Converting {} events to RFC 5545 iCalendar format",
+            events.len()
+        );
 
         // TODO: Implement Event to iCalendar conversion using calcard writer
         // For now, return a placeholder
@@ -290,7 +316,7 @@ impl RfcStandardsParser {
                 .map(|e| format!("BEGIN:VEVENT\r\nUID:{}\r\nSUMMARY:{}\r\nEND:VEVENT\r\n", e.uid, e.title))
                 .collect::<String>()
         );
-        
+
         debug!("Successfully converted events to iCalendar format");
         Ok(icalendar_string)
     }
@@ -418,13 +444,17 @@ END:VCALENDAR"#;
         let events = RfcStandardsParser::parse_icalendar_to_event(
             icalendar_data,
             "test-calendar".to_string(),
-        ).unwrap();
+        )
+        .unwrap();
 
         assert_eq!(events.len(), 1);
-        
+
         let event = &events[0];
         assert_eq!(event.title, "Team Meeting");
-        assert_eq!(event.description, Some("Weekly team standup meeting".to_string()));
+        assert_eq!(
+            event.description,
+            Some("Weekly team standup meeting".to_string())
+        );
         assert_eq!(event.location, Some("Conference Room A".to_string()));
         assert_eq!(event.status, EventStatus::Confirmed);
         assert_eq!(event.attendees.len(), 2);
@@ -453,10 +483,9 @@ END:VCARD"#;
         let generated_vcard = RfcStandardsParser::contact_to_vcard(contact).unwrap();
 
         // Parse the generated vCard back
-        let roundtrip_contacts = RfcStandardsParser::parse_vcard_to_contact(
-            &generated_vcard,
-            ContactSource::Local,
-        ).unwrap();
+        let roundtrip_contacts =
+            RfcStandardsParser::parse_vcard_to_contact(&generated_vcard, ContactSource::Local)
+                .unwrap();
         assert_eq!(roundtrip_contacts.len(), 1);
         let roundtrip_contact = &roundtrip_contacts[0];
 

@@ -71,7 +71,10 @@ impl ContextShortcutsPopup {
         let popup_area = self.center_popup(area, 70, 80);
 
         // Create the main block
-        let title = format!("Keyboard Shortcuts - {} Mode", self.mode_display_name(current_mode));
+        let title = format!(
+            "Keyboard Shortcuts - {} Mode",
+            self.mode_display_name(current_mode)
+        );
         let main_block = Block::default()
             .title(title)
             .borders(Borders::ALL)
@@ -204,215 +207,296 @@ impl ContextShortcutsPopup {
     }
 
     /// Get shortcuts organized by category for the current mode
-    fn get_shortcuts_for_mode(&self, mode: &UIMode) -> Vec<(&'static str, Vec<(&'static str, &'static str)>)> {
+    fn get_shortcuts_for_mode(
+        &self,
+        mode: &UIMode,
+    ) -> Vec<(&'static str, Vec<(&'static str, &'static str)>)> {
         match mode {
             UIMode::Normal => vec![
-                ("AI Assistant", vec![
-                    ("Ctrl+Alt+I", "Toggle AI assistant panel"),
-                    ("Ctrl+Alt+S", "AI email suggestions"),
-                    ("Ctrl+Alt+U", "Summarize email with AI"),
-                    ("Ctrl+Alt+C", "AI compose assistance"),
-                    ("Ctrl+Alt+G", "AI configuration"),
-                ]),
-                ("Navigation", vec![
-                    ("Tab", "Switch between panes"),
-                    ("Shift+Tab", "Switch panes backward"),
-                    ("j/k", "Navigate up/down in lists"),
-                    ("h/l", "Collapse/expand folders"),
-                    ("Enter", "Select item or open email"),
-                    ("Esc", "Go back or cancel"),
-                ]),
-                ("Email Actions", vec![
-                    ("c", "Compose new email"),
-                    ("Ctrl+R", "Reply to email"),
-                    ("Shift+R", "Reply to all"),
-                    ("Ctrl+F", "Forward email"),
-                    ("Shift+Delete", "Delete email"),
-                    ("Shift+U", "Mark as unread"),
-                    ("Shift+A", "Archive email"),
-                ]),
-                ("View Modes", vec![
-                    ("C", "Switch to calendar view"),
-                    ("E", "Switch to email view"),
-                    ("m", "Toggle email view mode"),
-                    ("H", "Toggle headers"),
-                    ("/", "Search"),
-                    ("?", "Show this help"),
-                ]),
-                ("System", vec![
-                    ("F", "Force refresh folder"),
-                    ("Ctrl+A", "Add account"),
-                    ("q", "Quit application"),
-                ]),
+                (
+                    "AI Assistant",
+                    vec![
+                        ("Ctrl+Alt+I", "Toggle AI assistant panel"),
+                        ("Ctrl+Alt+S", "AI email suggestions"),
+                        ("Ctrl+Alt+U", "Summarize email with AI"),
+                        ("Ctrl+Alt+C", "AI compose assistance"),
+                        ("Ctrl+Alt+G", "AI configuration"),
+                    ],
+                ),
+                (
+                    "Navigation",
+                    vec![
+                        ("Tab", "Switch between panes"),
+                        ("Shift+Tab", "Switch panes backward"),
+                        ("j/k", "Navigate up/down in lists"),
+                        ("h/l", "Collapse/expand folders"),
+                        ("Enter", "Select item or open email"),
+                        ("Esc", "Go back or cancel"),
+                    ],
+                ),
+                (
+                    "Email Actions",
+                    vec![
+                        ("c", "Compose new email"),
+                        ("Ctrl+R", "Reply to email"),
+                        ("Shift+R", "Reply to all"),
+                        ("Ctrl+F", "Forward email"),
+                        ("Shift+Delete", "Delete email"),
+                        ("Shift+U", "Mark as unread"),
+                        ("Shift+A", "Archive email"),
+                    ],
+                ),
+                (
+                    "View Modes",
+                    vec![
+                        ("C", "Switch to calendar view"),
+                        ("E", "Switch to email view"),
+                        ("m", "Toggle email view mode"),
+                        ("H", "Toggle headers"),
+                        ("/", "Search"),
+                        ("?", "Show this help"),
+                    ],
+                ),
+                (
+                    "System",
+                    vec![
+                        ("F", "Force refresh folder"),
+                        ("Ctrl+A", "Add account"),
+                        ("q", "Quit application"),
+                    ],
+                ),
             ],
-            
+
             UIMode::Compose => vec![
-                ("AI Assistant", vec![
-                    ("Ctrl+Alt+C", "AI compose assistance"),
-                    ("Ctrl+Alt+R", "Generate quick reply suggestions"),
-                    ("Ctrl+Alt+E", "Generate email content with AI"),
-                ]),
-                ("Navigation", vec![
-                    ("Tab", "Next field"),
-                    ("Shift+Tab", "Previous field"),
-                    ("Enter", "Edit current field"),
-                    ("Esc", "Cancel composition"),
-                ]),
-                ("Actions", vec![
-                    ("Ctrl+S", "Send email"),
-                    ("Ctrl+D", "Save as draft"),
-                    ("@", "Contact lookup"),
-                ]),
-                ("Spell Checking", vec![
-                    ("Ctrl+Z", "Toggle spell checking"),
-                    ("Ctrl+N", "Next spelling error"),
-                    ("Ctrl+P", "Previous spelling error"),
-                    ("Ctrl+,", "Spell check configuration"),
-                ]),
-                ("Formatting", vec![
-                    ("Ctrl+A", "Select all"),
-                    ("Ctrl+C", "Copy"),
-                    ("Ctrl+V", "Paste"),
-                ]),
+                (
+                    "AI Assistant",
+                    vec![
+                        ("Ctrl+Alt+C", "AI compose assistance"),
+                        ("Ctrl+Alt+R", "Generate quick reply suggestions"),
+                        ("Ctrl+Alt+E", "Generate email content with AI"),
+                    ],
+                ),
+                (
+                    "Navigation",
+                    vec![
+                        ("Tab", "Next field"),
+                        ("Shift+Tab", "Previous field"),
+                        ("Enter", "Edit current field"),
+                        ("Esc", "Cancel composition"),
+                    ],
+                ),
+                (
+                    "Actions",
+                    vec![
+                        ("Ctrl+S", "Send email"),
+                        ("Ctrl+D", "Save as draft"),
+                        ("@", "Contact lookup"),
+                    ],
+                ),
+                (
+                    "Spell Checking",
+                    vec![
+                        ("Ctrl+Z", "Toggle spell checking"),
+                        ("Ctrl+N", "Next spelling error"),
+                        ("Ctrl+P", "Previous spelling error"),
+                        ("Ctrl+,", "Spell check configuration"),
+                    ],
+                ),
+                (
+                    "Formatting",
+                    vec![
+                        ("Ctrl+A", "Select all"),
+                        ("Ctrl+C", "Copy"),
+                        ("Ctrl+V", "Paste"),
+                    ],
+                ),
             ],
 
             UIMode::Calendar => vec![
-                ("AI Assistant", vec![
-                    ("Ctrl+Alt+I", "Toggle AI assistant panel"),
-                    ("Ctrl+Alt+L", "AI calendar assistance"),
-                    ("Ctrl+Alt+T", "Parse scheduling requests with AI"),
-                ]),
-                ("Navigation", vec![
-                    ("←→", "Previous/Next month"),
-                    ("↑↓", "Navigate weeks"),
-                    ("j/k", "Navigate days"),
-                    (".", "Go to today"),
-                    ("Enter", "View event details"),
-                ]),
-                ("View Modes", vec![
-                    ("1", "Day view"),
-                    ("2", "Week view"),
-                    ("3", "Month view"),
-                    ("4", "Agenda view"),
-                ]),
-                ("Event Actions", vec![
-                    ("e", "Create new event"),
-                    ("E", "Create recurring event"),
-                    ("Ctrl+e", "Edit selected event"),
-                    ("Del", "Delete event"),
-                    ("Space", "Toggle event completion"),
-                ]),
-                ("Calendar Management", vec![
-                    ("c", "Show calendar list"),
-                    ("t", "Create todo/task"),
-                    ("T", "View todos"),
-                    ("Esc", "Return to email view"),
-                ]),
+                (
+                    "AI Assistant",
+                    vec![
+                        ("Ctrl+Alt+I", "Toggle AI assistant panel"),
+                        ("Ctrl+Alt+L", "AI calendar assistance"),
+                        ("Ctrl+Alt+T", "Parse scheduling requests with AI"),
+                    ],
+                ),
+                (
+                    "Navigation",
+                    vec![
+                        ("←→", "Previous/Next month"),
+                        ("↑↓", "Navigate weeks"),
+                        ("j/k", "Navigate days"),
+                        (".", "Go to today"),
+                        ("Enter", "View event details"),
+                    ],
+                ),
+                (
+                    "View Modes",
+                    vec![
+                        ("1", "Day view"),
+                        ("2", "Week view"),
+                        ("3", "Month view"),
+                        ("4", "Agenda view"),
+                    ],
+                ),
+                (
+                    "Event Actions",
+                    vec![
+                        ("e", "Create new event"),
+                        ("E", "Create recurring event"),
+                        ("Ctrl+e", "Edit selected event"),
+                        ("Del", "Delete event"),
+                        ("Space", "Toggle event completion"),
+                    ],
+                ),
+                (
+                    "Calendar Management",
+                    vec![
+                        ("c", "Show calendar list"),
+                        ("t", "Create todo/task"),
+                        ("T", "View todos"),
+                        ("Esc", "Return to email view"),
+                    ],
+                ),
             ],
 
             UIMode::Search => vec![
-                ("Search", vec![
-                    ("Type", "Enter search query"),
-                    ("Enter", "Execute search"),
-                    ("↑↓/j/k", "Navigate results"),
-                    ("Enter", "Open selected result"),
-                ]),
-                ("Search Modes", vec![
-                    ("Tab", "Cycle search modes"),
-                    ("F1", "Search all"),
-                    ("F2", "Search subject"),
-                    ("F3", "Search sender"),
-                    ("F4", "Search content"),
-                ]),
-                ("Actions", vec![
-                    ("Esc", "Close search"),
-                    ("Ctrl+C", "Clear search"),
-                    ("/", "Focus search box"),
-                ]),
+                (
+                    "Search",
+                    vec![
+                        ("Type", "Enter search query"),
+                        ("Enter", "Execute search"),
+                        ("↑↓/j/k", "Navigate results"),
+                        ("Enter", "Open selected result"),
+                    ],
+                ),
+                (
+                    "Search Modes",
+                    vec![
+                        ("Tab", "Cycle search modes"),
+                        ("F1", "Search all"),
+                        ("F2", "Search subject"),
+                        ("F3", "Search sender"),
+                        ("F4", "Search content"),
+                    ],
+                ),
+                (
+                    "Actions",
+                    vec![
+                        ("Esc", "Close search"),
+                        ("Ctrl+C", "Clear search"),
+                        ("/", "Focus search box"),
+                    ],
+                ),
             ],
 
             UIMode::EmailViewer => vec![
-                ("AI Assistant", vec![
-                    ("Ctrl+Alt+U", "Summarize email with AI"),
-                    ("Ctrl+Alt+A", "Analyze email content with AI"),
-                    ("Ctrl+Alt+R", "Generate quick reply suggestions"),
-                ]),
-                ("Navigation", vec![
-                    ("j/k", "Scroll up/down"),
-                    ("↑↓", "Scroll line by line"),
-                    ("Page Up/Down", "Scroll page"),
-                    ("Home/End", "Go to top/bottom"),
-                ]),
-                ("Actions", vec![
-                    ("Ctrl+R", "Reply"),
-                    ("Shift+R", "Reply all"),
-                    ("Ctrl+F", "Forward"),
-                    ("c", "Add sender to contacts"),
-                    ("Space", "Show actions menu"),
-                ]),
-                ("View Options", vec![
-                    ("m", "Toggle view mode"),
-                    ("H", "Show/hide headers"),
-                    ("a", "View attachments"),
-                    ("v", "View selected attachment"),
-                ]),
-                ("Exit", vec![
-                    ("q", "Close viewer"),
-                    ("Esc", "Close viewer"),
-                ]),
+                (
+                    "AI Assistant",
+                    vec![
+                        ("Ctrl+Alt+U", "Summarize email with AI"),
+                        ("Ctrl+Alt+A", "Analyze email content with AI"),
+                        ("Ctrl+Alt+R", "Generate quick reply suggestions"),
+                    ],
+                ),
+                (
+                    "Navigation",
+                    vec![
+                        ("j/k", "Scroll up/down"),
+                        ("↑↓", "Scroll line by line"),
+                        ("Page Up/Down", "Scroll page"),
+                        ("Home/End", "Go to top/bottom"),
+                    ],
+                ),
+                (
+                    "Actions",
+                    vec![
+                        ("Ctrl+R", "Reply"),
+                        ("Shift+R", "Reply all"),
+                        ("Ctrl+F", "Forward"),
+                        ("c", "Add sender to contacts"),
+                        ("Space", "Show actions menu"),
+                    ],
+                ),
+                (
+                    "View Options",
+                    vec![
+                        ("m", "Toggle view mode"),
+                        ("H", "Show/hide headers"),
+                        ("a", "View attachments"),
+                        ("v", "View selected attachment"),
+                    ],
+                ),
+                ("Exit", vec![("q", "Close viewer"), ("Esc", "Close viewer")]),
             ],
 
             UIMode::ContextAware => vec![
-                ("Navigation", vec![
-                    ("Tab", "Switch between panes"),
-                    ("j/k", "Navigate items"),
-                    ("Enter", "Select/Open"),
-                    ("Esc", "Hide context panel"),
-                ]),
-                ("Context Actions", vec![
-                    ("c", "Create event from email"),
-                    ("s", "Schedule meeting"),
-                    ("a", "Accept invitation"),
-                    ("d", "Decline invitation"),
-                    ("t", "Tentative response"),
-                ]),
-                ("Email Actions", vec![
-                    ("r", "Reply to email"),
-                    ("f", "Forward email"),
-                    ("v", "View details"),
-                ]),
+                (
+                    "Navigation",
+                    vec![
+                        ("Tab", "Switch between panes"),
+                        ("j/k", "Navigate items"),
+                        ("Enter", "Select/Open"),
+                        ("Esc", "Hide context panel"),
+                    ],
+                ),
+                (
+                    "Context Actions",
+                    vec![
+                        ("c", "Create event from email"),
+                        ("s", "Schedule meeting"),
+                        ("a", "Accept invitation"),
+                        ("d", "Decline invitation"),
+                        ("t", "Tentative response"),
+                    ],
+                ),
+                (
+                    "Email Actions",
+                    vec![
+                        ("r", "Reply to email"),
+                        ("f", "Forward email"),
+                        ("v", "View details"),
+                    ],
+                ),
             ],
 
             UIMode::InvitationViewer => vec![
-                ("Navigation", vec![
-                    ("j/k", "Navigate options"),
-                    ("Enter", "Select action"),
-                    ("Tab", "Switch sections"),
-                ]),
-                ("Response Actions", vec![
-                    ("a", "Accept invitation"),
-                    ("d", "Decline invitation"),
-                    ("t", "Tentative response"),
-                    ("r", "Reply with message"),
-                ]),
-                ("View Options", vec![
-                    ("v", "View full details"),
-                    ("c", "Add to calendar"),
-                    ("e", "Edit before accepting"),
-                ]),
-                ("Navigation", vec![
-                    ("q", "Close viewer"),
-                    ("Esc", "Close viewer"),
-                ]),
+                (
+                    "Navigation",
+                    vec![
+                        ("j/k", "Navigate options"),
+                        ("Enter", "Select action"),
+                        ("Tab", "Switch sections"),
+                    ],
+                ),
+                (
+                    "Response Actions",
+                    vec![
+                        ("a", "Accept invitation"),
+                        ("d", "Decline invitation"),
+                        ("t", "Tentative response"),
+                        ("r", "Reply with message"),
+                    ],
+                ),
+                (
+                    "View Options",
+                    vec![
+                        ("v", "View full details"),
+                        ("c", "Add to calendar"),
+                        ("e", "Edit before accepting"),
+                    ],
+                ),
+                (
+                    "Navigation",
+                    vec![("q", "Close viewer"), ("Esc", "Close viewer")],
+                ),
             ],
 
-            _ => vec![
-                ("General", vec![
-                    ("?", "Show help"),
-                    ("Esc", "Go back"),
-                    ("Ctrl+Q", "Quit"),
-                ]),
-            ],
+            _ => vec![(
+                "General",
+                vec![("?", "Show help"), ("Esc", "Go back"), ("Ctrl+Q", "Quit")],
+            )],
         }
     }
 

@@ -7,17 +7,15 @@
 //! - Viewing filter statistics and performance
 
 use crate::email::{
-    AdvancedEmailFilter, AdvancedFilterEngine, AdvancedCondition, ConditionGroup, BooleanLogic,
-    ActionRule, AdvancedFilterAction, FilterTemplateLibrary,
+    ActionRule, AdvancedCondition, AdvancedEmailFilter, AdvancedFilterAction, AdvancedFilterEngine,
+    BooleanLogic, ConditionGroup, FilterTemplateLibrary,
 };
 use crossterm::event::{KeyCode, KeyModifiers};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{
-        Block, Borders, List, ListItem, ListState, Paragraph, Tabs, Wrap,
-    },
+    widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Tabs, Wrap},
     Frame,
 };
 use std::sync::Arc;
@@ -27,29 +25,29 @@ use uuid::Uuid;
 #[allow(dead_code)]
 pub struct AdvancedFiltersUI {
     engine: Arc<AdvancedFilterEngine>,
-    
+
     // UI state
     current_tab: FilterTab,
     focused_area: FocusedArea,
-    
+
     // Filter management
     filters: Vec<AdvancedEmailFilter>,
     selected_filter_index: Option<usize>,
     filter_list_state: ListState,
-    
+
     // Filter editor
     editing_filter: Option<AdvancedEmailFilter>,
     condition_editor: ConditionEditor,
     action_editor: ActionEditor,
-    
+
     // Template management
     templates: FilterTemplateLibrary,
     selected_template: Option<String>,
-    
+
     // Testing
     test_mode: bool,
     test_results: Vec<String>,
-    
+
     // Statistics
     show_statistics: bool,
 }
@@ -98,14 +96,14 @@ pub struct ConditionEditor {
     current_group: ConditionGroup,
     selected_condition_index: Option<usize>,
     editing_condition: Option<AdvancedCondition>,
-    
+
     // Form fields
     field_input: String,
     operator_input: String,
     value_input: String,
     case_sensitive: bool,
     negate: bool,
-    
+
     // Group logic
     group_logic: BooleanLogic,
     nested_groups: Vec<ConditionGroup>,
@@ -117,7 +115,7 @@ pub struct ActionEditor {
     current_actions: Vec<ActionRule>,
     selected_action_index: Option<usize>,
     editing_action: Option<AdvancedFilterAction>,
-    
+
     // Form fields
     action_type_input: String,
     action_value_input: String,
@@ -129,7 +127,7 @@ impl AdvancedFiltersUI {
     /// Create a new advanced filters UI
     pub fn new(engine: Arc<AdvancedFilterEngine>) -> Self {
         let templates = FilterTemplateLibrary::new();
-        
+
         Self {
             engine,
             current_tab: FilterTab::FilterList,
@@ -149,7 +147,11 @@ impl AdvancedFiltersUI {
     }
 
     /// Handle keyboard input
-    pub async fn handle_key(&mut self, key: KeyCode, modifiers: KeyModifiers) -> (bool, Option<FilterUIAction>) {
+    pub async fn handle_key(
+        &mut self,
+        key: KeyCode,
+        modifiers: KeyModifiers,
+    ) -> (bool, Option<FilterUIAction>) {
         match key {
             KeyCode::Tab => {
                 self.next_tab();
@@ -168,11 +170,15 @@ impl AdvancedFiltersUI {
                 let filter_id = self.filters[self.selected_filter_index.unwrap()].id;
                 (true, Some(FilterUIAction::DeleteFilter(filter_id)))
             }
-            KeyCode::F(5) => (true, Some(FilterUIAction::TestFilter(
-                self.filters.get(self.selected_filter_index.unwrap_or(0))
-                    .map(|f| f.id)
-                    .unwrap_or_else(Uuid::new_v4)
-            ))),
+            KeyCode::F(5) => (
+                true,
+                Some(FilterUIAction::TestFilter(
+                    self.filters
+                        .get(self.selected_filter_index.unwrap_or(0))
+                        .map(|f| f.id)
+                        .unwrap_or_else(Uuid::new_v4),
+                )),
+            ),
             KeyCode::Char('s') if modifiers.contains(KeyModifiers::CONTROL) => {
                 (true, Some(FilterUIAction::SaveChanges))
             }
@@ -184,15 +190,13 @@ impl AdvancedFiltersUI {
                     (false, None)
                 }
             }
-            _ => {
-                match self.current_tab {
-                    FilterTab::FilterList => self.handle_filter_list_key(key, modifiers).await,
-                    FilterTab::FilterEditor => self.handle_filter_editor_key(key, modifiers).await,
-                    FilterTab::Templates => self.handle_templates_key(key, modifiers).await,
-                    FilterTab::Testing => self.handle_testing_key(key, modifiers).await,
-                    FilterTab::Statistics => self.handle_statistics_key(key, modifiers).await,
-                }
-            }
+            _ => match self.current_tab {
+                FilterTab::FilterList => self.handle_filter_list_key(key, modifiers).await,
+                FilterTab::FilterEditor => self.handle_filter_editor_key(key, modifiers).await,
+                FilterTab::Templates => self.handle_templates_key(key, modifiers).await,
+                FilterTab::Testing => self.handle_testing_key(key, modifiers).await,
+                FilterTab::Statistics => self.handle_statistics_key(key, modifiers).await,
+            },
         }
     }
 
@@ -227,7 +231,7 @@ impl AdvancedFiltersUI {
     fn render_tab_bar(&self, frame: &mut Frame, area: Rect) {
         let tab_titles = vec![
             "Filter List",
-            "Editor", 
+            "Editor",
             "Templates",
             "Testing",
             "Statistics",
@@ -242,9 +246,17 @@ impl AdvancedFiltersUI {
         };
 
         let tabs = Tabs::new(tab_titles)
-            .block(Block::default().borders(Borders::ALL).title("Advanced Email Filters"))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title("Advanced Email Filters"),
+            )
             .style(Style::default().fg(Color::White))
-            .highlight_style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))
+            .highlight_style(
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            )
             .select(selected_tab);
 
         frame.render_widget(tabs, area);
@@ -261,23 +273,24 @@ impl AdvancedFiltersUI {
             .split(area);
 
         // Filter list
-        let filter_items: Vec<ListItem> = self.filters
+        let filter_items: Vec<ListItem> = self
+            .filters
             .iter()
             .enumerate()
             .map(|(i, filter)| {
                 let enabled_indicator = if filter.enabled { "✓" } else { "✗" };
                 let priority_indicator = format!("[{}]", filter.priority);
                 let stats = format!("({} matches)", filter.statistics.matches_count);
-                
-                let content = format!("{} {} {} - {}", 
-                    enabled_indicator, 
-                    priority_indicator,
-                    filter.name,
-                    stats
+
+                let content = format!(
+                    "{} {} {} - {}",
+                    enabled_indicator, priority_indicator, filter.name, stats
                 );
-                
+
                 let style = if Some(i) == self.selected_filter_index {
-                    Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+                    Style::default()
+                        .fg(Color::Yellow)
+                        .add_modifier(Modifier::BOLD)
                 } else if filter.enabled {
                     Style::default().fg(Color::Green)
                 } else {
@@ -289,14 +302,16 @@ impl AdvancedFiltersUI {
             .collect();
 
         let filter_list = List::new(filter_items)
-            .block(Block::default()
-                .borders(Borders::ALL)
-                .title("Email Filters")
-                .border_style(if self.focused_area == FocusedArea::FilterList {
-                    Style::default().fg(Color::Yellow)
-                } else {
-                    Style::default()
-                }))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title("Email Filters")
+                    .border_style(if self.focused_area == FocusedArea::FilterList {
+                        Style::default().fg(Color::Yellow)
+                    } else {
+                        Style::default()
+                    }),
+            )
             .highlight_style(Style::default().add_modifier(Modifier::BOLD))
             .highlight_symbol("→ ");
 
@@ -333,10 +348,10 @@ impl AdvancedFiltersUI {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(6),  // Basic info
-                Constraint::Min(5),     // Conditions
-                Constraint::Min(3),     // Actions
-                Constraint::Length(4),  // Statistics
+                Constraint::Length(6), // Basic info
+                Constraint::Min(5),    // Conditions
+                Constraint::Min(3),    // Actions
+                Constraint::Length(4), // Statistics
             ])
             .split(area);
 
@@ -354,7 +369,11 @@ impl AdvancedFiltersUI {
                 Span::styled("Enabled: ", Style::default().add_modifier(Modifier::BOLD)),
                 Span::styled(
                     if filter.enabled { "Yes" } else { "No" },
-                    Style::default().fg(if filter.enabled { Color::Green } else { Color::Red })
+                    Style::default().fg(if filter.enabled {
+                        Color::Green
+                    } else {
+                        Color::Red
+                    }),
                 ),
             ]),
             Line::from(vec![
@@ -375,12 +394,13 @@ impl AdvancedFiltersUI {
         frame.render_widget(conditions_paragraph, chunks[1]);
 
         // Actions preview
-        let actions_text: Vec<Line> = filter.action_rules
+        let actions_text: Vec<Line> = filter
+            .action_rules
             .iter()
             .flat_map(|rule| {
-                rule.actions.iter().map(|action| {
-                    Line::from(format!("• {:?}", action))
-                })
+                rule.actions
+                    .iter()
+                    .map(|action| Line::from(format!("• {:?}", action)))
             })
             .collect();
 
@@ -393,7 +413,10 @@ impl AdvancedFiltersUI {
         let stats_lines = vec![
             Line::from(format!("Matches: {}", filter.statistics.matches_count)),
             Line::from(format!("Actions: {}", filter.statistics.actions_executed)),
-            Line::from(format!("Avg Time: {:.2}ms", filter.statistics.average_execution_time_ms)),
+            Line::from(format!(
+                "Avg Time: {:.2}ms",
+                filter.statistics.average_execution_time_ms
+            )),
         ];
 
         let stats_paragraph = Paragraph::new(stats_lines)
@@ -406,15 +429,15 @@ impl AdvancedFiltersUI {
         let mut lines = Vec::new();
         let indent_str = "  ".repeat(indent);
 
-        lines.push(Line::from(format!("{}Logic: {:?}", indent_str, group.logic)));
+        lines.push(Line::from(format!(
+            "{}Logic: {:?}",
+            indent_str, group.logic
+        )));
 
         for condition in &group.conditions {
             lines.push(Line::from(format!(
                 "{}• {:?} {:?} {:?}",
-                indent_str,
-                condition.field,
-                condition.operator,
-                condition.value
+                indent_str, condition.field, condition.operator, condition.value
             )));
         }
 
@@ -437,7 +460,11 @@ impl AdvancedFiltersUI {
             ];
 
             let help = Paragraph::new(help_text)
-                .block(Block::default().borders(Borders::ALL).title("Filter Editor"))
+                .block(
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .title("Filter Editor"),
+                )
                 .alignment(Alignment::Center);
 
             frame.render_widget(help, area);
@@ -470,15 +497,16 @@ impl AdvancedFiltersUI {
             Line::from("• Nested group management"),
         ];
 
-        let editor = Paragraph::new(placeholder_text)
-            .block(Block::default()
+        let editor = Paragraph::new(placeholder_text).block(
+            Block::default()
                 .borders(Borders::ALL)
                 .title("Condition Editor")
                 .border_style(if self.focused_area == FocusedArea::ConditionEditor {
                     Style::default().fg(Color::Yellow)
                 } else {
                     Style::default()
-                }));
+                }),
+        );
 
         frame.render_widget(editor, area);
     }
@@ -495,15 +523,16 @@ impl AdvancedFiltersUI {
             Line::from("• Priority settings"),
         ];
 
-        let editor = Paragraph::new(placeholder_text)
-            .block(Block::default()
+        let editor = Paragraph::new(placeholder_text).block(
+            Block::default()
                 .borders(Borders::ALL)
                 .title("Action Editor")
                 .border_style(if self.focused_area == FocusedArea::ActionEditor {
                     Style::default().fg(Color::Yellow)
                 } else {
                     Style::default()
-                }));
+                }),
+        );
 
         frame.render_widget(editor, area);
     }
@@ -513,13 +542,15 @@ impl AdvancedFiltersUI {
         let template_names: Vec<&String> = self.templates.get_templates().keys().collect();
         let template_items: Vec<ListItem> = template_names
             .iter()
-            .map(|name| {
-                ListItem::new(name.as_str())
-            })
+            .map(|name| ListItem::new(name.as_str()))
             .collect();
 
         let template_list = List::new(template_items)
-            .block(Block::default().borders(Borders::ALL).title("Filter Templates"))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title("Filter Templates"),
+            )
             .highlight_style(Style::default().add_modifier(Modifier::BOLD))
             .highlight_symbol("→ ");
 
@@ -536,11 +567,18 @@ impl AdvancedFiltersUI {
                 Line::from("Results will appear here."),
             ]
         } else {
-            self.test_results.iter().map(|result| Line::from(result.as_str())).collect()
+            self.test_results
+                .iter()
+                .map(|result| Line::from(result.as_str()))
+                .collect()
         };
 
         let test_panel = Paragraph::new(test_lines)
-            .block(Block::default().borders(Borders::ALL).title("Filter Testing"))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title("Filter Testing"),
+            )
             .wrap(Wrap { trim: true });
 
         frame.render_widget(test_panel, area);
@@ -550,13 +588,19 @@ impl AdvancedFiltersUI {
     fn render_statistics(&self, frame: &mut Frame, area: Rect) {
         let stats_lines = vec![
             Line::from(format!("Total Filters: {}", self.filters.len())),
-            Line::from(format!("Enabled Filters: {}", self.filters.iter().filter(|f| f.enabled).count())),
+            Line::from(format!(
+                "Enabled Filters: {}",
+                self.filters.iter().filter(|f| f.enabled).count()
+            )),
             Line::from(""),
             Line::from("Top Performing Filters:"),
         ];
 
-        let stats_panel = Paragraph::new(stats_lines)
-            .block(Block::default().borders(Borders::ALL).title("Filter Statistics"));
+        let stats_panel = Paragraph::new(stats_lines).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title("Filter Statistics"),
+        );
 
         frame.render_widget(stats_panel, area);
     }
@@ -612,7 +656,11 @@ impl AdvancedFiltersUI {
     }
 
     /// Key handling for different tabs
-    async fn handle_filter_list_key(&mut self, key: KeyCode, _modifiers: KeyModifiers) -> (bool, Option<FilterUIAction>) {
+    async fn handle_filter_list_key(
+        &mut self,
+        key: KeyCode,
+        _modifiers: KeyModifiers,
+    ) -> (bool, Option<FilterUIAction>) {
         match key {
             KeyCode::Up => {
                 if let Some(index) = self.selected_filter_index {
@@ -650,22 +698,38 @@ impl AdvancedFiltersUI {
         }
     }
 
-    async fn handle_filter_editor_key(&mut self, _key: KeyCode, _modifiers: KeyModifiers) -> (bool, Option<FilterUIAction>) {
+    async fn handle_filter_editor_key(
+        &mut self,
+        _key: KeyCode,
+        _modifiers: KeyModifiers,
+    ) -> (bool, Option<FilterUIAction>) {
         // TODO: Implement filter editor key handling
         (true, None)
     }
 
-    async fn handle_templates_key(&mut self, _key: KeyCode, _modifiers: KeyModifiers) -> (bool, Option<FilterUIAction>) {
+    async fn handle_templates_key(
+        &mut self,
+        _key: KeyCode,
+        _modifiers: KeyModifiers,
+    ) -> (bool, Option<FilterUIAction>) {
         // TODO: Implement template key handling
         (true, None)
     }
 
-    async fn handle_testing_key(&mut self, _key: KeyCode, _modifiers: KeyModifiers) -> (bool, Option<FilterUIAction>) {
+    async fn handle_testing_key(
+        &mut self,
+        _key: KeyCode,
+        _modifiers: KeyModifiers,
+    ) -> (bool, Option<FilterUIAction>) {
         // TODO: Implement testing key handling
         (true, None)
     }
 
-    async fn handle_statistics_key(&mut self, _key: KeyCode, _modifiers: KeyModifiers) -> (bool, Option<FilterUIAction>) {
+    async fn handle_statistics_key(
+        &mut self,
+        _key: KeyCode,
+        _modifiers: KeyModifiers,
+    ) -> (bool, Option<FilterUIAction>) {
         // TODO: Implement statistics key handling
         (true, None)
     }
@@ -714,7 +778,7 @@ mod tests {
     async fn test_advanced_filters_ui_creation() {
         let engine = Arc::new(AdvancedFilterEngine::new());
         let ui = AdvancedFiltersUI::new(engine);
-        
+
         assert_eq!(ui.current_tab, FilterTab::FilterList);
         assert_eq!(ui.focused_area, FocusedArea::FilterList);
         assert!(ui.filters.is_empty());
@@ -724,10 +788,10 @@ mod tests {
     async fn test_tab_navigation() {
         let engine = Arc::new(AdvancedFilterEngine::new());
         let mut ui = AdvancedFiltersUI::new(engine);
-        
+
         ui.next_tab();
         assert_eq!(ui.current_tab, FilterTab::FilterEditor);
-        
+
         ui.previous_tab();
         assert_eq!(ui.current_tab, FilterTab::FilterList);
     }

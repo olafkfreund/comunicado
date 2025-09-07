@@ -21,21 +21,31 @@ impl Default for Optimizer {
 }
 
 impl Default for OptimizationEngine {
-    fn default() -> Self { Self }
+    fn default() -> Self {
+        Self
+    }
 }
 
 impl Default for OptimizationRule {
-    fn default() -> Self { Self }
+    fn default() -> Self {
+        Self
+    }
 }
 
 impl Default for PerformanceTuner {
-    fn default() -> Self { Self }
+    fn default() -> Self {
+        Self
+    }
 }
 
 impl Default for AutoOptimizer {
-    fn default() -> Self { Self }
+    fn default() -> Self {
+        Self
+    }
 }
 
 impl Default for OptimizationRecommendation {
-    fn default() -> Self { Self }
+    fn default() -> Self {
+        Self
+    }
 }

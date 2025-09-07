@@ -1,11 +1,11 @@
 //! Main AI service providing high-level AI functionality
 
-use crate::ai::{AIContext, AIResult};
 use crate::ai::cache::AIResponseCache;
 use crate::ai::config::{AIConfig, AIProviderType};
 use crate::ai::error::AIError;
 use crate::ai::provider::AIProviderManager;
-use crate::ai::retry::{RetryManager, RetryConfig};
+use crate::ai::retry::{RetryConfig, RetryManager};
+use crate::ai::{AIContext, AIResult};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -76,7 +76,7 @@ pub struct EmailTriageResult {
     pub category: EmailCategory,
     /// Urgency score (0.0 to 1.0)
     pub urgency_score: f32,
-    /// Importance score (0.0 to 1.0) 
+    /// Importance score (0.0 to 1.0)
     pub importance_score: f32,
     /// Sentiment analysis (-1.0 to 1.0, negative to positive)
     pub sentiment_score: f32,
@@ -266,15 +266,14 @@ impl AIService {
         }
 
         // Generate cache key
-        let cache_key = self.cache.generate_prompt_hash(
-            &format!("reply:{}", email_content),
-            Some(user_context),
-        );
+        let cache_key = self
+            .cache
+            .generate_prompt_hash(&format!("reply:{}", email_content), Some(user_context));
 
         // Check cache first
         if let Some(cached) = self.cache.get_cached_response(&cache_key).await {
-            let suggestions: Vec<String> = serde_json::from_str(&cached.content)
-                .unwrap_or_else(|_| vec![cached.content]);
+            let suggestions: Vec<String> =
+                serde_json::from_str(&cached.content).unwrap_or_else(|_| vec![cached.content]);
             debug!("Using cached email reply suggestions");
             return Ok(suggestions);
         }
@@ -287,42 +286,45 @@ impl AIService {
         let cache_key_clone = cache_key.clone();
 
         // Execute with retry logic
-        let (result, stats) = self.retry_manager.execute_with_stats(|| {
-            let email_content = email_content.clone();
-            let user_context = user_context.clone();
-            let provider_manager = provider_manager.clone();
-            let cache = cache.clone();
-            let cache_key = cache_key_clone.clone();
-            
-            async move {
-                info!("Attempting to generate email reply suggestions");
-                
-                // Get active provider
-                let provider_manager = provider_manager.read().await;
-                let provider = provider_manager.get_active_provider().await?;
+        let (result, stats) = self
+            .retry_manager
+            .execute_with_stats(|| {
+                let email_content = email_content.clone();
+                let user_context = user_context.clone();
+                let provider_manager = provider_manager.clone();
+                let cache = cache.clone();
+                let cache_key = cache_key_clone.clone();
 
-                // Generate reply suggestions
-                let suggestions = provider.suggest_reply(&email_content, &user_context).await?;
+                async move {
+                    info!("Attempting to generate email reply suggestions");
 
-                // Cache the result
-                let cache_content = serde_json::to_string(&suggestions)
-                    .unwrap_or_else(|_| suggestions.join("\n"));
-                
-                cache
-                    .cache_response(&cache_key, &cache_content, provider.name(), None)
-                    .await?;
+                    // Get active provider
+                    let provider_manager = provider_manager.read().await;
+                    let provider = provider_manager.get_active_provider().await?;
 
-                Ok(suggestions)
-            }
-        }).await;
+                    // Generate reply suggestions
+                    let suggestions = provider
+                        .suggest_reply(&email_content, &user_context)
+                        .await?;
+
+                    // Cache the result
+                    let cache_content = serde_json::to_string(&suggestions)
+                        .unwrap_or_else(|_| suggestions.join("\n"));
+
+                    cache
+                        .cache_response(&cache_key, &cache_content, provider.name(), None)
+                        .await?;
+
+                    Ok(suggestions)
+                }
+            })
+            .await;
 
         // Log retry statistics
         if stats.total_attempts > 1 {
             info!(
                 "Email reply suggestion completed after {} attempts in {:?} (delays: {:?})",
-                stats.total_attempts,
-                stats.total_duration,
-                stats.total_delay
+                stats.total_attempts, stats.total_duration, stats.total_delay
             );
         }
 
@@ -330,7 +332,11 @@ impl AIService {
     }
 
     /// Summarize email content
-    pub async fn summarize_email(&self, content: &str, max_length: Option<usize>) -> AIResult<String> {
+    pub async fn summarize_email(
+        &self,
+        content: &str,
+        max_length: Option<usize>,
+    ) -> AIResult<String> {
         if !self.is_enabled().await {
             return Err(AIError::config_error("AI functionality is disabled"));
         }
@@ -362,38 +368,39 @@ impl AIService {
         let cache_key_clone = cache_key.clone();
 
         // Execute with retry logic
-        let (result, stats) = self.retry_manager.execute_with_stats(|| {
-            let content = content.clone();
-            let provider_manager = provider_manager.clone();
-            let cache = cache.clone();
-            let cache_key = cache_key_clone.clone();
-            
-            async move {
-                info!("Attempting to generate email summary");
-                
-                // Get active provider
-                let provider_manager = provider_manager.read().await;
-                let provider = provider_manager.get_active_provider().await?;
+        let (result, stats) = self
+            .retry_manager
+            .execute_with_stats(|| {
+                let content = content.clone();
+                let provider_manager = provider_manager.clone();
+                let cache = cache.clone();
+                let cache_key = cache_key_clone.clone();
 
-                // Generate summary
-                let summary = provider.summarize_content(&content, max_length).await?;
+                async move {
+                    info!("Attempting to generate email summary");
 
-                // Cache the result
-                cache
-                    .cache_response(&cache_key, &summary, provider.name(), None)
-                    .await?;
+                    // Get active provider
+                    let provider_manager = provider_manager.read().await;
+                    let provider = provider_manager.get_active_provider().await?;
 
-                Ok(summary)
-            }
-        }).await;
+                    // Generate summary
+                    let summary = provider.summarize_content(&content, max_length).await?;
+
+                    // Cache the result
+                    cache
+                        .cache_response(&cache_key, &summary, provider.name(), None)
+                        .await?;
+
+                    Ok(summary)
+                }
+            })
+            .await;
 
         // Log retry statistics
         if stats.total_attempts > 1 {
             info!(
                 "Email summarization completed after {} attempts in {:?} (delays: {:?})",
-                stats.total_attempts,
-                stats.total_duration,
-                stats.total_delay
+                stats.total_attempts, stats.total_duration, stats.total_delay
             );
         }
 
@@ -415,10 +422,9 @@ impl AIService {
         }
 
         // Generate cache key
-        let cache_key = self.cache.generate_prompt_hash(
-            &format!("categorize:{}", content),
-            None,
-        );
+        let cache_key = self
+            .cache
+            .generate_prompt_hash(&format!("categorize:{}", content), None);
 
         // Check cache first
         if let Some(cached) = self.cache.get_cached_response(&cache_key).await {
@@ -435,9 +441,9 @@ impl AIService {
         let category = provider.categorize_email(content).await?;
 
         // Cache the result
-        let cache_content = serde_json::to_string(&category)
-            .unwrap_or_else(|_| category.to_string());
-        
+        let cache_content =
+            serde_json::to_string(&category).unwrap_or_else(|_| category.to_string());
+
         self.cache
             .cache_response(&cache_key, &cache_content, provider.name(), None)
             .await?;
@@ -460,10 +466,9 @@ impl AIService {
         }
 
         // Generate cache key
-        let cache_key = self.cache.generate_prompt_hash(
-            &format!("schedule:{}", text),
-            None,
-        );
+        let cache_key = self
+            .cache
+            .generate_prompt_hash(&format!("schedule:{}", text), None);
 
         // Check cache first
         if let Some(cached) = self.cache.get_cached_response(&cache_key).await {
@@ -480,9 +485,8 @@ impl AIService {
         let intent = provider.parse_schedule_request(text).await?;
 
         // Cache the result
-        let cache_content = serde_json::to_string(&intent)
-            .unwrap_or_else(|_| text.to_string());
-        
+        let cache_content = serde_json::to_string(&intent).unwrap_or_else(|_| text.to_string());
+
         self.cache
             .cache_response(&cache_key, &cache_content, provider.name(), None)
             .await?;
@@ -491,7 +495,10 @@ impl AIService {
     }
 
     /// Generate a meeting summary from calendar events
-    pub async fn generate_meeting_summary(&self, events: &[crate::calendar::Event]) -> AIResult<String> {
+    pub async fn generate_meeting_summary(
+        &self,
+        events: &[crate::calendar::Event],
+    ) -> AIResult<String> {
         if !self.is_enabled().await {
             return Err(AIError::config_error("AI functionality is disabled"));
         }
@@ -513,10 +520,9 @@ impl AIService {
             .join("\n");
 
         // Generate cache key
-        let cache_key = self.cache.generate_prompt_hash(
-            &format!("meeting_summary:{}", events_text),
-            None,
-        );
+        let cache_key = self
+            .cache
+            .generate_prompt_hash(&format!("meeting_summary:{}", events_text), None);
 
         // Check cache first
         if let Some(cached) = self.cache.get_cached_response(&cache_key).await {
@@ -541,7 +547,7 @@ impl AIService {
             "Please generate a concise summary of these calendar events and meetings:\n\n{}",
             events_text
         );
-        
+
         let summary = provider.complete_text(&prompt, Some(&context)).await?;
 
         // Cache the result
@@ -567,7 +573,10 @@ impl AIService {
         let provider = provider_manager.get_active_provider().await?;
 
         // Generate different types of assistance
-        let subject_prompt = format!("Generate 3 professional email subject lines for: {}", prompt);
+        let subject_prompt = format!(
+            "Generate 3 professional email subject lines for: {}",
+            prompt
+        );
         let body_prompt = format!("Generate a professional email body for: {}", prompt);
         let tone_prompt = format!("Suggest appropriate tones for an email about: {}", prompt);
 
@@ -608,7 +617,7 @@ impl AIService {
             subject_suggestions,
             body_suggestions,
             tone_suggestions,
-            key_points: vec![], // Could be enhanced with key point extraction
+            key_points: vec![],   // Could be enhanced with key point extraction
             next_actions: vec![], // Could be enhanced with action item detection
         })
     }
@@ -620,15 +629,14 @@ impl AIService {
         }
 
         // Generate cache key
-        let cache_key = self.cache.generate_prompt_hash(
-            &format!("extract_info:{}", content),
-            None,
-        );
+        let cache_key = self
+            .cache
+            .generate_prompt_hash(&format!("extract_info:{}", content), None);
 
         // Check cache first
         if let Some(cached) = self.cache.get_cached_response(&cache_key).await {
-            let info: Vec<String> = serde_json::from_str(&cached.content)
-                .unwrap_or_else(|_| vec![cached.content]);
+            let info: Vec<String> =
+                serde_json::from_str(&cached.content).unwrap_or_else(|_| vec![cached.content]);
             return Ok(info);
         }
 
@@ -640,9 +648,9 @@ impl AIService {
         let key_info = provider.extract_key_info(content).await?;
 
         // Cache the result
-        let cache_content = serde_json::to_string(&key_info)
-            .unwrap_or_else(|_| key_info.join("\n"));
-        
+        let cache_content =
+            serde_json::to_string(&key_info).unwrap_or_else(|_| key_info.join("\n"));
+
         self.cache
             .cache_response(&cache_key, &cache_content, provider.name(), None)
             .await?;
@@ -665,14 +673,26 @@ impl AIService {
             total_providers: provider_stats.total_providers,
             healthy_providers: provider_stats.healthy_providers,
             features_enabled: vec![
-                ("email_suggestions".to_string(), config.email_suggestions_enabled),
-                ("email_summarization".to_string(), config.email_summarization_enabled),
-                ("calendar_assistance".to_string(), config.calendar_assistance_enabled),
-                ("email_categorization".to_string(), config.email_categorization_enabled),
+                (
+                    "email_suggestions".to_string(),
+                    config.email_suggestions_enabled,
+                ),
+                (
+                    "email_summarization".to_string(),
+                    config.email_summarization_enabled,
+                ),
+                (
+                    "calendar_assistance".to_string(),
+                    config.calendar_assistance_enabled,
+                ),
+                (
+                    "email_categorization".to_string(),
+                    config.email_categorization_enabled,
+                ),
             ]
             .into_iter()
             .collect(),
-            retry_enabled: true, // Retry is always enabled
+            retry_enabled: true,   // Retry is always enabled
             retry_max_attempts: 3, // Default from RetryConfig
         })
     }
@@ -703,28 +723,30 @@ impl AIService {
         // For now, return a simple message about retry capabilities
         format!(
             "AI retry system active with max {} attempts, base delay {:?}",
-            3, // Default max attempts
-            std::time::Duration::from_secs(1) // Default base delay
+            3,                                 // Default max attempts
+            std::time::Duration::from_secs(1)  // Default base delay
         )
     }
 
     /// Test AI provider connectivity with retry logic
     pub async fn test_provider_connectivity(&self) -> AIResult<String> {
-        let (result, stats) = self.retry_manager.execute_with_stats(|| async {
-            let provider_manager = self.provider_manager.read().await;
-            let provider = provider_manager.get_active_provider().await?;
-            
-            // Test with a simple prompt
-            provider.complete_text("Test connectivity", None).await
-        }).await;
+        let (result, stats) = self
+            .retry_manager
+            .execute_with_stats(|| async {
+                let provider_manager = self.provider_manager.read().await;
+                let provider = provider_manager.get_active_provider().await?;
+
+                // Test with a simple prompt
+                provider.complete_text("Test connectivity", None).await
+            })
+            .await;
 
         match result {
             Ok(_response) => {
                 let message = if stats.total_attempts > 1 {
                     format!(
                         "✅ Provider connectivity successful after {} attempts ({:?} total time)",
-                        stats.total_attempts,
-                        stats.total_duration
+                        stats.total_attempts, stats.total_duration
                     )
                 } else {
                     "✅ Provider connectivity successful".to_string()
@@ -734,8 +756,7 @@ impl AIService {
             Err(error) => {
                 let message = format!(
                     "❌ Provider connectivity failed after {} attempts: {}",
-                    stats.total_attempts,
-                    error
+                    stats.total_attempts, error
                 );
                 Err(AIError::provider_unavailable(message))
             }
@@ -743,33 +764,39 @@ impl AIService {
     }
 
     /// Complete text using AI provider
-    pub async fn complete_text(&self, prompt: &str, context: Option<&AIContext>) -> AIResult<String> {
+    pub async fn complete_text(
+        &self,
+        prompt: &str,
+        context: Option<&AIContext>,
+    ) -> AIResult<String> {
         // Capture values for retry closure
         let prompt = prompt.to_string();
         let context = context.cloned();
         let provider_manager = self.provider_manager.clone();
 
         // Execute with retry logic
-        let (result, stats) = self.retry_manager.execute_with_stats(|| {
-            let prompt = prompt.clone();
-            let context = context.clone();
-            let provider_manager = provider_manager.clone();
-            
-            async move {
-                debug!("Attempting text completion");
-                
-                let provider_manager = provider_manager.read().await;
-                let provider = provider_manager.get_active_provider().await?;
-                provider.complete_text(&prompt, context.as_ref()).await
-            }
-        }).await;
+        let (result, stats) = self
+            .retry_manager
+            .execute_with_stats(|| {
+                let prompt = prompt.clone();
+                let context = context.clone();
+                let provider_manager = provider_manager.clone();
+
+                async move {
+                    debug!("Attempting text completion");
+
+                    let provider_manager = provider_manager.read().await;
+                    let provider = provider_manager.get_active_provider().await?;
+                    provider.complete_text(&prompt, context.as_ref()).await
+                }
+            })
+            .await;
 
         // Log retry statistics for non-trivial operations
         if stats.total_attempts > 1 {
             debug!(
                 "Text completion completed after {} attempts in {:?}",
-                stats.total_attempts,
-                stats.total_duration
+                stats.total_attempts, stats.total_duration
             );
         }
 
@@ -820,18 +847,24 @@ impl AIService {
 
         // Check for bulk domains
         let sender_domain = message.from_addr.split('@').nth(1).unwrap_or("");
-        if config.bulk_domains.iter().any(|domain| sender_domain.contains(domain)) {
+        if config
+            .bulk_domains
+            .iter()
+            .any(|domain| sender_domain.contains(domain))
+        {
             priority = EmailPriority::Bulk;
             key_indicators.push("Bulk domain".to_string());
         }
 
         // Check priority keywords
         let content_lower = email_content.to_lowercase();
-        let found_keywords: Vec<_> = config.priority_keywords.iter()
+        let found_keywords: Vec<_> = config
+            .priority_keywords
+            .iter()
             .filter(|keyword| content_lower.contains(&keyword.to_lowercase()))
             .cloned()
             .collect();
-        
+
         if !found_keywords.is_empty() {
             if priority != EmailPriority::Bulk {
                 priority = EmailPriority::High;
@@ -848,7 +881,11 @@ impl AIService {
         // Check cache first for AI analysis results
         let mut ai_analysis: Option<(EmailCategory, f32, f32, f32, String, Vec<String>)> = None;
         if let Some(cached) = self.cache.get_cached_response(&cache_key).await {
-            if let Ok(cached_result) = serde_json::from_str::<(EmailCategory, f32, f32, f32, String, Vec<String>)>(&cached.content) {
+            if let Ok(cached_result) =
+                serde_json::from_str::<(EmailCategory, f32, f32, f32, String, Vec<String>)>(
+                    &cached.content,
+                )
+            {
                 ai_analysis = Some(cached_result);
             }
         }
@@ -893,8 +930,10 @@ Respond only with valid JSON."#,
                 creativity: Some(0.3), // Lower creativity for analytical tasks
             };
 
-            let response = provider.complete_text(&triage_prompt, Some(&ai_context)).await?;
-            
+            let response = provider
+                .complete_text(&triage_prompt, Some(&ai_context))
+                .await?;
+
             // Parse AI response
             if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&response) {
                 let category = match parsed["category"].as_str().unwrap_or("Uncategorized") {
@@ -914,33 +953,61 @@ Respond only with valid JSON."#,
                 let urgency_score = parsed["urgency_score"].as_f64().unwrap_or(0.5) as f32;
                 let importance_score = parsed["importance_score"].as_f64().unwrap_or(0.5) as f32;
                 let sentiment_score = parsed["sentiment_score"].as_f64().unwrap_or(0.0) as f32;
-                let reasoning = parsed["reasoning"].as_str().unwrap_or("No reasoning provided").to_string();
-                
+                let reasoning = parsed["reasoning"]
+                    .as_str()
+                    .unwrap_or("No reasoning provided")
+                    .to_string();
+
                 let action_items: Vec<String> = parsed["action_items"]
                     .as_array()
-                    .map(|arr| arr.iter()
-                        .filter_map(|v| v.as_str())
-                        .map(String::from)
-                        .collect())
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|v| v.as_str())
+                            .map(String::from)
+                            .collect()
+                    })
                     .unwrap_or_default();
 
-                ai_analysis = Some((category, urgency_score, importance_score, sentiment_score, reasoning, action_items));
+                ai_analysis = Some((
+                    category,
+                    urgency_score,
+                    importance_score,
+                    sentiment_score,
+                    reasoning,
+                    action_items,
+                ));
 
                 // Cache the AI analysis
                 let cache_content = serde_json::to_string(&ai_analysis).unwrap_or_default();
-                let _ = self.cache
+                let _ = self
+                    .cache
                     .cache_response(&cache_key, &cache_content, provider.name(), None)
                     .await;
             }
         }
 
         // Use AI analysis or fallback to defaults
-        let (category, urgency_score, importance_score, sentiment_score, reasoning, action_items, ai_available) = 
-            if let Some((cat, urg, imp, sent, reason, actions)) = ai_analysis {
-                (cat, urg, imp, sent, reason, actions, true)
-            } else {
-                (EmailCategory::Uncategorized, 0.5, 0.5, 0.0, "Rule-based analysis only".to_string(), Vec::new(), false)
-            };
+        let (
+            category,
+            urgency_score,
+            importance_score,
+            sentiment_score,
+            reasoning,
+            action_items,
+            ai_available,
+        ) = if let Some((cat, urg, imp, sent, reason, actions)) = ai_analysis {
+            (cat, urg, imp, sent, reason, actions, true)
+        } else {
+            (
+                EmailCategory::Uncategorized,
+                0.5,
+                0.5,
+                0.0,
+                "Rule-based analysis only".to_string(),
+                Vec::new(),
+                false,
+            )
+        };
 
         // Determine final priority based on AI scores and rules
         if priority == EmailPriority::Bulk {
@@ -963,10 +1030,10 @@ Respond only with valid JSON."#,
         };
 
         // Determine if human review is needed
-        let requires_human_review = confidence < config.min_confidence_threshold ||
-            priority == EmailPriority::Critical ||
-            sentiment_score < -0.7 ||
-            (!action_items.is_empty() && priority >= EmailPriority::High);
+        let requires_human_review = confidence < config.min_confidence_threshold
+            || priority == EmailPriority::Critical
+            || sentiment_score < -0.7
+            || (!action_items.is_empty() && priority >= EmailPriority::High);
 
         // Estimate response time based on priority and content
         let estimated_response_time = match priority {
@@ -984,13 +1051,14 @@ Respond only with valid JSON."#,
         );
 
         // Check processing time limit
-        let (final_requires_human_review, final_key_indicators) = if processing_time.as_secs() > config.max_processing_time as u64 {
-            let mut updated_indicators = key_indicators;
-            updated_indicators.push("Processing timeout".to_string());
-            (true, updated_indicators)
-        } else {
-            (requires_human_review, key_indicators)
-        };
+        let (final_requires_human_review, final_key_indicators) =
+            if processing_time.as_secs() > config.max_processing_time as u64 {
+                let mut updated_indicators = key_indicators;
+                updated_indicators.push("Processing timeout".to_string());
+                (true, updated_indicators)
+            } else {
+                (requires_human_review, key_indicators)
+            };
 
         Ok(EmailTriageResult {
             priority,
@@ -1018,7 +1086,7 @@ Respond only with valid JSON."#,
         }
 
         let mut results = Vec::with_capacity(messages.len());
-        
+
         // Process in parallel with concurrency limit
         let semaphore = Arc::new(tokio::sync::Semaphore::new(5)); // Max 5 concurrent
         let mut handles = Vec::new();
@@ -1099,7 +1167,7 @@ pub struct AIServiceHealth {
     pub retry_max_attempts: usize,
 }
 
-// Temporarily disabled while fixing interface issues  
+// Temporarily disabled while fixing interface issues
 // #[cfg(test)]
 // mod tests {
 /*    use super::*;
@@ -1195,12 +1263,12 @@ pub struct AIServiceHealth {
     #[tokio::test]
     async fn test_email_reply_suggestions() {
         let service = create_test_service().await;
-        
+
         let suggestions = service
             .suggest_email_reply("Hello, how are you?", "Casual conversation")
             .await
             .unwrap();
-        
+
         assert_eq!(suggestions.len(), 2);
         assert_eq!(suggestions[0], "Mock reply 1");
         assert_eq!(suggestions[1], "Mock reply 2");
@@ -1209,36 +1277,36 @@ pub struct AIServiceHealth {
     #[tokio::test]
     async fn test_email_summarization() {
         let service = create_test_service().await;
-        
+
         let summary = service
             .summarize_email("This is a long email that needs summarization...", Some(100))
             .await
             .unwrap();
-        
+
         assert_eq!(summary, "Mock summary");
     }
 
     #[tokio::test]
     async fn test_email_categorization() {
         let service = create_test_service().await;
-        
+
         let category = service
             .categorize_email("Meeting scheduled for tomorrow at 3 PM")
             .await
             .unwrap();
-        
+
         assert_eq!(category, EmailCategory::Work);
     }
 
     #[tokio::test]
     async fn test_scheduling_intent_parsing() {
         let service = create_test_service().await;
-        
+
         let intent = service
             .parse_scheduling_intent("Schedule a meeting for tomorrow at 3 PM")
             .await
             .unwrap();
-        
+
         assert_eq!(intent.intent_type, "meeting");
         assert_eq!(intent.title, Some("Mock meeting".to_string()));
         assert_eq!(intent.confidence, 0.8);
@@ -1247,9 +1315,9 @@ pub struct AIServiceHealth {
     #[tokio::test]
     async fn test_service_health_status() {
         let service = create_test_service().await;
-        
+
         let health = service.get_health_status().await.unwrap();
-        
+
         assert!(health.enabled);
         assert_eq!(health.active_provider, AIProviderType::Ollama);
         assert!(health.features_enabled["email_suggestions"]);

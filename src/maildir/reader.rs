@@ -156,7 +156,7 @@ impl MaildirReader {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     use tempfile::TempDir;
 
     #[tokio::test]

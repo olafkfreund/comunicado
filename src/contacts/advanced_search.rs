@@ -6,9 +6,9 @@
 use crate::contacts::{
     Contact, ContactSearchCriteria, ContactSource, ContactsDatabase, ContactsError, ContactsResult,
 };
-use sqlx::Row;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use sqlx::Row;
 use std::collections::HashMap;
 
 /// Advanced search criteria with multiple filters and options
@@ -16,23 +16,23 @@ use std::collections::HashMap;
 pub struct AdvancedSearchCriteria {
     /// General query text (searches across all fields)
     pub query: Option<String>,
-    
+
     /// Specific field searches
     pub name_query: Option<String>,
     pub email_query: Option<String>,
     pub phone_query: Option<String>,
     pub company_query: Option<String>,
     pub notes_query: Option<String>,
-    
+
     /// Contact source filters
     pub sources: Vec<ContactSource>,
-    
+
     /// Email and phone presence filters
     pub has_email: Option<bool>,
     pub has_phone: Option<bool>,
     pub has_company: Option<bool>,
     pub has_notes: Option<bool>,
-    
+
     /// Date range filters
     pub created_after: Option<DateTime<Utc>>,
     pub created_before: Option<DateTime<Utc>>,
@@ -40,14 +40,14 @@ pub struct AdvancedSearchCriteria {
     pub updated_before: Option<DateTime<Utc>>,
     pub synced_after: Option<DateTime<Utc>>,
     pub synced_before: Option<DateTime<Utc>>,
-    
+
     /// Search options
     pub fuzzy_matching: bool,
     pub case_sensitive: bool,
     pub whole_word_only: bool,
     pub limit: Option<usize>,
     pub offset: Option<usize>,
-    
+
     /// Sorting options
     pub sort_field: SortField,
     pub sort_direction: SortDirection,
@@ -240,23 +240,23 @@ impl AdvancedSearchCriteria {
     /// Convert to basic search criteria for fallback
     pub fn to_basic_criteria(&self) -> ContactSearchCriteria {
         let mut criteria = ContactSearchCriteria::new();
-        
+
         if let Some(query) = &self.query {
             criteria = criteria.with_query(query.clone());
         }
-        
+
         if let Some(email) = &self.email_query {
             criteria = criteria.with_email(email.clone());
         }
-        
+
         if let Some(limit) = self.limit {
             criteria = criteria.with_limit(limit);
         }
-        
+
         if let Some(source) = self.sources.first() {
             criteria = criteria.with_source(source.clone());
         }
-        
+
         criteria
     }
 }
@@ -269,19 +269,22 @@ impl AdvancedContactSearch {
     }
 
     /// Perform advanced search with scoring and ranking
-    pub async fn search(&self, criteria: &AdvancedSearchCriteria) -> ContactsResult<Vec<SearchResult>> {
+    pub async fn search(
+        &self,
+        criteria: &AdvancedSearchCriteria,
+    ) -> ContactsResult<Vec<SearchResult>> {
         let start_time = std::time::Instant::now();
-        
+
         // Build optimized SQL query based on criteria
         let (query, params) = self.build_search_query(criteria)?;
-        
+
         // Execute query
         let rows = sqlx::query(&query)
             .bind_all(params)
             .fetch_all(&self.database.pool)
             .await
             .map_err(|e| ContactsError::DatabaseError(e.to_string()))?;
-        
+
         // Convert rows to contacts
         let mut results = Vec::new();
         for row in rows {
@@ -289,7 +292,7 @@ impl AdvancedContactSearch {
             let relevance_score = self.calculate_relevance_score(&contact, criteria);
             let matching_fields = self.find_matching_fields(&contact, criteria);
             let snippets = self.generate_snippets(&contact, criteria);
-            
+
             results.push(SearchResult {
                 contact,
                 relevance_score,
@@ -297,19 +300,24 @@ impl AdvancedContactSearch {
                 snippets,
             });
         }
-        
+
         // Sort results based on criteria
         self.sort_results(&mut results, criteria);
-        
+
         // Record search in history
         let execution_time = start_time.elapsed().as_millis() as u64;
-        let _ = self.add_to_search_history(criteria, results.len(), execution_time).await;
-        
+        let _ = self
+            .add_to_search_history(criteria, results.len(), execution_time)
+            .await;
+
         Ok(results)
     }
 
     /// Build optimized SQL query from search criteria
-    fn build_search_query(&self, criteria: &AdvancedSearchCriteria) -> ContactsResult<(String, Vec<String>)> {
+    fn build_search_query(
+        &self,
+        criteria: &AdvancedSearchCriteria,
+    ) -> ContactsResult<(String, Vec<String>)> {
         let mut query = "SELECT c.*, 
                                GROUP_CONCAT(DISTINCT e.address || '|' || e.label || '|' || e.is_primary) as emails,
                                GROUP_CONCAT(DISTINCT p.number || '|' || p.label || '|' || p.is_primary) as phones
@@ -342,7 +350,7 @@ impl AdvancedContactSearch {
                     param_count, param_count + 1, param_count + 2, param_count + 3, param_count + 4
                 ));
             }
-            
+
             params.extend(vec![pattern.clone(); 5]);
             param_count += 5;
         }
@@ -361,8 +369,15 @@ impl AdvancedContactSearch {
 
         if let Some(email_query) = &criteria.email_query {
             let pattern = self.build_search_pattern(email_query, criteria);
-            query.push_str(&format!(" AND c.id IN (SELECT contact_id FROM contact_emails WHERE {} address LIKE ?{})", 
-                if criteria.case_sensitive { "" } else { "LOWER(" }, param_count));
+            query.push_str(&format!(
+                " AND c.id IN (SELECT contact_id FROM contact_emails WHERE {} address LIKE ?{})",
+                if criteria.case_sensitive {
+                    ""
+                } else {
+                    "LOWER("
+                },
+                param_count
+            ));
             if !criteria.case_sensitive {
                 query.push_str(")");
             }
@@ -372,7 +387,10 @@ impl AdvancedContactSearch {
 
         if let Some(phone_query) = &criteria.phone_query {
             let pattern = self.build_search_pattern(phone_query, criteria);
-            query.push_str(&format!(" AND c.id IN (SELECT contact_id FROM contact_phones WHERE number LIKE ?{})", param_count));
+            query.push_str(&format!(
+                " AND c.id IN (SELECT contact_id FROM contact_phones WHERE number LIKE ?{})",
+                param_count
+            ));
             params.push(pattern);
             param_count += 1;
         }
@@ -405,12 +423,18 @@ impl AdvancedContactSearch {
             for source in &criteria.sources {
                 match source {
                     ContactSource::Google { account_id } => {
-                        source_conditions.push(format!("(c.source_type = 'google' AND c.source_account_id = ?{})", param_count));
+                        source_conditions.push(format!(
+                            "(c.source_type = 'google' AND c.source_account_id = ?{})",
+                            param_count
+                        ));
                         params.push(account_id.clone());
                         param_count += 1;
                     }
                     ContactSource::Outlook { account_id } => {
-                        source_conditions.push(format!("(c.source_type = 'outlook' AND c.source_account_id = ?{})", param_count));
+                        source_conditions.push(format!(
+                            "(c.source_type = 'outlook' AND c.source_account_id = ?{})",
+                            param_count
+                        ));
                         params.push(account_id.clone());
                         param_count += 1;
                     }
@@ -495,7 +519,7 @@ impl AdvancedContactSearch {
 
         // Group by and sorting
         query.push_str(" GROUP BY c.id");
-        
+
         let sort_clause = self.build_sort_clause(criteria);
         query.push_str(&sort_clause);
 
@@ -546,12 +570,20 @@ impl AdvancedContactSearch {
     }
 
     /// Calculate relevance score for search results
-    fn calculate_relevance_score(&self, contact: &Contact, criteria: &AdvancedSearchCriteria) -> f64 {
+    fn calculate_relevance_score(
+        &self,
+        contact: &Contact,
+        criteria: &AdvancedSearchCriteria,
+    ) -> f64 {
         let mut score = 0.0;
 
         // Base score for exact matches in display name (highest priority)
         if let Some(query) = &criteria.query {
-            if contact.display_name.to_lowercase().contains(&query.to_lowercase()) {
+            if contact
+                .display_name
+                .to_lowercase()
+                .contains(&query.to_lowercase())
+            {
                 score += 10.0;
                 if contact.display_name.to_lowercase() == query.to_lowercase() {
                     score += 20.0; // Exact match bonus
@@ -561,12 +593,14 @@ impl AdvancedContactSearch {
 
         // Score for name field matches
         if let Some(name_query) = &criteria.name_query {
-            let name_text = format!("{} {} {}", 
-                contact.display_name, 
+            let name_text = format!(
+                "{} {} {}",
+                contact.display_name,
                 contact.first_name.as_deref().unwrap_or(""),
                 contact.last_name.as_deref().unwrap_or("")
-            ).to_lowercase();
-            
+            )
+            .to_lowercase();
+
             if name_text.contains(&name_query.to_lowercase()) {
                 score += 8.0;
             }
@@ -575,7 +609,11 @@ impl AdvancedContactSearch {
         // Score for email matches
         if let Some(email_query) = &criteria.email_query {
             for email in &contact.emails {
-                if email.address.to_lowercase().contains(&email_query.to_lowercase()) {
+                if email
+                    .address
+                    .to_lowercase()
+                    .contains(&email_query.to_lowercase())
+                {
                     score += 6.0;
                     if email.is_primary {
                         score += 2.0; // Primary email bonus
@@ -587,7 +625,10 @@ impl AdvancedContactSearch {
         // Score for company matches
         if let Some(company_query) = &criteria.company_query {
             if let Some(company) = &contact.company {
-                if company.to_lowercase().contains(&company_query.to_lowercase()) {
+                if company
+                    .to_lowercase()
+                    .contains(&company_query.to_lowercase())
+                {
                     score += 5.0;
                 }
             }
@@ -613,16 +654,28 @@ impl AdvancedContactSearch {
         }
 
         // Bonus for having complete information
-        if !contact.emails.is_empty() { score += 0.5; }
-        if !contact.phones.is_empty() { score += 0.5; }
-        if contact.company.is_some() { score += 0.3; }
-        if contact.notes.is_some() { score += 0.2; }
+        if !contact.emails.is_empty() {
+            score += 0.5;
+        }
+        if !contact.phones.is_empty() {
+            score += 0.5;
+        }
+        if contact.company.is_some() {
+            score += 0.3;
+        }
+        if contact.notes.is_some() {
+            score += 0.2;
+        }
 
         score.max(0.0)
     }
 
     /// Find which fields matched the search criteria
-    fn find_matching_fields(&self, contact: &Contact, criteria: &AdvancedSearchCriteria) -> Vec<String> {
+    fn find_matching_fields(
+        &self,
+        contact: &Contact,
+        criteria: &AdvancedSearchCriteria,
+    ) -> Vec<String> {
         let mut matching_fields = Vec::new();
 
         if let Some(query) = &criteria.query {
@@ -649,7 +702,11 @@ impl AdvancedContactSearch {
 
         if let Some(email_query) = &criteria.email_query {
             for email in &contact.emails {
-                if email.address.to_lowercase().contains(&email_query.to_lowercase()) {
+                if email
+                    .address
+                    .to_lowercase()
+                    .contains(&email_query.to_lowercase())
+                {
                     matching_fields.push("email".to_string());
                     break;
                 }
@@ -669,12 +726,16 @@ impl AdvancedContactSearch {
     }
 
     /// Generate highlighted snippets for matching fields
-    fn generate_snippets(&self, contact: &Contact, criteria: &AdvancedSearchCriteria) -> HashMap<String, String> {
+    fn generate_snippets(
+        &self,
+        contact: &Contact,
+        criteria: &AdvancedSearchCriteria,
+    ) -> HashMap<String, String> {
         let mut snippets = HashMap::new();
 
         if let Some(query) = &criteria.query {
             let query_lower = query.to_lowercase();
-            
+
             // Generate snippet for display name if it matches
             if contact.display_name.to_lowercase().contains(&query_lower) {
                 let highlighted = self.highlight_text(&contact.display_name, query);
@@ -698,10 +759,11 @@ impl AdvancedContactSearch {
         // Simple highlighting - in a real implementation, you might use regex or more sophisticated matching
         let lower_text = text.to_lowercase();
         let lower_query = query.to_lowercase();
-        
+
         if let Some(start) = lower_text.find(&lower_query) {
             let end = start + query.len();
-            format!("{}**{}**{}", 
+            format!(
+                "{}**{}**{}",
                 &text[..start],
                 &text[start..end],
                 &text[end..]
@@ -715,18 +777,22 @@ impl AdvancedContactSearch {
     fn sort_results(&self, results: &mut Vec<SearchResult>, criteria: &AdvancedSearchCriteria) {
         match criteria.sort_field {
             SortField::Relevance => {
-                results.sort_by(|a, b| {
-                    match criteria.sort_direction {
-                        SortDirection::Ascending => a.relevance_score.partial_cmp(&b.relevance_score).unwrap_or(std::cmp::Ordering::Equal),
-                        SortDirection::Descending => b.relevance_score.partial_cmp(&a.relevance_score).unwrap_or(std::cmp::Ordering::Equal),
-                    }
+                results.sort_by(|a, b| match criteria.sort_direction {
+                    SortDirection::Ascending => a
+                        .relevance_score
+                        .partial_cmp(&b.relevance_score)
+                        .unwrap_or(std::cmp::Ordering::Equal),
+                    SortDirection::Descending => b
+                        .relevance_score
+                        .partial_cmp(&a.relevance_score)
+                        .unwrap_or(std::cmp::Ordering::Equal),
                 });
             }
             SortField::DisplayName => {
-                results.sort_by(|a, b| {
-                    match criteria.sort_direction {
-                        SortDirection::Ascending => a.contact.display_name.cmp(&b.contact.display_name),
-                        SortDirection::Descending => b.contact.display_name.cmp(&a.contact.display_name),
+                results.sort_by(|a, b| match criteria.sort_direction {
+                    SortDirection::Ascending => a.contact.display_name.cmp(&b.contact.display_name),
+                    SortDirection::Descending => {
+                        b.contact.display_name.cmp(&a.contact.display_name)
                     }
                 });
             }
@@ -741,19 +807,15 @@ impl AdvancedContactSearch {
                 });
             }
             SortField::CreatedAt => {
-                results.sort_by(|a, b| {
-                    match criteria.sort_direction {
-                        SortDirection::Ascending => a.contact.created_at.cmp(&b.contact.created_at),
-                        SortDirection::Descending => b.contact.created_at.cmp(&a.contact.created_at),
-                    }
+                results.sort_by(|a, b| match criteria.sort_direction {
+                    SortDirection::Ascending => a.contact.created_at.cmp(&b.contact.created_at),
+                    SortDirection::Descending => b.contact.created_at.cmp(&a.contact.created_at),
                 });
             }
             SortField::UpdatedAt => {
-                results.sort_by(|a, b| {
-                    match criteria.sort_direction {
-                        SortDirection::Ascending => a.contact.updated_at.cmp(&b.contact.updated_at),
-                        SortDirection::Descending => b.contact.updated_at.cmp(&a.contact.updated_at),
-                    }
+                results.sort_by(|a, b| match criteria.sort_direction {
+                    SortDirection::Ascending => a.contact.updated_at.cmp(&b.contact.updated_at),
+                    SortDirection::Descending => b.contact.updated_at.cmp(&a.contact.updated_at),
                 });
             }
             // For other fields, results are already sorted by SQL query
@@ -763,22 +825,22 @@ impl AdvancedContactSearch {
 
     /// Add search to history
     async fn add_to_search_history(
-        &self, 
-        criteria: &AdvancedSearchCriteria, 
-        result_count: usize, 
-        execution_time_ms: u64
+        &self,
+        criteria: &AdvancedSearchCriteria,
+        result_count: usize,
+        execution_time_ms: u64,
     ) -> ContactsResult<()> {
         let query_text = self.criteria_to_summary_text(criteria);
-        
-        // For now, we'll just log the search. In a full implementation, 
+
+        // For now, we'll just log the search. In a full implementation,
         // this would be stored in a search_history table
         tracing::info!(
-            "Search executed: '{}' - {} results in {}ms", 
-            query_text, 
-            result_count, 
+            "Search executed: '{}' - {} results in {}ms",
+            query_text,
+            result_count,
             execution_time_ms
         );
-        
+
         Ok(())
     }
 
@@ -803,7 +865,9 @@ impl AdvancedContactSearch {
         }
 
         if !criteria.sources.is_empty() {
-            let source_names: Vec<String> = criteria.sources.iter()
+            let source_names: Vec<String> = criteria
+                .sources
+                .iter()
                 .map(|s| s.provider_name().to_string())
                 .collect();
             parts.push(format!("Sources: {}", source_names.join(", ")));
@@ -821,11 +885,13 @@ impl AdvancedContactSearch {
         let mut suggestions = Vec::new();
 
         // Get common names, companies, and email domains
-        let rows = sqlx::query("
+        let rows = sqlx::query(
+            "
             SELECT DISTINCT display_name FROM contacts 
             WHERE display_name LIKE ? 
             ORDER BY display_name LIMIT 5
-        ")
+        ",
+        )
         .bind(format!("{}%", partial_query))
         .fetch_all(&self.database.pool)
         .await
@@ -838,11 +904,13 @@ impl AdvancedContactSearch {
         }
 
         // Get company suggestions
-        let company_rows = sqlx::query("
+        let company_rows = sqlx::query(
+            "
             SELECT DISTINCT company FROM contacts 
             WHERE company IS NOT NULL AND company LIKE ? 
             ORDER BY company LIMIT 3
-        ")
+        ",
+        )
         .bind(format!("{}%", partial_query))
         .fetch_all(&self.database.pool)
         .await
@@ -863,7 +931,9 @@ trait QueryBuilderExt {
     fn bind_all(self, params: Vec<String>) -> Self;
 }
 
-impl<'q> QueryBuilderExt for sqlx::query::Query<'q, sqlx::Sqlite, sqlx::sqlite::SqliteArguments<'q>> {
+impl<'q> QueryBuilderExt
+    for sqlx::query::Query<'q, sqlx::Sqlite, sqlx::sqlite::SqliteArguments<'q>>
+{
     fn bind_all(mut self, params: Vec<String>) -> Self {
         for param in params {
             self = self.bind(param);
@@ -881,7 +951,7 @@ mod tests {
     async fn test_advanced_search_creation() {
         let temp_file = NamedTempFile::new().unwrap();
         let db_path = temp_file.path().to_str().unwrap();
-        
+
         let search_engine = AdvancedContactSearch::new(db_path).await;
         assert!(search_engine.is_ok());
     }
@@ -917,8 +987,7 @@ mod tests {
         let empty_criteria = AdvancedSearchCriteria::new();
         assert!(empty_criteria.is_empty());
 
-        let non_empty_criteria = AdvancedSearchCriteria::new()
-            .with_query("test".to_string());
+        let non_empty_criteria = AdvancedSearchCriteria::new().with_query("test".to_string());
         assert!(!non_empty_criteria.is_empty());
     }
 }

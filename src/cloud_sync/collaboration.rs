@@ -116,11 +116,27 @@ pub struct PendingChange {
 /// Types of collaborative changes
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ChangeType {
-    TextInsert { position: usize, text: String },
-    TextDelete { position: usize, length: usize },
-    TextReplace { position: usize, old_text: String, new_text: String },
-    PropertyUpdate { path: String, value: serde_json::Value },
-    StructureChange { operation: String, data: serde_json::Value },
+    TextInsert {
+        position: usize,
+        text: String,
+    },
+    TextDelete {
+        position: usize,
+        length: usize,
+    },
+    TextReplace {
+        position: usize,
+        old_text: String,
+        new_text: String,
+    },
+    PropertyUpdate {
+        path: String,
+        value: serde_json::Value,
+    },
+    StructureChange {
+        operation: String,
+        data: serde_json::Value,
+    },
 }
 
 /// Conflict region in collaborative editing
@@ -269,7 +285,8 @@ impl CollaborationManager {
             collaboration_state: CollaborationState::new(),
         };
 
-        self.shared_resources.insert(resource_id.clone(), shared_resource.clone());
+        self.shared_resources
+            .insert(resource_id.clone(), shared_resource.clone());
 
         // Log activity
         self.activity_log.log_event(ActivityEvent {
@@ -305,7 +322,11 @@ impl CollaborationManager {
             resource.last_modified = Utc::now();
 
             // Update permission manager
-            self.permission_manager.add_permission(resource_id, user_id.clone(), permission.clone());
+            self.permission_manager.add_permission(
+                resource_id,
+                user_id.clone(),
+                permission.clone(),
+            );
 
             // Log activity
             self.activity_log.log_event(ActivityEvent {
@@ -322,9 +343,10 @@ impl CollaborationManager {
 
             Ok(())
         } else {
-            Err(CloudSyncError::ConflictResolution(
-                format!("Resource not found: {}", resource_id)
-            ))
+            Err(CloudSyncError::ConflictResolution(format!(
+                "Resource not found: {}",
+                resource_id
+            )))
         }
     }
 
@@ -335,11 +357,14 @@ impl CollaborationManager {
         resource_id: String,
     ) -> CloudSyncResult<Uuid> {
         let session_id = Uuid::new_v4();
-        
+
         // Check permissions
-        if !self.permission_manager.has_permission(&resource_id, &user_id, Permission::Read) {
+        if !self
+            .permission_manager
+            .has_permission(&resource_id, &user_id, Permission::Read)
+        {
             return Err(CloudSyncError::PermissionDenied(
-                "Insufficient permissions to access resource".to_string()
+                "Insufficient permissions to access resource".to_string(),
             ));
         }
 
@@ -351,7 +376,8 @@ impl CollaborationManager {
             active_resources: vec![resource_id.clone()],
             permissions: HashMap::from([(
                 resource_id.clone(),
-                self.permission_manager.get_permission(&resource_id, &user_id)
+                self.permission_manager
+                    .get_permission(&resource_id, &user_id),
             )]),
             cursor_positions: HashMap::new(),
         };
@@ -359,11 +385,15 @@ impl CollaborationManager {
         self.user_sessions.insert(session_id.to_string(), session);
 
         // Update presence
-        self.presence_tracker.update_user_presence(user_id.clone(), PresenceStatus::Online);
+        self.presence_tracker
+            .update_user_presence(user_id.clone(), PresenceStatus::Online);
 
         // Update collaboration state
         if let Some(resource) = self.shared_resources.get_mut(&resource_id) {
-            resource.collaboration_state.active_editors.push(user_id.clone());
+            resource
+                .collaboration_state
+                .active_editors
+                .push(user_id.clone());
         }
 
         // Log activity
@@ -389,9 +419,12 @@ impl CollaborationManager {
         duration_seconds: u64,
     ) -> CloudSyncResult<Uuid> {
         // Check if user has edit permissions
-        if !self.permission_manager.has_permission(resource_id, user_id, Permission::Edit) {
+        if !self
+            .permission_manager
+            .has_permission(resource_id, user_id, Permission::Edit)
+        {
             return Err(CloudSyncError::PermissionDenied(
-                "Edit permissions required to acquire lock".to_string()
+                "Edit permissions required to acquire lock".to_string(),
             ));
         }
 
@@ -402,7 +435,7 @@ impl CollaborationManager {
                     match (&existing_lock.lock_type, &lock_type) {
                         (LockType::Exclusive, _) | (_, LockType::Exclusive) => {
                             return Err(CloudSyncError::ConflictResolution(
-                                "Section is already exclusively locked".to_string()
+                                "Section is already exclusively locked".to_string(),
                             ));
                         }
                         _ => {} // Allow shared locks
@@ -426,7 +459,10 @@ impl CollaborationManager {
 
         // Add lock to resource
         if let Some(resource) = self.shared_resources.get_mut(resource_id) {
-            resource.collaboration_state.locked_sections.push(resource_lock);
+            resource
+                .collaboration_state
+                .locked_sections
+                .push(resource_lock);
         }
 
         // Log activity
@@ -454,7 +490,9 @@ impl CollaborationManager {
     ) -> CloudSyncResult<()> {
         if let Some(resource) = self.shared_resources.get_mut(resource_id) {
             // Find and remove the lock
-            if let Some(pos) = resource.collaboration_state.locked_sections
+            if let Some(pos) = resource
+                .collaboration_state
+                .locked_sections
                 .iter()
                 .position(|lock| lock.id == lock_id && lock.user_id == user_id)
             {
@@ -473,13 +511,14 @@ impl CollaborationManager {
                 Ok(())
             } else {
                 Err(CloudSyncError::ConflictResolution(
-                    "Lock not found or not owned by user".to_string()
+                    "Lock not found or not owned by user".to_string(),
                 ))
             }
         } else {
-            Err(CloudSyncError::ConflictResolution(
-                format!("Resource not found: {}", resource_id)
-            ))
+            Err(CloudSyncError::ConflictResolution(format!(
+                "Resource not found: {}",
+                resource_id
+            )))
         }
     }
 
@@ -500,16 +539,19 @@ impl CollaborationManager {
                 updated_at: Utc::now(),
             };
 
-            session.cursor_positions.insert(resource_id.to_string(), cursor_position.clone());
+            session
+                .cursor_positions
+                .insert(resource_id.to_string(), cursor_position.clone());
             session.last_activity = Utc::now();
 
             // Update presence tracker
-            self.presence_tracker.update_cursor_position(&session.user_id, cursor_position);
+            self.presence_tracker
+                .update_cursor_position(&session.user_id, cursor_position);
 
             Ok(())
         } else {
             Err(CloudSyncError::ConflictResolution(
-                "Session not found".to_string()
+                "Session not found".to_string(),
             ))
         }
     }
@@ -517,7 +559,9 @@ impl CollaborationManager {
     /// Get active collaborators for resource
     pub fn get_active_collaborators(&self, resource_id: &str) -> Vec<UserPresence> {
         if let Some(resource) = self.shared_resources.get(resource_id) {
-            resource.collaboration_state.active_editors
+            resource
+                .collaboration_state
+                .active_editors
                 .iter()
                 .filter_map(|user_id| self.presence_tracker.get_user_presence(user_id))
                 .collect()
@@ -528,7 +572,8 @@ impl CollaborationManager {
 
     /// Get activity log for resource
     pub fn get_activity_log(&self, resource_id: &str, limit: Option<usize>) -> Vec<ActivityEvent> {
-        self.activity_log.get_events_for_resource(resource_id, limit.unwrap_or(100))
+        self.activity_log
+            .get_events_for_resource(resource_id, limit.unwrap_or(100))
     }
 
     /// Clean up expired locks and sessions
@@ -560,9 +605,8 @@ impl CollaborationManager {
 
         // Clean up inactive sessions
         let inactive_threshold = now - chrono::Duration::minutes(30);
-        self.user_sessions.retain(|_, session| {
-            session.last_activity > inactive_threshold
-        });
+        self.user_sessions
+            .retain(|_, session| session.last_activity > inactive_threshold);
 
         Ok(())
     }
@@ -581,7 +625,12 @@ impl PermissionManager {
         self.permission_cache.insert(cache_key, permission);
     }
 
-    fn has_permission(&self, resource_id: &str, user_id: &str, required_permission: Permission) -> bool {
+    fn has_permission(
+        &self,
+        resource_id: &str,
+        user_id: &str,
+        required_permission: Permission,
+    ) -> bool {
         let cache_key = format!("{}:{}", resource_id, user_id);
         if let Some(user_permission) = self.permission_cache.get(&cache_key) {
             Self::permission_allows(user_permission, &required_permission)
@@ -592,7 +641,8 @@ impl PermissionManager {
 
     fn get_permission(&self, resource_id: &str, user_id: &str) -> Permission {
         let cache_key = format!("{}:{}", resource_id, user_id);
-        self.permission_cache.get(&cache_key)
+        self.permission_cache
+            .get(&cache_key)
             .cloned()
             .unwrap_or(Permission::Read)
     }
@@ -604,7 +654,9 @@ impl PermissionManager {
             (Permission::Admin, _) => true,
             (Permission::Edit, Permission::Admin | Permission::Owner) => false,
             (Permission::Edit, _) => true,
-            (Permission::Comment, Permission::Edit | Permission::Admin | Permission::Owner) => false,
+            (Permission::Comment, Permission::Edit | Permission::Admin | Permission::Owner) => {
+                false
+            }
             (Permission::Comment, _) => true,
             (Permission::Read, Permission::Read) => true,
             (Permission::Read, _) => false,
@@ -621,15 +673,16 @@ impl PresenceTracker {
     }
 
     fn update_user_presence(&mut self, user_id: String, status: PresenceStatus) {
-        let presence = self.active_users.entry(user_id.clone()).or_insert_with(|| {
-            UserPresence {
+        let presence = self
+            .active_users
+            .entry(user_id.clone())
+            .or_insert_with(|| UserPresence {
                 user_id: user_id.clone(),
                 status: PresenceStatus::Offline,
                 last_seen: Utc::now(),
                 current_resource: None,
                 cursor_position: None,
-            }
-        });
+            });
 
         presence.status = status;
         presence.last_seen = Utc::now();
@@ -658,7 +711,7 @@ impl ActivityLog {
 
     fn log_event(&mut self, event: ActivityEvent) {
         self.events.push(event);
-        
+
         // Keep only recent events
         if self.events.len() > self.max_events {
             self.events.drain(0..1000); // Remove oldest 1000 events

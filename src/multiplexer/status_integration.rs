@@ -1,6 +1,6 @@
 //! Status line integration for multiplexers
 
-use super::{MultiplexerResult}; // MultiplexerError
+use super::MultiplexerResult; // MultiplexerError
 use serde::{Deserialize, Serialize};
 
 /// Status line provider trait

@@ -270,12 +270,14 @@ impl PluginConfig {
     where
         T: for<'de> Deserialize<'de>,
     {
-        let value = self.config
+        let value = self
+            .config
             .get(key)
             .ok_or_else(|| PluginError::ConfigurationError(format!("Key '{}' not found", key)))?;
-        
-        serde_json::from_value(value.clone())
-            .map_err(|e| PluginError::ConfigurationError(format!("Failed to deserialize key '{}': {}", key, e)))
+
+        serde_json::from_value(value.clone()).map_err(|e| {
+            PluginError::ConfigurationError(format!("Failed to deserialize key '{}': {}", key, e))
+        })
     }
 
     /// Set a configuration value
@@ -283,13 +285,16 @@ impl PluginConfig {
     where
         T: Serialize,
     {
-        let json_value = serde_json::to_value(value)
-            .map_err(|e| PluginError::ConfigurationError(format!("Failed to serialize value: {}", e)))?;
-        
+        let json_value = serde_json::to_value(value).map_err(|e| {
+            PluginError::ConfigurationError(format!("Failed to serialize value: {}", e))
+        })?;
+
         if let serde_json::Value::Object(ref mut map) = self.config {
             map.insert(key.to_string(), json_value);
         } else {
-            return Err(PluginError::ConfigurationError("Config is not an object".to_string()));
+            return Err(PluginError::ConfigurationError(
+                "Config is not an object".to_string(),
+            ));
         }
 
         Ok(())
@@ -316,7 +321,7 @@ pub struct PluginSettings {
 impl Default for PluginSettings {
     fn default() -> Self {
         Self {
-            max_execution_time: 5000, // 5 seconds
+            max_execution_time: 5000,            // 5 seconds
             max_memory_usage: 100 * 1024 * 1024, // 100MB
             sandboxed: true,
             log_level: "info".to_string(),
@@ -456,7 +461,7 @@ impl PluginEnvironment {
     /// Create a new plugin environment
     pub fn new(base_dir: std::path::PathBuf, plugin_id: Uuid) -> std::io::Result<Self> {
         let plugin_dir = base_dir.join("plugins").join(plugin_id.to_string());
-        
+
         let data_dir = plugin_dir.join("data");
         let log_dir = plugin_dir.join("logs");
         let cache_dir = plugin_dir.join("cache");

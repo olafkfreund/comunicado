@@ -1,6 +1,6 @@
 //! Sync protocol for mobile companion app
 
-use super::{MobileError, Result, EmailSummary, CalendarEventSummary, NotificationSettings};
+use super::{CalendarEventSummary, EmailSummary, MobileError, NotificationSettings, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -45,17 +45,17 @@ pub enum SyncPayload {
     // Request types
     Handshake(HandshakeRequest),
     Command(SyncCommand),
-    
+
     // Response types
     HandshakeResponse(HandshakeResponse),
     CommandResponse(SyncCommandResponse),
-    
+
     // Data types
     Emails(Vec<EmailSummary>),
     CalendarEvents(Vec<CalendarEventSummary>),
     Settings(AppSettings),
     Contacts(Vec<ContactSummary>),
-    
+
     // Status types
     SettingsUpdated,
     SyncComplete,
@@ -100,46 +100,46 @@ pub struct DeviceCapabilities {
 #[serde(tag = "command", content = "params")]
 pub enum SyncCommand {
     // Email commands
-    RequestEmails { 
-        folder: String, 
+    RequestEmails {
+        folder: String,
         count: usize,
         since: Option<DateTime<Utc>>,
     },
-    MarkEmailRead { 
-        email_id: String 
+    MarkEmailRead {
+        email_id: String,
     },
-    MarkEmailArchived { 
-        email_id: String 
+    MarkEmailArchived {
+        email_id: String,
     },
-    
+
     // Calendar commands
-    RequestCalendarEvents { 
+    RequestCalendarEvents {
         days_ahead: u32,
         calendar_ids: Option<Vec<String>>,
     },
-    UpdateEventResponse { 
-        event_id: String, 
-        response: EventResponse 
+    UpdateEventResponse {
+        event_id: String,
+        response: EventResponse,
     },
-    
+
     // Settings commands
-    UpdateSettings { 
-        settings: NotificationSettings 
+    UpdateSettings {
+        settings: NotificationSettings,
     },
     RequestSettings,
-    
+
     // Sync commands
     RequestFullSync,
-    RequestIncrementalSync { 
-        last_sync: DateTime<Utc> 
+    RequestIncrementalSync {
+        last_sync: DateTime<Utc>,
     },
-    
+
     // Contact commands
-    RequestContacts { 
-        count: Option<usize> 
+    RequestContacts {
+        count: Option<usize>,
     },
-    UpdateContact { 
-        contact: ContactSummary 
+    UpdateContact {
+        contact: ContactSummary,
     },
 }
 
@@ -349,11 +349,7 @@ impl SyncProtocol {
     }
 
     /// Create command message
-    pub fn create_command(
-        &self,
-        device_id: Uuid,
-        command: SyncCommand,
-    ) -> SyncMessage {
+    pub fn create_command(&self, device_id: Uuid, command: SyncCommand) -> SyncMessage {
         SyncMessage {
             id: Uuid::new_v4(),
             protocol_version: self.protocol_version.clone(),
@@ -416,8 +412,8 @@ impl SyncProtocol {
 
     /// Serialize message to bytes
     pub fn serialize_message(&self, message: &SyncMessage) -> Result<Vec<u8>> {
-        let mut data = serde_json::to_vec(message)
-            .map_err(|e| MobileError::SerializationError(e))?;
+        let mut data =
+            serde_json::to_vec(message).map_err(|e| MobileError::SerializationError(e))?;
 
         // Apply compression if enabled
         if message.compressed && self.compression_enabled {
@@ -448,8 +444,7 @@ impl SyncProtocol {
             }
 
             // Re-parse the processed data
-            serde_json::from_slice(&processed_data)
-                .map_err(|e| MobileError::SerializationError(e))
+            serde_json::from_slice(&processed_data).map_err(|e| MobileError::SerializationError(e))
         } else {
             // Try to decrypt/decompress and then parse
             if self.encryption_enabled {
@@ -460,18 +455,18 @@ impl SyncProtocol {
                 processed_data = self.decompress_data(&processed_data)?;
             }
 
-            serde_json::from_slice(&processed_data)
-                .map_err(|e| MobileError::SerializationError(e))
+            serde_json::from_slice(&processed_data).map_err(|e| MobileError::SerializationError(e))
         }
     }
 
     /// Process sync command
-    pub async fn process_command(
-        &self,
-        command: SyncCommand,
-    ) -> Result<SyncCommandResponse> {
+    pub async fn process_command(&self, command: SyncCommand) -> Result<SyncCommandResponse> {
         match command {
-            SyncCommand::RequestEmails { folder, count, since } => {
+            SyncCommand::RequestEmails {
+                folder,
+                count,
+                since,
+            } => {
                 // This would integrate with email service
                 let _ = (folder, count, since); // Suppress warnings
                 Ok(SyncCommandResponse::Success(SuccessData {
@@ -480,7 +475,10 @@ impl SyncProtocol {
                     next_sync_recommended: Some(Utc::now() + chrono::Duration::minutes(15)),
                 }))
             }
-            SyncCommand::RequestCalendarEvents { days_ahead, calendar_ids } => {
+            SyncCommand::RequestCalendarEvents {
+                days_ahead,
+                calendar_ids,
+            } => {
                 // This would integrate with calendar service
                 let _ = (days_ahead, calendar_ids);
                 Ok(SyncCommandResponse::Success(SuccessData {
@@ -496,14 +494,12 @@ impl SyncProtocol {
                     next_sync_recommended: None,
                 }))
             }
-            _ => {
-                Ok(SyncCommandResponse::Error(ErrorData {
-                    error_code: "UNSUPPORTED_COMMAND".to_string(),
-                    error_message: "Command not supported".to_string(),
-                    retry_after_seconds: None,
-                    details: HashMap::new(),
-                }))
-            }
+            _ => Ok(SyncCommandResponse::Error(ErrorData {
+                error_code: "UNSUPPORTED_COMMAND".to_string(),
+                error_message: "Command not supported".to_string(),
+                retry_after_seconds: None,
+                details: HashMap::new(),
+            })),
         }
     }
 
@@ -517,7 +513,7 @@ impl SyncProtocol {
         // Check message timestamp (not too old or in future)
         let now = Utc::now();
         let age = now.signed_duration_since(message.timestamp);
-        
+
         if age.num_minutes() > 60 || age.num_minutes() < -5 {
             return Ok(false);
         }
@@ -534,7 +530,7 @@ impl SyncProtocol {
     }
 
     // Private helper methods
-    
+
     fn is_compatible_version(&self, version: &str) -> bool {
         // Simple version compatibility check
         version.starts_with("1.")
@@ -548,7 +544,7 @@ impl SyncProtocol {
         message.id.hash(&mut hasher);
         message.timestamp.hash(&mut hasher);
         message.device_id.hash(&mut hasher);
-        
+
         Ok(format!("{:x}", hasher.finish()))
     }
 

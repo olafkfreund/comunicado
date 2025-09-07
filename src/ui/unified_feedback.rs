@@ -1,5 +1,5 @@
 //! Unified Feedback System
-//! 
+//!
 //! Provides a comprehensive, centralized system for managing all user feedback
 //! including toasts, notifications, alerts, progress indicators, and status messages.
 //! This system consolidates the various feedback mechanisms into a cohesive experience.
@@ -113,9 +113,11 @@ impl FeedbackContext {
             crate::ui::UIMode::Calendar => Self::Calendar,
             crate::ui::UIMode::Settings => Self::Settings,
             _ => match focused_pane {
-                crate::ui::FocusedPane::MessageList | crate::ui::FocusedPane::ContentPreview => Self::Email,
+                crate::ui::FocusedPane::MessageList | crate::ui::FocusedPane::ContentPreview => {
+                    Self::Email
+                }
                 _ => Self::Application,
-            }
+            },
         }
     }
 
@@ -140,7 +142,7 @@ pub struct FeedbackItem {
     pub mode: FeedbackMode,
     pub created_at: Instant,
     pub expires_at: Option<Instant>,
-    pub progress: Option<f64>, // 0.0 to 1.0 for progress indicators
+    pub progress: Option<f64>,       // 0.0 to 1.0 for progress indicators
     pub action_hint: Option<String>, // Hint about user action to resolve
     pub is_persistent: bool,
     pub is_dismissible: bool,
@@ -150,9 +152,9 @@ pub struct FeedbackItem {
 impl FeedbackItem {
     /// Create a new feedback item
     pub fn new<S: Into<String>>(
-        message: S, 
-        level: FeedbackLevel, 
-        context: FeedbackContext
+        message: S,
+        level: FeedbackLevel,
+        context: FeedbackContext,
     ) -> Self {
         let duration = Self::default_duration(level);
         let expires_at = if level == FeedbackLevel::Critical {
@@ -178,11 +180,7 @@ impl FeedbackItem {
     }
 
     /// Create a progress feedback item
-    pub fn progress<S: Into<String>>(
-        message: S,
-        progress: f64,
-        context: FeedbackContext
-    ) -> Self {
+    pub fn progress<S: Into<String>>(message: S, progress: f64, context: FeedbackContext) -> Self {
         let mut item = Self::new(message, FeedbackLevel::Progress, context);
         item.progress = Some(progress.clamp(0.0, 1.0));
         item.mode = FeedbackMode::Progress;
@@ -195,7 +193,7 @@ impl FeedbackItem {
     pub fn persistent<S: Into<String>>(
         message: S,
         level: FeedbackLevel,
-        context: FeedbackContext
+        context: FeedbackContext,
     ) -> Self {
         let mut item = Self::new(message, level, context);
         item.is_persistent = true;
@@ -207,7 +205,7 @@ impl FeedbackItem {
     pub fn modal<S: Into<String>>(
         message: S,
         level: FeedbackLevel,
-        context: FeedbackContext
+        context: FeedbackContext,
     ) -> Self {
         let mut item = Self::new(message, level, context);
         item.mode = FeedbackMode::Modal;
@@ -304,11 +302,7 @@ impl FeedbackItem {
                 theme.colors.palette.background,
                 theme.colors.palette.text_primary,
             ),
-            FeedbackLevel::Critical => (
-                Color::Red,
-                theme.colors.palette.background,
-                Color::White,
-            ),
+            FeedbackLevel::Critical => (Color::Red, theme.colors.palette.background, Color::White),
             FeedbackLevel::Progress => (
                 theme.colors.palette.accent,
                 theme.colors.palette.background,
@@ -348,7 +342,7 @@ impl Default for FeedbackConfig {
         let mut routing_rules = HashMap::new();
         routing_rules.insert(FeedbackContext::Network, FeedbackMode::StatusBar);
         routing_rules.insert(FeedbackContext::System, FeedbackMode::StatusBar);
-        
+
         Self {
             show_debug: false,
             max_toasts: 5,
@@ -404,7 +398,9 @@ impl UnifiedFeedbackManager {
         }
 
         // Apply routing rules
-        let final_mode = self.config.routing_rules
+        let final_mode = self
+            .config
+            .routing_rules
             .get(&item.context)
             .copied()
             .unwrap_or(item.mode);
@@ -436,7 +432,8 @@ impl UnifiedFeedbackManager {
         }
 
         // Store in active items and history
-        self.active_items.insert(final_item.id.clone(), final_item.clone());
+        self.active_items
+            .insert(final_item.id.clone(), final_item.clone());
         self.add_to_history(final_item);
     }
 
@@ -458,15 +455,27 @@ impl UnifiedFeedbackManager {
     }
 
     pub fn critical<S: Into<String>>(&mut self, message: S, context: FeedbackContext) {
-        self.add_feedback(FeedbackItem::modal(message, FeedbackLevel::Critical, context));
+        self.add_feedback(FeedbackItem::modal(
+            message,
+            FeedbackLevel::Critical,
+            context,
+        ));
     }
 
-    pub fn progress<S: Into<String>>(&mut self, message: S, progress: f64, context: FeedbackContext) {
+    pub fn progress<S: Into<String>>(
+        &mut self,
+        message: S,
+        progress: f64,
+        context: FeedbackContext,
+    ) {
         self.add_feedback(FeedbackItem::progress(message, progress, context));
     }
 
     pub fn status<S: Into<String>>(&mut self, message: S, context: FeedbackContext) {
-        self.add_feedback(FeedbackItem::new(message, FeedbackLevel::Status, context).with_mode(FeedbackMode::StatusBar));
+        self.add_feedback(
+            FeedbackItem::new(message, FeedbackLevel::Status, context)
+                .with_mode(FeedbackMode::StatusBar),
+        );
     }
 
     /// Update progress for an existing progress item
@@ -511,7 +520,8 @@ impl UnifiedFeedbackManager {
 
     /// Clear all feedback of a specific type
     pub fn clear_context(&mut self, context: FeedbackContext) {
-        let ids_to_remove: Vec<String> = self.active_items
+        let ids_to_remove: Vec<String> = self
+            .active_items
             .iter()
             .filter(|(_, item)| item.context == context)
             .map(|(id, _)| id.clone())
@@ -547,7 +557,12 @@ impl UnifiedFeedbackManager {
     pub fn render(&mut self, frame: &mut Frame, area: Rect, theme: &Theme) {
         // Render toasts
         if self.toast_manager.has_toasts() {
-            crate::ui::toast::ToastRenderer::render(frame, area, self.toast_manager.toasts(), theme);
+            crate::ui::toast::ToastRenderer::render(
+                frame,
+                area,
+                self.toast_manager.toasts(),
+                theme,
+            );
         }
 
         // Render progress indicators
@@ -566,7 +581,9 @@ impl UnifiedFeedbackManager {
 
     /// Check if there are any critical notifications requiring attention
     pub fn has_critical_notifications(&self) -> bool {
-        self.modal_queue.iter().any(|item| item.level == FeedbackLevel::Critical)
+        self.modal_queue
+            .iter()
+            .any(|item| item.level == FeedbackLevel::Critical)
     }
 
     /// Get summary of current feedback state for debugging
@@ -582,12 +599,22 @@ impl UnifiedFeedbackManager {
     }
 
     /// Show contextual feedback with intelligent routing
-    pub fn show_contextual<S: Into<String>>(&mut self, message: S, level: FeedbackLevel, context: FeedbackContext) {
+    pub fn show_contextual<S: Into<String>>(
+        &mut self,
+        message: S,
+        level: FeedbackLevel,
+        context: FeedbackContext,
+    ) {
         self.add_feedback(FeedbackItem::new(message, level, context));
     }
 
     /// Show progress feedback
-    pub fn show_progress<S: Into<String>>(&mut self, message: S, progress: f32, context: FeedbackContext) {
+    pub fn show_progress<S: Into<String>>(
+        &mut self,
+        message: S,
+        progress: f32,
+        context: FeedbackContext,
+    ) {
         self.progress(message, progress as f64, context);
     }
 
@@ -635,12 +662,7 @@ impl UnifiedFeedbackManager {
         }
     }
 
-    fn render_progress_indicators(
-        &self, 
-        frame: &mut Frame, 
-        area: Rect, 
-        theme: &Theme
-    ) {
+    fn render_progress_indicators(&self, frame: &mut Frame, area: Rect, theme: &Theme) {
         if self.progress_items.is_empty() {
             return;
         }
@@ -672,7 +694,13 @@ impl UnifiedFeedbackManager {
         }
     }
 
-    fn render_progress_item(&self, frame: &mut Frame, area: Rect, item: &FeedbackItem, theme: &Theme) {
+    fn render_progress_item(
+        &self,
+        frame: &mut Frame,
+        area: Rect,
+        item: &FeedbackItem,
+        theme: &Theme,
+    ) {
         let progress = item.progress.unwrap_or(0.0);
         let (border_color, bg_color, _text_color) = item.colors(theme);
 
@@ -681,7 +709,7 @@ impl UnifiedFeedbackManager {
                 Block::default()
                     .borders(Borders::ALL)
                     .title(format!("{} {}", item.icon(), item.message))
-                    .border_style(Style::default().fg(border_color))
+                    .border_style(Style::default().fg(border_color)),
             )
             .gauge_style(Style::default().fg(border_color).bg(bg_color))
             .percent((progress * 100.0) as u16);
@@ -716,7 +744,9 @@ impl UnifiedFeedbackManager {
         frame.render_widget(Clear, modal_area);
 
         // Create modal content
-        let title = format!("{} {}", item.icon(), 
+        let title = format!(
+            "{} {}",
+            item.icon(),
             match item.level {
                 FeedbackLevel::Critical => "Critical Alert",
                 FeedbackLevel::Error => "Error",
@@ -725,9 +755,7 @@ impl UnifiedFeedbackManager {
             }
         );
 
-        let mut content = vec![
-            Line::from(item.message.clone())
-        ];
+        let mut content = vec![Line::from(item.message.clone())];
 
         if let Some(action_hint) = &item.action_hint {
             content.push(Line::from(""));
@@ -744,7 +772,7 @@ impl UnifiedFeedbackManager {
                 Block::default()
                     .title(title)
                     .borders(Borders::ALL)
-                    .border_style(Style::default().fg(border_color))
+                    .border_style(Style::default().fg(border_color)),
             )
             .style(Style::default().fg(text_color).bg(bg_color))
             .alignment(Alignment::Center)

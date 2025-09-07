@@ -7,7 +7,7 @@
 //! - Key binding setup
 //! - Pane management
 
-use super::{MultiplexerError, MultiplexerResult, SessionInfo, MultiplexerType};
+use super::{MultiplexerError, MultiplexerResult, MultiplexerType, SessionInfo};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::process::{Command, Stdio};
@@ -98,13 +98,13 @@ impl TmuxIntegration {
     pub fn initialize(&mut self) -> MultiplexerResult<()> {
         // Verify tmux is available
         self.check_tmux_available()?;
-        
+
         // Get current session info
         self.update_session_info()?;
-        
+
         // Load current windows and panes
         self.refresh_windows()?;
-        
+
         Ok(())
     }
 
@@ -116,7 +116,7 @@ impl TmuxIntegration {
             .stderr(Stdio::null())
             .status()
             .map_err(|e| MultiplexerError::NotFound(format!("tmux not found: {}", e)))?;
-        
+
         Ok(())
     }
 
@@ -124,7 +124,7 @@ impl TmuxIntegration {
     pub fn update_session_info(&mut self) -> MultiplexerResult<()> {
         let session_name = self.run_tmux_command(&["display-message", "-p", "#S"])?;
         let _session_id = self.run_tmux_command(&["display-message", "-p", "#{session_id}"])?;
-        
+
         self.session_info = Some(SessionInfo {
             multiplexer: MultiplexerType::Tmux,
             session_name: session_name.trim().to_string(),
@@ -134,20 +134,20 @@ impl TmuxIntegration {
             remote: std::env::var("SSH_CONNECTION").is_ok(),
             socket_path: std::env::var("TMUX").ok().map(std::path::PathBuf::from),
         });
-        
+
         Ok(())
     }
 
     /// Refresh windows and panes information
     pub fn refresh_windows(&mut self) -> MultiplexerResult<()> {
         let windows_output = self.run_tmux_command(&[
-            "list-windows", 
-            "-F", 
-            "#{window_id}|#{window_index}|#{window_name}|#{window_active}|#{window_layout}"
+            "list-windows",
+            "-F",
+            "#{window_id}|#{window_index}|#{window_name}|#{window_active}|#{window_layout}",
         ])?;
 
         self.windows.clear();
-        
+
         for line in windows_output.lines() {
             if let Some(window) = self.parse_window_info(line)? {
                 // Get panes for this window
@@ -184,9 +184,11 @@ impl TmuxIntegration {
         let output = self.run_tmux_command(&[
             "new-window",
             "-d", // Don't switch to the new window
-            "-n", name,
+            "-n",
+            name,
             "-P", // Print window info
-            "-F", "#{window_id}"
+            "-F",
+            "#{window_id}",
         ])?;
 
         let window_id = output.trim().to_string();
@@ -197,13 +199,14 @@ impl TmuxIntegration {
     /// Split current pane
     pub fn split_pane(&mut self, vertical: bool) -> MultiplexerResult<String> {
         let split_arg = if vertical { "-v" } else { "-h" };
-        
+
         let output = self.run_tmux_command(&[
             "split-window",
             split_arg,
             "-d", // Don't switch to new pane
             "-P", // Print pane info
-            "-F", "#{pane_id}"
+            "-F",
+            "#{pane_id}",
         ])?;
 
         let pane_id = output.trim().to_string();
@@ -224,16 +227,21 @@ impl TmuxIntegration {
 
         // Set status position
         self.run_tmux_command(&["set-option", "-g", "status-position", status_position])?;
-        
+
         // Set status format
         self.run_tmux_command(&[
             "set-option", "-g", "status-right", 
             "#{?client_prefix,#[reverse]<Prefix>#[noreverse] ,}📧 Comunicado #[fg=blue]%H:%M %d-%b-%y"
         ])?;
-        
+
         // Configure status style
-        self.run_tmux_command(&["set-option", "-g", "status-style", "bg=colour234,fg=colour137"])?;
-        
+        self.run_tmux_command(&[
+            "set-option",
+            "-g",
+            "status-style",
+            "bg=colour234,fg=colour137",
+        ])?;
+
         Ok(())
     }
 
@@ -241,25 +249,45 @@ impl TmuxIntegration {
     pub fn setup_keybindings(&mut self) -> MultiplexerResult<()> {
         // Set up prefix key if specified
         if !self.config.prefix_key.is_empty() {
-            self.run_tmux_command(&[
-                "set-option", "-g", "prefix", &self.config.prefix_key
-            ])?;
+            self.run_tmux_command(&["set-option", "-g", "prefix", &self.config.prefix_key])?;
         }
 
         // Comunicado-specific key bindings
         let bindings = [
             // Quick email actions
-            ("bind-key", "-T", "prefix", "m", "display-message", "'📧 New Email'"),
-            ("bind-key", "-T", "prefix", "c", "display-message", "'📅 Calendar'"),
-            ("bind-key", "-T", "prefix", "s", "display-message", "'⚙️  Settings'"),
-            
+            (
+                "bind-key",
+                "-T",
+                "prefix",
+                "m",
+                "display-message",
+                "'📧 New Email'",
+            ),
+            (
+                "bind-key",
+                "-T",
+                "prefix",
+                "c",
+                "display-message",
+                "'📅 Calendar'",
+            ),
+            (
+                "bind-key",
+                "-T",
+                "prefix",
+                "s",
+                "display-message",
+                "'⚙️  Settings'",
+            ),
             // Window management for Comunicado
             ("bind-key", "-T", "prefix", "E", "new-window", "-n Email"),
             ("bind-key", "-T", "prefix", "C", "new-window", "-n Calendar"),
         ];
 
         for binding in &bindings {
-            let args: &[&str] = &[binding.0, binding.1, binding.2, binding.3, binding.4, binding.5];
+            let args: &[&str] = &[
+                binding.0, binding.1, binding.2, binding.3, binding.4, binding.5,
+            ];
             self.run_tmux_command(args)?;
         }
 
@@ -293,13 +321,16 @@ impl TmuxIntegration {
             "xclip -selection clipboard -o"
         };
 
-        self.run_tmux_command(&[
-            "set-option", "-g", "set-clipboard", "on"
-        ])?;
+        self.run_tmux_command(&["set-option", "-g", "set-clipboard", "on"])?;
 
         self.run_tmux_command(&[
-            "bind-key", "-T", "copy-mode-vi", "y", "send-keys", "-X", 
-            &format!("copy-pipe-and-cancel \"{}\"", copy_command)
+            "bind-key",
+            "-T",
+            "copy-mode-vi",
+            "y",
+            "send-keys",
+            "-X",
+            &format!("copy-pipe-and-cancel \"{}\"", copy_command),
         ])?;
 
         Ok(())
@@ -313,9 +344,7 @@ impl TmuxIntegration {
 
     /// Update window name
     pub fn update_window_name(&self, window_id: &str, name: &str) -> MultiplexerResult<()> {
-        self.run_tmux_command(&[
-            "rename-window", "-t", window_id, name
-        ])?;
+        self.run_tmux_command(&["rename-window", "-t", window_id, name])?;
         Ok(())
     }
 
@@ -327,8 +356,9 @@ impl TmuxIntegration {
     /// List all tmux sessions
     pub fn list_sessions(&self) -> MultiplexerResult<Vec<TmuxSession>> {
         let output = self.run_tmux_command(&[
-            "list-sessions", 
-            "-F", "#{session_name}|#{session_id}|#{session_created}|#{session_attached}"
+            "list-sessions",
+            "-F",
+            "#{session_name}|#{session_id}|#{session_created}|#{session_attached}",
         ])?;
 
         let mut sessions = Vec::new();
@@ -362,7 +392,7 @@ impl TmuxIntegration {
 
         if !output.status.success() {
             return Err(MultiplexerError::CommandFailed(
-                String::from_utf8_lossy(&output.stderr).to_string()
+                String::from_utf8_lossy(&output.stderr).to_string(),
             ));
         }
 

@@ -2,7 +2,7 @@ use crate::contacts::{ContactAutocomplete, ContactsManager};
 use crate::encryption::{EncryptionManager, KeyInfo};
 use crate::spell::{SpellCheckResult, SpellChecker};
 use crate::theme::Theme;
-use crate::ui::external_editor::{ExternalEditor, EditorConfig};
+use crate::ui::external_editor::{EditorConfig, ExternalEditor};
 use crossterm::event::KeyModifiers;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -285,7 +285,8 @@ impl ComposeUI {
         // Render autocomplete suggestions if visible
         if self.contact_autocomplete.is_visible() {
             let anchor_pos = self.get_current_field_anchor_position(area);
-            self.contact_autocomplete.render(f, area, anchor_pos.0, anchor_pos.1);
+            self.contact_autocomplete
+                .render(f, area, anchor_pos.0, anchor_pos.1);
         }
 
         // Render spell check suggestions if visible
@@ -370,21 +371,30 @@ impl ComposeUI {
 
         // Create encryption status text
         let mut encryption_text = Vec::new();
-        
+
         // Encryption status
         if self.is_encryption_enabled {
-            encryption_text.push(Span::styled("🔒 Encrypt", Style::default().fg(Color::Green)));
+            encryption_text.push(Span::styled(
+                "🔒 Encrypt",
+                Style::default().fg(Color::Green),
+            ));
         } else {
-            encryption_text.push(Span::styled("🔓 No Encryption", Style::default().fg(Color::Red)));
+            encryption_text.push(Span::styled(
+                "🔓 No Encryption",
+                Style::default().fg(Color::Red),
+            ));
         }
-        
+
         encryption_text.push(Span::raw(" | "));
-        
+
         // Signing status
         if self.is_signing_enabled {
             encryption_text.push(Span::styled("✏️ Sign", Style::default().fg(Color::Green)));
         } else {
-            encryption_text.push(Span::styled("✗ No Signing", Style::default().fg(Color::Yellow)));
+            encryption_text.push(Span::styled(
+                "✗ No Signing",
+                Style::default().fg(Color::Yellow),
+            ));
         }
 
         // Add key info if available
@@ -406,8 +416,7 @@ impl ComposeUI {
             .split(area);
 
         // Label
-        let label = Paragraph::new("Security:")
-            .style(theme.get_component_style("label", true));
+        let label = Paragraph::new("Security:").style(theme.get_component_style("label", true));
         f.render_widget(label, chunks[0]);
 
         // Controls
@@ -418,18 +427,19 @@ impl ComposeUI {
 
         // Show help text when focused
         if is_focused {
-            let help_text = " Press [E] to toggle encryption, [S] to toggle signing, [C] to configure ";
+            let help_text =
+                " Press [E] to toggle encryption, [S] to toggle signing, [C] to configure ";
             let help_style = Style::default().fg(Color::Gray);
             let help_area = Rect {
                 x: chunks[1].x + 1,
                 y: chunks[1].y + chunks[1].height - 1,
-                width: chunks[1].width.saturating_sub(2).min(help_text.len() as u16),
+                width: chunks[1]
+                    .width
+                    .saturating_sub(2)
+                    .min(help_text.len() as u16),
                 height: 1,
             };
-            f.render_widget(
-                Paragraph::new(help_text).style(help_style),
-                help_area
-            );
+            f.render_widget(Paragraph::new(help_text).style(help_style), help_area);
         }
     }
 
@@ -485,17 +495,17 @@ impl ComposeUI {
     fn get_current_field_anchor_position(&self, area: Rect) -> (u16, u16) {
         // Calculate the position based on the current field
         let field_y = match self.current_field {
-            ComposeField::To => area.y + 2,     // First field
-            ComposeField::Cc => area.y + 4,     // Second field
-            ComposeField::Bcc => area.y + 6,    // Third field
-            ComposeField::Subject => area.y + 8, // Fourth field
+            ComposeField::To => area.y + 2,                // First field
+            ComposeField::Cc => area.y + 4,                // Second field
+            ComposeField::Bcc => area.y + 6,               // Third field
+            ComposeField::Subject => area.y + 8,           // Fourth field
             ComposeField::EncryptionConfig => area.y + 10, // Encryption controls
-            ComposeField::Body => area.y + 12,  // Body area
+            ComposeField::Body => area.y + 12,             // Body area
         };
-        
+
         // X position is typically at the start of the input field
         let field_x = area.x + 10; // Account for label width
-        
+
         (field_x, field_y)
     }
 
@@ -722,15 +732,26 @@ impl ComposeUI {
         lines.push(Line::from(""));
         lines.push(Line::from(format!(
             "Syntax Highlighting: {}",
-            if self.editor_config.supports_syntax { "Yes" } else { "No" }
+            if self.editor_config.supports_syntax {
+                "Yes"
+            } else {
+                "No"
+            }
         )));
         lines.push(Line::from(format!(
             "Spell Checking: {}",
-            if self.editor_config.supports_spell { "Yes" } else { "No" }
+            if self.editor_config.supports_spell {
+                "Yes"
+            } else {
+                "No"
+            }
         )));
-        
+
         if self.editor_config.line_wrap > 0 {
-            lines.push(Line::from(format!("Line Wrap: {} chars", self.editor_config.line_wrap)));
+            lines.push(Line::from(format!(
+                "Line Wrap: {} chars",
+                self.editor_config.line_wrap
+            )));
         }
 
         lines.push(Line::from(""));
@@ -857,8 +878,12 @@ impl ComposeUI {
 
         match key.code {
             KeyCode::Esc => ComposeAction::Cancel,
-            KeyCode::Char('s') if key.modifiers.contains(KeyModifiers::CONTROL) => ComposeAction::Send,
-            KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => ComposeAction::SaveDraft,
+            KeyCode::Char('s') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                ComposeAction::Send
+            }
+            KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                ComposeAction::SaveDraft
+            }
             KeyCode::Char('z') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 // Toggle spell checking
                 self.toggle_spell_check().await;
@@ -1004,7 +1029,7 @@ impl ComposeUI {
     async fn launch_external_editor(&mut self) -> ComposeAction {
         // Get current body text
         let current_body = self.body_lines.join("\n");
-        
+
         // Launch editor and get edited content
         match self.external_editor.edit_email_body(&current_body).await {
             Ok(edited_body) => {
@@ -1015,7 +1040,7 @@ impl ComposeUI {
                 } else {
                     edited_body.lines().map(|s| s.to_string()).collect()
                 };
-                
+
                 // Reset cursor to end of content
                 if !self.body_lines.is_empty() {
                     self.body_line_index = self.body_lines.len() - 1;
@@ -1024,12 +1049,12 @@ impl ComposeUI {
                     self.body_line_index = 0;
                     self.body_cursor = 0;
                 }
-                
+
                 // Mark as modified if content changed
                 if current_body != edited_body {
                     self.mark_content_modified();
                 }
-                
+
                 ComposeAction::Continue
             }
             Err(e) => {
@@ -1118,7 +1143,9 @@ impl ComposeUI {
             let search_query = query.split(',').last().unwrap_or("").trim();
 
             if !search_query.is_empty() {
-                self.contact_autocomplete.update_suggestions(search_query).await;
+                self.contact_autocomplete
+                    .update_suggestions(search_query)
+                    .await;
                 self.contact_autocomplete.set_focus(true);
             }
         }
@@ -1134,7 +1161,9 @@ impl ComposeUI {
             let last_entry = current_value.split(',').last().unwrap_or("").trim();
 
             if last_entry.len() >= 2 {
-                self.contact_autocomplete.update_suggestions(last_entry).await;
+                self.contact_autocomplete
+                    .update_suggestions(last_entry)
+                    .await;
             } else {
                 self.contact_autocomplete.hide();
             }
@@ -1165,7 +1194,6 @@ impl ComposeUI {
 
         self.contact_autocomplete.hide();
     }
-
 
     /// Navigation methods
     fn next_field(&mut self) {
@@ -1465,7 +1493,11 @@ impl ComposeUI {
 
     /// Get encryption settings
     pub fn get_encryption_settings(&self) -> (bool, bool, Option<String>) {
-        (self.is_encryption_enabled, self.is_signing_enabled, self.signing_key.clone())
+        (
+            self.is_encryption_enabled,
+            self.is_signing_enabled,
+            self.signing_key.clone(),
+        )
     }
 
     /// Get email data for sending

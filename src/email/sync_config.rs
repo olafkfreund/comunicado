@@ -5,8 +5,8 @@
 
 use crate::email::auto_sync_scheduler::AutoSyncConfig;
 use serde::{Deserialize, Serialize};
-use std::path::{Path, PathBuf};
 use std::fs;
+use std::path::{Path, PathBuf};
 use tracing::{debug, info, warn};
 
 /// Configuration file for email sync settings
@@ -74,9 +74,11 @@ pub struct SyncConfigManager {
 
 impl SyncConfigManager {
     /// Create a new sync config manager
-    pub fn new<P: AsRef<Path>>(config_dir: P) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+    pub fn new<P: AsRef<Path>>(
+        config_dir: P,
+    ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let config_path = config_dir.as_ref().join("sync_config.toml");
-        
+
         // Ensure config directory exists
         if let Some(parent) = config_path.parent() {
             fs::create_dir_all(parent)
@@ -97,16 +99,21 @@ impl SyncConfigManager {
     }
 
     /// Load configuration from file
-    fn load_config(path: &Path) -> Result<SyncConfigFile, Box<dyn std::error::Error + Send + Sync>> {
+    fn load_config(
+        path: &Path,
+    ) -> Result<SyncConfigFile, Box<dyn std::error::Error + Send + Sync>> {
         let content = fs::read_to_string(path)
             .map_err(|e| format!("Failed to read sync config file: {}", e))?;
-        
-        let config: SyncConfigFile = toml::from_str(&content)
-            .map_err(|e| format!("Failed to parse sync config: {}", e))?;
+
+        let config: SyncConfigFile =
+            toml::from_str(&content).map_err(|e| format!("Failed to parse sync config: {}", e))?;
 
         // Validate config version
         if config.version > 1 {
-            warn!("Sync config version {} is newer than supported version 1", config.version);
+            warn!(
+                "Sync config version {} is newer than supported version 1",
+                config.version
+            );
         }
 
         debug!("Loaded sync configuration from {}", path.display());
@@ -133,33 +140,48 @@ impl SyncConfigManager {
     }
 
     /// Update the auto sync configuration
-    pub fn update_auto_sync_config(&mut self, config: AutoSyncConfig) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub fn update_auto_sync_config(
+        &mut self,
+        config: AutoSyncConfig,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         self.config.auto_sync = config;
         self.save_config()
     }
 
     /// Get account sync settings
     pub fn get_account_settings(&self, account_id: &str) -> AccountSyncSettings {
-        self.config.account_settings
+        self.config
+            .account_settings
             .get(account_id)
             .cloned()
             .unwrap_or_default()
     }
 
     /// Update account sync settings
-    pub fn update_account_settings(&mut self, account_id: String, settings: AccountSyncSettings) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub fn update_account_settings(
+        &mut self,
+        account_id: String,
+        settings: AccountSyncSettings,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         self.config.account_settings.insert(account_id, settings);
         self.save_config()
     }
 
     /// Remove account settings
-    pub fn remove_account_settings(&mut self, account_id: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub fn remove_account_settings(
+        &mut self,
+        account_id: &str,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         self.config.account_settings.remove(account_id);
         self.save_config()
     }
 
     /// Update last sync time for an account
-    pub fn update_last_sync(&mut self, account_id: &str, sync_time: chrono::DateTime<chrono::Utc>) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub fn update_last_sync(
+        &mut self,
+        account_id: &str,
+        sync_time: chrono::DateTime<chrono::Utc>,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let mut settings = self.get_account_settings(account_id);
         settings.last_sync = Some(sync_time);
         settings.failure_count = 0; // Reset failure count on successful sync
@@ -167,7 +189,10 @@ impl SyncConfigManager {
     }
 
     /// Increment failure count for an account
-    pub fn increment_failure_count(&mut self, account_id: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub fn increment_failure_count(
+        &mut self,
+        account_id: &str,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let mut settings = self.get_account_settings(account_id);
         settings.failure_count += 1;
         self.update_account_settings(account_id.to_string(), settings)
@@ -186,7 +211,8 @@ impl SyncConfigManager {
     /// Get effective sync interval for an account
     pub fn get_account_sync_interval(&self, account_id: &str) -> u64 {
         let settings = self.get_account_settings(account_id);
-        settings.custom_sync_interval_minutes
+        settings
+            .custom_sync_interval_minutes
             .unwrap_or(self.config.auto_sync.sync_interval_minutes)
     }
 
@@ -197,7 +223,10 @@ impl SyncConfigManager {
     }
 
     /// Import configuration from backup
-    pub fn import_config(&mut self, config_str: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub fn import_config(
+        &mut self,
+        config_str: &str,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let imported_config: SyncConfigFile = toml::from_str(config_str)
             .map_err(|e| format!("Failed to parse imported sync config: {}", e))?;
 
@@ -208,7 +237,7 @@ impl SyncConfigManager {
 
         self.config = imported_config;
         self.save_config()?;
-        
+
         info!("Successfully imported sync configuration");
         Ok(())
     }
@@ -217,7 +246,7 @@ impl SyncConfigManager {
     pub fn reset_to_defaults(&mut self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         self.config = SyncConfigFile::default();
         self.save_config()?;
-        
+
         info!("Reset sync configuration to defaults");
         Ok(())
     }
@@ -231,10 +260,16 @@ impl SyncConfigManager {
     pub fn get_config_stats(&self) -> ConfigStats {
         ConfigStats {
             total_accounts: self.config.account_settings.len(),
-            enabled_accounts: self.config.account_settings.values()
+            enabled_accounts: self
+                .config
+                .account_settings
+                .values()
                 .filter(|s| s.enabled)
                 .count(),
-            accounts_with_failures: self.config.account_settings.values()
+            accounts_with_failures: self
+                .config
+                .account_settings
+                .values()
                 .filter(|s| s.failure_count > 0)
                 .count(),
             last_updated: self.config.last_updated,
@@ -260,7 +295,9 @@ pub struct ConfigMigration;
 
 impl ConfigMigration {
     /// Migrate configuration from older versions
-    pub fn migrate_if_needed(config: &mut SyncConfigFile) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+    pub fn migrate_if_needed(
+        config: &mut SyncConfigFile,
+    ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
         let original_version = config.version;
         let migrated = false;
 
@@ -270,7 +307,10 @@ impl ConfigMigration {
         if migrated {
             config.version = 1;
             config.last_updated = chrono::Utc::now();
-            info!("Migrated sync config from version {} to {}", original_version, config.version);
+            info!(
+                "Migrated sync config from version {} to {}",
+                original_version, config.version
+            );
         }
 
         Ok(migrated)
@@ -286,10 +326,10 @@ mod tests {
     fn test_config_creation_and_save() {
         let temp_dir = tempdir().unwrap();
         let mut config_manager = SyncConfigManager::new(temp_dir.path()).unwrap();
-        
+
         // Test default config
         assert!(config_manager.get_auto_sync_config().enabled);
-        
+
         // Test saving
         config_manager.save_config().unwrap();
         assert!(temp_dir.path().join("sync_config.toml").exists());
@@ -299,14 +339,16 @@ mod tests {
     fn test_account_settings() {
         let temp_dir = tempdir().unwrap();
         let mut config_manager = SyncConfigManager::new(temp_dir.path()).unwrap();
-        
+
         let account_id = "test_account";
         let mut settings = AccountSyncSettings::default();
         settings.enabled = false;
         settings.custom_sync_interval_minutes = Some(30);
-        
-        config_manager.update_account_settings(account_id.to_string(), settings.clone()).unwrap();
-        
+
+        config_manager
+            .update_account_settings(account_id.to_string(), settings.clone())
+            .unwrap();
+
         let retrieved_settings = config_manager.get_account_settings(account_id);
         assert!(!retrieved_settings.enabled);
         assert_eq!(retrieved_settings.custom_sync_interval_minutes, Some(30));
@@ -316,20 +358,26 @@ mod tests {
     fn test_config_export_import() {
         let temp_dir = tempdir().unwrap();
         let mut config_manager = SyncConfigManager::new(temp_dir.path()).unwrap();
-        
+
         // Modify config
         let mut new_config = AutoSyncConfig::default();
         new_config.sync_interval_minutes = 45;
         config_manager.update_auto_sync_config(new_config).unwrap();
-        
+
         // Export
         let exported = config_manager.export_config().unwrap();
-        
+
         // Reset and import
         config_manager.reset_to_defaults().unwrap();
-        assert_eq!(config_manager.get_auto_sync_config().sync_interval_minutes, 15);
-        
+        assert_eq!(
+            config_manager.get_auto_sync_config().sync_interval_minutes,
+            15
+        );
+
         config_manager.import_config(&exported).unwrap();
-        assert_eq!(config_manager.get_auto_sync_config().sync_interval_minutes, 45);
+        assert_eq!(
+            config_manager.get_auto_sync_config().sync_interval_minutes,
+            45
+        );
     }
 }

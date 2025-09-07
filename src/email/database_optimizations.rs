@@ -6,7 +6,7 @@
 
 use crate::email::database::{DatabaseResult, StoredMessage};
 use chrono::{DateTime, Utc};
-use sqlx::{SqlitePool, Row};
+use sqlx::{Row, SqlitePool};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -113,7 +113,7 @@ impl OptimizedDatabase {
     pub async fn new(pool: SqlitePool, config: DatabaseOptimizationConfig) -> DatabaseResult<Self> {
         // Create a separate read-only pool for queries
         let read_pool = pool.clone();
-        
+
         // Initialize message cache
         let message_cache = Arc::new(RwLock::new(MessageCache {
             messages: HashMap::new(),
@@ -160,9 +160,7 @@ impl OptimizedDatabase {
             .await?;
 
         // Optimize query planner
-        sqlx::query("PRAGMA optimize")
-            .execute(pool)
-            .await?;
+        sqlx::query("PRAGMA optimize").execute(pool).await?;
 
         Ok(())
     }
@@ -175,23 +173,27 @@ impl OptimizedDatabase {
         pagination: &PaginationConfig,
     ) -> DatabaseResult<(Vec<StoredMessage>, QueryStats)> {
         let start_time = std::time::Instant::now();
-        
+
         // Calculate offset
         let offset = pagination.current_page * pagination.page_size;
-        
+
         // Check cache first
         if self.config.enable_query_cache {
-            if let Some(cached_results) = self.check_cache_for_query(
-                account_id, folder_name, pagination
-            ).await {
+            if let Some(cached_results) = self
+                .check_cache_for_query(account_id, folder_name, pagination)
+                .await
+            {
                 let result_count = cached_results.len() as u64;
-                return Ok((cached_results, QueryStats {
-                    execution_time_ms: start_time.elapsed().as_millis() as u64,
-                    rows_examined: 0,
-                    rows_returned: result_count,
-                    cache_hit: true,
-                    memory_used_bytes: 0,
-                }));
+                return Ok((
+                    cached_results,
+                    QueryStats {
+                        execution_time_ms: start_time.elapsed().as_millis() as u64,
+                        rows_examined: 0,
+                        rows_returned: result_count,
+                        cache_hit: true,
+                        memory_used_bytes: 0,
+                    },
+                ));
             }
         }
 
@@ -212,7 +214,8 @@ impl OptimizedDatabase {
             _ => "ORDER BY date DESC", // Default
         };
 
-        let query = format!(r"
+        let query = format!(
+            r"
             SELECT id, account_id, folder_name, imap_uid, message_id, thread_id, in_reply_to, message_references,
                    subject, from_addr, from_name, to_addrs, cc_addrs, bcc_addrs, reply_to, date,
                    body_text, body_html, attachments,
@@ -222,7 +225,9 @@ impl OptimizedDatabase {
             WHERE account_id = ?1 AND folder_name = ?2 AND is_deleted = FALSE
             {}
             LIMIT ?3 OFFSET ?4
-        ", sort_clause);
+        ",
+            sort_clause
+        );
 
         let rows = sqlx::query(&query)
             .bind(account_id)
@@ -240,7 +245,8 @@ impl OptimizedDatabase {
 
         // Cache the results
         if self.config.enable_query_cache {
-            self.cache_query_results(account_id, folder_name, pagination, &messages).await;
+            self.cache_query_results(account_id, folder_name, pagination, &messages)
+                .await;
         }
 
         let execution_time = start_time.elapsed().as_millis() as u64;
@@ -369,7 +375,7 @@ impl OptimizedDatabase {
 
         // Store formatted strings to avoid lifetime issues
         let mut condition_strings = Vec::new();
-        
+
         // Add folder filter if specified
         if let Some(folder) = &filters.folder_name {
             condition_strings.push(format!("m.folder_name = ?{}", param_count));
@@ -403,7 +409,7 @@ impl OptimizedDatabase {
             bind_params.push(format!("%{}%", subject));
             param_count += 1;
         }
-        
+
         // Build the full query
         let base_query = if query.is_empty() {
             // Add to sql_conditions
@@ -411,7 +417,8 @@ impl OptimizedDatabase {
                 sql_conditions.push(condition.as_str());
             }
             // No full-text search, just filtering
-            format!(r"
+            format!(
+                r"
                 SELECT m.id, m.account_id, m.folder_name, m.imap_uid, m.message_id, m.thread_id, m.in_reply_to, m.message_references,
                        m.subject, m.from_addr, m.from_name, m.to_addrs, m.cc_addrs, m.bcc_addrs, m.reply_to, m.date,
                        m.body_text, m.body_html, m.attachments,
@@ -421,7 +428,11 @@ impl OptimizedDatabase {
                 WHERE {}
                 ORDER BY m.date DESC
                 LIMIT ?{} OFFSET ?{}
-            ", sql_conditions.join(" AND "), param_count, param_count + 1)
+            ",
+                sql_conditions.join(" AND "),
+                param_count,
+                param_count + 1
+            )
         } else {
             // Include full-text search
             condition_strings.push(format!("messages_fts MATCH ?{}", param_count));
@@ -432,7 +443,8 @@ impl OptimizedDatabase {
             bind_params.push(query.to_string());
             param_count += 1;
 
-            format!(r"
+            format!(
+                r"
                 SELECT m.id, m.account_id, m.folder_name, m.imap_uid, m.message_id, m.thread_id, m.in_reply_to, m.message_references,
                        m.subject, m.from_addr, m.from_name, m.to_addrs, m.cc_addrs, m.bcc_addrs, m.reply_to, m.date,
                        m.body_text, m.body_html, m.attachments,
@@ -443,7 +455,11 @@ impl OptimizedDatabase {
                 WHERE {}
                 ORDER BY rank, m.date DESC
                 LIMIT ?{} OFFSET ?{}
-            ", sql_conditions.join(" AND "), param_count, param_count + 1)
+            ",
+                sql_conditions.join(" AND "),
+                param_count,
+                param_count + 1
+            )
         };
 
         // Add pagination parameters
@@ -507,13 +523,16 @@ impl OptimizedDatabase {
                 .and_then(|s| DateTime::parse_from_rfc3339(s.as_str()).ok())
                 .map(|dt| dt.into());
 
-            counts.insert(folder_name.clone(), FolderMessageCount {
-                folder_name,
-                total_count: row.get::<i64, _>("total_count") as u32,
-                unread_count: row.get::<i64, _>("unread_count") as u32,
-                draft_count: row.get::<i64, _>("draft_count") as u32,
-                latest_message_date: latest_date,
-            });
+            counts.insert(
+                folder_name.clone(),
+                FolderMessageCount {
+                    folder_name,
+                    total_count: row.get::<i64, _>("total_count") as u32,
+                    unread_count: row.get::<i64, _>("unread_count") as u32,
+                    draft_count: row.get::<i64, _>("draft_count") as u32,
+                    latest_message_date: latest_date,
+                },
+            );
         }
 
         Ok(counts)
@@ -531,7 +550,8 @@ impl OptimizedDatabase {
 
         // Rebuild FTS index
         sqlx::query("INSERT INTO messages_fts(messages_fts) VALUES('rebuild')")
-            .execute(&self.pool).await?;
+            .execute(&self.pool)
+            .await?;
 
         // Clean up old cache entries
         self.cleanup_cache().await;
@@ -555,8 +575,11 @@ impl OptimizedDatabase {
         pagination: &PaginationConfig,
     ) -> Option<Vec<StoredMessage>> {
         // Simple cache key based on query parameters
-        let _cache_key = format!("{}:{}:{}:{}", account_id, folder_name, pagination.current_page, pagination.page_size);
-        
+        let _cache_key = format!(
+            "{}:{}:{}:{}",
+            account_id, folder_name, pagination.current_page, pagination.page_size
+        );
+
         // For now, return None (cache implementation can be expanded)
         // In a real implementation, this would check the cache
         None
@@ -579,7 +602,8 @@ impl OptimizedDatabase {
         let ttl_duration = chrono::Duration::seconds(self.config.cache_ttl_seconds as i64);
 
         // Remove expired entries
-        let expired_keys: Vec<Uuid> = cache.insert_times
+        let expired_keys: Vec<Uuid> = cache
+            .insert_times
             .iter()
             .filter(|(_, &insert_time)| now.signed_duration_since(insert_time) > ttl_duration)
             .map(|(&key, _)| key)
@@ -593,13 +617,14 @@ impl OptimizedDatabase {
 
         // LRU eviction if cache is too large
         if cache.messages.len() > self.config.max_cached_messages {
-            let mut access_pairs: Vec<(Uuid, DateTime<Utc>)> = cache.access_times
+            let mut access_pairs: Vec<(Uuid, DateTime<Utc>)> = cache
+                .access_times
                 .iter()
                 .map(|(&id, &time)| (id, time))
                 .collect();
-            
+
             access_pairs.sort_by(|a, b| a.1.cmp(&b.1));
-            
+
             let to_remove = cache.messages.len() - self.config.max_cached_messages;
             for (id, _) in access_pairs.iter().take(to_remove) {
                 cache.messages.remove(id);
@@ -617,19 +642,23 @@ impl OptimizedDatabase {
 
     fn row_to_stored_message(&self, row: sqlx::sqlite::SqliteRow) -> DatabaseResult<StoredMessage> {
         use sqlx::Row;
-        
+
         let id = uuid::Uuid::parse_str(row.get("id"))?;
         let references: Vec<String> = serde_json::from_str(row.get("message_references"))?;
         let to_addrs: Vec<String> = serde_json::from_str(row.get("to_addrs"))?;
         let cc_addrs: Vec<String> = serde_json::from_str(row.get("cc_addrs"))?;
         let bcc_addrs: Vec<String> = serde_json::from_str(row.get("bcc_addrs"))?;
-        let attachments: Vec<crate::email::database::StoredAttachment> = serde_json::from_str(row.get("attachments"))?;
+        let attachments: Vec<crate::email::database::StoredAttachment> =
+            serde_json::from_str(row.get("attachments"))?;
         let flags: Vec<String> = serde_json::from_str(row.get("flags"))?;
         let labels: Vec<String> = serde_json::from_str(row.get("labels"))?;
 
-        let date: chrono::DateTime<chrono::Utc> = chrono::DateTime::parse_from_rfc3339(row.get("date"))?.into();
-        let created_at: chrono::DateTime<chrono::Utc> = chrono::DateTime::parse_from_rfc3339(row.get("created_at"))?.into();
-        let updated_at: chrono::DateTime<chrono::Utc> = chrono::DateTime::parse_from_rfc3339(row.get("updated_at"))?.into();
+        let date: chrono::DateTime<chrono::Utc> =
+            chrono::DateTime::parse_from_rfc3339(row.get("date"))?.into();
+        let created_at: chrono::DateTime<chrono::Utc> =
+            chrono::DateTime::parse_from_rfc3339(row.get("created_at"))?.into();
+        let updated_at: chrono::DateTime<chrono::Utc> =
+            chrono::DateTime::parse_from_rfc3339(row.get("updated_at"))?.into();
         let last_synced: chrono::DateTime<chrono::Utc> =
             chrono::DateTime::parse_from_rfc3339(row.get("last_synced"))?.into();
 
@@ -739,7 +768,7 @@ impl DatabasePerformanceMonitor {
     pub async fn record_query(&self, stats: QueryStats) {
         let mut query_stats = self.query_stats.write().await;
         query_stats.push(stats);
-        
+
         // Keep only the most recent queries
         if query_stats.len() > self.max_recorded_queries {
             let len = query_stats.len();
@@ -752,7 +781,7 @@ impl DatabasePerformanceMonitor {
         if query_stats.is_empty() {
             return 0.0;
         }
-        
+
         let total: u64 = query_stats.iter().map(|s| s.execution_time_ms).sum();
         total as f64 / query_stats.len() as f64
     }
@@ -762,7 +791,7 @@ impl DatabasePerformanceMonitor {
         if query_stats.is_empty() {
             return 0.0;
         }
-        
+
         let cache_hits = query_stats.iter().filter(|s| s.cache_hit).count();
         cache_hits as f64 / query_stats.len() as f64
     }
@@ -778,13 +807,13 @@ mod tests {
     async fn test_optimized_database_creation() {
         let temp_file = NamedTempFile::new().unwrap();
         let db_path = temp_file.path().to_str().unwrap();
-        
+
         let email_db = EmailDatabase::new(db_path).await.unwrap();
         let pool = email_db.pool.clone();
-        
+
         let config = DatabaseOptimizationConfig::default();
         let optimized_db = OptimizedDatabase::new(pool, config).await;
-        
+
         assert!(optimized_db.is_ok());
     }
 
@@ -816,7 +845,7 @@ mod tests {
     #[tokio::test]
     async fn test_performance_monitor() {
         let monitor = DatabasePerformanceMonitor::new(100);
-        
+
         let stats = QueryStats {
             execution_time_ms: 50,
             rows_examined: 100,
@@ -826,10 +855,10 @@ mod tests {
         };
 
         monitor.record_query(stats).await;
-        
+
         let avg_time = monitor.get_average_execution_time().await;
         assert_eq!(avg_time, 50.0);
-        
+
         let cache_rate = monitor.get_cache_hit_rate().await;
         assert_eq!(cache_rate, 1.0);
     }

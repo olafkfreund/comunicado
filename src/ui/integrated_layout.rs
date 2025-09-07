@@ -1,5 +1,5 @@
 //! Integrated Email-Calendar Layout System
-//! 
+//!
 //! Provides flexible layouts that can show email and calendar content
 //! in various configurations based on user needs and context.
 
@@ -69,7 +69,9 @@ impl IntegratedLayoutManager {
             IntegratedViewMode::CalendarPrimary => self.calendar_primary_layout(area),
             IntegratedViewMode::SplitView => self.split_view_layout(area),
             IntegratedViewMode::ContextAware => self.context_aware_layout(area),
-            IntegratedViewMode::FullScreen(content_type) => self.fullscreen_layout(area, content_type),
+            IntegratedViewMode::FullScreen(content_type) => {
+                self.fullscreen_layout(area, content_type)
+            }
         }
     }
 
@@ -80,9 +82,9 @@ impl IntegratedLayoutManager {
         let vertical_chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Min(3),                             // Main content
-                Constraint::Length(3),                          // Status bar
-                Constraint::Length(action_bar_height),          // Action bar (conditional)
+                Constraint::Min(3),                    // Main content
+                Constraint::Length(3),                 // Status bar
+                Constraint::Length(action_bar_height), // Action bar (conditional)
             ])
             .split(area);
 
@@ -92,9 +94,9 @@ impl IntegratedLayoutManager {
         let horizontal_chunks = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([
-                Constraint::Length(self.sidebar_width),         // Fixed sidebar
-                Constraint::Percentage(self.primary_ratio),     // Email list
-                Constraint::Min(35),                            // Details + calendar
+                Constraint::Length(self.sidebar_width),     // Fixed sidebar
+                Constraint::Percentage(self.primary_ratio), // Email list
+                Constraint::Min(35),                        // Details + calendar
             ])
             .split(main_area);
 
@@ -102,18 +104,22 @@ impl IntegratedLayoutManager {
         let details_chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Percentage(70),                     // Email content
-                Constraint::Min(8),                             // Calendar sidebar
+                Constraint::Percentage(70), // Email content
+                Constraint::Min(8),         // Calendar sidebar
             ])
             .split(horizontal_chunks[2]);
 
         IntegratedLayout {
             sidebar: horizontal_chunks[0],
-            primary_content: horizontal_chunks[1],              // Email list
-            secondary_content: Some(details_chunks[1]),         // Calendar sidebar
-            details_panel: details_chunks[0],                   // Email details
+            primary_content: horizontal_chunks[1], // Email list
+            secondary_content: Some(details_chunks[1]), // Calendar sidebar
+            details_panel: details_chunks[0],      // Email details
             status_bar: vertical_chunks[1],
-            action_bar: if self.show_action_bar { Some(vertical_chunks[2]) } else { None },
+            action_bar: if self.show_action_bar {
+                Some(vertical_chunks[2])
+            } else {
+                None
+            },
         }
     }
 
@@ -134,19 +140,23 @@ impl IntegratedLayoutManager {
         let horizontal_chunks = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([
-                Constraint::Length(self.sidebar_width),         // Sidebar
-                Constraint::Percentage(75),                     // Calendar view
-                Constraint::Min(25),                            // Email notifications
+                Constraint::Length(self.sidebar_width), // Sidebar
+                Constraint::Percentage(75),             // Calendar view
+                Constraint::Min(25),                    // Email notifications
             ])
             .split(main_area);
 
         IntegratedLayout {
             sidebar: horizontal_chunks[0],
-            primary_content: horizontal_chunks[1],              // Calendar
-            secondary_content: Some(horizontal_chunks[2]),      // Email notifications
-            details_panel: horizontal_chunks[1],                // Same as primary for calendar
+            primary_content: horizontal_chunks[1], // Calendar
+            secondary_content: Some(horizontal_chunks[2]), // Email notifications
+            details_panel: horizontal_chunks[1],   // Same as primary for calendar
             status_bar: vertical_chunks[1],
-            action_bar: if self.show_action_bar { Some(vertical_chunks[2]) } else { None },
+            action_bar: if self.show_action_bar {
+                Some(vertical_chunks[2])
+            } else {
+                None
+            },
         }
     }
 
@@ -167,19 +177,23 @@ impl IntegratedLayoutManager {
         let horizontal_chunks = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([
-                Constraint::Length(self.sidebar_width),         // Sidebar
-                Constraint::Percentage(50),                     // Email
-                Constraint::Percentage(50),                     // Calendar
+                Constraint::Length(self.sidebar_width), // Sidebar
+                Constraint::Percentage(50),             // Email
+                Constraint::Percentage(50),             // Calendar
             ])
             .split(main_area);
 
         IntegratedLayout {
             sidebar: horizontal_chunks[0],
-            primary_content: horizontal_chunks[1],              // Email
-            secondary_content: Some(horizontal_chunks[2]),      // Calendar
-            details_panel: horizontal_chunks[1],                // Email details within primary
+            primary_content: horizontal_chunks[1], // Email
+            secondary_content: Some(horizontal_chunks[2]), // Calendar
+            details_panel: horizontal_chunks[1],   // Email details within primary
             status_bar: vertical_chunks[1],
-            action_bar: if self.show_action_bar { Some(vertical_chunks[2]) } else { None },
+            action_bar: if self.show_action_bar {
+                Some(vertical_chunks[2])
+            } else {
+                None
+            },
         }
     }
 
@@ -194,16 +208,16 @@ impl IntegratedLayoutManager {
         let vertical_chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Min(3),                             // Full content
-                Constraint::Length(3),                          // Status bar
+                Constraint::Min(3),    // Full content
+                Constraint::Length(3), // Status bar
             ])
             .split(area);
 
         IntegratedLayout {
-            sidebar: Rect::default(),                           // Hidden
-            primary_content: vertical_chunks[0],                // Full screen
-            secondary_content: None,                            // Hidden
-            details_panel: vertical_chunks[0],                  // Same as primary
+            sidebar: Rect::default(),            // Hidden
+            primary_content: vertical_chunks[0], // Full screen
+            secondary_content: None,             // Hidden
+            details_panel: vertical_chunks[0],   // Same as primary
             status_bar: vertical_chunks[1],
             action_bar: None,
         }
@@ -251,11 +265,15 @@ pub struct LayoutContext {
 
 impl LayoutContext {
     pub fn suggest_layout(&self) -> IntegratedViewMode {
-        match (self.has_calendar_invitation, self.is_reading_email, self.is_viewing_calendar) {
+        match (
+            self.has_calendar_invitation,
+            self.is_reading_email,
+            self.is_viewing_calendar,
+        ) {
             (true, true, _) => IntegratedViewMode::ContextAware, // Show both email and calendar
-            (_, _, true) => IntegratedViewMode::CalendarPrimary,  // User actively using calendar
-            (_, true, _) => IntegratedViewMode::EmailPrimary,     // User reading email
-            _ => IntegratedViewMode::EmailPrimary,                // Default
+            (_, _, true) => IntegratedViewMode::CalendarPrimary, // User actively using calendar
+            (_, true, _) => IntegratedViewMode::EmailPrimary,    // User reading email
+            _ => IntegratedViewMode::EmailPrimary,               // Default
         }
     }
 }

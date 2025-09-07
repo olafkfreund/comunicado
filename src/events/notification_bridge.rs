@@ -5,18 +5,18 @@
 
 use crate::events::bus::{EventHandler, HandlerPriority};
 use crate::events::types::{
-    EmailEvent, EmailEventData, CalendarEvent, CalendarEventData, 
-    AccountEvent, AccountEventData, UIEvent, UIEventData, AppEvent, AppEventData
+    AccountEvent, AccountEventData, AppEvent, AppEventData, CalendarEvent, CalendarEventData,
+    EmailEvent, EmailEventData, UIEvent, UIEventData,
 };
 use crate::events::EventError;
 use crate::notifications::{
     types::{
-        NotificationEvent, NotificationPriority, EmailEventType, CalendarEventType, SystemEventType
+        CalendarEventType, EmailEventType, NotificationEvent, NotificationPriority, SystemEventType,
     },
-    UnifiedNotificationManager
+    UnifiedNotificationManager,
 };
-use tokio::sync::mpsc;
 use std::sync::Arc;
+use tokio::sync::mpsc;
 use tracing::{debug, error, info};
 
 /// Bridge between the event system and notification system
@@ -31,12 +31,21 @@ impl NotificationBridge {
             notification_sender: notification_manager.get_sender(),
         }
     }
-    
+
     /// Convert an email event to a notification event
-    fn email_event_to_notification(&self, event_data: &EmailEventData) -> Option<NotificationEvent> {
+    fn email_event_to_notification(
+        &self,
+        event_data: &EmailEventData,
+    ) -> Option<NotificationEvent> {
         let notification_event = match &event_data.event {
-            EmailEvent::EmailDeleted { account_id, email_id } => {
-                debug!("Converting email deletion event to notification: {} in {}", email_id, account_id);
+            EmailEvent::EmailDeleted {
+                account_id,
+                email_id,
+            } => {
+                debug!(
+                    "Converting email deletion event to notification: {} in {}",
+                    email_id, account_id
+                );
                 // Low priority for deletion events as they're user-initiated
                 NotificationEvent::Email {
                     event_type: EmailEventType::MessageDeleted,
@@ -47,8 +56,11 @@ impl NotificationBridge {
                     priority: NotificationPriority::Low,
                 }
             }
-            
-            EmailEvent::EmailMarkedRead { account_id, email_id } => {
+
+            EmailEvent::EmailMarkedRead {
+                account_id,
+                email_id,
+            } => {
                 debug!("Email marked as read: {} in {}", email_id, account_id);
                 // Very low priority for read status changes
                 NotificationEvent::Email {
@@ -60,13 +72,19 @@ impl NotificationBridge {
                     priority: NotificationPriority::Low,
                 }
             }
-            
-            EmailEvent::EmailMarkedUnread { account_id: _, email_id: _ } => {
+
+            EmailEvent::EmailMarkedUnread {
+                account_id: _,
+                email_id: _,
+            } => {
                 // Don't notify for unread events - they're typically user-initiated
                 return None;
             }
-            
-            EmailEvent::EmailArchived { account_id, email_id } => {
+
+            EmailEvent::EmailArchived {
+                account_id,
+                email_id,
+            } => {
                 debug!("Email archived: {} in {}", email_id, account_id);
                 NotificationEvent::Email {
                     event_type: EmailEventType::MessageUpdated,
@@ -77,7 +95,7 @@ impl NotificationBridge {
                     priority: NotificationPriority::Low,
                 }
             }
-            
+
             EmailEvent::EmailComposed { draft_id } => {
                 info!("Email composed: {}", draft_id);
                 NotificationEvent::Email {
@@ -89,8 +107,11 @@ impl NotificationBridge {
                     priority: NotificationPriority::Normal,
                 }
             }
-            
-            EmailEvent::EmailReplied { original_id, reply_id } => {
+
+            EmailEvent::EmailReplied {
+                original_id,
+                reply_id,
+            } => {
                 info!("Email reply sent: {} replying to {}", reply_id, original_id);
                 NotificationEvent::Email {
                     event_type: EmailEventType::MessageSent,
@@ -101,8 +122,11 @@ impl NotificationBridge {
                     priority: NotificationPriority::Normal,
                 }
             }
-            
-            EmailEvent::EmailForwarded { original_id, forward_id } => {
+
+            EmailEvent::EmailForwarded {
+                original_id,
+                forward_id,
+            } => {
                 info!("Email forwarded: {} forwarding {}", forward_id, original_id);
                 NotificationEvent::Email {
                     event_type: EmailEventType::MessageSent,
@@ -113,8 +137,11 @@ impl NotificationBridge {
                     priority: NotificationPriority::Normal,
                 }
             }
-            
-            EmailEvent::EmailReceived { account_id, email_id } => {
+
+            EmailEvent::EmailReceived {
+                account_id,
+                email_id,
+            } => {
                 info!("New email received: {} in {}", email_id, account_id);
                 NotificationEvent::Email {
                     event_type: EmailEventType::NewMessage,
@@ -125,8 +152,11 @@ impl NotificationBridge {
                     priority: NotificationPriority::High,
                 }
             }
-            
-            EmailEvent::EmailSent { account_id, email_id } => {
+
+            EmailEvent::EmailSent {
+                account_id,
+                email_id,
+            } => {
                 info!("Email sent: {} in {}", email_id, account_id);
                 NotificationEvent::Email {
                     event_type: EmailEventType::MessageSent,
@@ -137,15 +167,19 @@ impl NotificationBridge {
                     priority: NotificationPriority::Normal,
                 }
             }
-            
+
             EmailEvent::SearchStarted { query, scope: _ } => {
                 debug!("Search started: {}", query);
                 // Don't notify for search start - it's a user-initiated action
                 return None;
             }
-            
+
             EmailEvent::SearchCompleted { query, results } => {
-                info!("Search completed: '{}' found {} results", query, results.len());
+                info!(
+                    "Search completed: '{}' found {} results",
+                    query,
+                    results.len()
+                );
                 if results.len() > 0 {
                     NotificationEvent::System {
                         event_type: SystemEventType::ConfigurationChanged,
@@ -157,7 +191,7 @@ impl NotificationBridge {
                     return None;
                 }
             }
-            
+
             EmailEvent::SearchFailed { query, error } => {
                 info!("Search failed: '{}' error: {}", query, error);
                 NotificationEvent::System {
@@ -166,20 +200,26 @@ impl NotificationBridge {
                     priority: NotificationPriority::Normal,
                 }
             }
-            
+
             _ => {
                 debug!("Unhandled email event type: {:?}", event_data.event);
                 return None;
             }
         };
-        
+
         Some(notification_event)
     }
-    
+
     /// Convert a calendar event to a notification event
-    fn calendar_event_to_notification(&self, event_data: &CalendarEventData) -> Option<NotificationEvent> {
+    fn calendar_event_to_notification(
+        &self,
+        event_data: &CalendarEventData,
+    ) -> Option<NotificationEvent> {
         let notification_event = match &event_data.event {
-            CalendarEvent::EventCreated { calendar_id, event_id } => {
+            CalendarEvent::EventCreated {
+                calendar_id,
+                event_id,
+            } => {
                 info!("Calendar event created: {} in {}", event_id, calendar_id);
                 NotificationEvent::Calendar {
                     event_type: CalendarEventType::EventCreated,
@@ -189,8 +229,11 @@ impl NotificationBridge {
                     priority: NotificationPriority::Normal,
                 }
             }
-            
-            CalendarEvent::EventUpdated { calendar_id, event_id } => {
+
+            CalendarEvent::EventUpdated {
+                calendar_id,
+                event_id,
+            } => {
                 info!("Calendar event updated: {} in {}", event_id, calendar_id);
                 NotificationEvent::Calendar {
                     event_type: CalendarEventType::EventUpdated,
@@ -200,8 +243,11 @@ impl NotificationBridge {
                     priority: NotificationPriority::Normal,
                 }
             }
-            
-            CalendarEvent::EventDeleted { calendar_id, event_id } => {
+
+            CalendarEvent::EventDeleted {
+                calendar_id,
+                event_id,
+            } => {
                 info!("Calendar event deleted: {} in {}", event_id, calendar_id);
                 NotificationEvent::Calendar {
                     event_type: CalendarEventType::EventDeleted,
@@ -211,20 +257,32 @@ impl NotificationBridge {
                     priority: NotificationPriority::Low,
                 }
             }
-            
-            CalendarEvent::CalendarSynced { calendar_id, event_count } => {
-                info!("Calendar synced: {} with {} events", calendar_id, event_count);
+
+            CalendarEvent::CalendarSynced {
+                calendar_id,
+                event_count,
+            } => {
+                info!(
+                    "Calendar synced: {} with {} events",
+                    calendar_id, event_count
+                );
                 NotificationEvent::Calendar {
-                    event_type: CalendarEventType::SyncCompleted { new_count: *event_count as u32, updated_count: 0 },
+                    event_type: CalendarEventType::SyncCompleted {
+                        new_count: *event_count as u32,
+                        updated_count: 0,
+                    },
                     calendar_id: calendar_id.clone(),
                     event: None,
                     event_id: None,
                     priority: NotificationPriority::Low,
                 }
             }
-            
+
             CalendarEvent::InvitationReceived { event_id, from } => {
-                info!("Calendar invitation received for {} from {}", event_id, from);
+                info!(
+                    "Calendar invitation received for {} from {}",
+                    event_id, from
+                );
                 NotificationEvent::Calendar {
                     event_type: CalendarEventType::EventCreated, // Treat as new event notification
                     calendar_id: "Unknown".to_string(), // No calendar_id in invitation event
@@ -233,45 +291,61 @@ impl NotificationBridge {
                     priority: NotificationPriority::High,
                 }
             }
-            
+
             CalendarEvent::InvitationAccepted { event_id } => {
                 info!("Calendar invitation accepted for {}", event_id);
                 NotificationEvent::Calendar {
-                    event_type: CalendarEventType::RSVPSent { response: "Accepted".to_string() },
+                    event_type: CalendarEventType::RSVPSent {
+                        response: "Accepted".to_string(),
+                    },
                     calendar_id: "Unknown".to_string(),
                     event: None,
                     event_id: Some(event_id.clone()),
                     priority: NotificationPriority::Normal,
                 }
             }
-            
+
             CalendarEvent::InvitationDeclined { event_id } => {
                 info!("Calendar invitation declined for {}", event_id);
                 NotificationEvent::Calendar {
-                    event_type: CalendarEventType::RSVPSent { response: "Declined".to_string() },
+                    event_type: CalendarEventType::RSVPSent {
+                        response: "Declined".to_string(),
+                    },
                     calendar_id: "Unknown".to_string(),
                     event: None,
                     event_id: Some(event_id.clone()),
                     priority: NotificationPriority::Normal,
                 }
             }
-            
+
             _ => {
                 debug!("Unhandled calendar event type: {:?}", event_data.event);
                 return None;
             }
         };
-        
+
         Some(notification_event)
     }
-    
+
     /// Convert an account event to a notification event
-    fn account_event_to_notification(&self, event_data: &AccountEventData) -> Option<NotificationEvent> {
+    fn account_event_to_notification(
+        &self,
+        event_data: &AccountEventData,
+    ) -> Option<NotificationEvent> {
         let notification_event = match &event_data.event {
-            AccountEvent::AccountSyncCompleted { account_id, duration_ms } => {
-                info!("Account sync completed: {} in {} ms", account_id, duration_ms);
+            AccountEvent::AccountSyncCompleted {
+                account_id,
+                duration_ms,
+            } => {
+                info!(
+                    "Account sync completed: {} in {} ms",
+                    account_id, duration_ms
+                );
                 NotificationEvent::Email {
-                    event_type: EmailEventType::SyncCompleted { new_count: 0, updated_count: 0 },
+                    event_type: EmailEventType::SyncCompleted {
+                        new_count: 0,
+                        updated_count: 0,
+                    },
                     account_id: account_id.clone(),
                     folder_name: None,
                     message: None,
@@ -279,11 +353,13 @@ impl NotificationBridge {
                     priority: NotificationPriority::Low,
                 }
             }
-            
+
             AccountEvent::AccountSyncFailed { account_id, error } => {
                 info!("Account sync failed: {} - {}", account_id, error);
                 NotificationEvent::Email {
-                    event_type: EmailEventType::SyncFailed { error: error.clone() },
+                    event_type: EmailEventType::SyncFailed {
+                        error: error.clone(),
+                    },
                     account_id: account_id.clone(),
                     folder_name: None,
                     message: None,
@@ -291,16 +367,22 @@ impl NotificationBridge {
                     priority: NotificationPriority::High,
                 }
             }
-            
-            AccountEvent::AccountAdded { account_id, provider } => {
+
+            AccountEvent::AccountAdded {
+                account_id,
+                provider,
+            } => {
                 info!("New account added: {} ({})", account_id, provider);
                 NotificationEvent::System {
                     event_type: SystemEventType::ConfigurationChanged,
-                    message: format!("Account '{}' ({}) has been added successfully", account_id, provider),
+                    message: format!(
+                        "Account '{}' ({}) has been added successfully",
+                        account_id, provider
+                    ),
                     priority: NotificationPriority::Normal,
                 }
             }
-            
+
             AccountEvent::AccountRemoved { account_id } => {
                 info!("Account removed: {}", account_id);
                 NotificationEvent::System {
@@ -309,16 +391,16 @@ impl NotificationBridge {
                     priority: NotificationPriority::Normal,
                 }
             }
-            
+
             _ => {
                 debug!("Unhandled account event type: {:?}", event_data.event);
                 return None;
             }
         };
-        
+
         Some(notification_event)
     }
-    
+
     /// Convert a UI event to a notification event
     fn ui_event_to_notification(&self, event_data: &UIEventData) -> Option<NotificationEvent> {
         // Most UI events don't need notifications, but some system-level ones might
@@ -331,15 +413,15 @@ impl NotificationBridge {
                     priority: NotificationPriority::Low,
                 }
             }
-            
+
             // Most other UI events don't need notifications
-            UIEvent::ModeChanged { .. } | 
-            UIEvent::PaneChanged { .. } | 
-            UIEvent::ViewChanged { .. } => {
+            UIEvent::ModeChanged { .. }
+            | UIEvent::PaneChanged { .. }
+            | UIEvent::ViewChanged { .. } => {
                 // These are frequent UI state changes that don't need notifications
                 return None;
             }
-            
+
             _ => {
                 // Most UI events (mode changes, pane switches) don't need notifications
                 return None;
@@ -347,19 +429,25 @@ impl NotificationBridge {
         }
         .into()
     }
-    
+
     /// Convert an application event to a notification event
     fn app_event_to_notification(&self, event_data: &AppEventData) -> Option<NotificationEvent> {
         let notification_event = match &event_data.event {
-            AppEvent::AppStarted { version, startup_time_ms } => {
-                info!("Application started (v{}) in {} ms", version, startup_time_ms);
+            AppEvent::AppStarted {
+                version,
+                startup_time_ms,
+            } => {
+                info!(
+                    "Application started (v{}) in {} ms",
+                    version, startup_time_ms
+                );
                 NotificationEvent::System {
                     event_type: SystemEventType::AppStarted,
                     message: format!("Comunicado v{} has started successfully", version),
                     priority: NotificationPriority::Low,
                 }
             }
-            
+
             AppEvent::AppShuttingDown => {
                 info!("Application shutting down");
                 NotificationEvent::System {
@@ -368,7 +456,7 @@ impl NotificationBridge {
                     priority: NotificationPriority::Low,
                 }
             }
-            
+
             AppEvent::ConfigLoaded { config_path } => {
                 info!("Configuration loaded from: {}", config_path);
                 NotificationEvent::System {
@@ -377,8 +465,12 @@ impl NotificationBridge {
                     priority: NotificationPriority::Low,
                 }
             }
-            
-            AppEvent::ConfigChanged { setting, old_value: _, new_value: _ } => {
+
+            AppEvent::ConfigChanged {
+                setting,
+                old_value: _,
+                new_value: _,
+            } => {
                 info!("Configuration setting changed: {}", setting);
                 NotificationEvent::System {
                     event_type: SystemEventType::ConfigurationChanged,
@@ -386,16 +478,16 @@ impl NotificationBridge {
                     priority: NotificationPriority::Low,
                 }
             }
-            
+
             _ => {
                 debug!("Unhandled app event type: {:?}", event_data.event);
                 return None;
             }
         };
-        
+
         Some(notification_event)
     }
-    
+
     /// Send a notification event to the notification system
     fn send_notification(&self, notification_event: NotificationEvent) {
         if let Err(e) = self.notification_sender.send(notification_event) {
@@ -412,7 +504,7 @@ impl EventHandler<EmailEventData> for NotificationBridge {
         }
         Ok(())
     }
-    
+
     fn priority(&self) -> HandlerPriority {
         HandlerPriority::Low // Notifications shouldn't block other operations
     }
@@ -426,7 +518,7 @@ impl EventHandler<CalendarEventData> for NotificationBridge {
         }
         Ok(())
     }
-    
+
     fn priority(&self) -> HandlerPriority {
         HandlerPriority::Low
     }
@@ -440,7 +532,7 @@ impl EventHandler<AccountEventData> for NotificationBridge {
         }
         Ok(())
     }
-    
+
     fn priority(&self) -> HandlerPriority {
         HandlerPriority::Low
     }
@@ -454,7 +546,7 @@ impl EventHandler<UIEventData> for NotificationBridge {
         }
         Ok(())
     }
-    
+
     fn priority(&self) -> HandlerPriority {
         HandlerPriority::Low
     }
@@ -468,7 +560,7 @@ impl EventHandler<AppEventData> for NotificationBridge {
         }
         Ok(())
     }
-    
+
     fn priority(&self) -> HandlerPriority {
         HandlerPriority::Low
     }
@@ -482,7 +574,9 @@ pub struct EmailNotificationBridge {
 impl EmailNotificationBridge {
     pub fn new(notification_manager: &UnifiedNotificationManager) -> Self {
         Self {
-            bridge: Arc::new(std::sync::Mutex::new(NotificationBridge::new(notification_manager))),
+            bridge: Arc::new(std::sync::Mutex::new(NotificationBridge::new(
+                notification_manager,
+            ))),
         }
     }
 }
@@ -491,11 +585,15 @@ impl EventHandler<EmailEventData> for EmailNotificationBridge {
     fn handle(&mut self, event: &EmailEventData) -> Result<(), EventError> {
         let mut bridge = match self.bridge.lock() {
             Ok(bridge) => bridge,
-            Err(_) => return Err(EventError::ProcessingFailed("Failed to lock notification bridge".to_string())),
+            Err(_) => {
+                return Err(EventError::ProcessingFailed(
+                    "Failed to lock notification bridge".to_string(),
+                ))
+            }
         };
         bridge.handle(event)
     }
-    
+
     fn priority(&self) -> HandlerPriority {
         HandlerPriority::Low
     }
@@ -509,7 +607,9 @@ pub struct CalendarNotificationBridge {
 impl CalendarNotificationBridge {
     pub fn new(notification_manager: &UnifiedNotificationManager) -> Self {
         Self {
-            bridge: Arc::new(std::sync::Mutex::new(NotificationBridge::new(notification_manager))),
+            bridge: Arc::new(std::sync::Mutex::new(NotificationBridge::new(
+                notification_manager,
+            ))),
         }
     }
 }
@@ -518,11 +618,15 @@ impl EventHandler<CalendarEventData> for CalendarNotificationBridge {
     fn handle(&mut self, event: &CalendarEventData) -> Result<(), EventError> {
         let mut bridge = match self.bridge.lock() {
             Ok(bridge) => bridge,
-            Err(_) => return Err(EventError::ProcessingFailed("Failed to lock notification bridge".to_string())),
+            Err(_) => {
+                return Err(EventError::ProcessingFailed(
+                    "Failed to lock notification bridge".to_string(),
+                ))
+            }
         };
         bridge.handle(event)
     }
-    
+
     fn priority(&self) -> HandlerPriority {
         HandlerPriority::Low
     }
@@ -536,7 +640,9 @@ pub struct AccountNotificationBridge {
 impl AccountNotificationBridge {
     pub fn new(notification_manager: &UnifiedNotificationManager) -> Self {
         Self {
-            bridge: Arc::new(std::sync::Mutex::new(NotificationBridge::new(notification_manager))),
+            bridge: Arc::new(std::sync::Mutex::new(NotificationBridge::new(
+                notification_manager,
+            ))),
         }
     }
 }
@@ -545,11 +651,15 @@ impl EventHandler<AccountEventData> for AccountNotificationBridge {
     fn handle(&mut self, event: &AccountEventData) -> Result<(), EventError> {
         let mut bridge = match self.bridge.lock() {
             Ok(bridge) => bridge,
-            Err(_) => return Err(EventError::ProcessingFailed("Failed to lock notification bridge".to_string())),
+            Err(_) => {
+                return Err(EventError::ProcessingFailed(
+                    "Failed to lock notification bridge".to_string(),
+                ))
+            }
         };
         bridge.handle(event)
     }
-    
+
     fn priority(&self) -> HandlerPriority {
         HandlerPriority::Low
     }
@@ -563,7 +673,9 @@ pub struct UINotificationBridge {
 impl UINotificationBridge {
     pub fn new(notification_manager: &UnifiedNotificationManager) -> Self {
         Self {
-            bridge: Arc::new(std::sync::Mutex::new(NotificationBridge::new(notification_manager))),
+            bridge: Arc::new(std::sync::Mutex::new(NotificationBridge::new(
+                notification_manager,
+            ))),
         }
     }
 }
@@ -572,11 +684,15 @@ impl EventHandler<UIEventData> for UINotificationBridge {
     fn handle(&mut self, event: &UIEventData) -> Result<(), EventError> {
         let mut bridge = match self.bridge.lock() {
             Ok(bridge) => bridge,
-            Err(_) => return Err(EventError::ProcessingFailed("Failed to lock notification bridge".to_string())),
+            Err(_) => {
+                return Err(EventError::ProcessingFailed(
+                    "Failed to lock notification bridge".to_string(),
+                ))
+            }
         };
         bridge.handle(event)
     }
-    
+
     fn priority(&self) -> HandlerPriority {
         HandlerPriority::Low
     }
@@ -590,7 +706,9 @@ pub struct AppNotificationBridge {
 impl AppNotificationBridge {
     pub fn new(notification_manager: &UnifiedNotificationManager) -> Self {
         Self {
-            bridge: Arc::new(std::sync::Mutex::new(NotificationBridge::new(notification_manager))),
+            bridge: Arc::new(std::sync::Mutex::new(NotificationBridge::new(
+                notification_manager,
+            ))),
         }
     }
 }
@@ -599,11 +717,15 @@ impl EventHandler<AppEventData> for AppNotificationBridge {
     fn handle(&mut self, event: &AppEventData) -> Result<(), EventError> {
         let mut bridge = match self.bridge.lock() {
             Ok(bridge) => bridge,
-            Err(_) => return Err(EventError::ProcessingFailed("Failed to lock notification bridge".to_string())),
+            Err(_) => {
+                return Err(EventError::ProcessingFailed(
+                    "Failed to lock notification bridge".to_string(),
+                ))
+            }
         };
         bridge.handle(event)
     }
-    
+
     fn priority(&self) -> HandlerPriority {
         HandlerPriority::Low
     }
@@ -629,16 +751,16 @@ impl NotificationBridgeRegistry {
             app_bridge: AppNotificationBridge::new(notification_manager),
         }
     }
-    
+
     /// Register all notification bridges with the event bus
     pub fn register_all_bridges(self, bus: &mut crate::events::bus::EventBus) {
         // Subscribe notification bridges to their respective event types
         bus.subscribe::<EmailEventData, _>(self.email_bridge);
-        bus.subscribe::<CalendarEventData, _>(self.calendar_bridge);  
+        bus.subscribe::<CalendarEventData, _>(self.calendar_bridge);
         bus.subscribe::<AccountEventData, _>(self.account_bridge);
         bus.subscribe::<UIEventData, _>(self.ui_bridge);
         bus.subscribe::<AppEventData, _>(self.app_bridge);
-        
+
         info!("All notification bridges registered with event bus");
     }
 }

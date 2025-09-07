@@ -1,5 +1,5 @@
 use chrono::{DateTime, Datelike, Timelike, Utc};
-use notify_rust::{Notification, Timeout, Urgency, NotificationHandle};
+use notify_rust::{Notification, NotificationHandle, Timeout, Urgency};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -7,9 +7,9 @@ use tokio::sync::{broadcast, mpsc, RwLock};
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
-use crate::notifications::types::{NotificationConfig, NotificationEvent, NotificationPriority};
 use crate::calendar::Event;
 use crate::email::StoredMessage;
+use crate::notifications::types::{NotificationConfig, NotificationEvent, NotificationPriority};
 
 /// Enhanced desktop notification service using native Rust notifications
 pub struct DesktopNotificationService {
@@ -71,25 +71,29 @@ impl ReminderScheduler {
             reminder_sender,
         }
     }
-    
+
     /// Schedule reminders for a calendar event
-    pub async fn schedule_event_reminders(&self, event: &Event) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn schedule_event_reminders(
+        &self,
+        event: &Event,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let reminder_minutes = vec![15, 5, 0]; // Default reminder times
         let mut handles = Vec::new();
-        
+
         for minutes in reminder_minutes {
             let reminder_time = event.start_time - chrono::Duration::minutes(minutes);
             let now = Utc::now();
-            
+
             if reminder_time > now {
                 let event_clone = event.clone();
                 let sender = self.reminder_sender.clone();
-                let delay = (reminder_time - now).to_std()
+                let delay = (reminder_time - now)
+                    .to_std()
                     .map_err(|_| "Invalid reminder time")?;
-                
+
                 let handle = tokio::spawn(async move {
                     tokio::time::sleep(delay).await;
-                    
+
                     let reminder_event = NotificationEvent::Calendar {
                         event_type: crate::notifications::types::CalendarEventType::EventReminder {
                             minutes_until: minutes as i64,
@@ -97,29 +101,32 @@ impl ReminderScheduler {
                         calendar_id: event_clone.calendar_id.clone(),
                         event: Some(event_clone.clone()),
                         event_id: Some(event_clone.id.clone()),
-                        priority: if minutes == 0 { 
-                            NotificationPriority::High 
-                        } else { 
-                            NotificationPriority::Normal 
+                        priority: if minutes == 0 {
+                            NotificationPriority::High
+                        } else {
+                            NotificationPriority::Normal
                         },
                     };
-                    
+
                     if let Err(e) = sender.send(reminder_event) {
                         error!("Failed to send reminder notification: {}", e);
                     }
                 });
-                
+
                 handles.push(handle);
             }
         }
-        
+
         if !handles.is_empty() {
-            self.scheduled_reminders.write().await.insert(event.id.parse().unwrap_or_else(|_| Uuid::new_v4()), handles);
+            self.scheduled_reminders
+                .write()
+                .await
+                .insert(event.id.parse().unwrap_or_else(|_| Uuid::new_v4()), handles);
         }
-        
+
         Ok(())
     }
-    
+
     /// Cancel reminders for an event
     pub async fn cancel_event_reminders(&self, event_id: Uuid) {
         if let Some(handles) = self.scheduled_reminders.write().await.remove(&event_id) {
@@ -129,7 +136,7 @@ impl ReminderScheduler {
             debug!("Cancelled reminders for event {}", event_id);
         }
     }
-    
+
     /// Clean up completed reminder tasks
     pub async fn cleanup_completed_reminders(&self) {
         let mut reminders = self.scheduled_reminders.write().await;
@@ -150,7 +157,7 @@ impl DesktopNotificationService {
     pub fn with_config(config: NotificationConfig) -> Self {
         let (action_sender, _action_receiver) = mpsc::unbounded_channel();
         let (reminder_sender, _reminder_receiver) = mpsc::unbounded_channel();
-        
+
         Self {
             config,
             last_notification_times: HashMap::new(),
@@ -168,25 +175,36 @@ impl DesktopNotificationService {
         config.enabled = false;
         Self::with_config(config)
     }
-    
+
     /// Schedule calendar event reminders
-    pub async fn schedule_calendar_reminders(&self, event: &Event) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        self.reminder_scheduler.schedule_event_reminders(event).await
+    pub async fn schedule_calendar_reminders(
+        &self,
+        event: &Event,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        self.reminder_scheduler
+            .schedule_event_reminders(event)
+            .await
     }
-    
+
     /// Cancel calendar event reminders
     pub async fn cancel_calendar_reminders(&self, event_id: Uuid) {
-        self.reminder_scheduler.cancel_event_reminders(event_id).await
+        self.reminder_scheduler
+            .cancel_event_reminders(event_id)
+            .await
     }
-    
+
     /// Send email notification with actions
-    pub async fn notify_email(&self, email: &StoredMessage, is_important: bool) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn notify_email(
+        &self,
+        email: &StoredMessage,
+        is_important: bool,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let priority = if is_important {
             NotificationPriority::High
         } else {
             NotificationPriority::Normal
         };
-        
+
         let event = NotificationEvent::Email {
             event_type: crate::notifications::types::EmailEventType::NewMessage,
             account_id: email.account_id.clone(),
@@ -195,12 +213,16 @@ impl DesktopNotificationService {
             message_id: Some(email.id.to_string()),
             priority,
         };
-        
+
         self.handle_notification_event(event).await
     }
-    
+
     /// Send calendar event notification
-    pub async fn notify_calendar_event(&self, event: &Event, event_type: crate::notifications::types::CalendarEventType) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn notify_calendar_event(
+        &self,
+        event: &Event,
+        event_type: crate::notifications::types::CalendarEventType,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let priority = match event_type {
             crate::notifications::types::CalendarEventType::EventReminder { minutes_until } => {
                 if minutes_until <= 5 {
@@ -211,7 +233,7 @@ impl DesktopNotificationService {
             }
             _ => NotificationPriority::Normal,
         };
-        
+
         let notification_event = NotificationEvent::Calendar {
             event_type,
             calendar_id: event.calendar_id.clone(),
@@ -219,12 +241,15 @@ impl DesktopNotificationService {
             event_id: Some(event.id.clone()),
             priority,
         };
-        
+
         self.handle_notification_event(notification_event).await
     }
-    
+
     /// Dismiss specific notification
-    pub async fn dismiss_notification(&self, notification_id: Uuid) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn dismiss_notification(
+        &self,
+        notification_id: Uuid,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let mut active = self.active_notifications.write().await;
         if let Some(notification) = active.remove(&notification_id) {
             if let Some(_handle) = notification.handle {
@@ -235,27 +260,29 @@ impl DesktopNotificationService {
         }
         Ok(())
     }
-    
+
     /// Dismiss all active notifications
-    pub async fn dismiss_all_notifications(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn dismiss_all_notifications(
+        &self,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let mut active = self.active_notifications.write().await;
         let count = active.len();
         active.clear();
         debug!("Dismissed {} active notifications", count);
         Ok(())
     }
-    
+
     /// Get count of active notifications
     pub async fn active_notification_count(&self) -> usize {
         self.active_notifications.read().await.len()
     }
-    
+
     /// Clean up expired notifications
     pub async fn cleanup_expired_notifications(&self) {
         let now = Utc::now();
         let mut active = self.active_notifications.write().await;
         let initial_count = active.len();
-        
+
         active.retain(|_, notification| {
             if let Some(expires_at) = notification.expires_at {
                 expires_at > now
@@ -263,12 +290,12 @@ impl DesktopNotificationService {
                 true // Keep notifications without expiration
             }
         });
-        
+
         let removed_count = initial_count - active.len();
         if removed_count > 0 {
             debug!("Cleaned up {} expired notifications", removed_count);
         }
-        
+
         // Also clean up reminder scheduler
         self.reminder_scheduler.cleanup_completed_reminders().await;
     }
@@ -301,34 +328,34 @@ impl DesktopNotificationService {
 
         tokio::spawn(async move {
             let service = Self::with_config(config);
-            
+
             while let Ok(event) = receiver.recv().await {
                 if let Err(e) = service.handle_notification_event(event).await {
                     error!("Failed to handle notification event: {}", e);
                 }
             }
         });
-        
+
         // Start cleanup task
         self.start_cleanup_task();
     }
-    
+
     /// Start periodic cleanup task for expired notifications
     fn start_cleanup_task(&self) {
         let active_notifications = Arc::clone(&self.active_notifications);
         let reminder_scheduler = self.reminder_scheduler.scheduled_reminders.clone();
-        
+
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_secs(60));
-            
+
             loop {
                 interval.tick().await;
-                
+
                 // Clean up expired notifications
                 let now = Utc::now();
                 let mut active = active_notifications.write().await;
                 let initial_count = active.len();
-                
+
                 active.retain(|_, notification| {
                     if let Some(expires_at) = notification.expires_at {
                         expires_at > now
@@ -336,12 +363,12 @@ impl DesktopNotificationService {
                         true
                     }
                 });
-                
+
                 let removed_count = initial_count - active.len();
                 if removed_count > 0 {
                     debug!("Cleaned up {} expired notifications", removed_count);
                 }
-                
+
                 // Clean up completed reminders
                 let mut reminders = reminder_scheduler.write().await;
                 reminders.retain(|_, handles| {
@@ -624,12 +651,17 @@ impl DesktopNotificationService {
                     created_at: Utc::now(),
                     expires_at: match priority {
                         NotificationPriority::Critical => None, // Never expires
-                        NotificationPriority::High => Some(Utc::now() + chrono::Duration::seconds(10)),
+                        NotificationPriority::High => {
+                            Some(Utc::now() + chrono::Duration::seconds(10))
+                        }
                         _ => Some(Utc::now() + chrono::Duration::seconds(5)),
                     },
                 };
-                
-                self.active_notifications.write().await.insert(notification_id, active_notification);
+
+                self.active_notifications
+                    .write()
+                    .await
+                    .insert(notification_id, active_notification);
 
                 // Update rate limiting
                 // Note: Need to make this method compatible with async
@@ -676,7 +708,12 @@ impl DesktopNotificationService {
             is_quiet_hours: self.is_quiet_hours(),
             is_enabled: self.config.enabled,
             active_notifications: self.active_notifications.read().await.len(),
-            scheduled_reminders: self.reminder_scheduler.scheduled_reminders.read().await.len(),
+            scheduled_reminders: self
+                .reminder_scheduler
+                .scheduled_reminders
+                .read()
+                .await
+                .len(),
         }
     }
 }

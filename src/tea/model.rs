@@ -1,17 +1,16 @@
+use crate::calendar::Event;
+use crate::contacts::Contact;
+use crate::oauth2::AccountConfig;
+use crate::plugins::notes::tui::TUIMode as NotesTUIMode;
+use crate::plugins::notes::types::{Note, NoteId};
 /// Application model following TEA pattern
-/// 
+///
 /// Contains all application state in a centralized, immutable structure
 /// that can be updated through the update function based on messages.
-
-use crate::tea::message::{ViewMode, ToastLevel, CalendarView, SyncStatus};
-use crate::oauth2::AccountConfig;
-use crate::contacts::Contact;
-use crate::calendar::Event;
-use crate::plugins::notes::types::{Note, NoteId};
-use crate::plugins::notes::tui::{TUIMode as NotesTUIMode};
+use crate::tea::message::{CalendarView, SyncStatus, ToastLevel, ViewMode};
 use crate::theme::Theme;
-use std::collections::HashMap;
 use chrono::{DateTime, Local, NaiveDate};
+use std::collections::HashMap;
 use tokio::time::{Duration, Instant};
 
 /// Main application model containing all state
@@ -19,43 +18,43 @@ use tokio::time::{Duration, Instant};
 pub struct Model {
     /// Application lifecycle state
     pub app_state: AppState,
-    
+
     /// Current view mode
     pub current_view: ViewMode,
-    
+
     /// UI state
     pub ui_state: UIState,
-    
+
     /// Email state
     pub email_state: EmailState,
-    
+
     /// Calendar state
     pub calendar_state: CalendarState,
-    
+
     /// Contacts state
     pub contacts_state: ContactsState,
-    
+
     /// Notes state
     pub notes_state: NotesState,
-    
+
     /// KDE Connect integration state
     pub kde_connect_state: KdeConnectState,
-    
+
     /// Account management state
     pub account_state: AccountState,
-    
+
     /// Background tasks state
     pub background_state: BackgroundState,
-    
+
     /// Notification state
     pub notification_state: NotificationState,
-    
+
     /// Application configuration
     pub config: AppConfig,
-    
+
     /// Theme settings
     pub theme: Theme,
-    
+
     /// Auto-sync state
     pub auto_sync: AutoSyncState,
 }
@@ -65,16 +64,16 @@ pub struct Model {
 pub struct AppState {
     /// Whether the application should quit
     pub should_quit: bool,
-    
+
     /// Initialization state
     pub initialization: InitializationState,
-    
+
     /// Terminal dimensions
     pub terminal_size: (u16, u16),
-    
+
     /// Last tick time for periodic updates
     pub last_tick: Instant,
-    
+
     /// Application start time
     pub start_time: Instant,
 }
@@ -84,16 +83,16 @@ pub struct AppState {
 pub struct InitializationState {
     /// Whether initialization is complete
     pub complete: bool,
-    
+
     /// Whether initialization is in progress
     pub in_progress: bool,
-    
+
     /// Initialization phases and their status
     pub phases: HashMap<String, PhaseStatus>,
-    
+
     /// Current initialization phase
     pub current_phase: Option<String>,
-    
+
     /// Initialization error if any
     pub error: Option<String>,
 }
@@ -112,25 +111,25 @@ pub enum PhaseStatus {
 pub struct UIState {
     /// Whether sidebar is visible
     pub sidebar_visible: bool,
-    
+
     /// Whether status bar is visible
     pub status_bar_visible: bool,
-    
+
     /// Whether help overlay is shown
     pub help_visible: bool,
-    
+
     /// Search bar state
     pub search: SearchState,
-    
+
     /// Toast notifications
     pub toasts: Vec<Toast>,
-    
+
     /// Context menu state
     pub context_menu: Option<ContextMenu>,
-    
+
     /// Modal dialogs
     pub modal: Option<Modal>,
-    
+
     /// Layout preferences
     pub layout: LayoutState,
 }
@@ -140,13 +139,13 @@ pub struct UIState {
 pub struct SearchState {
     /// Whether search is active
     pub active: bool,
-    
+
     /// Current search query
     pub query: String,
-    
+
     /// Search results count
     pub results_count: Option<usize>,
-    
+
     /// Whether search is loading
     pub loading: bool,
 }
@@ -211,10 +210,10 @@ pub struct ModalButton {
 pub struct LayoutState {
     /// Sidebar width percentage
     pub sidebar_width: u16,
-    
+
     /// Status bar position
     pub status_bar_position: StatusBarPosition,
-    
+
     /// Panel splits for different views
     pub panel_splits: HashMap<ViewMode, Vec<u16>>,
 }
@@ -232,28 +231,28 @@ pub enum StatusBarPosition {
 pub struct EmailState {
     /// Current folder
     pub current_folder: Option<String>,
-    
+
     /// Loaded messages
     pub messages: Vec<crate::email::EmailMessage>,
-    
+
     /// Selected message ID
     pub selected_message: Option<String>,
-    
+
     /// Currently reading message ID
     pub reading_message: Option<String>,
-    
+
     /// Folder tree state
     pub folder_tree: FolderTreeState,
-    
+
     /// Compose state
     pub compose: Option<ComposeState>,
-    
+
     /// Loading state
     pub loading: bool,
-    
+
     /// Last sync time
     pub last_sync: Option<DateTime<Local>>,
-    
+
     /// Sync status
     pub sync_status: SyncStatus,
 }
@@ -263,13 +262,13 @@ pub struct EmailState {
 pub struct FolderTreeState {
     /// Expanded folders
     pub expanded: HashMap<String, bool>,
-    
+
     /// Selected folder
     pub selected: Option<String>,
-    
+
     /// Folder unread counts
     pub unread_counts: HashMap<String, u32>,
-    
+
     /// Folder message counts
     pub message_counts: HashMap<String, u32>,
 }
@@ -302,28 +301,28 @@ pub enum ComposeField {
 pub struct CalendarState {
     /// Current view mode
     pub view: CalendarView,
-    
+
     /// Current viewing date
     pub current_date: NaiveDate,
-    
+
     /// Loaded events
     pub events: Vec<Event>,
-    
+
     /// Selected event ID
     pub selected_event: Option<String>,
-    
+
     /// Event creation/editing state
     pub editing_event: Option<EventEditState>,
-    
+
     /// Calendar visibility
     pub visible_calendars: HashMap<String, bool>,
-    
+
     /// Loading state
     pub loading: bool,
-    
+
     /// Last sync time
     pub last_sync: Option<DateTime<Local>>,
-    
+
     /// Sync status
     pub sync_status: SyncStatus,
 }
@@ -358,19 +357,19 @@ pub enum EventField {
 pub struct ContactsState {
     /// Loaded contacts
     pub contacts: Vec<Contact>,
-    
+
     /// Selected contact ID
     pub selected_contact: Option<String>,
-    
+
     /// Contact editing state
     pub editing_contact: Option<ContactEditState>,
-    
+
     /// Loading state
     pub loading: bool,
-    
+
     /// Last sync time
     pub last_sync: Option<DateTime<Local>>,
-    
+
     /// Sync status
     pub sync_status: SyncStatus,
 }
@@ -402,37 +401,37 @@ pub enum ContactField {
 pub struct NotesState {
     /// Loaded notes
     pub notes: Vec<Note>,
-    
+
     /// Selected note ID
     pub selected_note: Option<NoteId>,
-    
+
     /// Currently viewing note ID
     pub viewing_note: Option<NoteId>,
-    
+
     /// Note editing state
     pub editing_note: Option<NoteEditState>,
-    
+
     /// Current TUI mode
     pub tui_mode: NotesTUIMode,
-    
+
     /// Search query
     pub search_query: String,
-    
+
     /// Search results
     pub search_results: Vec<Note>,
-    
+
     /// Loading state
     pub loading: bool,
-    
+
     /// Last sync time
     pub last_sync: Option<DateTime<Local>>,
-    
+
     /// Sync status
     pub sync_status: SyncStatus,
-    
+
     /// Status message
     pub status_message: Option<String>,
-    
+
     /// Error message
     pub error_message: Option<String>,
 }
@@ -440,7 +439,7 @@ pub struct NotesState {
 /// Note editing state
 #[derive(Debug, Clone)]
 pub struct NoteEditState {
-    pub note_id: Option<NoteId>, // None for new note
+    pub note_id: Option<NoteId>,     // None for new note
     pub original_note: Option<Note>, // Backup for cancel operations
     pub title: String,
     pub content: String,
@@ -461,28 +460,28 @@ pub enum NoteField {
 pub struct KdeConnectState {
     /// Whether KDE Connect integration is enabled
     pub enabled: bool,
-    
+
     /// Current configuration
     pub config: Option<crate::integrations::KdeConnectConfig>,
-    
+
     /// Available devices
     pub available_devices: Vec<crate::integrations::KdeConnectDevice>,
-    
+
     /// Currently configured device
     pub active_device: Option<String>, // device_id
-    
+
     /// Connection status
     pub connection_status: KdeConnectConnectionStatus,
-    
+
     /// Last notification sent
     pub last_notification: Option<KdeConnectNotification>,
-    
+
     /// Notification queue
     pub notification_queue: Vec<KdeConnectNotification>,
-    
+
     /// Statistics
     pub stats: KdeConnectStats,
-    
+
     /// Error state
     pub error_message: Option<String>,
 }
@@ -533,13 +532,13 @@ pub struct KdeConnectStats {
 pub struct AccountState {
     /// Configured accounts
     pub accounts: Vec<AccountConfig>,
-    
+
     /// Account sync status
     pub sync_status: HashMap<String, SyncStatus>,
-    
+
     /// Active account for operations
     pub active_account: Option<String>,
-    
+
     /// Account loading state
     pub loading: bool,
 }
@@ -549,10 +548,10 @@ pub struct AccountState {
 pub struct BackgroundState {
     /// Running tasks
     pub tasks: HashMap<String, TaskState>,
-    
+
     /// Task queue
     pub queue: Vec<String>,
-    
+
     /// Overall processing state
     pub processing: bool,
 }
@@ -580,7 +579,7 @@ pub enum TaskStatus {
 pub struct NotificationState {
     /// Pending notifications
     pub notifications: Vec<Notification>,
-    
+
     /// Notification settings
     pub settings: NotificationSettings,
 }
@@ -610,16 +609,16 @@ pub struct NotificationSettings {
 pub struct AppConfig {
     /// Auto-sync interval in minutes
     pub auto_sync_interval: u64,
-    
+
     /// Maximum number of messages to load per folder
     pub max_messages_per_folder: usize,
-    
+
     /// Theme name
     pub theme_name: String,
-    
+
     /// Keyboard shortcuts
     pub shortcuts: HashMap<String, String>,
-    
+
     /// UI preferences
     pub ui_preferences: UIPreferences,
 }
@@ -629,16 +628,16 @@ pub struct AppConfig {
 pub struct UIPreferences {
     /// Show line numbers in email list
     pub show_line_numbers: bool,
-    
+
     /// Date format
     pub date_format: String,
-    
+
     /// Time format
     pub time_format: String,
-    
+
     /// Show unread counts
     pub show_unread_counts: bool,
-    
+
     /// Auto-mark as read delay (seconds)
     pub auto_mark_read_delay: u64,
 }
@@ -648,13 +647,13 @@ pub struct UIPreferences {
 pub struct AutoSyncState {
     /// Last auto-sync time
     pub last_sync: Instant,
-    
+
     /// Auto-sync interval
     pub interval: Duration,
-    
+
     /// Whether auto-sync is enabled
     pub enabled: bool,
-    
+
     /// Auto-sync status
     pub status: SyncStatus,
 }
@@ -669,7 +668,7 @@ impl Model {
     /// Create a new model with default values
     pub fn new() -> Self {
         let now = Instant::now();
-        
+
         Self {
             app_state: AppState {
                 should_quit: false,
@@ -811,17 +810,17 @@ impl Model {
             },
         }
     }
-    
+
     /// Check if the application should quit
     pub fn should_quit(&self) -> bool {
         self.app_state.should_quit
     }
-    
+
     /// Check if initialization is complete
     pub fn is_initialized(&self) -> bool {
         self.app_state.initialization.complete
     }
-    
+
     /// Get current view mode
     pub fn current_view(&self) -> ViewMode {
         self.current_view

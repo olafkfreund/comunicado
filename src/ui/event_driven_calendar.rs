@@ -3,10 +3,8 @@
 //! This module provides event-driven implementations for calendar operations,
 //! replacing direct method calls with event publishing to decouple components.
 
+use crate::events::types::{CalendarEvent, CalendarEventData};
 use crate::events::{publish, EventError};
-use crate::events::types::{
-    CalendarEvent, CalendarEventData
-};
 use chrono::{DateTime, Utc};
 
 /// Event-driven calendar operations handler
@@ -34,17 +32,17 @@ impl EventDrivenCalendarHandler {
     pub fn set_selected_event(&mut self, event_id: String) {
         self.selected_event_id = Some(event_id);
     }
-    
+
     /// Set the current view date for the calendar
     pub fn set_view_date(&mut self, date: DateTime<Utc>) {
         self.current_view_date = date;
     }
-    
+
     /// Get the current view date
     pub fn view_date(&self) -> &DateTime<Utc> {
         &self.current_view_date
     }
-    
+
     /// Update the calendar view type (placeholder implementation)
     pub fn update_view(&mut self, _view_type: String) {
         // Placeholder implementation for future calendar view types
@@ -57,10 +55,14 @@ impl EventDrivenCalendarHandler {
             calendar_id: calendar_id.clone(),
             event_id: event_id.clone(),
         });
-        
+
         publish(event)?;
-        
-        tracing::info!("Published event creation for event {} in calendar {}", event_id, calendar_id);
+
+        tracing::info!(
+            "Published event creation for event {} in calendar {}",
+            event_id,
+            calendar_id
+        );
         Ok(())
     }
 
@@ -70,10 +72,14 @@ impl EventDrivenCalendarHandler {
             calendar_id: calendar_id.clone(),
             event_id: event_id.clone(),
         });
-        
+
         publish(event)?;
-        
-        tracing::info!("Published event update for event {} in calendar {}", event_id, calendar_id);
+
+        tracing::info!(
+            "Published event update for event {} in calendar {}",
+            event_id,
+            calendar_id
+        );
         Ok(())
     }
 
@@ -83,36 +89,49 @@ impl EventDrivenCalendarHandler {
             calendar_id: calendar_id.clone(),
             event_id: event_id.clone(),
         });
-        
+
         publish(event)?;
-        
-        tracing::info!("Published event deletion for event {} in calendar {}", event_id, calendar_id);
+
+        tracing::info!(
+            "Published event deletion for event {} in calendar {}",
+            event_id,
+            calendar_id
+        );
         Ok(())
     }
 
     /// Delete the currently selected event
     pub fn delete_current_event(&self) -> Result<(), EventError> {
-        if let (Some(calendar_id), Some(event_id)) = (
-            &self.current_calendar_id,
-            &self.selected_event_id,
-        ) {
+        if let (Some(calendar_id), Some(event_id)) =
+            (&self.current_calendar_id, &self.selected_event_id)
+        {
             self.delete_event(calendar_id.clone(), event_id.clone())?;
         }
         Ok(())
     }
 
     /// Reschedule a calendar event using events
-    pub fn reschedule_event(&self, calendar_id: String, event_id: String, old_time: i64, new_time: i64) -> Result<(), EventError> {
+    pub fn reschedule_event(
+        &self,
+        calendar_id: String,
+        event_id: String,
+        old_time: i64,
+        new_time: i64,
+    ) -> Result<(), EventError> {
         let event = CalendarEventData::new(CalendarEvent::EventRescheduled {
             calendar_id: calendar_id.clone(),
             event_id: event_id.clone(),
             old_time,
             new_time,
         });
-        
+
         publish(event)?;
-        
-        tracing::info!("Published event reschedule for event {} in calendar {}", event_id, calendar_id);
+
+        tracing::info!(
+            "Published event reschedule for event {} in calendar {}",
+            event_id,
+            calendar_id
+        );
         Ok(())
     }
 
@@ -122,10 +141,14 @@ impl EventDrivenCalendarHandler {
             calendar_id: calendar_id.clone(),
             name: name.clone(),
         });
-        
+
         publish(event)?;
-        
-        tracing::info!("Published calendar addition for calendar {} ({})", calendar_id, name);
+
+        tracing::info!(
+            "Published calendar addition for calendar {} ({})",
+            calendar_id,
+            name
+        );
         Ok(())
     }
 
@@ -134,9 +157,9 @@ impl EventDrivenCalendarHandler {
         let event = CalendarEventData::new(CalendarEvent::CalendarRemoved {
             calendar_id: calendar_id.clone(),
         });
-        
+
         publish(event)?;
-        
+
         tracing::info!("Published calendar removal for calendar {}", calendar_id);
         Ok(())
     }
@@ -147,38 +170,64 @@ impl EventDrivenCalendarHandler {
             calendar_id: calendar_id.clone(),
             event_count,
         });
-        
+
         publish(event)?;
-        
-        tracing::info!("Published calendar sync for calendar {} with {} events", calendar_id, event_count);
+
+        tracing::info!(
+            "Published calendar sync for calendar {} with {} events",
+            calendar_id,
+            event_count
+        );
         Ok(())
     }
 
     /// Handle invitation response using events
-    pub fn respond_to_invitation(&self, event_id: String, response: InvitationResponse) -> Result<(), EventError> {
+    pub fn respond_to_invitation(
+        &self,
+        event_id: String,
+        response: InvitationResponse,
+    ) -> Result<(), EventError> {
         let calendar_event = match response {
-            InvitationResponse::Accept => CalendarEvent::InvitationAccepted { event_id: event_id.clone() },
-            InvitationResponse::Decline => CalendarEvent::InvitationDeclined { event_id: event_id.clone() },
-            InvitationResponse::Tentative => CalendarEvent::InvitationTentative { event_id: event_id.clone() },
+            InvitationResponse::Accept => CalendarEvent::InvitationAccepted {
+                event_id: event_id.clone(),
+            },
+            InvitationResponse::Decline => CalendarEvent::InvitationDeclined {
+                event_id: event_id.clone(),
+            },
+            InvitationResponse::Tentative => CalendarEvent::InvitationTentative {
+                event_id: event_id.clone(),
+            },
         };
 
         let event = CalendarEventData::new(calendar_event);
         publish(event)?;
-        
-        tracing::info!("Published invitation response {:?} for event {}", response, event_id);
+
+        tracing::info!(
+            "Published invitation response {:?} for event {}",
+            response,
+            event_id
+        );
         Ok(())
     }
 
     /// Trigger a reminder for an event using events
-    pub fn trigger_reminder(&self, event_id: String, minutes_before: u32) -> Result<(), EventError> {
+    pub fn trigger_reminder(
+        &self,
+        event_id: String,
+        minutes_before: u32,
+    ) -> Result<(), EventError> {
         let event = CalendarEventData::new(CalendarEvent::ReminderTriggered {
             event_id: event_id.clone(),
             minutes_before,
         });
-        
+
         publish(event)?;
-        
-        tracing::info!("Published reminder trigger for event {} ({} minutes before)", event_id, minutes_before);
+
+        tracing::info!(
+            "Published reminder trigger for event {} ({} minutes before)",
+            event_id,
+            minutes_before
+        );
         Ok(())
     }
 
@@ -187,9 +236,9 @@ impl EventDrivenCalendarHandler {
         let event = CalendarEventData::new(CalendarEvent::ReminderDismissed {
             event_id: event_id.clone(),
         });
-        
+
         publish(event)?;
-        
+
         tracing::info!("Published reminder dismissal for event {}", event_id);
         Ok(())
     }
@@ -228,7 +277,7 @@ impl EventDrivenCalendarState {
         tracing::debug!("Changed to calendar: {}", calendar_id);
         Ok(())
     }
-    
+
     /// Set the selected date for the calendar view
     pub fn set_selected_date(&mut self, date: chrono::NaiveDate) {
         self.view_date = date.and_hms_opt(0, 0, 0).unwrap().and_utc();
@@ -240,7 +289,11 @@ impl EventDrivenCalendarState {
             let old_mode = self.current_view_mode.clone();
             self.current_view_mode = new_mode.clone();
             // TODO: Publish view mode change event
-            tracing::debug!("Changed calendar view from {:?} to {:?}", old_mode, new_mode);
+            tracing::debug!(
+                "Changed calendar view from {:?} to {:?}",
+                old_mode,
+                new_mode
+            );
         }
         Ok(())
     }
@@ -298,13 +351,22 @@ impl CalendarMigrationHelper {
         calendar_state: &mut EventDrivenCalendarState,
     ) -> Result<(), EventError> {
         match action {
-            CalendarAction::CreateEvent { calendar_id, event_id } => {
+            CalendarAction::CreateEvent {
+                calendar_id,
+                event_id,
+            } => {
                 calendar_handler.create_event(calendar_id.clone(), event_id.clone())?;
             }
-            CalendarAction::UpdateEvent { calendar_id, event_id } => {
+            CalendarAction::UpdateEvent {
+                calendar_id,
+                event_id,
+            } => {
                 calendar_handler.update_event(calendar_id.clone(), event_id.clone())?;
             }
-            CalendarAction::DeleteEvent { calendar_id, event_id } => {
+            CalendarAction::DeleteEvent {
+                calendar_id,
+                event_id,
+            } => {
                 calendar_handler.delete_event(calendar_id.clone(), event_id.clone())?;
             }
             CalendarAction::ChangeViewMode { mode } => {
@@ -333,12 +395,27 @@ impl CalendarMigrationHelper {
 /// This should match the actual CalendarAction from the calendar module
 #[derive(Debug, Clone)]
 pub enum CalendarAction {
-    CreateEvent { calendar_id: String, event_id: String },
-    UpdateEvent { calendar_id: String, event_id: String },
-    DeleteEvent { calendar_id: String, event_id: String },
-    ChangeViewMode { mode: String },
-    SelectCalendar { calendar_id: String },
-    SyncCalendar { calendar_id: String },
+    CreateEvent {
+        calendar_id: String,
+        event_id: String,
+    },
+    UpdateEvent {
+        calendar_id: String,
+        event_id: String,
+    },
+    DeleteEvent {
+        calendar_id: String,
+        event_id: String,
+    },
+    ChangeViewMode {
+        mode: String,
+    },
+    SelectCalendar {
+        calendar_id: String,
+    },
+    SyncCalendar {
+        calendar_id: String,
+    },
 }
 
 #[cfg(test)]
@@ -349,28 +426,34 @@ mod tests {
     #[test]
     fn test_event_driven_calendar_handler() {
         let _bus = initialize_event_bus();
-        
+
         let handler = EventDrivenCalendarHandler::new();
-        
+
         // Test event creation
-        assert!(handler.create_event("cal1".to_string(), "event1".to_string()).is_ok());
-        
+        assert!(handler
+            .create_event("cal1".to_string(), "event1".to_string())
+            .is_ok());
+
         // Test event update
-        assert!(handler.update_event("cal1".to_string(), "event1".to_string()).is_ok());
-        
+        assert!(handler
+            .update_event("cal1".to_string(), "event1".to_string())
+            .is_ok());
+
         // Test event deletion
-        assert!(handler.delete_event("cal1".to_string(), "event1".to_string()).is_ok());
+        assert!(handler
+            .delete_event("cal1".to_string(), "event1".to_string())
+            .is_ok());
     }
 
     #[test]
     fn test_event_driven_calendar_state() {
         let mut state = EventDrivenCalendarState::new();
-        
+
         assert_eq!(state.current_view_mode(), &CalendarViewMode::Month);
-        
+
         assert!(state.change_view_mode(CalendarViewMode::Week).is_ok());
         assert_eq!(state.current_view_mode(), &CalendarViewMode::Week);
-        
+
         assert!(state.select_event("event1".to_string()).is_ok());
         assert_eq!(state.selected_event(), &Some("event1".to_string()));
     }

@@ -1,29 +1,26 @@
 //! Terminal management utilities with RAII pattern
-//! 
+//!
 //! This module provides a clean abstraction for terminal operations,
 //! ensuring proper setup and teardown of terminal state using RAII.
 
-use std::io::{self, Stdout};
 use anyhow::Result;
 use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use ratatui::{
-    backend::CrosstermBackend,
-    Terminal,
-};
+use ratatui::{backend::CrosstermBackend, Terminal};
+use std::io::{self, Stdout};
 
 /// Terminal manager trait for abstraction
 pub trait TerminalManager {
     type Backend;
-    
+
     /// Setup terminal for TUI operations
     fn setup(&mut self) -> Result<()>;
-    
+
     /// Teardown terminal and restore original state
     fn teardown(&mut self) -> Result<()>;
-    
+
     /// Execute a function with terminal access
     fn with_terminal<F, R>(&mut self, f: F) -> Result<R>
     where
@@ -42,17 +39,17 @@ impl TerminalGuard {
         enable_raw_mode()?;
         let mut stdout = io::stdout();
         execute!(stdout, EnterAlternateScreen)?;
-        
+
         Ok(Self {
             should_restore: true,
         })
     }
-    
+
     /// Setup terminal and return guard
     pub fn setup() -> Result<Self> {
         Self::new()
     }
-    
+
     /// Consume guard without restoring (for handoff scenarios)
     pub fn release(mut self) {
         self.should_restore = false;
@@ -81,18 +78,18 @@ impl ManagedTerminal {
         let guard = TerminalGuard::setup()?;
         let backend = CrosstermBackend::new(io::stdout());
         let terminal = Terminal::new(backend)?;
-        
+
         Ok(Self {
             terminal,
             _guard: guard,
         })
     }
-    
+
     /// Get mutable reference to the terminal
     pub fn terminal(&mut self) -> &mut Terminal<CrosstermBackend<Stdout>> {
         &mut self.terminal
     }
-    
+
     /// Execute a function with the terminal
     pub fn with<F, R>(&mut self, f: F) -> Result<R>
     where
@@ -100,7 +97,7 @@ impl ManagedTerminal {
     {
         f(&mut self.terminal)
     }
-    
+
     /// Release the terminal without cleanup (for handoff)
     pub fn release(self) -> Terminal<CrosstermBackend<Stdout>> {
         // Guard will be dropped but won't restore due to release
@@ -122,7 +119,7 @@ impl StandardTerminalManager {
             guard: None,
         }
     }
-    
+
     /// Check if terminal is active
     pub fn is_active(&self) -> bool {
         self.terminal.is_some()
@@ -137,22 +134,22 @@ impl Default for StandardTerminalManager {
 
 impl TerminalManager for StandardTerminalManager {
     type Backend = CrosstermBackend<Stdout>;
-    
+
     fn setup(&mut self) -> Result<()> {
         if self.is_active() {
             return Ok(()); // Already setup
         }
-        
+
         let guard = TerminalGuard::setup()?;
         let backend = CrosstermBackend::new(io::stdout());
         let terminal = Terminal::new(backend)?;
-        
+
         self.guard = Some(guard);
         self.terminal = Some(terminal);
-        
+
         Ok(())
     }
-    
+
     fn teardown(&mut self) -> Result<()> {
         // Drop terminal first
         self.terminal = None;
@@ -160,7 +157,7 @@ impl TerminalManager for StandardTerminalManager {
         self.guard = None;
         Ok(())
     }
-    
+
     fn with_terminal<F, R>(&mut self, f: F) -> Result<R>
     where
         F: FnOnce(&mut Terminal<Self::Backend>) -> Result<R>,
@@ -190,19 +187,19 @@ where
     let guard = TerminalGuard::setup()?;
     let backend = CrosstermBackend::new(io::stdout());
     let mut terminal = Terminal::new(backend)?;
-    
+
     let result = f(&mut terminal);
-    
+
     // Guard automatically cleans up on drop
     drop(guard);
-    
+
     result
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_terminal_guard_creation() {
         // Note: This test would need to be run with a real terminal
@@ -210,7 +207,7 @@ mod tests {
         if std::env::var("CI").is_ok() {
             return; // Skip in CI environment
         }
-        
+
         // Guard should be created and dropped without panic
         {
             let _guard = TerminalGuard::new();
@@ -218,16 +215,16 @@ mod tests {
         }
         // Guard dropped and terminal restored
     }
-    
+
     #[test]
     fn test_standard_manager_lifecycle() {
         let manager = StandardTerminalManager::new();
         assert!(!manager.is_active());
-        
+
         // After setup (would need terminal in real test)
         // assert!(manager.setup().is_ok());
         // assert!(manager.is_active());
-        
+
         // After teardown
         // assert!(manager.teardown().is_ok());
         // assert!(!manager.is_active());

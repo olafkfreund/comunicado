@@ -38,7 +38,10 @@ impl ConfigManager {
     }
 
     /// Load custom deployment strategy configuration
-    pub async fn load_custom_strategy(&self, strategy_name: &str) -> DeploymentResult<serde_json::Value> {
+    pub async fn load_custom_strategy(
+        &self,
+        strategy_name: &str,
+    ) -> DeploymentResult<serde_json::Value> {
         println!("Loading custom strategy: {}", strategy_name);
         // Return placeholder configuration
         Ok(serde_json::json!({

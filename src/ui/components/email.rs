@@ -3,19 +3,20 @@
 //! Implements a modular email component system that replaces the monolithic email UI structure.
 
 use super::{
-    ComponentId, ComponentState, UIComponent, ComponentResult,
-    RenderContext, UIEvent, EventResult, ComponentMetrics,
+    ComponentId, ComponentMetrics, ComponentResult, ComponentState, EventResult, RenderContext,
+    UIComponent, UIEvent,
 };
 use crate::{
-    email::{StoredMessage, EmailDatabase},
+    contacts::{ContactsManager, SenderRecognitionService},
+    email::{EmailDatabase, StoredMessage},
     ui::{
+        compose::{ComposeAction, ComposeUI},
         content_preview::EmailContent,
         email_viewer::{EmailViewer, EmailViewerAction},
         message_list::MessageList,
-        compose::{ComposeUI, ComposeAction},
     },
-    contacts::{SenderRecognitionService, ContactsManager},
 };
+use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{
     layout::{Constraint, Direction, Layout},
     style::Style,
@@ -23,7 +24,6 @@ use ratatui::{
 };
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use crossterm::event::{KeyCode, KeyEvent};
 
 /// Email component state
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -39,29 +39,29 @@ pub struct EmailComponent {
     id: ComponentId,
     state: ComponentState,
     metrics: ComponentMetrics,
-    
+
     // Component configuration
     mode: EmailComponentMode,
-    
+
     // UI components
     message_list: MessageList,
     email_viewer: EmailViewer,
     compose_ui: Option<ComposeUI>,
-    
+
     // Data and services
     database: Option<Arc<EmailDatabase>>,
     sender_recognition: Option<Arc<SenderRecognitionService>>,
     contacts_manager: Option<Arc<ContactsManager>>,
-    
+
     // Current state
     current_account: Option<String>,
     current_folder: Option<String>,
     selected_message: Option<StoredMessage>,
     current_email_content: Option<EmailContent>,
-    
+
     // Focus management
     focused_section: EmailSection,
-    
+
     // Performance tracking
     #[allow(dead_code)]
     last_render_time: Instant,
@@ -99,7 +99,7 @@ impl EmailComponent {
             render_count: 0,
         }
     }
-    
+
     /// Initialize with database and services
     pub fn with_services(
         mut self,
@@ -112,23 +112,23 @@ impl EmailComponent {
         self.contacts_manager = contacts_manager;
         self
     }
-    
+
     /// Set the current account and folder
     pub fn set_account_folder(&mut self, account: Option<String>, folder: Option<String>) {
         self.current_account = account;
         self.current_folder = folder;
         // TODO: Load messages for the account/folder
     }
-    
+
     /// Get the current mode
     pub fn mode(&self) -> EmailComponentMode {
         self.mode.clone()
     }
-    
+
     /// Set the component mode
     pub fn set_mode(&mut self, mode: EmailComponentMode) -> ComponentResult<()> {
         self.mode = mode;
-        
+
         // Update component state based on mode
         match mode {
             EmailComponentMode::MessageList => {
@@ -144,19 +144,19 @@ impl EmailComponent {
                 }
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// Get the selected message
     pub fn selected_message(&self) -> Option<&StoredMessage> {
         self.selected_message.as_ref()
     }
-    
+
     /// Set the selected message for viewing
     pub fn set_selected_message(&mut self, message: Option<StoredMessage>) {
         self.selected_message = message;
-        
+
         // Load email content if message is selected
         if let Some(ref msg) = self.selected_message {
             // TODO: Load email content from database
@@ -179,16 +179,19 @@ impl EmailComponent {
                 parsed_urls: Vec::new(),
                 parsed_content: Vec::new(),
             };
-            
+
             self.current_email_content = Some(content.clone());
             self.email_viewer.set_email(msg.clone(), content);
         } else {
             self.current_email_content = None;
         }
     }
-    
+
     /// Handle email viewer actions
-    fn handle_email_viewer_action(&mut self, action: EmailViewerAction) -> ComponentResult<EventResult> {
+    fn handle_email_viewer_action(
+        &mut self,
+        action: EmailViewerAction,
+    ) -> ComponentResult<EventResult> {
         match action {
             EmailViewerAction::Close => {
                 self.set_mode(EmailComponentMode::MessageList)?;
@@ -236,13 +239,13 @@ impl EmailComponent {
             }
         }
     }
-    
+
     /// Start compose mode for new email
     pub fn start_compose(&mut self) -> ComponentResult<()> {
         self.set_mode(EmailComponentMode::Compose)?;
         Ok(())
     }
-    
+
     /// Start compose mode for reply
     pub fn start_reply(&mut self, message: &StoredMessage) -> ComponentResult<()> {
         if let Some(ref contacts_manager) = self.contacts_manager {
@@ -252,7 +255,7 @@ impl EmailComponent {
             } else {
                 format!("Re: {}", message.subject)
             };
-            
+
             self.compose_ui = Some(ComposeUI::new_reply(
                 contacts_manager.clone(),
                 reply_to,
@@ -262,7 +265,7 @@ impl EmailComponent {
         }
         Ok(())
     }
-    
+
     /// Start compose mode for forward
     pub fn start_forward(&mut self, message: &StoredMessage) -> ComponentResult<()> {
         if let Some(ref contacts_manager) = self.contacts_manager {
@@ -271,9 +274,9 @@ impl EmailComponent {
             } else {
                 format!("Fwd: {}", message.subject)
             };
-            
+
             let original_body = message.body_text.as_deref().unwrap_or("");
-            
+
             self.compose_ui = Some(ComposeUI::new_forward(
                 contacts_manager.clone(),
                 &subject,
@@ -283,9 +286,12 @@ impl EmailComponent {
         }
         Ok(())
     }
-    
+
     /// Handle compose key events
-    pub async fn handle_compose_key(&mut self, key: KeyEvent) -> ComponentResult<Option<ComposeAction>> {
+    pub async fn handle_compose_key(
+        &mut self,
+        key: KeyEvent,
+    ) -> ComponentResult<Option<ComposeAction>> {
         if let Some(ref mut compose_ui) = self.compose_ui {
             let action = compose_ui.handle_key(key).await;
             Ok(Some(action))
@@ -293,31 +299,34 @@ impl EmailComponent {
             Ok(None)
         }
     }
-    
+
     /// Get compose data for sending
     pub fn get_compose_data(&self) -> Option<crate::ui::EmailComposeData> {
         self.compose_ui.as_ref().map(|ui| ui.get_email_data())
     }
-    
+
     /// Check if compose form is modified
     pub fn is_compose_modified(&self) -> bool {
-        self.compose_ui.as_ref().map(|ui| ui.is_modified()).unwrap_or(false)
+        self.compose_ui
+            .as_ref()
+            .map(|ui| ui.is_modified())
+            .unwrap_or(false)
     }
-    
+
     /// Clear compose modifications (after saving)
     pub fn clear_compose_modified(&mut self) {
         if let Some(ref mut compose_ui) = self.compose_ui {
             compose_ui.clear_modified();
         }
     }
-    
+
     /// Exit compose mode
     pub fn exit_compose(&mut self) -> ComponentResult<()> {
         self.compose_ui = None;
         self.set_mode(EmailComponentMode::MessageList)?;
         Ok(())
     }
-    
+
     /// Render the message list view
     fn render_message_list(&mut self, context: &mut RenderContext<'_>) -> ComponentResult<()> {
         // Create layout for folder tree and message list
@@ -328,7 +337,7 @@ impl EmailComponent {
                 Constraint::Percentage(75), // Message list
             ])
             .split(context.area);
-        
+
         // Render folder tree placeholder
         let folder_block = Block::default()
             .title("Folders")
@@ -338,14 +347,14 @@ impl EmailComponent {
                     context.theme.colors.palette.accent
                 } else {
                     context.theme.colors.palette.border
-                }
+                },
             ));
-        
-        let folder_content = Paragraph::new("📁 Inbox\n📁 Sent\n📁 Drafts\n📁 Trash")
-            .block(folder_block);
-        
+
+        let folder_content =
+            Paragraph::new("📁 Inbox\n📁 Sent\n📁 Drafts\n📁 Trash").block(folder_block);
+
         context.frame.render_widget(folder_content, chunks[0]);
-        
+
         // Render message list
         let list_block = Block::default()
             .title("Messages")
@@ -355,9 +364,9 @@ impl EmailComponent {
                     context.theme.colors.palette.accent
                 } else {
                     context.theme.colors.palette.border
-                }
+                },
             ));
-        
+
         self.message_list.render(
             context.frame,
             chunks[1],
@@ -365,35 +374,36 @@ impl EmailComponent {
             self.focused_section == EmailSection::MessageList && context.is_focused,
             context.theme,
         );
-        
+
         Ok(())
     }
-    
+
     /// Render the email viewer
     fn render_email_viewer(&mut self, context: &mut RenderContext<'_>) -> ComponentResult<()> {
-        self.email_viewer.render(context.frame, context.area, context.theme);
+        self.email_viewer
+            .render(context.frame, context.area, context.theme);
         Ok(())
     }
-    
+
     /// Render the compose view
     fn render_compose(&mut self, context: &mut RenderContext<'_>) -> ComponentResult<()> {
         if let Some(ref mut compose_ui) = self.compose_ui {
             compose_ui.render(context.frame, context.area, context.theme);
         } else {
             // Show fallback message if no compose UI is available
-            let placeholder = Paragraph::new("Compose view requires contacts manager to be initialized")
-                .block(
+            let placeholder =
+                Paragraph::new("Compose view requires contacts manager to be initialized").block(
                     Block::default()
                         .title("Compose Email")
                         .borders(Borders::ALL)
-                        .border_style(Style::default().fg(context.theme.colors.palette.border))
+                        .border_style(Style::default().fg(context.theme.colors.palette.border)),
                 );
-            
+
             context.frame.render_widget(placeholder, context.area);
         }
         Ok(())
     }
-    
+
     /// Handle key events for message list mode
     fn handle_message_list_key(&mut self, key: KeyEvent) -> ComponentResult<EventResult> {
         match key.code {
@@ -428,7 +438,7 @@ impl EmailComponent {
             _ => Ok(EventResult::Ignored),
         }
     }
-    
+
     /// Handle key events for email viewer mode
     fn handle_email_viewer_key(&mut self, key: KeyEvent) -> ComponentResult<EventResult> {
         if let Some(action) = self.email_viewer.handle_key(key.code) {
@@ -437,7 +447,7 @@ impl EmailComponent {
             Ok(EventResult::Ignored)
         }
     }
-    
+
     /// Handle key events for compose mode (internal)
     fn handle_compose_key_internal(&mut self, _key: KeyEvent) -> ComponentResult<EventResult> {
         // This would handle compose key events synchronously if needed
@@ -450,82 +460,78 @@ impl UIComponent for EmailComponent {
     fn component_id(&self) -> ComponentId {
         self.id
     }
-    
+
     fn component_name(&self) -> &str {
         "EmailComponent"
     }
-    
+
     fn state(&self) -> ComponentState {
         self.state
     }
-    
+
     fn initialize(&mut self) -> ComponentResult<()> {
         self.state = ComponentState::Ready;
         Ok(())
     }
-    
+
     fn render(&mut self, context: &mut RenderContext<'_>) -> ComponentResult<()> {
         let start_time = Instant::now();
-        
+
         // Render based on current mode
         let result = match self.mode {
             EmailComponentMode::MessageList => self.render_message_list(context),
             EmailComponentMode::EmailViewer => self.render_email_viewer(context),
             EmailComponentMode::Compose => self.render_compose(context),
         };
-        
+
         // Update render metrics
         let render_time = start_time.elapsed();
         self.metrics.last_render_time = render_time;
         self.metrics.render_calls += 1;
         self.render_count += 1;
-        
+
         // Update average render time (simple moving average)
         let weight = 0.1;
         self.metrics.avg_render_time = Duration::from_nanos(
-            (self.metrics.avg_render_time.as_nanos() as f64 * (1.0 - weight) +
-             render_time.as_nanos() as f64 * weight) as u64
+            (self.metrics.avg_render_time.as_nanos() as f64 * (1.0 - weight)
+                + render_time.as_nanos() as f64 * weight) as u64,
         );
-        
+
         self.metrics.last_updated = Instant::now();
-        
+
         result
     }
-    
+
     fn handle_event(&mut self, event: &UIEvent) -> ComponentResult<EventResult> {
         match event {
             UIEvent::Key(key) => {
                 self.metrics.events_processed += 1;
-                
+
                 match self.mode {
                     EmailComponentMode::MessageList => self.handle_message_list_key(*key),
                     EmailComponentMode::EmailViewer => self.handle_email_viewer_key(*key),
                     EmailComponentMode::Compose => self.handle_compose_key_internal(*key),
                 }
             }
-            UIEvent::FocusGained => {
-                Ok(EventResult::Handled)
-            }
-            UIEvent::FocusLost => {
-                Ok(EventResult::Handled)
-            }
+            UIEvent::FocusGained => Ok(EventResult::Handled),
+            UIEvent::FocusLost => Ok(EventResult::Handled),
             _ => Ok(EventResult::Ignored),
         }
     }
-    
+
     fn metrics(&self) -> &ComponentMetrics {
         &self.metrics
     }
-    
+
     fn set_state(&mut self, new_state: ComponentState) -> ComponentResult<()> {
         self.state = new_state;
         Ok(())
     }
-    
+
     fn can_focus(&self) -> bool {
         matches!(self.state, ComponentState::Ready | ComponentState::Focused)
     }
-    
+
     fn cleanup(&mut self) -> ComponentResult<()> {
         self.state = ComponentState::Destroying;
         Ok(())
@@ -555,7 +561,7 @@ impl std::fmt::Debug for EmailComponent {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_email_component_creation() {
         let component = EmailComponent::new();
@@ -563,37 +569,37 @@ mod tests {
         assert_eq!(component.mode(), EmailComponentMode::MessageList);
         assert_eq!(component.component_name(), "EmailComponent");
     }
-    
+
     #[test]
     fn test_email_component_initialization() {
         let mut component = EmailComponent::new();
         component.initialize().unwrap();
         assert_eq!(component.state(), ComponentState::Ready);
     }
-    
+
     #[test]
     fn test_mode_switching() {
         let mut component = EmailComponent::new();
         component.initialize().unwrap();
-        
+
         // Switch to email viewer mode
         component.set_mode(EmailComponentMode::EmailViewer).unwrap();
         assert_eq!(component.mode(), EmailComponentMode::EmailViewer);
-        
+
         // Switch to compose mode
         component.set_mode(EmailComponentMode::Compose).unwrap();
         assert_eq!(component.mode(), EmailComponentMode::Compose);
-        
+
         // Switch back to message list
         component.set_mode(EmailComponentMode::MessageList).unwrap();
         assert_eq!(component.mode(), EmailComponentMode::MessageList);
     }
-    
+
     #[test]
     fn test_focus_management() {
         let component = EmailComponent::new();
         assert!(!component.can_focus()); // Uninitialized components can't focus
-        
+
         let mut component = EmailComponent::new();
         component.initialize().unwrap();
         assert!(component.can_focus()); // Ready components can focus

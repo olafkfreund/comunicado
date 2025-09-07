@@ -1,4 +1,4 @@
-use crate::contacts::{ContactsManager, ContactSearchCriteria};
+use crate::contacts::{ContactSearchCriteria, ContactsManager};
 use ratatui::{
     layout::Rect,
     style::{Color, Modifier, Style},
@@ -42,7 +42,7 @@ impl ContactAutocomplete {
     /// Update autocomplete suggestions based on query
     pub async fn update_suggestions(&mut self, query: &str) {
         self.query = query.to_string();
-        
+
         if query.len() < 2 {
             self.suggestions.clear();
             self.is_visible = false;
@@ -60,8 +60,12 @@ impl ContactAutocomplete {
                     .into_iter()
                     .flat_map(|contact| {
                         contact.emails.into_iter().filter_map(move |email| {
-                            if email.address.to_lowercase().contains(&query.to_lowercase()) ||
-                               contact.display_name.to_lowercase().contains(&query.to_lowercase()) {
+                            if email.address.to_lowercase().contains(&query.to_lowercase())
+                                || contact
+                                    .display_name
+                                    .to_lowercase()
+                                    .contains(&query.to_lowercase())
+                            {
                                 Some(ContactSuggestion {
                                     contact_id: contact.id,
                                     display_name: contact.display_name.clone(),
@@ -169,7 +173,7 @@ impl ContactAutocomplete {
         // Calculate popup position and size
         let popup_height = (self.suggestions.len() + 2).min(8) as u16; // +2 for borders, max 8 rows
         let popup_width = 60.min(area.width);
-        
+
         let popup_x = anchor_x.min(area.width.saturating_sub(popup_width));
         let popup_y = if anchor_y + popup_height <= area.height {
             anchor_y + 1 // Show below anchor
@@ -188,7 +192,8 @@ impl ContactAutocomplete {
         frame.render_widget(Clear, popup_area);
 
         // Create list items
-        let items: Vec<ListItem> = self.suggestions
+        let items: Vec<ListItem> = self
+            .suggestions
             .iter()
             .map(|suggestion| {
                 let line = Line::from(vec![
@@ -199,10 +204,7 @@ impl ContactAutocomplete {
                             .add_modifier(Modifier::BOLD),
                     ),
                     Span::styled(" <", Style::default().fg(Color::Gray)),
-                    Span::styled(
-                        suggestion.email.clone(),
-                        Style::default().fg(Color::Cyan),
-                    ),
+                    Span::styled(suggestion.email.clone(), Style::default().fg(Color::Cyan)),
                     Span::styled(">", Style::default().fg(Color::Gray)),
                     Span::styled(
                         format!(" ({})", suggestion.source),
@@ -253,7 +255,7 @@ impl ContactAutocomplete {
                     let display_name = contact.display_name.clone();
                     let contact_id = contact.id;
                     let source = contact.source.provider_name().to_string();
-                    
+
                     contact.primary_email().map(|email| ContactSuggestion {
                         contact_id,
                         display_name,
@@ -286,13 +288,16 @@ impl ContactAutocomplete {
                     let display_name = contact.display_name.clone();
                     let contact_id = contact.id;
                     let source = contact.source.provider_name().to_string();
-                    
-                    contact.emails.into_iter().map(move |email| ContactSuggestion {
-                        contact_id,
-                        display_name: display_name.clone(),
-                        email: email.address,
-                        source: source.clone(),
-                    })
+
+                    contact
+                        .emails
+                        .into_iter()
+                        .map(move |email| ContactSuggestion {
+                            contact_id,
+                            display_name: display_name.clone(),
+                            email: email.address,
+                            source: source.clone(),
+                        })
                 })
                 .collect(),
             Err(e) => {
@@ -302,4 +307,3 @@ impl ContactAutocomplete {
         }
     }
 }
-

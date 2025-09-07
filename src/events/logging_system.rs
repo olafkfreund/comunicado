@@ -400,7 +400,8 @@ impl LoggingSystem {
                 category: Some(category),
                 message,
                 details,
-            }).await;
+            })
+            .await;
         }
 
         error_id
@@ -511,14 +512,16 @@ impl LoggingSystem {
 
         let mut streams = self.log_streams.lock().await;
         streams.insert(stream_id, stream);
-        
+
         stream_id
     }
 
     /// Get recent entries from a log stream
     pub async fn get_stream_entries(&self, stream_id: Uuid) -> Option<Vec<LogEntry>> {
         let streams = self.log_streams.lock().await;
-        streams.get(&stream_id).map(|stream| stream.recent_entries.iter().cloned().collect())
+        streams
+            .get(&stream_id)
+            .map(|stream| stream.recent_entries.iter().cloned().collect())
     }
 
     /// Remove a log stream
@@ -555,10 +558,14 @@ impl LoggingSystem {
         for stream in streams.values_mut() {
             // Check if entry matches stream filters
             if entry.level >= stream.filter_level {
-                if stream.category_filters.is_empty() || 
-                   entry.category.as_ref().map_or(true, |cat| stream.category_filters.contains(cat)) {
+                if stream.category_filters.is_empty()
+                    || entry
+                        .category
+                        .as_ref()
+                        .map_or(true, |cat| stream.category_filters.contains(cat))
+                {
                     stream.recent_entries.push_back(entry.clone());
-                    
+
                     // Maintain max entries limit
                     while stream.recent_entries.len() > stream.max_entries {
                         stream.recent_entries.pop_front();
@@ -582,36 +589,45 @@ impl ErrorTracker {
 
     pub async fn track_error(&mut self, error: TrackedError) {
         self.total_errors += 1;
-        
+
         if error.level >= LogLevel::Critical {
             self.critical_errors += 1;
         }
 
         // Track by category
-        let category_errors = self.errors_by_category.entry(error.category.clone()).or_insert_with(VecDeque::new);
+        let category_errors = self
+            .errors_by_category
+            .entry(error.category.clone())
+            .or_insert_with(VecDeque::new);
         category_errors.push_back(error.clone());
-        
+
         // Maintain history limits
         while category_errors.len() > 1000 {
             category_errors.pop_front();
         }
 
         // Update frequency statistics
-        let frequency = self.error_frequencies.entry(error.category.clone()).or_insert_with(|| ErrorFrequency {
-            total_count: 0,
-            recent_count: 0,
-            error_rate: 0.0,
-            first_seen: error.timestamp,
-            last_seen: error.timestamp,
-            avg_interval: Duration::from_secs(0),
-        });
-        
+        let frequency = self
+            .error_frequencies
+            .entry(error.category.clone())
+            .or_insert_with(|| ErrorFrequency {
+                total_count: 0,
+                recent_count: 0,
+                error_rate: 0.0,
+                first_seen: error.timestamp,
+                last_seen: error.timestamp,
+                avg_interval: Duration::from_secs(0),
+            });
+
         frequency.total_count += 1;
         frequency.last_seen = error.timestamp;
-        
+
         // Track correlations
         if let Some(correlation_id) = &error.correlation_id {
-            let correlated_errors = self.error_correlations.entry(correlation_id.clone()).or_insert_with(Vec::new);
+            let correlated_errors = self
+                .error_correlations
+                .entry(correlation_id.clone())
+                .or_insert_with(Vec::new);
             correlated_errors.push(error);
         }
     }
@@ -628,7 +644,7 @@ impl ErrorTracker {
     fn get_recent_errors(&self, duration: Duration) -> Vec<TrackedError> {
         let cutoff = Instant::now() - duration;
         let mut recent = Vec::new();
-        
+
         for errors in self.errors_by_category.values() {
             for error in errors {
                 if error.timestamp >= cutoff {
@@ -636,7 +652,7 @@ impl ErrorTracker {
                 }
             }
         }
-        
+
         recent.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
         recent
     }
@@ -652,7 +668,7 @@ impl AuditLogger {
 
     pub fn log_entry(&mut self, entry: AuditLogEntry) {
         self.statistics.total_operations += 1;
-        
+
         match entry.status {
             AuditStatus::Success => self.statistics.successful_operations += 1,
             AuditStatus::Failed => self.statistics.failed_operations += 1,
@@ -660,18 +676,22 @@ impl AuditLogger {
         }
 
         // Update operation type statistics
-        *self.statistics.operations_by_type.entry(entry.operation.clone()).or_insert(0) += 1;
+        *self
+            .statistics
+            .operations_by_type
+            .entry(entry.operation.clone())
+            .or_insert(0) += 1;
 
         // Update average duration
         if let Some(duration) = entry.duration {
             let current_avg = self.statistics.average_operation_duration;
             let total_ops = self.statistics.total_operations;
-            self.statistics.average_operation_duration = 
+            self.statistics.average_operation_duration =
                 (current_avg * (total_ops - 1) as u32 + duration) / total_ops as u32;
         }
 
         self.audit_logs.push_back(entry);
-        
+
         // Maintain size limits
         while self.audit_logs.len() > 50000 {
             self.audit_logs.pop_front();
@@ -691,9 +711,9 @@ impl HealthLogger {
     pub fn log_health(&mut self, entry: HealthLogEntry) {
         self.current_status = entry.status;
         self.health_metrics = entry.metrics.clone();
-        
+
         self.health_history.push_back(entry);
-        
+
         // Keep last 10000 health entries
         while self.health_history.len() > 10000 {
             self.health_history.pop_front();

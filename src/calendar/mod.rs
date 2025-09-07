@@ -29,8 +29,8 @@ pub use invitation_manager::{InvitationManager, InvitationStatistics};
 pub use manager::CalendarManager;
 pub use notifications::{CalendarNotification, CalendarNotificationManager};
 pub use sharing::{
-    CalendarSharingManager, CalendarShare, SharedUser, SharingInvitation, CalendarPermission,
-    DesktopIntegrationType, SharingError, SharingResult,
+    CalendarPermission, CalendarShare, CalendarSharingManager, DesktopIntegrationType, SharedUser,
+    SharingError, SharingInvitation, SharingResult,
 };
 pub use sharing_ui::{CalendarSharingUI, SharingAction, SharingTab};
 pub use sync::{CalendarSyncEngine, CalendarSyncProgress};

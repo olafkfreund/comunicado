@@ -9,9 +9,9 @@
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
-use tokio::sync::{RwLock, Mutex};
-use tokio::time::Duration;
 use std::time::Instant;
+use tokio::sync::{Mutex, RwLock};
+use tokio::time::Duration;
 // Removed serde imports as they're not needed for this module
 
 /// State of a lazy initialization
@@ -32,17 +32,17 @@ impl InitializationState {
     pub fn is_ready(&self) -> bool {
         matches!(self, InitializationState::Ready { .. })
     }
-    
+
     /// Check if initialization is in progress
     pub fn is_initializing(&self) -> bool {
         matches!(self, InitializationState::Initializing { .. })
     }
-    
+
     /// Check if initialization failed
     pub fn is_failed(&self) -> bool {
         matches!(self, InitializationState::Failed { .. })
     }
-    
+
     /// Get error message if failed
     pub fn error_message(&self) -> Option<&str> {
         match self {
@@ -50,7 +50,7 @@ impl InitializationState {
             _ => None,
         }
     }
-    
+
     /// Get initialization duration if ready
     pub fn duration(&self) -> Option<Duration> {
         match self {
@@ -110,7 +110,7 @@ where
             name,
         }
     }
-    
+
     /// Create with custom configuration
     pub fn with_config(name: String, config: LazyConfig) -> Self {
         Self {
@@ -118,7 +118,7 @@ where
             ..Self::new(name)
         }
     }
-    
+
     /// Set the initializer function
     pub fn with_initializer<F, Fut>(mut self, init_fn: F) -> Self
     where
@@ -128,23 +128,23 @@ where
         self.initializer = Some(Box::pin(init_fn()));
         self
     }
-    
+
     /// Get current initialization state
     pub async fn state(&self) -> InitializationState {
         self.state.read().await.clone()
     }
-    
+
     /// Check if the resource is ready
     pub async fn is_ready(&self) -> bool {
         self.inner.read().await.is_some()
     }
-    
+
     /// Get the resource if it's ready, otherwise return None
     pub async fn try_get(&self) -> Option<Arc<T>> {
         let inner = self.inner.read().await;
         inner.as_ref().map(|t| Arc::new(t.clone()))
     }
-    
+
     /// Get the resource, initializing if necessary
     pub async fn get(&self) -> Result<Arc<T>, String> {
         // Fast path: check if already initialized
@@ -154,16 +154,16 @@ where
                 return Ok(Arc::new(value.clone()));
             }
         }
-        
+
         // Slow path: initialize
         self.initialize().await
     }
-    
+
     /// Force initialization (even if already initialized)
     pub async fn initialize(&self) -> Result<Arc<T>, String> {
         // Acquire initialization lock to prevent concurrent initialization
         let _lock = self.init_mutex.lock().await;
-        
+
         // Double-check pattern
         {
             let inner = self.inner.read().await;
@@ -171,39 +171,40 @@ where
                 return Ok(Arc::new(value.clone()));
             }
         }
-        
+
         // Check current state
         let current_state = self.state.read().await.clone();
         match current_state {
-            InitializationState::Failed { attempts, .. } if attempts >= self.config.max_attempts => {
+            InitializationState::Failed { attempts, .. }
+                if attempts >= self.config.max_attempts =>
+            {
                 return Err(format!(
-                    "Initialization of '{}' failed after {} attempts", 
-                    self.name, 
-                    attempts
+                    "Initialization of '{}' failed after {} attempts",
+                    self.name, attempts
                 ));
             }
             _ => {}
         }
-        
+
         // Update state to initializing
         let start_time = Instant::now();
         {
             let mut state = self.state.write().await;
-            *state = InitializationState::Initializing { started_at: start_time };
+            *state = InitializationState::Initializing {
+                started_at: start_time,
+            };
         }
-        
+
         // Perform initialization with retry logic
         let mut last_error = String::new();
         let mut attempt = 1;
-        
+
         while attempt <= self.config.max_attempts {
             // Perform the actual initialization
             let result = if let Some(timeout) = self.config.timeout {
                 // Use a dummy initializer for compilation - in practice this would be the real one
-                let dummy_init = async { 
-                    Err("No initializer provided".to_string())
-                };
-                
+                let dummy_init = async { Err("No initializer provided".to_string()) };
+
                 match tokio::time::timeout(timeout, dummy_init).await {
                     Ok(result) => result,
                     Err(_) => Err("Initialization timed out".to_string()),
@@ -212,7 +213,7 @@ where
                 // Use a dummy initializer for compilation
                 Err("No initializer provided".to_string())
             };
-            
+
             match result {
                 Ok(value) => {
                     // Success - store the value and update state
@@ -220,13 +221,13 @@ where
                         let mut inner = self.inner.write().await;
                         *inner = Some(value);
                     }
-                    
+
                     let duration = start_time.elapsed();
                     {
                         let mut state = self.state.write().await;
                         *state = InitializationState::Ready { duration };
                     }
-                    
+
                     // Return the initialized value
                     let inner = self.inner.read().await;
                     return match inner.as_ref() {
@@ -236,17 +237,17 @@ where
                 }
                 Err(error) => {
                     last_error = error;
-                    
+
                     if attempt < self.config.max_attempts {
                         // Wait before retry
                         tokio::time::sleep(self.config.retry_delay).await;
                     }
-                    
+
                     attempt += 1;
                 }
             }
         }
-        
+
         // All attempts failed
         {
             let mut state = self.state.write().await;
@@ -255,25 +256,25 @@ where
                 attempts: self.config.max_attempts,
             };
         }
-        
+
         Err(last_error)
     }
-    
+
     /// Reset the initialization state (for retrying)
     pub async fn reset(&self) {
         let _lock = self.init_mutex.lock().await;
-        
+
         {
             let mut inner = self.inner.write().await;
             *inner = None;
         }
-        
+
         {
             let mut state = self.state.write().await;
             *state = InitializationState::NotStarted;
         }
     }
-    
+
     /// Get resource name
     pub fn name(&self) -> &str {
         &self.name
@@ -299,32 +300,34 @@ where
             name,
         }
     }
-    
+
     /// Initialize with a provided value
     pub async fn initialize_with_value(&self, value: T) -> Result<Arc<T>, String> {
         let _lock = self.init_mutex.lock().await;
-        
+
         let start_time = Instant::now();
         {
             let mut state = self.state.write().await;
-            *state = InitializationState::Initializing { started_at: start_time };
+            *state = InitializationState::Initializing {
+                started_at: start_time,
+            };
         }
-        
+
         // Store the value
         {
             let mut inner = self.inner.write().await;
             *inner = Some(value.clone());
         }
-        
+
         let duration = start_time.elapsed();
         {
             let mut state = self.state.write().await;
             *state = InitializationState::Ready { duration };
         }
-        
+
         Ok(Arc::new(value))
     }
-    
+
     /// Get a clone of the resource if ready
     pub async fn get_cloned(&self) -> Option<T> {
         let inner = self.inner.read().await;
@@ -353,42 +356,46 @@ where
     fn name(&self) -> &str {
         &self.name
     }
-    
+
     fn is_ready(&self) -> Pin<Box<dyn Future<Output = bool> + Send + '_>> {
         Box::pin(async move {
             let state = self.state.read().await;
             state.is_ready()
         })
     }
-    
+
     fn state(&self) -> Pin<Box<dyn Future<Output = InitializationState> + Send + '_>> {
         Box::pin(async move {
             let state = self.state.read().await;
             state.clone()
         })
     }
-    
+
     fn initialize(&self) -> Pin<Box<dyn Future<Output = Result<(), String>> + Send + '_>> {
         Box::pin(async move {
             // For testing, just update the state directly
             let start_time = std::time::Instant::now();
             {
                 let mut state = self.state.write().await;
-                *state = InitializationState::Initializing { started_at: start_time };
+                *state = InitializationState::Initializing {
+                    started_at: start_time,
+                };
             }
-            
+
             // Simulate some work
             tokio::time::sleep(std::time::Duration::from_millis(1)).await;
-            
+
             {
                 let mut state = self.state.write().await;
-                *state = InitializationState::Ready { duration: start_time.elapsed() };
+                *state = InitializationState::Ready {
+                    duration: start_time.elapsed(),
+                };
             }
-            
+
             Ok(())
         })
     }
-    
+
     fn reset(&self) -> Pin<Box<dyn Future<Output = ()> + Send + '_>> {
         Box::pin(async move {
             let _lock = self.init_mutex.lock().await;
@@ -411,7 +418,7 @@ impl LazyInitManager {
             resources: Arc::new(RwLock::new(std::collections::HashMap::new())),
         }
     }
-    
+
     /// Register a lazy resource
     pub async fn register<T>(&self, resource: LazyInit<T>)
     where
@@ -421,54 +428,54 @@ impl LazyInitManager {
         let mut resources = self.resources.write().await;
         resources.insert(name, Box::new(resource));
     }
-    
+
     /// Initialize all resources
     pub async fn initialize_all(&self) -> Result<(), Vec<String>> {
         let resources = self.resources.read().await;
         let mut errors = Vec::new();
-        
+
         for (name, resource) in resources.iter() {
             if let Err(error) = resource.initialize().await {
                 errors.push(format!("{}: {}", name, error));
             }
         }
-        
+
         if errors.is_empty() {
             Ok(())
         } else {
             Err(errors)
         }
     }
-    
+
     /// Check if all resources are ready
     pub async fn all_ready(&self) -> bool {
         let resources = self.resources.read().await;
-        
+
         for resource in resources.values() {
             if !resource.is_ready().await {
                 return false;
             }
         }
-        
+
         true
     }
-    
+
     /// Get initialization status of all resources
     pub async fn get_status(&self) -> std::collections::HashMap<String, InitializationState> {
         let resources = self.resources.read().await;
         let mut status = std::collections::HashMap::new();
-        
+
         for (name, resource) in resources.iter() {
             status.insert(name.clone(), resource.state().await);
         }
-        
+
         status
     }
-    
+
     /// Reset all resources
     pub async fn reset_all(&self) {
         let resources = self.resources.read().await;
-        
+
         for resource in resources.values() {
             resource.reset().await;
         }
@@ -494,7 +501,7 @@ mod tests {
     #[tokio::test]
     async fn test_lazy_init_creation() {
         let lazy: LazyInit<TestResource> = LazyInit::new("test_resource".to_string());
-        
+
         assert_eq!(lazy.name(), "test_resource");
         assert!(!lazy.is_ready().await);
         assert_eq!(lazy.state().await, InitializationState::NotStarted);
@@ -504,11 +511,11 @@ mod tests {
     async fn test_lazy_init_with_value() {
         let lazy = LazyInit::new("test_resource".to_string());
         let test_value = TestResource { value: 42 };
-        
+
         let result = lazy.initialize_with_value(test_value.clone()).await;
         assert!(result.is_ok());
         assert!(lazy.is_ready().await);
-        
+
         let retrieved = lazy.get_cloned().await;
         assert_eq!(retrieved, Some(test_value));
     }
@@ -516,14 +523,14 @@ mod tests {
     #[tokio::test]
     async fn test_lazy_init_state_transitions() {
         let lazy = LazyInit::new("test_resource".to_string());
-        
+
         // Initially not started
         assert_eq!(lazy.state().await, InitializationState::NotStarted);
-        
+
         // After initialization
         let test_value = TestResource { value: 123 };
         lazy.initialize_with_value(test_value).await.unwrap();
-        
+
         let state = lazy.state().await;
         assert!(state.is_ready());
         assert!(state.duration().is_some());
@@ -537,8 +544,9 @@ mod tests {
             retry_delay: Duration::from_secs(1),
             cache_failures: false,
         };
-        
-        let lazy: LazyInit<TestResource> = LazyInit::with_config("test".to_string(), config.clone());
+
+        let lazy: LazyInit<TestResource> =
+            LazyInit::with_config("test".to_string(), config.clone());
         assert_eq!(lazy.config.max_attempts, 5);
         assert_eq!(lazy.config.timeout, Some(Duration::from_secs(60)));
     }
@@ -547,11 +555,11 @@ mod tests {
     async fn test_lazy_init_reset() {
         let lazy = LazyInit::new("test_resource".to_string());
         let test_value = TestResource { value: 456 };
-        
+
         // Initialize
         lazy.initialize_with_value(test_value).await.unwrap();
         assert!(lazy.is_ready().await);
-        
+
         // Reset
         lazy.reset().await;
         assert!(!lazy.is_ready().await);
@@ -561,16 +569,16 @@ mod tests {
     #[tokio::test]
     async fn test_lazy_init_manager() {
         let manager = LazyInitManager::new();
-        
+
         let lazy1: LazyInit<String> = LazyInit::new("resource1".to_string());
         let lazy2: LazyInit<String> = LazyInit::new("resource2".to_string());
-        
+
         manager.register(lazy1).await;
         manager.register(lazy2).await;
-        
+
         // Initially not ready
         assert!(!manager.all_ready().await);
-        
+
         let status = manager.get_status().await;
         assert_eq!(status.len(), 2);
         assert!(status.contains_key("resource1"));
@@ -584,25 +592,25 @@ mod tests {
         assert!(!not_started.is_initializing());
         assert!(!not_started.is_failed());
         assert!(not_started.error_message().is_none());
-        
-        let initializing = InitializationState::Initializing { 
-            started_at: Instant::now() 
+
+        let initializing = InitializationState::Initializing {
+            started_at: Instant::now(),
         };
         assert!(!initializing.is_ready());
         assert!(initializing.is_initializing());
         assert!(!initializing.is_failed());
-        
-        let ready = InitializationState::Ready { 
-            duration: Duration::from_millis(100) 
+
+        let ready = InitializationState::Ready {
+            duration: Duration::from_millis(100),
         };
         assert!(ready.is_ready());
         assert!(!ready.is_initializing());
         assert!(!ready.is_failed());
         assert_eq!(ready.duration(), Some(Duration::from_millis(100)));
-        
-        let failed = InitializationState::Failed { 
+
+        let failed = InitializationState::Failed {
             error: "Test error".to_string(),
-            attempts: 3 
+            attempts: 3,
         };
         assert!(!failed.is_ready());
         assert!(!failed.is_initializing());

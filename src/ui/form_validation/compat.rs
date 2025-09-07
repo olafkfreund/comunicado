@@ -3,15 +3,15 @@
 //! This module provides backward compatibility while the codebase migrates
 //! to the new separated components.
 
-use std::time::Duration;
-use std::collections::HashMap;
-use regex::Regex;
-use ratatui::{Frame, layout::Rect};
-use crate::theme::Theme;
 use super::*;
+use crate::theme::Theme;
+use ratatui::{layout::Rect, Frame};
+use regex::Regex;
+use std::collections::HashMap;
+use std::time::Duration;
 
 /// Legacy FormValidationSystem API - provides backward compatibility
-/// 
+///
 /// This is a drop-in replacement for the old monolithic FormValidationSystem
 /// that delegates to the new separated components internally.
 pub struct LegacyFormValidationSystem {
@@ -47,7 +47,9 @@ impl LegacyFormValidationSystem {
     pub fn validate_field(&mut self, field_name: &str) {
         if let Some(field) = self.unified.state().get_field(field_name) {
             let result = self.unified.validator().validate_field(field);
-            self.unified.state_mut().set_field_validation_result(field_name, result);
+            self.unified
+                .state_mut()
+                .set_field_validation_result(field_name, result);
         }
     }
 
@@ -68,7 +70,9 @@ impl LegacyFormValidationSystem {
 
     /// Set field focus (legacy API)
     pub fn set_field_focus(&mut self, field_name: &str, focused: bool) {
-        self.unified.state_mut().set_field_focus(field_name, focused);
+        self.unified
+            .state_mut()
+            .set_field_focus(field_name, focused);
     }
 
     /// Check if field exists (legacy API)
@@ -78,17 +82,25 @@ impl LegacyFormValidationSystem {
 
     /// Get field value (legacy API)
     pub fn get_field_value(&self, field_name: &str) -> Option<String> {
-        self.unified.state().get_field(field_name).map(|f| f.value.clone())
+        self.unified
+            .state()
+            .get_field(field_name)
+            .map(|f| f.value.clone())
     }
 
     /// Get field validation result (legacy API)
     pub fn get_field_validation(&self, field_name: &str) -> Option<&ValidationResult> {
-        self.unified.state().get_field(field_name).map(|f| &f.validation_result)
+        self.unified
+            .state()
+            .get_field(field_name)
+            .map(|f| &f.validation_result)
     }
 
     /// Clear field validation (legacy API)
     pub fn clear_field_validation(&mut self, field_name: &str) {
-        self.unified.state_mut().set_field_validation_result(field_name, ValidationResult::Valid);
+        self.unified
+            .state_mut()
+            .set_field_validation_result(field_name, ValidationResult::Valid);
     }
 
     /// Clear all validation (legacy API)
@@ -106,7 +118,7 @@ impl LegacyFormValidationSystem {
         self.unified.state().get_form_data()
     }
 
-    /// Set form data (legacy API) 
+    /// Set form data (legacy API)
     pub fn set_form_data(&mut self, data: HashMap<String, String>) {
         self.unified.state_mut().set_form_data(data);
     }
@@ -120,16 +132,12 @@ impl LegacyFormValidationSystem {
         title: &str,
         theme: &Theme,
     ) {
-        self.unified.render_validated_field(frame, area, field_name, title, theme);
+        self.unified
+            .render_validated_field(frame, area, field_name, title, theme);
     }
 
     /// Render validation summary (legacy API)
-    pub fn render_validation_summary(
-        &self,
-        frame: &mut Frame,
-        area: Rect,
-        theme: &Theme,
-    ) {
+    pub fn render_validation_summary(&self, frame: &mut Frame, area: Rect, theme: &Theme) {
         self.unified.render_validation_summary(frame, area, theme);
     }
 
@@ -160,21 +168,27 @@ impl LegacyFormValidationSystem {
 
     /// Check if field has error (legacy API)
     pub fn field_has_error(&self, field_name: &str) -> bool {
-        self.unified.state().get_field(field_name)
+        self.unified
+            .state()
+            .get_field(field_name)
             .map(|f| f.has_error())
             .unwrap_or(false)
     }
 
     /// Check if field is dirty (legacy API)
     pub fn field_is_dirty(&self, field_name: &str) -> bool {
-        self.unified.state().get_field(field_name)
+        self.unified
+            .state()
+            .get_field(field_name)
             .map(|f| f.is_dirty)
             .unwrap_or(false)
     }
 
     /// Check if field is touched (legacy API)
     pub fn field_is_touched(&self, field_name: &str) -> bool {
-        self.unified.state().get_field(field_name)
+        self.unified
+            .state()
+            .get_field(field_name)
             .map(|f| f.is_touched)
             .unwrap_or(false)
     }

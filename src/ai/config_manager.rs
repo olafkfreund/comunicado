@@ -37,27 +37,27 @@ impl AIConfigManager {
     pub async fn initialize(&self) -> AIResult<()> {
         // Load configuration from file
         self.load_config().await?;
-        
+
         // Initialize AI service if enabled
         let config = self.config.read().await;
         if config.enabled {
             drop(config);
             self.initialize_ai_service().await?;
         }
-        
+
         Ok(())
     }
 
     /// Load configuration from file
     pub async fn load_config(&self) -> AIResult<()> {
         let loaded_config = AIConfig::load_from_file(&self.config_path).await?;
-        
+
         // Validate the loaded configuration
         loaded_config.validate()?;
-        
+
         let mut config = self.config.write().await;
         *config = loaded_config;
-        
+
         Ok(())
     }
 
@@ -77,13 +77,13 @@ impl AIConfigManager {
     pub async fn update_config(&self, new_config: AIConfig) -> AIResult<()> {
         // Validate the new configuration
         new_config.validate()?;
-        
+
         let mut config = self.config.write().await;
         let old_enabled = config.enabled;
         let old_provider = config.provider.clone();
-        
+
         *config = new_config;
-        
+
         // If AI was enabled/disabled or provider changed, reinitialize service
         if config.enabled != old_enabled || config.provider != old_provider {
             drop(config);
@@ -93,10 +93,10 @@ impl AIConfigManager {
                 self.shutdown_ai_service().await;
             }
         }
-        
+
         // Save the updated configuration
         self.save_config().await?;
-        
+
         Ok(())
     }
 
@@ -106,10 +106,10 @@ impl AIConfigManager {
             let mut config = self.config.write().await;
             config.enabled = true;
         }
-        
+
         self.initialize_ai_service().await?;
         self.save_config().await?;
-        
+
         Ok(())
     }
 
@@ -119,10 +119,10 @@ impl AIConfigManager {
             let mut config = self.config.write().await;
             config.enabled = false;
         }
-        
+
         self.shutdown_ai_service().await;
         self.save_config().await?;
-        
+
         Ok(())
     }
 
@@ -132,12 +132,12 @@ impl AIConfigManager {
             let mut config = self.config.write().await;
             config.provider = provider;
         }
-        
+
         // Reinitialize AI service with new provider
         if self.is_ai_enabled().await {
             self.initialize_ai_service().await?;
         }
-        
+
         self.save_config().await?;
         Ok(())
     }
@@ -148,7 +148,7 @@ impl AIConfigManager {
             let mut config = self.config.write().await;
             config.privacy_mode = privacy_mode;
         }
-        
+
         self.save_config().await?;
         Ok(())
     }
@@ -159,12 +159,12 @@ impl AIConfigManager {
             let mut config = self.config.write().await;
             config.set_api_key(provider, api_key);
         }
-        
+
         // Reinitialize AI service if using the updated provider
         if self.is_ai_enabled().await {
             self.initialize_ai_service().await?;
         }
-        
+
         self.save_config().await?;
         Ok(())
     }
@@ -178,10 +178,15 @@ impl AIConfigManager {
                 "email_summarization" => config.email_summarization_enabled = enabled,
                 "calendar_assistance" => config.calendar_assistance_enabled = enabled,
                 "email_categorization" => config.email_categorization_enabled = enabled,
-                _ => return Err(AIError::config_error(format!("Unknown feature: {}", feature))),
+                _ => {
+                    return Err(AIError::config_error(format!(
+                        "Unknown feature: {}",
+                        feature
+                    )))
+                }
             }
         }
-        
+
         self.save_config().await?;
         Ok(())
     }
@@ -206,12 +211,8 @@ impl AIConfigManager {
     pub async fn is_consent_required(&self, operation: &str) -> bool {
         let config = self.config.read().await;
         let consent_manager = self.consent_manager.read().await;
-        
-        consent_manager.is_consent_required(
-            operation,
-            &config.provider,
-            &config.privacy_mode,
-        )
+
+        consent_manager.is_consent_required(operation, &config.provider, &config.privacy_mode)
     }
 
     /// Record consent decision
@@ -235,16 +236,16 @@ impl AIConfigManager {
     /// Initialize AI service based on current configuration
     async fn initialize_ai_service(&self) -> AIResult<()> {
         let config = self.config.read().await.clone();
-        
+
         if !config.enabled {
             return Ok(());
         }
 
         let service = AIFactory::create_ai_service(config).await?;
-        
+
         let mut ai_service = self.ai_service.write().await;
         *ai_service = Some(Arc::new(service));
-        
+
         Ok(())
     }
 
@@ -279,7 +280,7 @@ impl AIConfigManager {
     pub async fn import_config(&self, json_data: &str) -> AIResult<()> {
         let new_config: AIConfig = serde_json::from_str(json_data)
             .map_err(|e| AIError::config_error(format!("Failed to import config: {}", e)))?;
-        
+
         self.update_config(new_config).await?;
         Ok(())
     }
@@ -288,17 +289,31 @@ impl AIConfigManager {
     pub async fn get_config_stats(&self) -> ConfigStats {
         let config = self.config.read().await;
         let consent_manager = self.consent_manager.read().await;
-        
+
         ConfigStats {
             ai_enabled: config.enabled,
             current_provider: config.provider.clone(),
             privacy_mode: config.privacy_mode.clone(),
             features_enabled: vec![
-                ("email_suggestions".to_string(), config.email_suggestions_enabled),
-                ("email_summarization".to_string(), config.email_summarization_enabled),
-                ("calendar_assistance".to_string(), config.calendar_assistance_enabled),
-                ("email_categorization".to_string(), config.email_categorization_enabled),
-            ].into_iter().collect(),
+                (
+                    "email_suggestions".to_string(),
+                    config.email_suggestions_enabled,
+                ),
+                (
+                    "email_summarization".to_string(),
+                    config.email_summarization_enabled,
+                ),
+                (
+                    "calendar_assistance".to_string(),
+                    config.calendar_assistance_enabled,
+                ),
+                (
+                    "email_categorization".to_string(),
+                    config.email_categorization_enabled,
+                ),
+            ]
+            .into_iter()
+            .collect(),
             api_keys_configured: config.api_keys.keys().cloned().collect(),
             consent_decisions_count: consent_manager.get_all_consent().len(),
         }
@@ -356,10 +371,10 @@ mod tests {
     async fn test_config_manager_initialization() {
         let temp_dir = tempdir().unwrap();
         let config_path = temp_dir.path().join("ai_config.toml");
-        
+
         let manager = AIConfigManager::new(config_path);
         assert!(manager.initialize().await.is_ok());
-        
+
         // Should start with AI disabled
         assert!(!manager.is_ai_enabled().await);
     }
@@ -368,21 +383,21 @@ mod tests {
     async fn test_config_persistence() {
         let temp_dir = tempdir().unwrap();
         let config_path = temp_dir.path().join("ai_config.toml");
-        
+
         {
             let manager = AIConfigManager::new(config_path.clone());
             manager.initialize().await.unwrap();
-            
+
             // Enable AI and set provider
             manager.enable_ai().await.unwrap();
             manager.set_provider(AIProviderType::Ollama).await.unwrap();
         }
-        
+
         // Create new manager and load config
         {
             let manager = AIConfigManager::new(config_path);
             manager.initialize().await.unwrap();
-            
+
             let config = manager.get_config().await;
             assert!(config.enabled);
             assert_eq!(config.provider, AIProviderType::Ollama);
@@ -393,20 +408,26 @@ mod tests {
     async fn test_feature_management() {
         let temp_dir = tempdir().unwrap();
         let config_path = temp_dir.path().join("ai_config.toml");
-        
+
         let manager = AIConfigManager::new(config_path);
         manager.initialize().await.unwrap();
-        
+
         // First enable AI globally - required for individual features to work
         manager.enable_ai().await.unwrap();
-        
+
         // Test feature enabling/disabling
         assert!(manager.is_feature_enabled("email_suggestions").await);
-        
-        manager.set_feature_enabled("email_suggestions", false).await.unwrap();
+
+        manager
+            .set_feature_enabled("email_suggestions", false)
+            .await
+            .unwrap();
         assert!(!manager.is_feature_enabled("email_suggestions").await);
-        
-        manager.set_feature_enabled("email_suggestions", true).await.unwrap();
+
+        manager
+            .set_feature_enabled("email_suggestions", true)
+            .await
+            .unwrap();
         assert!(manager.is_feature_enabled("email_suggestions").await);
     }
 
@@ -414,42 +435,38 @@ mod tests {
     async fn test_consent_management() {
         let temp_dir = tempdir().unwrap();
         let config_path = temp_dir.path().join("ai_config.toml");
-        
+
         let manager = AIConfigManager::new(config_path);
         manager.initialize().await.unwrap();
-        
+
         // Test consent recording
-        manager.record_consent(
-            "email_summary".to_string(),
-            ConsentDecision::AllowAlways
-        ).await;
-        
+        manager
+            .record_consent("email_summary".to_string(), ConsentDecision::AllowAlways)
+            .await;
+
         assert_eq!(
             manager.is_operation_allowed("email_summary").await,
             Some(true)
         );
-        
+
         // Clear consent
         manager.clear_all_consent().await;
-        assert_eq!(
-            manager.is_operation_allowed("email_summary").await,
-            None
-        );
+        assert_eq!(manager.is_operation_allowed("email_summary").await, None);
     }
 
     #[tokio::test]
     async fn test_config_validation() {
         let temp_dir = tempdir().unwrap();
         let config_path = temp_dir.path().join("ai_config.toml");
-        
+
         let manager = AIConfigManager::new(config_path);
         manager.initialize().await.unwrap();
-        
+
         // Test valid configuration
         let mut valid_config = AIConfig::default();
         valid_config.creativity = 0.5;
         assert!(manager.update_config(valid_config).await.is_ok());
-        
+
         // Test invalid configuration
         let mut invalid_config = AIConfig::default();
         invalid_config.creativity = 1.5; // Invalid value

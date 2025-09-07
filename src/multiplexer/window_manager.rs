@@ -1,7 +1,7 @@
 //! Window and pane management for multiplexers
 
-use super::{MultiplexerError, MultiplexerResult};
 use super::session::PaneArrangement;
+use super::{MultiplexerError, MultiplexerResult};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -36,10 +36,10 @@ impl WindowManager {
             layouts: HashMap::new(),
             current_layout: None,
         };
-        
+
         // Initialize with default layouts
         manager.create_default_layouts()?;
-        
+
         Ok(manager)
     }
 
@@ -76,7 +76,10 @@ impl WindowManager {
                 ("sidebar".to_string(), (25, 100)),
                 ("list".to_string(), (35, 100)),
                 ("content".to_string(), (40, 100)),
-            ].iter().cloned().collect(),
+            ]
+            .iter()
+            .cloned()
+            .collect(),
         };
 
         // Calendar-focused layout
@@ -102,23 +105,27 @@ impl WindowManager {
             default_sizes: [
                 ("calendar".to_string(), (70, 100)),
                 ("details".to_string(), (30, 100)),
-            ].iter().cloned().collect(),
+            ]
+            .iter()
+            .cloned()
+            .collect(),
         };
 
         self.layouts.insert("email".to_string(), email_layout);
         self.layouts.insert("calendar".to_string(), calendar_layout);
-        
+
         Ok(())
     }
 
     /// Apply a window layout
     pub fn apply_layout(&mut self, layout_name: &str) -> MultiplexerResult<()> {
         if !self.layouts.contains_key(layout_name) {
-            return Err(MultiplexerError::SessionError(
-                format!("Layout '{}' not found", layout_name)
-            ));
+            return Err(MultiplexerError::SessionError(format!(
+                "Layout '{}' not found",
+                layout_name
+            )));
         }
-        
+
         self.current_layout = Some(layout_name.to_string());
         Ok(())
     }
@@ -130,7 +137,8 @@ impl WindowManager {
 
     /// Get current layout
     pub fn current_layout(&self) -> Option<&WindowLayout> {
-        self.current_layout.as_ref()
+        self.current_layout
+            .as_ref()
             .and_then(|name| self.layouts.get(name))
     }
 }

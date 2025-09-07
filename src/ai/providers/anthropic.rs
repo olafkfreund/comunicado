@@ -1,10 +1,10 @@
 //! Anthropic Claude provider implementation
 
-use crate::ai::{AIContext, AIResult};
 use crate::ai::config::AIConfig;
 use crate::ai::error::AIError;
 use crate::ai::provider::{AIProvider, ProviderCapabilities};
 use crate::ai::service::{EmailCategory, SchedulingIntent};
+use crate::ai::{AIContext, AIResult};
 use async_trait::async_trait;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -139,11 +139,13 @@ impl AnthropicProvider {
 
     /// Create Anthropic provider from config
     pub fn from_config(config: &AIConfig) -> AIResult<Self> {
-        let api_key = config.get_api_key("anthropic")
+        let api_key = config
+            .get_api_key("anthropic")
             .ok_or_else(|| AIError::config_error("Anthropic API key not configured"))?
             .clone();
 
-        let model = config.local_model
+        let model = config
+            .local_model
             .as_ref()
             .unwrap_or(&"claude-3-haiku-20240307".to_string())
             .clone();
@@ -168,14 +170,15 @@ impl AnthropicProvider {
             top_k: None,
         };
 
-        let response = timeout(self.request_timeout,
+        let response = timeout(
+            self.request_timeout,
             self.client
                 .post("https://api.anthropic.com/v1/messages")
                 .header("x-api-key", &self.api_key)
                 .header("anthropic-version", "2023-06-01")
                 .header("Content-Type", "application/json")
                 .json(&request)
-                .send()
+                .send(),
         )
         .await
         .map_err(|_| AIError::timeout(self.request_timeout))?
@@ -184,12 +187,17 @@ impl AnthropicProvider {
         if !response.status().is_success() {
             let status = response.status();
             let error_text = response.text().await.unwrap_or_default();
-            
+
             return match status.as_u16() {
                 401 => Err(AIError::auth_failure("Anthropic")),
-                429 => Err(AIError::rate_limit("Anthropic", Some(Duration::from_secs(60)))),
+                429 => Err(AIError::rate_limit(
+                    "Anthropic",
+                    Some(Duration::from_secs(60)),
+                )),
                 400 => {
-                    if let Ok(error_response) = serde_json::from_str::<AnthropicErrorResponse>(&error_text) {
+                    if let Ok(error_response) =
+                        serde_json::from_str::<AnthropicErrorResponse>(&error_text)
+                    {
                         if error_response.error.detail_type == "invalid_request_error" {
                             Err(AIError::invalid_response(error_response.error.message))
                         } else {
@@ -198,20 +206,24 @@ impl AnthropicProvider {
                     } else {
                         Err(AIError::invalid_response(error_text))
                     }
-                },
+                }
                 413 => Err(AIError::request_too_large(0)),
                 500..=599 => Err(AIError::provider_unavailable("Anthropic server error")),
-                _ => Err(AIError::provider_unavailable(format!("Anthropic API error: {}", status))),
+                _ => Err(AIError::provider_unavailable(format!(
+                    "Anthropic API error: {}",
+                    status
+                ))),
             };
         }
 
-        let anthropic_response: AnthropicResponse = response
-            .json()
-            .await
-            .map_err(|e| AIError::invalid_response(format!("Failed to parse Anthropic response: {}", e)))?;
+        let anthropic_response: AnthropicResponse = response.json().await.map_err(|e| {
+            AIError::invalid_response(format!("Failed to parse Anthropic response: {}", e))
+        })?;
 
         if anthropic_response.content.is_empty() {
-            return Err(AIError::invalid_response("No content in Anthropic response"));
+            return Err(AIError::invalid_response(
+                "No content in Anthropic response",
+            ));
         }
 
         Ok(anthropic_response.content[0].text.clone())
@@ -228,26 +240,56 @@ impl AnthropicProvider {
     /// Parse email category from AI response
     fn parse_category_from_response(&self, response: &str) -> EmailCategory {
         let response_lower = response.to_lowercase();
-        
-        if response_lower.contains("work") || response_lower.contains("business") || response_lower.contains("professional") {
+
+        if response_lower.contains("work")
+            || response_lower.contains("business")
+            || response_lower.contains("professional")
+        {
             EmailCategory::Work
-        } else if response_lower.contains("personal") || response_lower.contains("family") || response_lower.contains("friend") {
+        } else if response_lower.contains("personal")
+            || response_lower.contains("family")
+            || response_lower.contains("friend")
+        {
             EmailCategory::Personal
-        } else if response_lower.contains("promotional") || response_lower.contains("marketing") || response_lower.contains("advertisement") {
+        } else if response_lower.contains("promotional")
+            || response_lower.contains("marketing")
+            || response_lower.contains("advertisement")
+        {
             EmailCategory::Promotional
-        } else if response_lower.contains("social") || response_lower.contains("facebook") || response_lower.contains("twitter") {
+        } else if response_lower.contains("social")
+            || response_lower.contains("facebook")
+            || response_lower.contains("twitter")
+        {
             EmailCategory::Social
-        } else if response_lower.contains("financial") || response_lower.contains("bank") || response_lower.contains("payment") {
+        } else if response_lower.contains("financial")
+            || response_lower.contains("bank")
+            || response_lower.contains("payment")
+        {
             EmailCategory::Financial
-        } else if response_lower.contains("travel") || response_lower.contains("flight") || response_lower.contains("hotel") {
+        } else if response_lower.contains("travel")
+            || response_lower.contains("flight")
+            || response_lower.contains("hotel")
+        {
             EmailCategory::Travel
-        } else if response_lower.contains("shopping") || response_lower.contains("order") || response_lower.contains("purchase") {
+        } else if response_lower.contains("shopping")
+            || response_lower.contains("order")
+            || response_lower.contains("purchase")
+        {
             EmailCategory::Shopping
-        } else if response_lower.contains("newsletter") || response_lower.contains("subscription") || response_lower.contains("digest") {
+        } else if response_lower.contains("newsletter")
+            || response_lower.contains("subscription")
+            || response_lower.contains("digest")
+        {
             EmailCategory::Newsletter
-        } else if response_lower.contains("system") || response_lower.contains("automated") || response_lower.contains("notification") {
+        } else if response_lower.contains("system")
+            || response_lower.contains("automated")
+            || response_lower.contains("notification")
+        {
             EmailCategory::System
-        } else if response_lower.contains("spam") || response_lower.contains("suspicious") || response_lower.contains("phishing") {
+        } else if response_lower.contains("spam")
+            || response_lower.contains("suspicious")
+            || response_lower.contains("phishing")
+        {
             EmailCategory::Spam
         } else {
             EmailCategory::Uncategorized
@@ -269,7 +311,9 @@ impl AnthropicProvider {
         // Extract title from AI response
         let title = ai_response
             .lines()
-            .find(|line| line.to_lowercase().contains("title") || line.to_lowercase().contains("subject"))
+            .find(|line| {
+                line.to_lowercase().contains("title") || line.to_lowercase().contains("subject")
+            })
             .and_then(|line| line.split(':').nth(1))
             .map(|s| s.trim().to_string());
 
@@ -312,7 +356,8 @@ impl AIProvider for AnthropicProvider {
             content: "Hello".to_string(),
         }];
 
-        match timeout(Duration::from_secs(10),
+        match timeout(
+            Duration::from_secs(10),
             self.client
                 .post("https://api.anthropic.com/v1/messages")
                 .header("x-api-key", &self.api_key)
@@ -327,45 +372,53 @@ impl AIProvider for AnthropicProvider {
                     top_p: None,
                     top_k: None,
                 })
-                .send()
-        ).await {
+                .send(),
+        )
+        .await
+        {
             Ok(Ok(response)) => Ok(response.status().is_success()),
             _ => Ok(false),
         }
     }
 
     async fn complete_text(&self, prompt: &str, context: Option<&AIContext>) -> AIResult<String> {
-        let temperature = context
-            .and_then(|c| c.creativity)
-            .unwrap_or(0.7);
+        let temperature = context.and_then(|c| c.creativity).unwrap_or(0.7);
 
         let system_prompt = Some("You are Claude, a helpful AI assistant for email and calendar management. Provide clear, concise, and professional responses.".to_string());
-        
+
         let enhanced_prompt = if let Some(ctx) = context {
             let mut full_prompt = prompt.to_string();
-            
+
             if let Some(ref email_thread) = ctx.email_thread {
                 full_prompt = format!("Email context: {}\n\nRequest: {}", email_thread, prompt);
             }
-            
+
             if let Some(ref calendar_context) = ctx.calendar_context {
                 full_prompt = format!("{}\n\nCalendar context: {}", full_prompt, calendar_context);
             }
-            
+
             if let Some(max_length) = ctx.max_length {
-                full_prompt = format!("{}\n\nPlease keep the response under {} characters.", full_prompt, max_length);
+                full_prompt = format!(
+                    "{}\n\nPlease keep the response under {} characters.",
+                    full_prompt, max_length
+                );
             }
-            
+
             full_prompt
         } else {
             prompt.to_string()
         };
 
         let messages = self.create_user_message(&enhanced_prompt);
-        self.make_request(messages, system_prompt, Some(temperature)).await
+        self.make_request(messages, system_prompt, Some(temperature))
+            .await
     }
 
-    async fn summarize_content(&self, content: &str, max_length: Option<usize>) -> AIResult<String> {
+    async fn summarize_content(
+        &self,
+        content: &str,
+        max_length: Option<usize>,
+    ) -> AIResult<String> {
         let max_len = max_length.unwrap_or(200);
         let system_prompt = Some("You are an expert at creating concise, informative summaries. Focus on key points and main messages.".to_string());
         let user_prompt = format!(
@@ -385,16 +438,20 @@ impl AIProvider for AnthropicProvider {
         );
 
         let messages = self.create_user_message(&user_prompt);
-        let response = self.make_request(messages, system_prompt, Some(0.6)).await?;
-        
+        let response = self
+            .make_request(messages, system_prompt, Some(0.6))
+            .await?;
+
         // Parse the numbered responses
         let suggestions: Vec<String> = response
             .lines()
             .filter_map(|line| {
                 let trimmed = line.trim();
-                if let Some(content) = trimmed.strip_prefix("1. ")
+                if let Some(content) = trimmed
+                    .strip_prefix("1. ")
                     .or_else(|| trimmed.strip_prefix("2. "))
-                    .or_else(|| trimmed.strip_prefix("3. ")) {
+                    .or_else(|| trimmed.strip_prefix("3. "))
+                {
                     Some(content.to_string())
                 } else {
                     None
@@ -418,7 +475,9 @@ impl AIProvider for AnthropicProvider {
         );
 
         let messages = self.create_user_message(&user_prompt);
-        let response = self.make_request(messages, system_prompt, Some(0.4)).await?;
+        let response = self
+            .make_request(messages, system_prompt, Some(0.4))
+            .await?;
         Ok(self.parse_schedule_from_response(text, &response))
     }
 
@@ -430,7 +489,9 @@ impl AIProvider for AnthropicProvider {
         );
 
         let messages = self.create_user_message(&user_prompt);
-        let response = self.make_request(messages, system_prompt, Some(0.2)).await?;
+        let response = self
+            .make_request(messages, system_prompt, Some(0.2))
+            .await?;
         Ok(self.parse_category_from_response(&response))
     }
 
@@ -460,8 +521,10 @@ impl AIProvider for AnthropicProvider {
         );
 
         let messages = self.create_user_message(&user_prompt);
-        let response = self.make_request(messages, system_prompt, Some(0.3)).await?;
-        
+        let response = self
+            .make_request(messages, system_prompt, Some(0.3))
+            .await?;
+
         let key_points: Vec<String> = response
             .lines()
             .map(|line| line.trim().to_string())
@@ -498,7 +561,7 @@ mod tests {
     fn test_message_creation() {
         let provider = create_test_provider();
         let messages = provider.create_user_message("Test prompt");
-        
+
         assert_eq!(messages.len(), 1);
         assert_eq!(messages[0].role, "user");
         assert_eq!(messages[0].content, "Test prompt");
@@ -507,12 +570,12 @@ mod tests {
     #[test]
     fn test_category_parsing() {
         let provider = create_test_provider();
-        
+
         assert_eq!(
             provider.parse_category_from_response("This appears to be a work-related email"),
             EmailCategory::Work
         );
-        
+
         assert_eq!(
             provider.parse_category_from_response("This looks like a promotional marketing email"),
             EmailCategory::Promotional
@@ -543,7 +606,7 @@ mod tests {
             "Schedule a meeting for tomorrow at 3 PM",
             "Title: Tomorrow's Meeting\nThis is a detailed meeting request with structured information about the event scheduled for tomorrow afternoon."
         );
-        
+
         assert_eq!(intent.intent_type, "meeting");
         assert!(intent.confidence > 0.8); // Claude typically provides high confidence
     }
@@ -553,10 +616,10 @@ mod tests {
         let mut config = AIConfig::default();
         config.set_api_key("anthropic".to_string(), "test-key".to_string());
         config.local_model = Some("claude-3-sonnet-20240229".to_string());
-        
+
         let provider = AnthropicProvider::from_config(&config);
         assert!(provider.is_ok());
-        
+
         let provider = provider.unwrap();
         assert_eq!(provider.model, "claude-3-sonnet-20240229");
         assert_eq!(provider.api_key, "test-key");

@@ -1,5 +1,5 @@
 use crate::email::{
-    EmailDatabase, FolderHierarchyMapper, MaildirErrorHandler, MaildirMapper, 
+    EmailDatabase, FolderHierarchyMapper, MaildirErrorHandler, MaildirMapper,
     MaildirOperationContext, StoredMessage, TimestampUtils,
 };
 use anyhow::Result;
@@ -14,22 +14,22 @@ use tokio::fs;
 pub enum MaildirExportError {
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
-    
+
     #[error("Database error: {0}")]
     Database(String),
-    
+
     #[error("Serialization error: {0}")]
     Serialization(String),
-    
+
     #[error("Path error: {0}")]
     Path(String),
-    
+
     #[error("Export cancelled by user")]
     Cancelled,
-    
+
     #[error("Permission denied: {0}")]
     Permission(String),
-    
+
     #[error("Disk space insufficient")]
     DiskSpace,
 }
@@ -62,23 +62,23 @@ impl ExportStats {
             (self.messages_exported as f64 / self.messages_found as f64) * 100.0
         }
     }
-    
+
     /// Check if export was successful overall
     pub fn is_successful(&self) -> bool {
         self.messages_failed == 0 && self.errors.is_empty()
     }
-    
+
     /// Get human-readable size of bytes written
     pub fn bytes_written_human(&self) -> String {
         const UNITS: &[&str] = &["B", "KB", "MB", "GB", "TB"];
         let mut size = self.bytes_written as f64;
         let mut unit_index = 0;
-        
+
         while size >= 1024.0 && unit_index < UNITS.len() - 1 {
             size /= 1024.0;
             unit_index += 1;
         }
-        
+
         format!("{:.1} {}", size, UNITS[unit_index])
     }
 }
@@ -177,7 +177,8 @@ impl MaildirExporter {
 
     /// Cancel the current export operation
     pub fn cancel(&self) {
-        self.cancelled.store(true, std::sync::atomic::Ordering::Relaxed);
+        self.cancelled
+            .store(true, std::sync::atomic::Ordering::Relaxed);
     }
 
     /// Check if export has been cancelled
@@ -192,21 +193,23 @@ impl MaildirExporter {
         output_path: P,
     ) -> MaildirExportResult<ExportStats> {
         let output = output_path.as_ref();
-        
+
         // Create base directory
         fs::create_dir_all(output).await?;
-        
+
         let mut stats = ExportStats::default();
-        
+
         // Get all folders for the account
-        let folders = self.database
+        let folders = self
+            .database
             .get_folders(account_id)
             .await
             .map_err(|e| MaildirExportError::Database(e.to_string()))?;
 
         // Count total messages for progress tracking
         for folder in &folders {
-            let messages = self.database
+            let messages = self
+                .database
                 .get_messages(account_id, &folder.name, None, None)
                 .await
                 .map_err(|e| MaildirExportError::Database(e.to_string()))?;
@@ -225,13 +228,8 @@ impl MaildirExporter {
                 return Err(MaildirExportError::Cancelled);
             }
 
-            self.export_folder(
-                account_id,
-                &folder.name,
-                output,
-                &mut stats,
-                &progress_bar,
-            ).await?;
+            self.export_folder(account_id, &folder.name, output, &mut stats, &progress_bar)
+                .await?;
         }
 
         if let Some(pb) = progress_bar {
@@ -251,23 +249,25 @@ impl MaildirExporter {
         progress_bar: &Option<ProgressBar>,
     ) -> MaildirExportResult<()> {
         let output = output_path.as_ref();
-        
+
         // Create folder-specific Maildir structure
-        let folder_path = self.folder_mapper
+        let folder_path = self
+            .folder_mapper
             .create_maildir_path(output, account_id, folder_name)
             .map_err(|e| MaildirExportError::Path(e.to_string()))?;
 
         self.ensure_maildir_structure(&folder_path).await?;
 
         // Get messages from database
-        let messages = self.database
+        let messages = self
+            .database
             .get_messages(account_id, folder_name, None, None)
             .await
             .map_err(|e| MaildirExportError::Database(e.to_string()))?;
 
         // Filter messages based on configuration
         let filtered_messages = self.filter_messages(messages);
-        
+
         // Limit messages if configured
         let limited_messages = if let Some(max) = self.config.max_messages_per_folder {
             filtered_messages.into_iter().take(max).collect()
@@ -317,7 +317,7 @@ impl MaildirExporter {
         message: &StoredMessage,
     ) -> MaildirExportResult<u64> {
         let folder = folder_path.as_ref();
-        
+
         // Determine if message should go in new/ or cur/ based on flags
         let is_seen = message.flags.iter().any(|f| f == "\\Seen");
         let target_dir = if is_seen {
@@ -327,7 +327,8 @@ impl MaildirExporter {
         };
 
         // Generate Maildir-compliant filename
-        let filename = self.mapper
+        let filename = self
+            .mapper
             .generate_maildir_filename(message, is_seen)
             .map_err(|e| MaildirExportError::Serialization(e.to_string()))?;
 
@@ -343,10 +344,10 @@ impl MaildirExporter {
 
         // Serialize message to RFC822 format
         let email_content = self.serialize_message_to_rfc822(message)?;
-        
+
         // Write to file
         fs::write(&file_path, &email_content).await?;
-        
+
         // Preserve original timestamp if configured
         if self.config.preserve_timestamps {
             if let Err(e) = TimestampUtils::set_file_modification_time(&file_path, &message.date) {
@@ -367,8 +368,11 @@ impl MaildirExporter {
             email.push_str(&format!("Message-ID: {}\r\n", message_id));
         } else {
             // Generate a message ID if missing
-            email.push_str(&format!("Message-ID: <{}.{}@comunicado>\r\n", 
-                message.date.timestamp(), message.id));
+            email.push_str(&format!(
+                "Message-ID: <{}.{}@comunicado>\r\n",
+                message.date.timestamp(),
+                message.id
+            ));
         }
 
         email.push_str(&format!(
@@ -377,10 +381,12 @@ impl MaildirExporter {
         ));
 
         email.push_str(&format!("From: {}\r\n", message.from_addr));
-        
+
         if let Some(ref from_name) = message.from_name {
-            email = email.replace(&format!("From: {}", message.from_addr), 
-                &format!("From: {} <{}>\r\n", from_name, message.from_addr));
+            email = email.replace(
+                &format!("From: {}", message.from_addr),
+                &format!("From: {} <{}>\r\n", from_name, message.from_addr),
+            );
         }
 
         email.push_str(&format!("Subject: {}\r\n", message.subject));
@@ -416,7 +422,10 @@ impl MaildirExporter {
         if message.body_html.is_some() && message.body_text.is_some() {
             // Multipart message
             let boundary = format!("boundary_{}", message.id.to_string().replace('-', ""));
-            email.push_str(&format!("Content-Type: multipart/alternative; boundary=\"{}\"\r\n", boundary));
+            email.push_str(&format!(
+                "Content-Type: multipart/alternative; boundary=\"{}\"\r\n",
+                boundary
+            ));
             email.push_str("MIME-Version: 1.0\r\n");
             email.push_str("\r\n");
 
@@ -464,18 +473,19 @@ impl MaildirExporter {
 
     /// Filter messages based on export configuration
     fn filter_messages(&self, messages: Vec<StoredMessage>) -> Vec<StoredMessage> {
-        messages.into_iter()
+        messages
+            .into_iter()
             .filter(|msg| {
                 // Filter drafts if not included
                 if msg.is_draft && !self.config.include_drafts {
                     return false;
                 }
-                
+
                 // Filter deleted messages if not included
                 if msg.is_deleted && !self.config.include_deleted {
                     return false;
                 }
-                
+
                 true
             })
             .collect()
@@ -521,7 +531,7 @@ impl MaildirExporter {
         // This is a simplified check - in production, you'd use system calls
         // to check actual disk space
         let path = output_path.as_ref();
-        
+
         if !path.exists() {
             return Err(MaildirExportError::Path(format!(
                 "Output path does not exist: {:?}",
@@ -534,11 +544,9 @@ impl MaildirExporter {
     }
 
     /// Get export statistics for an account without actually exporting
-    pub async fn get_export_preview(
-        &self,
-        account_id: &str,
-    ) -> MaildirExportResult<ExportPreview> {
-        let folders = self.database
+    pub async fn get_export_preview(&self, account_id: &str) -> MaildirExportResult<ExportPreview> {
+        let folders = self
+            .database
             .get_folders(account_id)
             .await
             .map_err(|e| MaildirExportError::Database(e.to_string()))?;
@@ -551,7 +559,8 @@ impl MaildirExporter {
         };
 
         for folder in folders {
-            let messages = self.database
+            let messages = self
+                .database
                 .get_messages(account_id, &folder.name, None, None)
                 .await
                 .map_err(|e| MaildirExportError::Database(e.to_string()))?;
@@ -595,12 +604,12 @@ impl ExportPreview {
         const UNITS: &[&str] = &["B", "KB", "MB", "GB", "TB"];
         let mut size = self.estimated_size as f64;
         let mut unit_index = 0;
-        
+
         while size >= 1024.0 && unit_index < UNITS.len() - 1 {
             size /= 1024.0;
             unit_index += 1;
         }
-        
+
         format!("{:.1} {}", size, UNITS[unit_index])
     }
 }
@@ -691,7 +700,7 @@ mod tests {
     async fn test_cancellation() {
         let database = create_test_database().await;
         let exporter = MaildirExporter::new(database);
-        
+
         assert!(!exporter.is_cancelled());
         exporter.cancel();
         assert!(exporter.is_cancelled());
@@ -702,10 +711,10 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let database = create_test_database().await;
         let exporter = MaildirExporter::new(database);
-        
+
         let test_path = temp_dir.path().join("test_folder");
         exporter.ensure_maildir_structure(&test_path).await.unwrap();
-        
+
         assert!(test_path.join("new").exists());
         assert!(test_path.join("cur").exists());
         assert!(test_path.join("tmp").exists());
@@ -715,10 +724,10 @@ mod tests {
     async fn test_serialize_message_to_rfc822() {
         let database = create_test_database().await;
         let exporter = MaildirExporter::new(database);
-        
+
         let message = create_test_message("test1", "INBOX", "Test Subject");
         let serialized = exporter.serialize_message_to_rfc822(&message).unwrap();
-        
+
         assert!(serialized.contains("Message-ID: <test1@example.com>"));
         assert!(serialized.contains("Subject: Test Subject"));
         assert!(serialized.contains("From: Test Sender <sender@example.com>"));
@@ -732,12 +741,12 @@ mod tests {
     async fn test_serialize_plain_text_only() {
         let database = create_test_database().await;
         let exporter = MaildirExporter::new(database);
-        
+
         let mut message = create_test_message("test2", "INBOX", "Plain Text");
         message.body_html = None; // Remove HTML body
-        
+
         let serialized = exporter.serialize_message_to_rfc822(&message).unwrap();
-        
+
         assert!(serialized.contains("Content-Type: text/plain"));
         assert!(!serialized.contains("multipart"));
         assert!(serialized.contains("This is the body text."));
@@ -747,12 +756,12 @@ mod tests {
     async fn test_serialize_html_only() {
         let database = create_test_database().await;
         let exporter = MaildirExporter::new(database);
-        
+
         let mut message = create_test_message("test3", "INBOX", "HTML Only");
         message.body_text = None; // Remove text body
-        
+
         let serialized = exporter.serialize_message_to_rfc822(&message).unwrap();
-        
+
         assert!(serialized.contains("Content-Type: text/html"));
         assert!(!serialized.contains("multipart"));
         assert!(serialized.contains("<p>This is the body text.</p>"));
@@ -767,16 +776,16 @@ mod tests {
             ..Default::default()
         };
         let exporter = MaildirExporter::with_config(database, config);
-        
+
         let mut messages = vec![
             create_test_message("msg1", "INBOX", "Normal"),
             create_test_message("msg2", "INBOX", "Draft"),
             create_test_message("msg3", "INBOX", "Deleted"),
         ];
-        
+
         messages[1].is_draft = true;
         messages[2].is_deleted = true;
-        
+
         let filtered = exporter.filter_messages(messages);
         assert_eq!(filtered.len(), 3); // All messages included with this config
     }
@@ -786,14 +795,14 @@ mod tests {
         let database = create_test_database().await;
         let mut exporter = MaildirExporter::new(database);
         exporter.config.include_drafts = false;
-        
+
         let mut messages = vec![
             create_test_message("msg1", "INBOX", "Normal"),
             create_test_message("msg2", "INBOX", "Draft"),
         ];
-        
+
         messages[1].is_draft = true;
-        
+
         let filtered = exporter.filter_messages(messages);
         assert_eq!(filtered.len(), 1); // Draft excluded
         assert_eq!(filtered[0].subject, "Normal");
@@ -804,14 +813,14 @@ mod tests {
         let database = create_test_database().await;
         let mut exporter = MaildirExporter::new(database);
         exporter.config.include_deleted = false; // Default behavior
-        
+
         let mut messages = vec![
             create_test_message("msg1", "INBOX", "Normal"),
             create_test_message("msg2", "INBOX", "Deleted"),
         ];
-        
+
         messages[1].is_deleted = true;
-        
+
         let filtered = exporter.filter_messages(messages);
         assert_eq!(filtered.len(), 1); // Deleted excluded
         assert_eq!(filtered[0].subject, "Normal");
@@ -822,20 +831,26 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let database = create_test_database().await;
         let exporter = MaildirExporter::new(database);
-        
+
         let folder_path = temp_dir.path().join("test_folder");
-        exporter.ensure_maildir_structure(&folder_path).await.unwrap();
-        
+        exporter
+            .ensure_maildir_structure(&folder_path)
+            .await
+            .unwrap();
+
         let message = create_test_message("test_export", "INBOX", "Export Test");
-        let bytes_written = exporter.export_message(&folder_path, &message).await.unwrap();
-        
+        let bytes_written = exporter
+            .export_message(&folder_path, &message)
+            .await
+            .unwrap();
+
         assert!(bytes_written > 0);
-        
+
         // Verify file was created in cur/ (message has \\Seen flag)
         let cur_dir = folder_path.join("cur");
         let entries: Vec<_> = std::fs::read_dir(cur_dir).unwrap().collect();
         assert_eq!(entries.len(), 1);
-        
+
         // Verify file content
         let file_path = entries[0].as_ref().unwrap().path();
         let content = std::fs::read_to_string(&file_path).unwrap();
@@ -848,15 +863,21 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let database = create_test_database().await;
         let exporter = MaildirExporter::new(database);
-        
+
         let folder_path = temp_dir.path().join("test_folder");
-        exporter.ensure_maildir_structure(&folder_path).await.unwrap();
-        
+        exporter
+            .ensure_maildir_structure(&folder_path)
+            .await
+            .unwrap();
+
         let mut message = create_test_message("test_new", "INBOX", "New Message");
         message.flags.clear(); // Remove \\Seen flag
-        
-        exporter.export_message(&folder_path, &message).await.unwrap();
-        
+
+        exporter
+            .export_message(&folder_path, &message)
+            .await
+            .unwrap();
+
         // Verify file was created in new/ (no \\Seen flag)
         let new_dir = folder_path.join("new");
         let entries: Vec<_> = std::fs::read_dir(new_dir).unwrap().collect();
@@ -870,11 +891,11 @@ mod tests {
         stats.messages_exported = 85;
         stats.messages_failed = 15;
         stats.bytes_written = 1024 * 1024; // 1MB
-        
+
         assert_eq!(stats.success_rate(), 85.0);
         assert!(!stats.is_successful()); // Has failures
         assert_eq!(stats.bytes_written_human(), "1.0 MB");
-        
+
         // Test with no failures
         stats.messages_failed = 0;
         stats.errors.clear();
@@ -897,26 +918,29 @@ mod tests {
     async fn test_progress_callback() {
         let database = create_test_database().await;
         let mut exporter = MaildirExporter::new(database);
-        
+
         let progress_data = Arc::new(std::sync::Mutex::new(Vec::new()));
         let progress_data_clone = progress_data.clone();
-        
+
         exporter.set_progress_callback(Box::new(move |current, total, message| {
-            progress_data_clone.lock().unwrap().push((current, total, message.to_string()));
+            progress_data_clone
+                .lock()
+                .unwrap()
+                .push((current, total, message.to_string()));
         }));
-        
+
         assert!(exporter.progress_callback.is_some());
     }
 
     #[tokio::test]
     async fn test_check_disk_space() {
         let temp_dir = TempDir::new().unwrap();
-        
+
         // Existing path should return true
         let result = MaildirExporter::check_disk_space(temp_dir.path(), 1024).await;
         assert!(result.is_ok());
         assert!(result.unwrap());
-        
+
         // Non-existent path should return error
         let result = MaildirExporter::check_disk_space("/nonexistent/path", 1024).await;
         assert!(result.is_err());
@@ -926,9 +950,12 @@ mod tests {
     async fn test_export_preview_empty() {
         let database = create_test_database().await;
         let exporter = MaildirExporter::new(database);
-        
+
         // Since we're using in-memory database with no data, this should return empty preview
-        let preview = exporter.get_export_preview("nonexistent_account").await.unwrap();
+        let preview = exporter
+            .get_export_preview("nonexistent_account")
+            .await
+            .unwrap();
         assert_eq!(preview.total_folders, 0);
         assert_eq!(preview.total_messages, 0);
         assert_eq!(preview.estimated_size, 0);
@@ -943,16 +970,16 @@ mod tests {
             estimated_size: 1536, // 1.5 KB
             folders: Vec::new(),
         };
-        
+
         assert_eq!(preview.estimated_size_human(), "1.5 KB");
-        
+
         let large_preview = ExportPreview {
             total_folders: 1,
             total_messages: 1000,
             estimated_size: 2 * 1024 * 1024 * 1024, // 2 GB
             folders: Vec::new(),
         };
-        
+
         assert_eq!(large_preview.estimated_size_human(), "2.0 GB");
     }
 
@@ -962,15 +989,21 @@ mod tests {
         let database = create_test_database().await;
         let mut exporter = MaildirExporter::new(database);
         exporter.config.overwrite_existing = false;
-        
+
         let folder_path = temp_dir.path().join("test_folder");
-        exporter.ensure_maildir_structure(&folder_path).await.unwrap();
-        
+        exporter
+            .ensure_maildir_structure(&folder_path)
+            .await
+            .unwrap();
+
         let message = create_test_message("test_overwrite", "INBOX", "Overwrite Test");
-        
+
         // First export should succeed
-        exporter.export_message(&folder_path, &message).await.unwrap();
-        
+        exporter
+            .export_message(&folder_path, &message)
+            .await
+            .unwrap();
+
         // Second export should fail due to existing file
         let result = exporter.export_message(&folder_path, &message).await;
         assert!(result.is_err());
@@ -987,15 +1020,21 @@ mod tests {
         let database = create_test_database().await;
         let mut exporter = MaildirExporter::new(database);
         exporter.config.overwrite_existing = true;
-        
+
         let folder_path = temp_dir.path().join("test_folder");
-        exporter.ensure_maildir_structure(&folder_path).await.unwrap();
-        
+        exporter
+            .ensure_maildir_structure(&folder_path)
+            .await
+            .unwrap();
+
         let message = create_test_message("test_overwrite", "INBOX", "Overwrite Test");
-        
+
         // First export
-        exporter.export_message(&folder_path, &message).await.unwrap();
-        
+        exporter
+            .export_message(&folder_path, &message)
+            .await
+            .unwrap();
+
         // Second export should succeed with overwrite enabled
         let result = exporter.export_message(&folder_path, &message).await;
         assert!(result.is_ok());

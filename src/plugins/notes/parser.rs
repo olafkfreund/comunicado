@@ -1,17 +1,17 @@
 //! Markdown parser and content processor
-//! 
+//!
 //! Handles parsing of markdown files with YAML frontmatter, wiki-link extraction,
 //! and content processing including title extraction, word counting, and tag parsing.
 
-use super::types::{Note, NoteFrontmatter, WikiLink, LinkType};
 use super::manager::NoteResult;
+use super::types::{LinkType, Note, NoteFrontmatter, WikiLink};
 
-use std::path::PathBuf;
+use chrono::Utc;
+use pulldown_cmark::{Event, HeadingLevel, Parser, Tag};
 use regex::Regex;
 use serde_yaml;
-use pulldown_cmark::{Parser, Event, Tag, HeadingLevel};
-use chrono::Utc;
 use std::collections::HashMap;
+use std::path::PathBuf;
 
 /// Markdown parser for note content
 #[derive(Debug, Clone)]
@@ -34,7 +34,7 @@ impl MarkdownParser {
         // Updated regex to capture embed links with ! prefix
         let wiki_link_regex = Regex::new(r"!?\[\[([^\]]+)\]\]").expect("Invalid wiki link regex");
         let tag_regex = Regex::new(r"(?:^|\s)#([a-zA-Z0-9_-]+)").expect("Invalid tag regex");
-        
+
         Self {
             wiki_link_regex,
             tag_regex,
@@ -42,33 +42,35 @@ impl MarkdownParser {
     }
 
     /// Parse a markdown file and extract all note information
-    pub fn parse_note(&self, 
-                     id: String, 
-                     file_path: PathBuf, 
-                     raw_content: &str) -> NoteResult<Note> {
+    pub fn parse_note(
+        &self,
+        id: String,
+        file_path: PathBuf,
+        raw_content: &str,
+    ) -> NoteResult<Note> {
         // Split frontmatter and content
         let (frontmatter, content) = self.extract_frontmatter(raw_content)?;
-        
+
         // Extract title (from frontmatter or first heading)
         let title = self.extract_title(&frontmatter, &content, &file_path);
-        
+
         // Extract wiki links
         let links = self.extract_wiki_links(&content);
-        
+
         // Extract tags (from frontmatter and content)
         let tags = self.extract_tags(&frontmatter, &content);
-        
+
         // Calculate word count
         let word_count = self.calculate_word_count(&content);
-        
+
         // Calculate content hash
         let content_hash = self.calculate_content_hash(&content);
-        
+
         // Get file size
         let file_size = raw_content.len() as u64;
-        
+
         let now = Utc::now();
-        
+
         Ok(Note {
             id,
             title,
@@ -87,7 +89,10 @@ impl MarkdownParser {
     }
 
     /// Extract YAML frontmatter from markdown content
-    pub fn extract_frontmatter(&self, content: &str) -> NoteResult<(Option<NoteFrontmatter>, String)> {
+    pub fn extract_frontmatter(
+        &self,
+        content: &str,
+    ) -> NoteResult<(Option<NoteFrontmatter>, String)> {
         if !content.starts_with("---\n") {
             return Ok((None, content.to_string()));
         }
@@ -114,7 +119,7 @@ impl MarkdownParser {
         // Extract frontmatter YAML
         let frontmatter_lines: Vec<&str> = content_lines[1..end_line].to_vec();
         let frontmatter_yaml = frontmatter_lines.join("\n");
-        
+
         // Parse YAML frontmatter
         let frontmatter: NoteFrontmatter = match serde_yaml::from_str(&frontmatter_yaml) {
             Ok(fm) => fm,
@@ -132,7 +137,12 @@ impl MarkdownParser {
     }
 
     /// Extract title from frontmatter or first heading
-    pub fn extract_title(&self, frontmatter: &Option<NoteFrontmatter>, content: &str, file_path: &std::path::Path) -> String {
+    pub fn extract_title(
+        &self,
+        frontmatter: &Option<NoteFrontmatter>,
+        content: &str,
+        file_path: &std::path::Path,
+    ) -> String {
         // Check frontmatter first
         if let Some(ref fm) = frontmatter {
             if let Some(ref title) = fm.title {
@@ -163,26 +173,30 @@ impl MarkdownParser {
 
     /// Extract wiki links from content with enhanced parsing
     pub fn extract_wiki_links(&self, content: &str) -> Vec<WikiLink> {
-        self.extract_wiki_links_with_positions(content).into_iter().map(|(link, _)| link).collect()
+        self.extract_wiki_links_with_positions(content)
+            .into_iter()
+            .map(|(link, _)| link)
+            .collect()
     }
 
     /// Extract wiki links with line numbers and positions
     pub fn extract_wiki_links_with_positions(&self, content: &str) -> Vec<(WikiLink, usize)> {
         let mut links = Vec::new();
         let lines: Vec<&str> = content.lines().collect();
-        
+
         for (line_number, line) in lines.iter().enumerate() {
             for cap in self.wiki_link_regex.captures_iter(line) {
                 if let Some(link_text) = cap.get(1) {
                     let text = link_text.as_str();
                     let full_match = cap.get(0).unwrap().as_str();
-                    
+
                     // Check if this is an embed link by looking at the full match
                     let is_embed = full_match.starts_with("![[");
-                    
+
                     // Parse different types of wiki links
-                    let (link_target, display_text, mut link_type) = self.parse_wiki_link_content(text);
-                    
+                    let (link_target, display_text, mut link_type) =
+                        self.parse_wiki_link_content(text);
+
                     // Override link type if this is an embed
                     if is_embed {
                         link_type = LinkType::Embed;
@@ -195,7 +209,7 @@ impl MarkdownParser {
                         line_number + 1, // Convert to 1-based line numbers
                         link_type,
                     );
-                    
+
                     if let Some(display) = display_text {
                         link.display_text = Some(display);
                     }
@@ -204,14 +218,14 @@ impl MarkdownParser {
                 }
             }
         }
-        
+
         links
     }
 
     /// Parse the content inside wiki link brackets to determine type and extract information
     fn parse_wiki_link_content(&self, content: &str) -> (String, Option<String>, LinkType) {
         let trimmed = content.trim();
-        
+
         // Check for embed links ![[target]]
         if trimmed.starts_with('!') {
             let embed_content = &trimmed[1..];
@@ -219,14 +233,14 @@ impl MarkdownParser {
                 return (target, display, LinkType::Embed);
             }
         }
-        
+
         // Check for block references [[target#^block]]
         if trimmed.contains("#^") {
             if let Some((target, display)) = self.parse_link_with_display(trimmed) {
                 return (target, display, LinkType::Block);
             }
         }
-        
+
         // Check for tag links [[#tag]]
         if trimmed.starts_with('#') {
             let tag_content = &trimmed[1..];
@@ -234,7 +248,7 @@ impl MarkdownParser {
                 return (target, display, LinkType::Tag);
             }
         }
-        
+
         // Standard wiki link
         if let Some((target, display)) = self.parse_link_with_display(trimmed) {
             (target, display, LinkType::Wiki)
@@ -250,22 +264,30 @@ impl MarkdownParser {
             if parts.len() == 2 {
                 let target = parts[0].trim().to_string();
                 let display = parts[1].trim().to_string();
-                return Some((target, if display.is_empty() { None } else { Some(display) }));
+                return Some((
+                    target,
+                    if display.is_empty() {
+                        None
+                    } else {
+                        Some(display)
+                    },
+                ));
             }
         }
-        
+
         Some((content.trim().to_string(), None))
     }
 
     /// Extract all types of links from content (wiki links, markdown links, URLs)
     pub fn extract_all_links(&self, content: &str) -> Vec<WikiLink> {
         let mut links = Vec::new();
-        
+
         // Extract wiki links
         links.extend(self.extract_wiki_links(content));
-        
+
         // Extract markdown links [text](url)
-        let markdown_link_regex = Regex::new(r"\[([^\]]+)\]\(([^)]+)\)").expect("Invalid markdown link regex");
+        let markdown_link_regex =
+            Regex::new(r"\[([^\]]+)\]\(([^)]+)\)").expect("Invalid markdown link regex");
         for cap in markdown_link_regex.captures_iter(content) {
             if let (Some(text), Some(url)) = (cap.get(1), cap.get(2)) {
                 let mut link = WikiLink::new(
@@ -278,67 +300,89 @@ impl MarkdownParser {
                 links.push(link);
             }
         }
-        
+
         links
     }
 
     /// Validate wiki link target format
     pub fn validate_wiki_link_target(&self, target: &str) -> NoteResult<()> {
         if target.trim().is_empty() {
-            return Err(super::manager::NoteError::Parse("Empty wiki link target".into()));
+            return Err(super::manager::NoteError::Parse(
+                "Empty wiki link target".into(),
+            ));
         }
-        
+
         if target.len() > 200 {
-            return Err(super::manager::NoteError::Parse("Wiki link target too long (max 200 characters)".into()));
+            return Err(super::manager::NoteError::Parse(
+                "Wiki link target too long (max 200 characters)".into(),
+            ));
         }
-        
+
         // Check for invalid characters
         let invalid_chars = ['<', '>', ':', '"', '|', '?', '*'];
         for ch in invalid_chars {
             if target.contains(ch) {
-                return Err(super::manager::NoteError::Parse(format!("Invalid character '{}' in wiki link target", ch)));
+                return Err(super::manager::NoteError::Parse(format!(
+                    "Invalid character '{}' in wiki link target",
+                    ch
+                )));
             }
         }
-        
+
         Ok(())
     }
 
     /// Resolve wiki link target to potential file paths
-    pub fn resolve_wiki_link_paths(&self, target: &str, base_dir: &std::path::Path) -> Vec<std::path::PathBuf> {
+    pub fn resolve_wiki_link_paths(
+        &self,
+        target: &str,
+        base_dir: &std::path::Path,
+    ) -> Vec<std::path::PathBuf> {
         let mut paths = Vec::new();
-        
+
         // Direct match
         paths.push(base_dir.join(format!("{}.md", target)));
-        
+
         // Case-insensitive match
         let lowercase_target = target.to_lowercase();
         paths.push(base_dir.join(format!("{}.md", lowercase_target)));
-        
+
         // With spaces replaced by hyphens
         let hyphenated = target.replace(' ', "-");
         paths.push(base_dir.join(format!("{}.md", hyphenated)));
-        
+
         // With spaces replaced by underscores
         let underscored = target.replace(' ', "_");
         paths.push(base_dir.join(format!("{}.md", underscored)));
-        
+
         // Slugified version
         let slugified = target
             .to_lowercase()
             .chars()
-            .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '-' })
+            .map(|c| {
+                if c.is_alphanumeric() || c == '-' || c == '_' {
+                    c
+                } else {
+                    '-'
+                }
+            })
             .collect::<String>();
         paths.push(base_dir.join(format!("{}.md", slugified)));
-        
+
         paths
     }
 
     /// Update wiki links in content with new target names
-    pub fn update_wiki_links_in_content(&self, content: &str, old_target: &str, new_target: &str) -> String {
+    pub fn update_wiki_links_in_content(
+        &self,
+        content: &str,
+        old_target: &str,
+        new_target: &str,
+    ) -> String {
         let old_pattern = format!("[[{}]]", old_target);
         let new_pattern = format!("[[{}]]", new_target);
         let result = content.replace(&old_pattern, &new_pattern);
-        
+
         // Also handle links with display text
         let old_pattern_with_display = format!("[[{}|", old_target);
         let new_pattern_with_display = format!("[[{}|", new_target);
@@ -346,23 +390,27 @@ impl MarkdownParser {
     }
 
     /// Extract tags from frontmatter and content
-    pub fn extract_tags(&self, frontmatter: &Option<NoteFrontmatter>, content: &str) -> Vec<String> {
+    pub fn extract_tags(
+        &self,
+        frontmatter: &Option<NoteFrontmatter>,
+        content: &str,
+    ) -> Vec<String> {
         let mut tags = std::collections::HashSet::new();
-        
+
         // Extract from frontmatter
         if let Some(ref fm) = frontmatter {
             for tag in &fm.tags {
                 tags.insert(tag.clone());
             }
         }
-        
+
         // Extract hashtags from content
         for cap in self.tag_regex.captures_iter(content) {
             if let Some(tag_match) = cap.get(1) {
                 tags.insert(tag_match.as_str().to_string());
             }
         }
-        
+
         let mut tag_vec: Vec<String> = tags.into_iter().collect();
         tag_vec.sort();
         tag_vec
@@ -374,7 +422,7 @@ impl MarkdownParser {
         let parser = Parser::new(content);
         let mut plain_text = String::new();
         let mut in_heading = false;
-        
+
         for event in parser {
             match event {
                 Event::Start(Tag::Heading(_, _, _)) => {
@@ -393,7 +441,7 @@ impl MarkdownParser {
                 _ => {}
             }
         }
-        
+
         // Count words, excluding empty strings and pure whitespace
         plain_text
             .split_whitespace()
@@ -403,8 +451,8 @@ impl MarkdownParser {
 
     /// Calculate content hash for change detection
     pub fn calculate_content_hash(&self, content: &str) -> String {
-        use sha2::{Sha256, Digest};
-        
+        use sha2::{Digest, Sha256};
+
         let mut hasher = Sha256::new();
         hasher.update(content.as_bytes());
         format!("{:x}", hasher.finalize())
@@ -415,77 +463,111 @@ impl MarkdownParser {
         // Title validation
         if let Some(ref title) = frontmatter.title {
             if title.trim().is_empty() {
-                return Err(super::manager::NoteError::Parse("Empty title in frontmatter".into()));
+                return Err(super::manager::NoteError::Parse(
+                    "Empty title in frontmatter".into(),
+                ));
             }
             if title.len() > 200 {
-                return Err(super::manager::NoteError::Parse("Title too long (max 200 characters)".into()));
+                return Err(super::manager::NoteError::Parse(
+                    "Title too long (max 200 characters)".into(),
+                ));
             }
             // Check for invalid characters in title
             if title.contains('\n') || title.contains('\r') {
-                return Err(super::manager::NoteError::Parse("Title cannot contain line breaks".into()));
+                return Err(super::manager::NoteError::Parse(
+                    "Title cannot contain line breaks".into(),
+                ));
             }
         }
 
         // Tags validation
         if frontmatter.tags.len() > 50 {
-            return Err(super::manager::NoteError::Parse("Too many tags (max 50)".into()));
+            return Err(super::manager::NoteError::Parse(
+                "Too many tags (max 50)".into(),
+            ));
         }
         for tag in &frontmatter.tags {
             if tag.trim().is_empty() {
                 return Err(super::manager::NoteError::Parse("Empty tag found".into()));
             }
             if tag.len() > 50 {
-                return Err(super::manager::NoteError::Parse("Tag too long (max 50 characters)".into()));
+                return Err(super::manager::NoteError::Parse(
+                    "Tag too long (max 50 characters)".into(),
+                ));
             }
             // Tags should only contain alphanumeric, hyphens, and underscores
-            if !tag.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_') {
-                return Err(super::manager::NoteError::Parse(format!("Invalid tag format: '{}'", tag)));
+            if !tag
+                .chars()
+                .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
+            {
+                return Err(super::manager::NoteError::Parse(format!(
+                    "Invalid tag format: '{}'",
+                    tag
+                )));
             }
         }
 
         // Author validation
         if let Some(ref author) = frontmatter.author {
             if author.trim().is_empty() {
-                return Err(super::manager::NoteError::Parse("Empty author field".into()));
+                return Err(super::manager::NoteError::Parse(
+                    "Empty author field".into(),
+                ));
             }
             if author.len() > 100 {
-                return Err(super::manager::NoteError::Parse("Author name too long (max 100 characters)".into()));
+                return Err(super::manager::NoteError::Parse(
+                    "Author name too long (max 100 characters)".into(),
+                ));
             }
         }
 
         // Template validation
         if let Some(ref template) = frontmatter.template {
             if template.trim().is_empty() {
-                return Err(super::manager::NoteError::Parse("Empty template field".into()));
+                return Err(super::manager::NoteError::Parse(
+                    "Empty template field".into(),
+                ));
             }
             if template.len() > 50 {
-                return Err(super::manager::NoteError::Parse("Template name too long (max 50 characters)".into()));
+                return Err(super::manager::NoteError::Parse(
+                    "Template name too long (max 50 characters)".into(),
+                ));
             }
         }
 
         // Categories validation
         if frontmatter.categories.len() > 20 {
-            return Err(super::manager::NoteError::Parse("Too many categories (max 20)".into()));
+            return Err(super::manager::NoteError::Parse(
+                "Too many categories (max 20)".into(),
+            ));
         }
         for category in &frontmatter.categories {
             if category.trim().is_empty() {
-                return Err(super::manager::NoteError::Parse("Empty category found".into()));
+                return Err(super::manager::NoteError::Parse(
+                    "Empty category found".into(),
+                ));
             }
             if category.len() > 50 {
-                return Err(super::manager::NoteError::Parse("Category too long (max 50 characters)".into()));
+                return Err(super::manager::NoteError::Parse(
+                    "Category too long (max 50 characters)".into(),
+                ));
             }
         }
 
         // Aliases validation
         if frontmatter.aliases.len() > 10 {
-            return Err(super::manager::NoteError::Parse("Too many aliases (max 10)".into()));
+            return Err(super::manager::NoteError::Parse(
+                "Too many aliases (max 10)".into(),
+            ));
         }
         for alias in &frontmatter.aliases {
             if alias.trim().is_empty() {
                 return Err(super::manager::NoteError::Parse("Empty alias found".into()));
             }
             if alias.len() > 100 {
-                return Err(super::manager::NoteError::Parse("Alias too long (max 100 characters)".into()));
+                return Err(super::manager::NoteError::Parse(
+                    "Alias too long (max 100 characters)".into(),
+                ));
             }
         }
 
@@ -494,25 +576,35 @@ impl MarkdownParser {
             let now = Utc::now();
             let one_year_future = now + chrono::Duration::days(365);
             let far_past = now - chrono::Duration::days(365 * 50); // 50 years ago
-            
+
             if date > one_year_future {
-                return Err(super::manager::NoteError::Parse("Date cannot be more than one year in the future".into()));
+                return Err(super::manager::NoteError::Parse(
+                    "Date cannot be more than one year in the future".into(),
+                ));
             }
             if date < far_past {
-                return Err(super::manager::NoteError::Parse("Date cannot be more than 50 years in the past".into()));
+                return Err(super::manager::NoteError::Parse(
+                    "Date cannot be more than 50 years in the past".into(),
+                ));
             }
         }
 
         // Custom metadata validation
         if frontmatter.metadata.len() > 50 {
-            return Err(super::manager::NoteError::Parse("Too many custom metadata fields (max 50)".into()));
+            return Err(super::manager::NoteError::Parse(
+                "Too many custom metadata fields (max 50)".into(),
+            ));
         }
         for (key, value) in &frontmatter.metadata {
             if key.trim().is_empty() {
-                return Err(super::manager::NoteError::Parse("Empty metadata key found".into()));
+                return Err(super::manager::NoteError::Parse(
+                    "Empty metadata key found".into(),
+                ));
             }
             if key.len() > 50 {
-                return Err(super::manager::NoteError::Parse("Metadata key too long (max 50 characters)".into()));
+                return Err(super::manager::NoteError::Parse(
+                    "Metadata key too long (max 50 characters)".into(),
+                ));
             }
             // Validate metadata value size
             let value_str = match value {
@@ -520,7 +612,9 @@ impl MarkdownParser {
                 _ => serde_yaml::to_string(value).unwrap_or_default(),
             };
             if value_str.len() > 1000 {
-                return Err(super::manager::NoteError::Parse("Metadata value too long (max 1000 characters)".into()));
+                return Err(super::manager::NoteError::Parse(
+                    "Metadata value too long (max 1000 characters)".into(),
+                ));
             }
         }
 
@@ -528,7 +622,10 @@ impl MarkdownParser {
     }
 
     /// Parse YAML frontmatter with advanced validation and normalization
-    pub fn parse_and_validate_frontmatter(&self, yaml_content: &str) -> NoteResult<NoteFrontmatter> {
+    pub fn parse_and_validate_frontmatter(
+        &self,
+        yaml_content: &str,
+    ) -> NoteResult<NoteFrontmatter> {
         // First attempt to parse the YAML
         let mut frontmatter: NoteFrontmatter = serde_yaml::from_str(yaml_content)
             .map_err(|e| super::manager::NoteError::Parse(format!("YAML parse error: {}", e)))?;
@@ -569,7 +666,8 @@ impl MarkdownParser {
         }
 
         // Normalize tags (trim, deduplicate, lowercase, remove empty)
-        frontmatter.tags = frontmatter.tags
+        frontmatter.tags = frontmatter
+            .tags
             .iter()
             .map(|tag| tag.trim().to_lowercase())
             .filter(|tag| !tag.is_empty())
@@ -579,7 +677,8 @@ impl MarkdownParser {
         frontmatter.tags.sort();
 
         // Normalize categories (trim, deduplicate, remove empty)
-        frontmatter.categories = frontmatter.categories
+        frontmatter.categories = frontmatter
+            .categories
             .iter()
             .map(|cat| cat.trim().to_string())
             .filter(|cat| !cat.is_empty())
@@ -589,7 +688,8 @@ impl MarkdownParser {
         frontmatter.categories.sort();
 
         // Normalize aliases (trim, deduplicate, remove empty)
-        frontmatter.aliases = frontmatter.aliases
+        frontmatter.aliases = frontmatter
+            .aliases
             .iter()
             .map(|alias| alias.trim().to_string())
             .filter(|alias| !alias.is_empty())
@@ -600,16 +700,20 @@ impl MarkdownParser {
 
         // Clean up metadata (remove empty keys/values)
         frontmatter.metadata.retain(|key, value| {
-            !key.trim().is_empty() && match value {
-                serde_yaml::Value::String(s) => !s.trim().is_empty(),
-                serde_yaml::Value::Null => false,
-                _ => true,
-            }
+            !key.trim().is_empty()
+                && match value {
+                    serde_yaml::Value::String(s) => !s.trim().is_empty(),
+                    serde_yaml::Value::Null => false,
+                    _ => true,
+                }
         });
     }
 
     /// Extract frontmatter with enhanced parsing and validation
-    pub fn extract_frontmatter_advanced(&self, content: &str) -> NoteResult<(Option<NoteFrontmatter>, String)> {
+    pub fn extract_frontmatter_advanced(
+        &self,
+        content: &str,
+    ) -> NoteResult<(Option<NoteFrontmatter>, String)> {
         if !content.starts_with("---\n") {
             return Ok((None, content.to_string()));
         }
@@ -636,7 +740,7 @@ impl MarkdownParser {
         // Extract frontmatter YAML
         let frontmatter_lines: Vec<&str> = content_lines[1..end_line].to_vec();
         let frontmatter_yaml = frontmatter_lines.join("\n");
-        
+
         // Parse and validate using the advanced method
         let frontmatter = match self.parse_and_validate_frontmatter(&frontmatter_yaml) {
             Ok(fm) => Some(fm),
@@ -659,12 +763,17 @@ impl MarkdownParser {
 
     /// Generate frontmatter as YAML string
     pub fn frontmatter_to_yaml(&self, frontmatter: &NoteFrontmatter) -> NoteResult<String> {
-        serde_yaml::to_string(frontmatter)
-            .map_err(|e| super::manager::NoteError::Parse(format!("YAML serialization error: {}", e)))
+        serde_yaml::to_string(frontmatter).map_err(|e| {
+            super::manager::NoteError::Parse(format!("YAML serialization error: {}", e))
+        })
     }
 
     /// Merge two frontmatter objects, with the second taking precedence
-    pub fn merge_frontmatter(&self, base: &NoteFrontmatter, override_fm: &NoteFrontmatter) -> NoteFrontmatter {
+    pub fn merge_frontmatter(
+        &self,
+        base: &NoteFrontmatter,
+        override_fm: &NoteFrontmatter,
+    ) -> NoteFrontmatter {
         let mut merged = base.clone();
 
         // Override fields if present in override_fm
@@ -687,17 +796,29 @@ impl MarkdownParser {
         // Merge collections
         let mut all_tags = merged.tags.clone();
         all_tags.extend(override_fm.tags.clone());
-        merged.tags = all_tags.into_iter().collect::<std::collections::HashSet<_>>().into_iter().collect();
+        merged.tags = all_tags
+            .into_iter()
+            .collect::<std::collections::HashSet<_>>()
+            .into_iter()
+            .collect();
         merged.tags.sort();
 
         let mut all_categories = merged.categories.clone();
         all_categories.extend(override_fm.categories.clone());
-        merged.categories = all_categories.into_iter().collect::<std::collections::HashSet<_>>().into_iter().collect();
+        merged.categories = all_categories
+            .into_iter()
+            .collect::<std::collections::HashSet<_>>()
+            .into_iter()
+            .collect();
         merged.categories.sort();
 
         let mut all_aliases = merged.aliases.clone();
         all_aliases.extend(override_fm.aliases.clone());
-        merged.aliases = all_aliases.into_iter().collect::<std::collections::HashSet<_>>().into_iter().collect();
+        merged.aliases = all_aliases
+            .into_iter()
+            .collect::<std::collections::HashSet<_>>()
+            .into_iter()
+            .collect();
         merged.aliases.sort();
 
         // Merge metadata (override takes precedence)
@@ -713,7 +834,7 @@ impl MarkdownParser {
     pub fn sanitize_content(&self, content: &str) -> String {
         // 1. Normalize line endings
         let mut sanitized = content.replace("\r\n", "\n").replace('\r', "\n");
-        
+
         // 2. Remove or escape potentially dangerous HTML tags if any HTML is present
         // This is basic protection - for more complex cases, would use ammonia crate
         sanitized = sanitized
@@ -722,12 +843,12 @@ impl MarkdownParser {
             .replace("<object", "&lt;object")
             .replace("<embed", "&lt;embed")
             .replace("<form", "&lt;form");
-        
+
         // 3. Normalize excessive whitespace (but preserve intentional formatting)
         let lines: Vec<&str> = sanitized.lines().collect();
         let mut normalized_lines = Vec::new();
         let mut consecutive_empty = 0;
-        
+
         for line in lines {
             if line.trim().is_empty() {
                 consecutive_empty += 1;
@@ -741,7 +862,7 @@ impl MarkdownParser {
                 normalized_lines.push(line.trim_end().to_string());
             }
         }
-        
+
         // 4. Ensure content ends with single newline
         let result = normalized_lines.join("\n");
         if result.is_empty() {
@@ -758,18 +879,20 @@ impl MarkdownParser {
         // 1. Check content length limits
         const MAX_CONTENT_LENGTH: usize = 1_000_000; // 1MB limit
         if content.len() > MAX_CONTENT_LENGTH {
-            return Err(super::manager::NoteError::Parse(
-                format!("Content too large: {} bytes (max {})", content.len(), MAX_CONTENT_LENGTH)
-            ));
+            return Err(super::manager::NoteError::Parse(format!(
+                "Content too large: {} bytes (max {})",
+                content.len(),
+                MAX_CONTENT_LENGTH
+            )));
         }
-        
+
         // 2. Validate markdown structure
         let parser = Parser::new(content);
         let mut heading_levels = Vec::new();
         let mut list_nesting_level = 0;
         const MAX_HEADING_LEVEL: u32 = 6;
         const MAX_LIST_NESTING: usize = 10;
-        
+
         for event in parser {
             match event {
                 Event::Start(Tag::Heading(level, _, _)) => {
@@ -781,11 +904,12 @@ impl MarkdownParser {
                         HeadingLevel::H5 => 5,
                         HeadingLevel::H6 => 6,
                     };
-                    
+
                     if level_num > MAX_HEADING_LEVEL {
-                        return Err(super::manager::NoteError::Parse(
-                            format!("Invalid heading level: H{} (max H{})", level_num, MAX_HEADING_LEVEL)
-                        ));
+                        return Err(super::manager::NoteError::Parse(format!(
+                            "Invalid heading level: H{} (max H{})",
+                            level_num, MAX_HEADING_LEVEL
+                        )));
                     }
                     heading_levels.push(level_num);
                 }
@@ -798,9 +922,10 @@ impl MarkdownParser {
                 Event::Start(Tag::List(_)) => {
                     list_nesting_level += 1;
                     if list_nesting_level > MAX_LIST_NESTING {
-                        return Err(super::manager::NoteError::Parse(
-                            format!("List nesting too deep: {} levels (max {})", list_nesting_level, MAX_LIST_NESTING)
-                        ));
+                        return Err(super::manager::NoteError::Parse(format!(
+                            "List nesting too deep: {} levels (max {})",
+                            list_nesting_level, MAX_LIST_NESTING
+                        )));
                     }
                 }
                 Event::End(Tag::List(_)) => {
@@ -811,29 +936,34 @@ impl MarkdownParser {
                 _ => {}
             }
         }
-        
+
         // 3. Validate heading hierarchy (should be logical progression)
         for window in heading_levels.windows(2) {
             let current = window[0];
             let next = window[1];
-            
+
             // Allow same level or one level deeper, or any level shallower
             if next > current + 1 {
-                return Err(super::manager::NoteError::Parse(
-                    format!("Invalid heading progression: H{} followed by H{} (skipped levels)", current, next)
-                ));
+                return Err(super::manager::NoteError::Parse(format!(
+                    "Invalid heading progression: H{} followed by H{} (skipped levels)",
+                    current, next
+                )));
             }
         }
-        
+
         // 4. Check for valid UTF-8 and basic character validation
         if !content.is_ascii() {
             // Ensure UTF-8 validity (should already be valid, but double-check)
             match std::str::from_utf8(content.as_bytes()) {
-                Ok(_) => {}, // Valid UTF-8
-                Err(_) => return Err(super::manager::NoteError::Parse("Invalid UTF-8 content".into())),
+                Ok(_) => {} // Valid UTF-8
+                Err(_) => {
+                    return Err(super::manager::NoteError::Parse(
+                        "Invalid UTF-8 content".into(),
+                    ))
+                }
             }
         }
-        
+
         Ok(())
     }
 
@@ -841,7 +971,7 @@ impl MarkdownParser {
     pub fn validate_and_sanitize(&self, content: &str) -> NoteResult<String> {
         // First validate the raw content
         self.validate_content(content)?;
-        
+
         // Then sanitize it
         Ok(self.sanitize_content(content))
     }
@@ -849,13 +979,13 @@ impl MarkdownParser {
     /// Extract metadata statistics
     pub fn extract_metadata(&self, content: &str) -> HashMap<String, String> {
         let mut metadata = HashMap::new();
-        
+
         // Count different markdown elements
         let parser = Parser::new(content);
         let mut heading_count = 0;
         let mut link_count = 0;
         let mut code_block_count = 0;
-        
+
         for event in parser {
             match event {
                 Event::Start(Tag::Heading(_, _, _)) => heading_count += 1,
@@ -864,11 +994,11 @@ impl MarkdownParser {
                 _ => {}
             }
         }
-        
+
         metadata.insert("headings".to_string(), heading_count.to_string());
         metadata.insert("links".to_string(), link_count.to_string());
         metadata.insert("code_blocks".to_string(), code_block_count.to_string());
-        
+
         metadata
     }
 }
@@ -902,14 +1032,14 @@ tags: ["test", "example"]
 This is the actual content."#;
 
         let (frontmatter, remaining_content) = parser.extract_frontmatter(content).unwrap();
-        
+
         assert!(frontmatter.is_some());
         let fm = frontmatter.unwrap();
         assert_eq!(fm.title, Some("Test Note".to_string()));
         assert_eq!(fm.tags.len(), 2);
         assert!(fm.tags.contains(&"test".to_string()));
         assert!(fm.tags.contains(&"example".to_string()));
-        
+
         assert!(remaining_content.contains("# Content Here"));
         assert!(!remaining_content.contains("---"));
     }
@@ -920,7 +1050,7 @@ This is the actual content."#;
         let content = "# Just a regular markdown file\n\nWith some content.";
 
         let (frontmatter, remaining_content) = parser.extract_frontmatter(content).unwrap();
-        
+
         assert!(frontmatter.is_none());
         assert_eq!(remaining_content, content);
     }
@@ -936,7 +1066,7 @@ malformed: [unclosed
 # Content"#;
 
         let (frontmatter, remaining_content) = parser.extract_frontmatter(content).unwrap();
-        
+
         // Should gracefully handle malformed YAML
         assert!(frontmatter.is_none());
         assert_eq!(remaining_content, content);
@@ -949,7 +1079,11 @@ malformed: [unclosed
         frontmatter.title = Some("Frontmatter Title".to_string());
         let content = "# Content Title\n\nSome text.";
 
-        let title = parser.extract_title(&Some(frontmatter), content, &std::path::Path::new("test.md"));
+        let title = parser.extract_title(
+            &Some(frontmatter),
+            content,
+            &std::path::Path::new("test.md"),
+        );
         assert_eq!(title, "Frontmatter Title");
     }
 
@@ -1141,7 +1275,10 @@ malformed: [unclosed
 
         let result = parser.validate_frontmatter(&frontmatter);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Invalid tag format"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid tag format"));
     }
 
     #[test]
@@ -1160,7 +1297,11 @@ malformed: [unclosed
         let parser = create_test_parser();
         let mut frontmatter = NoteFrontmatter::new();
         frontmatter.title = Some("  Title with spaces  ".to_string());
-        frontmatter.tags = vec!["  TAG1  ".to_string(), "tag2".to_string(), "TAG1".to_string()]; // Duplicates and whitespace
+        frontmatter.tags = vec![
+            "  TAG1  ".to_string(),
+            "tag2".to_string(),
+            "TAG1".to_string(),
+        ]; // Duplicates and whitespace
         frontmatter.author = Some("  Author Name  ".to_string());
 
         parser.normalize_frontmatter(&mut frontmatter);
@@ -1183,7 +1324,7 @@ author: "Test Author"
 
         let result = parser.parse_and_validate_frontmatter(yaml);
         assert!(result.is_ok());
-        
+
         let frontmatter = result.unwrap();
         assert_eq!(frontmatter.title, Some("Valid Note".to_string()));
         assert_eq!(frontmatter.tags.len(), 2);
@@ -1211,7 +1352,7 @@ tags: ["valid", "invalid tag with spaces!"]
 
         let result = parser.frontmatter_to_yaml(&frontmatter);
         assert!(result.is_ok());
-        
+
         let yaml = result.unwrap();
         assert!(yaml.contains("title: Test Note"));
         assert!(yaml.contains("tags:"));
@@ -1220,7 +1361,7 @@ tags: ["valid", "invalid tag with spaces!"]
     #[test]
     fn test_merge_frontmatter() {
         let parser = create_test_parser();
-        
+
         let mut base = NoteFrontmatter::new();
         base.title = Some("Base Title".to_string());
         base.tags = vec!["base".to_string()];
@@ -1253,17 +1394,17 @@ author: "  Test Author  "
 
         let result = parser.extract_frontmatter_advanced(content);
         assert!(result.is_ok());
-        
+
         let (frontmatter, remaining_content) = result.unwrap();
         assert!(frontmatter.is_some());
-        
+
         let fm = frontmatter.unwrap();
         assert_eq!(fm.title, Some("Advanced Test".to_string())); // Trimmed
         assert_eq!(fm.tags.len(), 2); // Deduplicated and lowercased
         assert!(fm.tags.contains(&"tag1".to_string()));
         assert!(fm.tags.contains(&"tag2".to_string()));
         assert_eq!(fm.author, Some("Test Author".to_string())); // Trimmed
-        
+
         assert!(remaining_content.contains("# Content Here"));
     }
 
@@ -1272,15 +1413,16 @@ author: "  Test Author  "
     #[test]
     fn test_extract_wiki_links_with_positions() {
         let parser = create_test_parser();
-        let content = "First line with [[Link One]]\nSecond line with [[Link Two|Display Text]]\nThird line";
+        let content =
+            "First line with [[Link One]]\nSecond line with [[Link Two|Display Text]]\nThird line";
 
         let links_with_positions = parser.extract_wiki_links_with_positions(content);
         assert_eq!(links_with_positions.len(), 2);
-        
+
         let (link1, line1) = &links_with_positions[0];
         assert_eq!(link1.link_text, "Link One");
         assert_eq!(*line1, 1);
-        
+
         let (link2, line2) = &links_with_positions[1];
         assert_eq!(link2.link_text, "Link Two");
         assert_eq!(link2.display_text, Some("Display Text".to_string()));
@@ -1291,7 +1433,7 @@ author: "  Test Author  "
     fn test_parse_wiki_link_content_embed() {
         let parser = create_test_parser();
         let (target, display, link_type) = parser.parse_wiki_link_content("!image.png");
-        
+
         assert_eq!(target, "image.png");
         assert_eq!(display, None);
         assert_eq!(link_type, LinkType::Embed);
@@ -1301,7 +1443,7 @@ author: "  Test Author  "
     fn test_parse_wiki_link_content_block_reference() {
         let parser = create_test_parser();
         let (target, display, link_type) = parser.parse_wiki_link_content("note#^block123");
-        
+
         assert_eq!(target, "note#^block123");
         assert_eq!(display, None);
         assert_eq!(link_type, LinkType::Block);
@@ -1311,7 +1453,7 @@ author: "  Test Author  "
     fn test_parse_wiki_link_content_tag() {
         let parser = create_test_parser();
         let (target, display, link_type) = parser.parse_wiki_link_content("#important");
-        
+
         assert_eq!(target, "important");
         assert_eq!(display, None);
         assert_eq!(link_type, LinkType::Tag);
@@ -1320,8 +1462,9 @@ author: "  Test Author  "
     #[test]
     fn test_parse_wiki_link_content_with_display() {
         let parser = create_test_parser();
-        let (target, display, link_type) = parser.parse_wiki_link_content("target-note|Custom Display");
-        
+        let (target, display, link_type) =
+            parser.parse_wiki_link_content("target-note|Custom Display");
+
         assert_eq!(target, "target-note");
         assert_eq!(display, Some("Custom Display".to_string()));
         assert_eq!(link_type, LinkType::Wiki);
@@ -1334,11 +1477,11 @@ author: "  Test Author  "
 
         let links = parser.extract_all_links(content);
         assert_eq!(links.len(), 2);
-        
+
         // Wiki link
         assert_eq!(links[0].link_text, "Note");
         assert_eq!(links[0].display_text, None);
-        
+
         // Markdown link
         assert_eq!(links[1].link_text, "https://google.com");
         assert_eq!(links[1].display_text, Some("Google".to_string()));
@@ -1347,13 +1490,13 @@ author: "  Test Author  "
     #[test]
     fn test_validate_wiki_link_target_valid() {
         let parser = create_test_parser();
-        
+
         let result = parser.validate_wiki_link_target("Valid Note Name");
         assert!(result.is_ok());
-        
+
         let result = parser.validate_wiki_link_target("note-with-hyphens");
         assert!(result.is_ok());
-        
+
         let result = parser.validate_wiki_link_target("note_with_underscores");
         assert!(result.is_ok());
     }
@@ -1361,15 +1504,15 @@ author: "  Test Author  "
     #[test]
     fn test_validate_wiki_link_target_invalid() {
         let parser = create_test_parser();
-        
+
         // Empty target
         let result = parser.validate_wiki_link_target("");
         assert!(result.is_err());
-        
+
         // Too long
         let result = parser.validate_wiki_link_target(&"a".repeat(201));
         assert!(result.is_err());
-        
+
         // Invalid characters
         let result = parser.validate_wiki_link_target("note<with>invalid:chars");
         assert!(result.is_err());
@@ -1379,16 +1522,18 @@ author: "  Test Author  "
     fn test_resolve_wiki_link_paths() {
         let parser = create_test_parser();
         let base_dir = std::path::Path::new("/notes");
-        
+
         let paths = parser.resolve_wiki_link_paths("My Note", base_dir);
-        
+
         assert!(paths.contains(&base_dir.join("My Note.md")));
         assert!(paths.contains(&base_dir.join("my note.md")));
         assert!(paths.contains(&base_dir.join("My-Note.md")));
         assert!(paths.contains(&base_dir.join("My_Note.md")));
-        
+
         // Check slugified version exists
-        let slugified_exists = paths.iter().any(|p| p.to_string_lossy().contains("my-note.md"));
+        let slugified_exists = paths
+            .iter()
+            .any(|p| p.to_string_lossy().contains("my-note.md"));
         assert!(slugified_exists);
     }
 
@@ -1396,9 +1541,9 @@ author: "  Test Author  "
     fn test_update_wiki_links_in_content() {
         let parser = create_test_parser();
         let content = "Link to [[Old Name]] and [[Old Name|Custom Display]].";
-        
+
         let updated = parser.update_wiki_links_in_content(content, "Old Name", "New Name");
-        
+
         assert!(updated.contains("[[New Name]]"));
         assert!(updated.contains("[[New Name|Custom Display]]"));
         assert!(!updated.contains("[[Old Name]]"));
@@ -1407,15 +1552,18 @@ author: "  Test Author  "
     #[test]
     fn test_parse_link_with_display_edge_cases() {
         let parser = create_test_parser();
-        
+
         // Empty display text
         let result = parser.parse_link_with_display("target|");
         assert_eq!(result, Some(("target".to_string(), None)));
-        
+
         // Multiple pipes (only first is used as separator)
         let result = parser.parse_link_with_display("target|display|extra");
-        assert_eq!(result, Some(("target".to_string(), Some("display|extra".to_string()))));
-        
+        assert_eq!(
+            result,
+            Some(("target".to_string(), Some("display|extra".to_string())))
+        );
+
         // No pipe
         let result = parser.parse_link_with_display("just-target");
         assert_eq!(result, Some(("just-target".to_string(), None)));
@@ -1437,17 +1585,26 @@ Multiple on line: [[First]] and [[Second|Display]]
 
         let links = parser.extract_wiki_links(content);
         assert_eq!(links.len(), 7);
-        
+
         // Check specific link types
-        let embed_links: Vec<_> = links.iter().filter(|l| l.link_type == LinkType::Embed).collect();
+        let embed_links: Vec<_> = links
+            .iter()
+            .filter(|l| l.link_type == LinkType::Embed)
+            .collect();
         assert_eq!(embed_links.len(), 1);
         assert_eq!(embed_links[0].link_text, "image.png");
-        
-        let tag_links: Vec<_> = links.iter().filter(|l| l.link_type == LinkType::Tag).collect();
+
+        let tag_links: Vec<_> = links
+            .iter()
+            .filter(|l| l.link_type == LinkType::Tag)
+            .collect();
         assert_eq!(tag_links.len(), 1);
         assert_eq!(tag_links[0].link_text, "important");
-        
-        let block_links: Vec<_> = links.iter().filter(|l| l.link_type == LinkType::Block).collect();
+
+        let block_links: Vec<_> = links
+            .iter()
+            .filter(|l| l.link_type == LinkType::Block)
+            .collect();
         assert_eq!(block_links.len(), 1);
         assert_eq!(block_links[0].link_text, "note#^block123");
     }
@@ -1476,14 +1633,14 @@ Normal **markdown** content.
 "#;
 
         let sanitized = parser.sanitize_content(content);
-        
+
         // Check that dangerous HTML tags are escaped
         assert!(sanitized.contains("&lt;script"));
         assert!(sanitized.contains("&lt;iframe"));
         assert!(sanitized.contains("&lt;object"));
         assert!(sanitized.contains("&lt;embed"));
         assert!(sanitized.contains("&lt;form"));
-        
+
         // Check that markdown is preserved
         assert!(sanitized.contains("**markdown**"));
         assert!(sanitized.contains("# Safe Content"));
@@ -1507,12 +1664,12 @@ Line 3
 Line 4"#;
 
         let sanitized = parser.sanitize_content(content);
-        
+
         // Should limit consecutive empty lines to 2
         let lines: Vec<&str> = sanitized.lines().collect();
         let mut consecutive_empty = 0;
         let mut max_consecutive = 0;
-        
+
         for line in &lines {
             if line.trim().is_empty() {
                 consecutive_empty += 1;
@@ -1521,13 +1678,22 @@ Line 4"#;
                 consecutive_empty = 0;
             }
         }
-        
-        assert!(max_consecutive <= 2, "Too many consecutive empty lines: {}", max_consecutive);
-        
+
+        assert!(
+            max_consecutive <= 2,
+            "Too many consecutive empty lines: {}",
+            max_consecutive
+        );
+
         // Should trim trailing whitespace
         for line in &lines {
             if !line.is_empty() {
-                assert_eq!(*line, line.trim_end(), "Line has trailing whitespace: '{}'", line);
+                assert_eq!(
+                    *line,
+                    line.trim_end(),
+                    "Line has trailing whitespace: '{}'",
+                    line
+                );
             }
         }
     }
@@ -1558,7 +1724,11 @@ Some more content.
 "#;
 
         let result = parser.validate_content(content);
-        assert!(result.is_ok(), "Valid content should pass validation: {:?}", result);
+        assert!(
+            result.is_ok(),
+            "Valid content should pass validation: {:?}",
+            result
+        );
     }
 
     #[test]
@@ -1568,7 +1738,10 @@ Some more content.
 
         let result = parser.validate_content(&content);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Content too large"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Content too large"));
     }
 
     #[test]
@@ -1583,14 +1756,17 @@ This should be invalid because we jumped from H1 to H3.
 
         let result = parser.validate_content(content);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Invalid heading progression"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid heading progression"));
     }
 
     #[test]
     fn test_validate_content_deep_list_nesting() {
         let parser = create_test_parser();
         let mut content = String::from("# Title\n\n");
-        
+
         // Create deeply nested list (11 levels, should exceed limit of 10)
         for i in 0..11 {
             content.push_str(&"  ".repeat(i));
@@ -1601,7 +1777,10 @@ This should be invalid because we jumped from H1 to H3.
 
         let result = parser.validate_content(&content);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("List nesting too deep"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("List nesting too deep"));
     }
 
     #[test]
@@ -1618,13 +1797,16 @@ Excessive whitespace above should be normalized.
 
         let result = parser.validate_and_sanitize(content);
         assert!(result.is_ok());
-        
+
         let sanitized = result.unwrap();
         assert!(sanitized.contains("&lt;script"));
-        
+
         // Check whitespace normalization
         let empty_line_count = sanitized.matches("\n\n").count();
-        assert!(empty_line_count <= 2, "Too many consecutive empty lines after sanitization");
+        assert!(
+            empty_line_count <= 2,
+            "Too many consecutive empty lines after sanitization"
+        );
     }
 
     #[test]
@@ -1646,7 +1828,11 @@ Excessive whitespace above should be normalized.
 "#;
 
         let result = parser.validate_content(content);
-        assert!(result.is_ok(), "Valid heading progression should pass: {:?}", result);
+        assert!(
+            result.is_ok(),
+            "Valid heading progression should pass: {:?}",
+            result
+        );
     }
 
     #[test]
@@ -1689,11 +1875,13 @@ This is a test note with [[linked note]] and #hashtag.
 More content here.
 "#;
 
-        let note = parser.parse_note(
-            "test-note".to_string(),
-            PathBuf::from("/test/note.md"),
-            content
-        ).unwrap();
+        let note = parser
+            .parse_note(
+                "test-note".to_string(),
+                PathBuf::from("/test/note.md"),
+                content,
+            )
+            .unwrap();
 
         assert_eq!(note.id, "test-note");
         assert_eq!(note.title, "Complete Test Note");
@@ -1712,11 +1900,13 @@ More content here.
         let parser = create_test_parser();
         let content = "Just some plain content.";
 
-        let note = parser.parse_note(
-            "minimal-note".to_string(),
-            PathBuf::from("/test/minimal.md"),
-            content
-        ).unwrap();
+        let note = parser
+            .parse_note(
+                "minimal-note".to_string(),
+                PathBuf::from("/test/minimal.md"),
+                content,
+            )
+            .unwrap();
 
         assert_eq!(note.id, "minimal-note");
         assert!(!note.title.is_empty());

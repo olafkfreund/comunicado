@@ -1,13 +1,12 @@
+use crate::theme::Theme;
 /// Modern typography system for enhanced visual hierarchy
-/// 
+///
 /// Provides consistent text styling, spacing, and information density
 /// management across the TUI interface for better readability and professional appearance.
-
 use ratatui::{
     style::{Color, Modifier, Style},
     text::{Line, Span, Text},
 };
-use crate::theme::Theme;
 
 /// Typography scale following a modular approach
 #[derive(Debug, Clone, Copy)]
@@ -36,7 +35,7 @@ pub enum InformationDensity {
     /// Compact - minimal spacing, more content visible
     Compact,
     /// Comfortable - balanced spacing (default)
-    Comfortable, 
+    Comfortable,
     /// Relaxed - maximum spacing, easier reading
     Relaxed,
 }
@@ -53,7 +52,7 @@ impl Spacing {
     pub fn new() -> Self {
         Self { unit: 1 }
     }
-    
+
     /// Get spacing for different densities
     pub fn get_spacing(&self, density: InformationDensity) -> SpacingValues {
         match density {
@@ -117,35 +116,48 @@ impl TypographySystem {
             density: InformationDensity::Comfortable,
         }
     }
-    
+
     /// Set information density
     pub fn with_density(mut self, density: InformationDensity) -> Self {
         self.density = density;
         self
     }
-    
+
     /// Get current density
     pub fn density(&self) -> InformationDensity {
         self.density
     }
-    
+
     /// Get spacing values for current density
     pub fn spacing(&self) -> SpacingValues {
         self.spacing.get_spacing(self.density)
     }
-    
+
     /// Create styled text with proper typography level
-    pub fn create_text<'a>(&self, content: &str, level: TypographyLevel, theme: &Theme) -> Text<'a> {
+    pub fn create_text<'a>(
+        &self,
+        content: &str,
+        level: TypographyLevel,
+        theme: &Theme,
+    ) -> Text<'a> {
         let style = self.get_typography_style(level, theme);
-        Text::from(vec![Line::from(vec![Span::styled(content.to_string(), style)])])
+        Text::from(vec![Line::from(vec![Span::styled(
+            content.to_string(),
+            style,
+        )])])
     }
-    
+
     /// Create styled span with typography level
-    pub fn create_span<'a>(&self, content: String, level: TypographyLevel, theme: &Theme) -> Span<'a> {
+    pub fn create_span<'a>(
+        &self,
+        content: String,
+        level: TypographyLevel,
+        theme: &Theme,
+    ) -> Span<'a> {
         let style = self.get_typography_style(level, theme);
         Span::styled(content, style)
     }
-    
+
     /// Get style for typography level
     pub fn get_typography_style(&self, level: TypographyLevel, theme: &Theme) -> Style {
         match level {
@@ -153,97 +165,106 @@ impl TypographySystem {
                 .fg(theme.colors.palette.text_primary)
                 .add_modifier(Modifier::BOLD)
                 .add_modifier(Modifier::UNDERLINED),
-                
+
             TypographyLevel::Heading2 => Style::default()
                 .fg(theme.colors.palette.text_primary)
                 .add_modifier(Modifier::BOLD),
-                
+
             TypographyLevel::Heading3 => Style::default()
                 .fg(theme.colors.palette.text_primary)
                 .add_modifier(Modifier::BOLD),
-                
-            TypographyLevel::Body => Style::default()
-                .fg(theme.colors.palette.text_primary),
-                
-            TypographyLevel::Caption => Style::default()
-                .fg(theme.colors.palette.text_secondary),
-                
+
+            TypographyLevel::Body => Style::default().fg(theme.colors.palette.text_primary),
+
+            TypographyLevel::Caption => Style::default().fg(theme.colors.palette.text_secondary),
+
             TypographyLevel::Metadata => Style::default()
                 .fg(theme.colors.palette.text_muted)
                 .add_modifier(Modifier::DIM),
-                
+
             TypographyLevel::Monospace => Style::default()
                 .fg(theme.colors.palette.text_primary)
                 .bg(theme.colors.palette.surface),
-                
+
             TypographyLevel::Label => Style::default()
                 .fg(theme.colors.palette.text_secondary)
                 .add_modifier(Modifier::DIM),
         }
     }
-    
+
     /// Create a formatted header with consistent styling
-    pub fn create_header<'a>(&self, title: &str, subtitle: Option<&str>, theme: &Theme) -> Vec<Line<'a>> {
+    pub fn create_header<'a>(
+        &self,
+        title: &str,
+        subtitle: Option<&str>,
+        theme: &Theme,
+    ) -> Vec<Line<'a>> {
         let mut lines = Vec::new();
-        
+
         // Main title
-        lines.push(Line::from(vec![
-            self.create_span(title.to_string(), TypographyLevel::Heading2, theme)
-        ]));
-        
+        lines.push(Line::from(vec![self.create_span(
+            title.to_string(),
+            TypographyLevel::Heading2,
+            theme,
+        )]));
+
         // Optional subtitle
         if let Some(sub) = subtitle {
-            lines.push(Line::from(vec![
-                self.create_span(sub.to_string(), TypographyLevel::Caption, theme)
-            ]));
+            lines.push(Line::from(vec![self.create_span(
+                sub.to_string(),
+                TypographyLevel::Caption,
+                theme,
+            )]));
         }
-        
+
         // Add spacing line based on density
         match self.density {
-            InformationDensity::Compact => {}, // No extra spacing
+            InformationDensity::Compact => {} // No extra spacing
             InformationDensity::Comfortable => lines.push(Line::from("")),
             InformationDensity::Relaxed => {
                 lines.push(Line::from(""));
                 lines.push(Line::from(""));
             }
         }
-        
+
         lines
     }
-    
+
     /// Create a data row with consistent formatting
     pub fn create_data_row<'a>(&self, label: &str, value: &str, theme: &Theme) -> Line<'a> {
         let spacing = self.spacing();
-        
+
         Line::from(vec![
             self.create_span(label.to_string(), TypographyLevel::Label, theme),
             Span::raw(" ".repeat(spacing.sm as usize)),
             self.create_span(value.to_string(), TypographyLevel::Body, theme),
         ])
     }
-    
+
     /// Create a metadata line with proper styling
     pub fn create_metadata<'a>(&self, content: &str, theme: &Theme) -> Line<'a> {
-        Line::from(vec![
-            self.create_span(content.to_string(), TypographyLevel::Metadata, theme)
-        ])
+        Line::from(vec![self.create_span(
+            content.to_string(),
+            TypographyLevel::Metadata,
+            theme,
+        )])
     }
-    
+
     /// Create emphasized text
     pub fn create_emphasis<'a>(&self, content: &str, theme: &Theme) -> Span<'a> {
         Span::styled(
             content.to_string(),
             Style::default()
                 .fg(theme.colors.palette.accent)
-                .add_modifier(Modifier::BOLD)
+                .add_modifier(Modifier::BOLD),
         )
     }
-    
+
     /// Create monospace identifier text (for IDs, hashes, etc.)
     pub fn create_identifier<'a>(&self, content: &str, theme: &Theme) -> Span<'a> {
         self.create_span(content.to_string(), TypographyLevel::Monospace, theme)
     }
-    
+
     /// Calculate optimal line height for current density
     pub fn line_height(&self) -> u16 {
         match self.density {
@@ -252,13 +273,13 @@ impl TypographySystem {
             InformationDensity::Relaxed => 2,
         }
     }
-    
+
     /// Calculate padding for containers
     pub fn container_padding(&self) -> u16 {
         let spacing = self.spacing();
         spacing.sm
     }
-    
+
     /// Calculate margin between sections
     pub fn section_margin(&self) -> u16 {
         let spacing = self.spacing();
@@ -272,32 +293,28 @@ pub struct VisualHierarchy;
 impl VisualHierarchy {
     /// Create a section divider
     pub fn section_divider<'a>(theme: &Theme) -> Line<'a> {
-        Line::from(vec![
-            Span::styled(
-                "─".repeat(50),
-                Style::default().fg(theme.colors.palette.border)
-            )
-        ])
+        Line::from(vec![Span::styled(
+            "─".repeat(50),
+            Style::default().fg(theme.colors.palette.border),
+        )])
     }
-    
+
     /// Create a subtle section divider
     pub fn subtle_divider<'a>(theme: &Theme) -> Line<'a> {
-        Line::from(vec![
-            Span::styled(
-                "·".repeat(20),
-                Style::default().fg(theme.colors.palette.text_muted)
-            )
-        ])
+        Line::from(vec![Span::styled(
+            "·".repeat(20),
+            Style::default().fg(theme.colors.palette.text_muted),
+        )])
     }
-    
+
     /// Create a status indicator with color
     pub fn status_indicator<'a>(status: &str, color: Color) -> Span<'a> {
         Span::styled(
             format!("● {}", status),
-            Style::default().fg(color).add_modifier(Modifier::BOLD)
+            Style::default().fg(color).add_modifier(Modifier::BOLD),
         )
     }
-    
+
     /// Create a badge-style indicator
     pub fn badge<'a>(text: &str, theme: &Theme) -> Span<'a> {
         Span::styled(
@@ -305,10 +322,10 @@ impl VisualHierarchy {
             Style::default()
                 .fg(theme.colors.palette.text_inverse)
                 .bg(theme.colors.palette.accent)
-                .add_modifier(Modifier::BOLD)
+                .add_modifier(Modifier::BOLD),
         )
     }
-    
+
     /// Create a count indicator (like unread count)
     pub fn count_indicator<'a>(count: usize, theme: &Theme) -> Option<Span<'a>> {
         if count == 0 {
@@ -318,7 +335,7 @@ impl VisualHierarchy {
                 format!("({})", count),
                 Style::default()
                     .fg(theme.colors.palette.accent)
-                    .add_modifier(Modifier::BOLD)
+                    .add_modifier(Modifier::BOLD),
             ))
         }
     }
@@ -327,30 +344,28 @@ impl VisualHierarchy {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
-    
+
     #[test]
     fn test_typography_system_creation() {
         let typography = TypographySystem::new();
         assert_eq!(typography.density(), InformationDensity::Comfortable);
     }
-    
+
     #[test]
     fn test_spacing_values() {
         let spacing = Spacing::new();
         let compact = spacing.get_spacing(InformationDensity::Compact);
         let comfortable = spacing.get_spacing(InformationDensity::Comfortable);
         let relaxed = spacing.get_spacing(InformationDensity::Relaxed);
-        
+
         // Relaxed should have more spacing than compact
         assert!(relaxed.md > comfortable.md);
         assert!(comfortable.md > compact.md);
     }
-    
+
     #[test]
     fn test_density_change() {
-        let typography = TypographySystem::new()
-            .with_density(InformationDensity::Compact);
+        let typography = TypographySystem::new().with_density(InformationDensity::Compact);
         assert_eq!(typography.density(), InformationDensity::Compact);
     }
 }

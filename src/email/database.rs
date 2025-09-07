@@ -272,7 +272,7 @@ impl EmailDatabase {
                 thread_id TEXT,
                 in_reply_to TEXT,
                 message_references TEXT NOT NULL, -- JSON array
-                
+
                 -- Headers
                 subject TEXT NOT NULL,
                 from_addr TEXT NOT NULL,
@@ -282,18 +282,18 @@ impl EmailDatabase {
                 bcc_addrs TEXT NOT NULL, -- JSON array
                 reply_to TEXT,
                 date TEXT NOT NULL,
-                
+
                 -- Content
                 body_text TEXT,
                 body_html TEXT,
                 attachments TEXT NOT NULL, -- JSON array
-                
+
                 -- Metadata
                 flags TEXT NOT NULL, -- JSON array
                 labels TEXT NOT NULL, -- JSON array
                 size INTEGER,
                 priority TEXT,
-                
+
                 -- Sync metadata
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
@@ -311,10 +311,10 @@ impl EmailDatabase {
         // This needs to be done before adding the unique constraint
         let cleanup_result = sqlx::query(
             r"
-            DELETE FROM messages 
+            DELETE FROM messages
             WHERE rowid NOT IN (
-                SELECT MIN(rowid) 
-                FROM messages 
+                SELECT MIN(rowid)
+                FROM messages
                 GROUP BY account_id, folder_name, imap_uid
             )
         ",
@@ -331,7 +331,7 @@ impl EmailDatabase {
         // Now add unique constraint to prevent future duplicates
         sqlx::query(
             r"
-            CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_unique 
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_unique
             ON messages (account_id, folder_name, imap_uid)
         ",
         )
@@ -383,7 +383,7 @@ impl EmailDatabase {
                 account_id TEXT NOT NULL,
                 subject TEXT NOT NULL DEFAULT '',
                 to_addrs TEXT NOT NULL DEFAULT '', -- JSON array
-                cc_addrs TEXT NOT NULL DEFAULT '', -- JSON array  
+                cc_addrs TEXT NOT NULL DEFAULT '', -- JSON array
                 bcc_addrs TEXT NOT NULL DEFAULT '', -- JSON array
                 reply_to TEXT,
                 body_text TEXT NOT NULL DEFAULT '',
@@ -529,7 +529,7 @@ impl EmailDatabase {
                 thread_id TEXT,
                 in_reply_to TEXT,
                 message_references TEXT NOT NULL, -- JSON array
-                
+
                 -- Headers
                 subject TEXT NOT NULL,
                 from_addr TEXT NOT NULL,
@@ -539,18 +539,18 @@ impl EmailDatabase {
                 bcc_addrs TEXT NOT NULL, -- JSON array
                 reply_to TEXT,
                 date TEXT NOT NULL,
-                
+
                 -- Content
                 body_text TEXT,
                 body_html TEXT,
                 attachments TEXT NOT NULL, -- JSON array
-                
+
                 -- Metadata
                 flags TEXT NOT NULL, -- JSON array
                 labels TEXT NOT NULL, -- JSON array
                 size INTEGER,
                 priority TEXT,
-                
+
                 -- Sync metadata
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
@@ -656,7 +656,7 @@ impl EmailDatabase {
                 sqlx::query(r"
                     UPDATE messages SET
                         message_id = ?1, thread_id = ?2, in_reply_to = ?3, message_references = ?4,
-                        subject = ?5, from_addr = ?6, from_name = ?7, to_addrs = ?8, cc_addrs = ?9, 
+                        subject = ?5, from_addr = ?6, from_name = ?7, to_addrs = ?8, cc_addrs = ?9,
                         bcc_addrs = ?10, reply_to = ?11, date = ?12, body_text = ?13, body_html = ?14,
                         attachments = ?15, flags = ?16, labels = ?17, size = ?18, priority = ?19,
                         updated_at = ?20, last_synced = ?21, sync_version = ?22, is_draft = ?23, is_deleted = ?24
@@ -706,14 +706,16 @@ impl EmailDatabase {
         body_html: Option<String>,
     ) -> DatabaseResult<()> {
         let now = chrono::Utc::now().to_rfc3339();
-        
-        sqlx::query(r"
+
+        sqlx::query(
+            r"
             UPDATE messages SET
                 body_text = COALESCE(?1, body_text),
                 body_html = COALESCE(?2, body_html),
                 updated_at = ?3
             WHERE id = ?4
-        ")
+        ",
+        )
         .bind(&body_text)
         .bind(&body_html)
         .bind(&now)
@@ -734,13 +736,15 @@ impl EmailDatabase {
         flags: Vec<String>,
     ) -> DatabaseResult<()> {
         let now = chrono::Utc::now().to_rfc3339();
-        
-        sqlx::query(r"
+
+        sqlx::query(
+            r"
             UPDATE messages SET
                 flags = ?1,
                 updated_at = ?2
             WHERE account_id = ?3 AND folder_name = ?4 AND imap_uid = ?5
-        ")
+        ",
+        )
         .bind(serde_json::to_string(&flags)?)
         .bind(&now)
         .bind(account_id)
@@ -749,7 +753,12 @@ impl EmailDatabase {
         .execute(&self.pool)
         .await?;
 
-        tracing::debug!("Updated flags for message UID {} in {}/{}", imap_uid, account_id, folder_name);
+        tracing::debug!(
+            "Updated flags for message UID {} in {}/{}",
+            imap_uid,
+            account_id,
+            folder_name
+        );
         Ok(())
     }
 
@@ -839,13 +848,15 @@ impl EmailDatabase {
         }
     }
 
-    /// Get all accounts from database 
+    /// Get all accounts from database
     pub async fn get_accounts(&self) -> DatabaseResult<Vec<EmailAccount>> {
-        let rows = sqlx::query(r"
+        let rows = sqlx::query(
+            r"
             SELECT id, name, email, provider, created_at, updated_at
             FROM accounts
             ORDER BY name
-        ")
+        ",
+        )
         .fetch_all(&self.pool)
         .await?;
 
@@ -856,19 +867,26 @@ impl EmailDatabase {
                 display_name: row.get("name"),
                 email: row.get("email"),
                 provider: row.get("provider"),
-                created_at: chrono::DateTime::parse_from_rfc3339(&row.get::<String, _>("created_at"))
-                    .map_err(DatabaseError::DateParse)?
-                    .with_timezone(&chrono::Utc),
-                updated_at: chrono::DateTime::parse_from_rfc3339(&row.get::<String, _>("updated_at"))
-                    .map_err(DatabaseError::DateParse)?
-                    .with_timezone(&chrono::Utc),
+                created_at: chrono::DateTime::parse_from_rfc3339(
+                    &row.get::<String, _>("created_at"),
+                )
+                .map_err(DatabaseError::DateParse)?
+                .with_timezone(&chrono::Utc),
+                updated_at: chrono::DateTime::parse_from_rfc3339(
+                    &row.get::<String, _>("updated_at"),
+                )
+                .map_err(DatabaseError::DateParse)?
+                .with_timezone(&chrono::Utc),
             });
         }
         Ok(accounts)
     }
 
     /// Get all messages for an account (for debugging purposes)
-    pub async fn get_all_messages_for_account(&self, account_id: &str) -> DatabaseResult<Vec<StoredMessage>> {
+    pub async fn get_all_messages_for_account(
+        &self,
+        account_id: &str,
+    ) -> DatabaseResult<Vec<StoredMessage>> {
         let rows = sqlx::query(r"
             SELECT id, account_id, folder_name, imap_uid, message_id, thread_id, in_reply_to, message_references,
                    subject, from_addr, from_name, to_addrs, cc_addrs, bcc_addrs, reply_to, date,
@@ -992,12 +1010,14 @@ impl EmailDatabase {
     pub async fn store_folder(&self, folder: &StoredFolder) -> DatabaseResult<()> {
         // Use INSERT OR REPLACE to handle both insert and update cases
         let attributes_json = serde_json::to_string(&folder.attributes)?;
-        
-        sqlx::query(r"
-            INSERT OR REPLACE INTO folders 
+
+        sqlx::query(
+            r"
+            INSERT OR REPLACE INTO folders
             (account_id, name, full_name, delimiter, attributes, created_at, updated_at)
             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
-        ")
+        ",
+        )
         .bind(&folder.account_id)
         .bind(&folder.name)
         .bind(&folder.full_name)
@@ -1291,7 +1311,7 @@ impl EmailDatabase {
     ) -> DatabaseResult<()> {
         sqlx::query(
             r"
-            UPDATE email_filters 
+            UPDATE email_filters
             SET enabled = ?1, updated_at = ?2
             WHERE id = ?3
         ",
@@ -1463,7 +1483,7 @@ impl EmailDatabase {
 
         let result = sqlx::query(
             r"
-            DELETE FROM drafts 
+            DELETE FROM drafts
             WHERE auto_saved = TRUE AND updated_at < ?
         ",
         )
@@ -1478,7 +1498,7 @@ impl EmailDatabase {
     pub async fn get_draft_stats(&self, account_id: &str) -> DatabaseResult<(u32, u32)> {
         let row = sqlx::query(
             r"
-            SELECT 
+            SELECT
                 COUNT(*) as total_count,
                 SUM(CASE WHEN auto_saved = FALSE THEN 1 ELSE 0 END) as manual_count
             FROM drafts WHERE account_id = ?
@@ -1504,17 +1524,17 @@ impl EmailDatabase {
         let rows = sqlx::query(
             r"
             SELECT id, body_text, body_html
-            FROM messages 
-            WHERE is_deleted = FALSE 
+            FROM messages
+            WHERE is_deleted = FALSE
             AND (
-                body_text LIKE '%<html%' OR 
-                body_text LIKE '%<div%' OR 
+                body_text LIKE '%<html%' OR
+                body_text LIKE '%<div%' OR
                 body_text LIKE '%content-type:%' OR
                 body_text LIKE '%delivered-to:%' OR
                 body_text LIKE '%authentication-results:%' OR
                 body_text LIKE '%received:%' OR
-                body_html LIKE '%<html%' OR 
-                body_html LIKE '%<div%' OR 
+                body_html LIKE '%<html%' OR
+                body_html LIKE '%<div%' OR
                 body_html LIKE '%content-type:%' OR
                 body_html LIKE '%delivered-to:%' OR
                 body_html LIKE '%authentication-results:%'
@@ -1560,7 +1580,7 @@ impl EmailDatabase {
             if needs_update {
                 sqlx::query("UPDATE messages SET body_text = ?, body_html = ?, updated_at = datetime('now') WHERE id = ?")
                     .bind(&new_body_text)
-                    .bind(&new_body_html) 
+                    .bind(&new_body_html)
                     .bind(message_id)
                     .execute(&self.pool)
                     .await?;
@@ -2408,10 +2428,10 @@ impl EmailDatabase {
         // Remove duplicate messages (same message_id in same folder)
         let duplicate_messages = sqlx::query(
             r"
-            DELETE FROM messages 
+            DELETE FROM messages
             WHERE id NOT IN (
-                SELECT MIN(id) 
-                FROM messages 
+                SELECT MIN(id)
+                FROM messages
                 GROUP BY account_id, folder_name, message_id
             )
         ",
@@ -2631,7 +2651,7 @@ pub struct CleanupResult {
     pub freed_space_mb: u32,
 }
 
-/// Structure for backup results  
+/// Structure for backup results
 #[derive(Debug)]
 pub struct BackupResult {
     pub size_mb: u32,

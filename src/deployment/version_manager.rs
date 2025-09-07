@@ -64,7 +64,10 @@ impl VersionManager {
 
     /// Prepare version rollback capability
     pub async fn prepare_version_rollback(&self, version: &str) -> VersionResult<()> {
-        println!("Version Manager: Preparing rollback for version: {}", version);
+        println!(
+            "Version Manager: Preparing rollback for version: {}",
+            version
+        );
         // Implementation would create rollback snapshots
         Ok(())
     }

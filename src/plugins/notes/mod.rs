@@ -1,26 +1,26 @@
 //! Notes plugin for Comunicado
-//! 
+//!
 //! Provides comprehensive note-taking functionality with markdown support,
 //! wiki-style linking, full-text search, and integration with email and calendar systems.
 
-pub mod types;
-pub mod manager;
-pub mod parser;
-pub mod storage;
-pub mod database;
-pub mod indexer;
-pub mod linker;
-pub mod watcher;
-pub mod scanner;
-pub mod integration;
-pub mod plugin;
 pub mod advanced_search;
-pub mod email_integration;
-pub mod mobile_integration;
 pub mod calendar_integration;
 pub mod conversions;
+pub mod database;
+pub mod email_integration;
+pub mod indexer;
+pub mod integration;
+pub mod linker;
+pub mod manager;
+pub mod mobile_integration;
+pub mod parser;
+pub mod plugin;
+pub mod scanner;
+pub mod storage;
 pub mod tui;
 pub mod tui_render;
+pub mod types;
+pub mod watcher;
 
 #[cfg(test)]
 mod ignore_patterns_test;
@@ -28,25 +28,36 @@ mod ignore_patterns_test;
 #[cfg(test)]
 mod search_tests;
 
-pub use types::*;
 pub use plugin::NotesPlugin;
+pub use types::*;
 
 // Plugin core types will be used when integration is complete
 
-/// Re-export commonly used types
-pub use types::{Note, NoteFrontmatter, WikiLink, NoteId, LinkType};
-pub use manager::NoteManager;
-pub use parser::MarkdownParser;
-pub use storage::NoteStorage;
-pub use database::NotesDatabase;
-pub use indexer::{NoteIndexer, IndexerConfig, IndexingStats};
-pub use linker::LinkResolver;
-pub use watcher::FileWatcher;
-pub use scanner::{DirectoryScanner, ScannedFile, ScanResult, ScanConfig};
-pub use integration::{FileSystemMonitor, ProcessingResult, MonitoringStats};
-pub use advanced_search::{AdvancedSearchEngine, AdvancedSearchOptions, SearchFilters, SearchCategory, RankingConfig, EnhancedSearchResult, SearchResultSummary};
-pub use email_integration::{EmailIntegrationService, EmailNote, EmailLinkType, EmailContact, EmailThread, EmailNotesStats};
-pub use mobile_integration::{MobileNotesIntegration, MobileNotesConfig, MobileNoteEvent, SmsConversionCandidate, MobileNotesStats};
-pub use calendar_integration::{CalendarNotesIntegration, CalendarNotesConfig, CalendarNoteEvent, EventLinkType, MeetingNote, MeetingAttendee, ActionItem, CalendarNotesStats};
+pub use advanced_search::{
+    AdvancedSearchEngine, AdvancedSearchOptions, EnhancedSearchResult, RankingConfig,
+    SearchCategory, SearchFilters, SearchResultSummary,
+};
+pub use calendar_integration::{
+    ActionItem, CalendarNoteEvent, CalendarNotesConfig, CalendarNotesIntegration,
+    CalendarNotesStats, EventLinkType, MeetingAttendee, MeetingNote,
+};
 pub use conversions::NoteConversionService;
-pub use tui::{NoteTUI, TUIMode, TUIConfig, TUITheme, TUIStats, PopupState};
+pub use database::NotesDatabase;
+pub use email_integration::{
+    EmailContact, EmailIntegrationService, EmailLinkType, EmailNote, EmailNotesStats, EmailThread,
+};
+pub use indexer::{IndexerConfig, IndexingStats, NoteIndexer};
+pub use integration::{FileSystemMonitor, MonitoringStats, ProcessingResult};
+pub use linker::LinkResolver;
+pub use manager::NoteManager;
+pub use mobile_integration::{
+    MobileNoteEvent, MobileNotesConfig, MobileNotesIntegration, MobileNotesStats,
+    SmsConversionCandidate,
+};
+pub use parser::MarkdownParser;
+pub use scanner::{DirectoryScanner, ScanConfig, ScanResult, ScannedFile};
+pub use storage::NoteStorage;
+pub use tui::{NoteTUI, PopupState, TUIConfig, TUIMode, TUIStats, TUITheme};
+/// Re-export commonly used types
+pub use types::{LinkType, Note, NoteFrontmatter, NoteId, WikiLink};
+pub use watcher::FileWatcher;

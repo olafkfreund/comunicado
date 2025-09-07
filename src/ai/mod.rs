@@ -1,5 +1,5 @@
 //! AI Integration Module for Comunicado
-//! 
+//!
 //! This module provides comprehensive AI assistance for email management, calendar scheduling,
 //! and content processing with support for both local (Ollama) and cloud-based AI providers.
 
@@ -29,10 +29,12 @@ mod triage_tests;
 
 // Re-export main types for convenient access
 pub use background::{
-    AIBackgroundProcessor, AIOperation, AIOperationType, BackgroundConfig, 
-    OperationPriority, OperationResult, OperationStatus, ProcessingStats, ProgressUpdate
+    AIBackgroundProcessor, AIOperation, AIOperationType, BackgroundConfig, OperationPriority,
+    OperationResult, OperationStatus, ProcessingStats, ProgressUpdate,
 };
-pub use cache::{AIResponseCache, CacheStatistics, CacheConfig, CachePriority, InvalidationStrategy};
+pub use cache::{
+    AIResponseCache, CacheConfig, CachePriority, CacheStatistics, InvalidationStrategy,
+};
 pub use config::{AIConfig, AIProviderType, PrivacyMode};
 pub use config_manager::{AIConfigManager, AIHealthStatus, ConfigStats};
 pub use error::AIError;
@@ -42,31 +44,35 @@ pub use provider::{AIProvider, AIProviderManager, ProviderCapabilities};
 // Add type aliases for backwards compatibility
 pub type AiError = AIError;
 pub type AiResult<T> = AIResult<T>;
+pub use crate::notifications::types::NotificationPriority;
+pub use categorization::{
+    ActionType, AutoAction, ClassificationResult, EmailCategorizer,
+    EmailCategory as CategorizedEmailCategory, SuggestedAction,
+};
+pub use enhanced_service::{
+    EnhancedAIConfig, EnhancedAIRequest, EnhancedAIResponse, EnhancedAIService, PerformanceMetrics,
+};
+pub use meeting_scheduler::{
+    MeetingAttendee, MeetingCreationResult, MeetingLocation, MeetingPriority, MeetingRequest,
+    MeetingSchedulerConfig, MeetingSchedulerService, MeetingSchedulerStats, MeetingType,
+};
 pub use providers::{AnthropicProvider, GoogleProvider, OllamaProvider, OpenAIProvider};
 pub use retry::{RetryConfig, RetryManager, RetryStats};
-pub use enhanced_service::{EnhancedAIService, EnhancedAIConfig, EnhancedAIRequest, EnhancedAIResponse, PerformanceMetrics};
-pub use meeting_scheduler::{
-    MeetingSchedulerService, MeetingSchedulerConfig, MeetingRequest, MeetingCreationResult,
-    MeetingType, MeetingPriority, MeetingLocation, MeetingAttendee, MeetingSchedulerStats
-};
 pub use service::{
-    AIService, EmailCategory, EmailPriority, EmailTriageResult, EmailTriageConfig, 
-    SchedulingIntent, EmailAssistance
+    AIService, EmailAssistance, EmailCategory, EmailPriority, EmailTriageConfig, EmailTriageResult,
+    SchedulingIntent,
 };
 pub use smart_compose::{
-    SmartComposeService, SmartComposeConfig, SmartComposeResponse, ComposeSuggestion,
-    CompositionContext, EmailType, SuggestionType, SmartComposeStats
+    ComposeSuggestion, CompositionContext, EmailType, SmartComposeConfig, SmartComposeResponse,
+    SmartComposeService, SmartComposeStats, SuggestionType,
 };
 pub use smart_reply::{
-    SmartReplyGenerator, ReplyRequest, ReplyType, ReplyTone, ReplyLength, 
-    GeneratedReply, ReplyTemplate, UserPreferences
+    GeneratedReply, ReplyLength, ReplyRequest, ReplyTemplate, ReplyTone, ReplyType,
+    SmartReplyGenerator, UserPreferences,
 };
-pub use categorization::{
-    EmailCategorizer, EmailCategory as CategorizedEmailCategory, ClassificationResult,
-    AutoAction, SuggestedAction, ActionType
+pub use streaming::{
+    AIStreamingManager, StreamChunk, StreamingConfig, StreamingSession, StreamingStats,
 };
-pub use crate::notifications::types::NotificationPriority;
-pub use streaming::{AIStreamingManager, StreamChunk, StreamingConfig, StreamingSession, StreamingStats};
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

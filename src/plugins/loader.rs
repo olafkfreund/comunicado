@@ -8,8 +8,8 @@
 
 use super::core::{Plugin, PluginError, PluginInfo, PluginResult};
 
-use std::path::{Path, PathBuf};
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 
 /// Plugin loader for dynamic loading of plugins from various sources
 pub struct PluginLoader {
@@ -42,10 +42,10 @@ type LibraryHandle = ();
 pub trait PluginLoadingStrategy: Send + Sync {
     /// Check if this strategy can load the given plugin
     fn can_load(&self, plugin_info: &PluginInfo) -> bool;
-    
+
     /// Load the plugin using this strategy
     fn load_plugin(&self, plugin_info: &PluginInfo) -> PluginResult<Box<dyn Plugin>>;
-    
+
     /// Get the name of this loading strategy
     #[allow(dead_code)]
     fn strategy_name(&self) -> &'static str;
@@ -75,13 +75,16 @@ impl PluginLoader {
     /// Load a plugin using the appropriate strategy
     pub async fn load_plugin(&mut self, plugin_info: &PluginInfo) -> PluginResult<Box<dyn Plugin>> {
         // Find appropriate loading strategy
-        let strategy = self.loading_strategies
+        let strategy = self
+            .loading_strategies
             .iter()
             .find(|s| s.can_load(plugin_info))
-            .ok_or_else(|| PluginError::Unknown(format!(
-                "No loading strategy found for plugin: {}",
-                plugin_info.name
-            )))?;
+            .ok_or_else(|| {
+                PluginError::Unknown(format!(
+                    "No loading strategy found for plugin: {}",
+                    plugin_info.name
+                ))
+            })?;
 
         // Load the plugin
         let plugin = strategy.load_plugin(plugin_info)?;
@@ -97,7 +100,10 @@ impl PluginLoader {
 
     /// Get information about loaded libraries
     pub fn get_loaded_libraries(&self) -> Vec<&PathBuf> {
-        self.loaded_libraries.values().map(|lib| &lib.path).collect()
+        self.loaded_libraries
+            .values()
+            .map(|lib| &lib.path)
+            .collect()
     }
 }
 
@@ -124,13 +130,12 @@ impl CompiledPluginStrategy {
         // 1. Load the dynamic library (.so/.dll/.dylib)
         // 2. Look for the plugin creation function
         // 3. Return the function pointer
-        
+
         // For now, we'll use a registry of built-in plugins
         self.get_builtin_plugin_creator(&plugin_info.name)
-            .ok_or_else(|| PluginError::NotFound(format!(
-                "No compiled plugin found: {}",
-                plugin_info.name
-            )))
+            .ok_or_else(|| {
+                PluginError::NotFound(format!("No compiled plugin found: {}", plugin_info.name))
+            })
     }
 
     /// Get built-in plugin creators (for demonstration)
@@ -187,7 +192,7 @@ impl PluginLoadingStrategy for ScriptPluginStrategy {
         // 1. Set up a script runtime (Python, JavaScript, etc.)
         // 2. Load and execute the plugin script
         // 3. Create a wrapper that implements the Plugin trait
-        
+
         Err(PluginError::Unknown(format!(
             "Script plugin loading not yet implemented: {}",
             plugin_info.name
@@ -212,7 +217,9 @@ impl PluginLoadingStrategy for WasmPluginStrategy {
     fn can_load(&self, plugin_info: &PluginInfo) -> bool {
         // Check if this is a WASM plugin
         plugin_info.capabilities.contains(&"wasm".to_string())
-            || plugin_info.capabilities.contains(&"webassembly".to_string())
+            || plugin_info
+                .capabilities
+                .contains(&"webassembly".to_string())
     }
 
     fn load_plugin(&self, plugin_info: &PluginInfo) -> PluginResult<Box<dyn Plugin>> {
@@ -220,7 +227,7 @@ impl PluginLoadingStrategy for WasmPluginStrategy {
         // 1. Set up a WebAssembly runtime (wasmtime, wasmer, etc.)
         // 2. Load the WASM module
         // 3. Create a wrapper that implements the Plugin trait
-        
+
         Err(PluginError::Unknown(format!(
             "WASM plugin loading not yet implemented: {}",
             plugin_info.name
@@ -311,19 +318,20 @@ pub struct PluginManifestParser;
 impl PluginManifestParser {
     /// Parse plugin manifest from JSON file
     pub async fn parse_from_file(manifest_path: &Path) -> PluginResult<PluginInfo> {
-        let content = tokio::fs::read_to_string(manifest_path).await
+        let content = tokio::fs::read_to_string(manifest_path)
+            .await
             .map_err(|e| PluginError::Io(e))?;
 
-        let plugin_info: PluginInfo = serde_json::from_str(&content)
-            .map_err(|e| PluginError::Serialization(e))?;
+        let plugin_info: PluginInfo =
+            serde_json::from_str(&content).map_err(|e| PluginError::Serialization(e))?;
 
         Ok(plugin_info)
     }
 
     /// Parse plugin manifest from string content
     pub fn parse_from_string(content: &str) -> PluginResult<PluginInfo> {
-        let plugin_info: PluginInfo = serde_json::from_str(content)
-            .map_err(|e| PluginError::Serialization(e))?;
+        let plugin_info: PluginInfo =
+            serde_json::from_str(content).map_err(|e| PluginError::Serialization(e))?;
 
         Ok(plugin_info)
     }
@@ -332,15 +340,21 @@ impl PluginManifestParser {
     pub fn validate_manifest(plugin_info: &PluginInfo) -> PluginResult<()> {
         // Basic validation
         if plugin_info.name.is_empty() {
-            return Err(PluginError::ConfigurationError("Plugin name cannot be empty".to_string()));
+            return Err(PluginError::ConfigurationError(
+                "Plugin name cannot be empty".to_string(),
+            ));
         }
 
         if plugin_info.version.is_empty() {
-            return Err(PluginError::ConfigurationError("Plugin version cannot be empty".to_string()));
+            return Err(PluginError::ConfigurationError(
+                "Plugin version cannot be empty".to_string(),
+            ));
         }
 
         if plugin_info.author.is_empty() {
-            return Err(PluginError::ConfigurationError("Plugin author cannot be empty".to_string()));
+            return Err(PluginError::ConfigurationError(
+                "Plugin author cannot be empty".to_string(),
+            ));
         }
 
         // Validate version format (simplified semantic versioning)
@@ -358,7 +372,7 @@ impl PluginManifestParser {
 /// Simple semantic version validation
 fn is_valid_semver(version: &str) -> bool {
     let parts: Vec<&str> = version.split('.').collect();
-    
+
     if parts.len() != 3 {
         return false;
     }

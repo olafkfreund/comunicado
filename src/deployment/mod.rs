@@ -10,46 +10,46 @@
 //! - Health checks and monitoring setup
 //! - Auto-update mechanisms
 
-pub mod packaging;
+pub mod auto_update;
+pub mod ci_cd;
+pub mod configuration;
 pub mod containers;
 pub mod distributions;
-pub mod ci_cd;
-pub mod version_manager;
-pub mod configuration;
 pub mod health_checks;
-pub mod auto_update;
+pub mod packaging;
+pub mod version_manager;
 
-pub use packaging::{
-    PackageManager, PackageConfig, PackageResult, PackageError, PackageType,
-    DebianPackage, RpmPackage, AppImagePackage, FlatpakPackage,
+pub use auto_update::{
+    AutoUpdateConfig, AutoUpdateError, AutoUpdateManager, AutoUpdateResult, UpdateChannel,
+    UpdatePolicy, UpdateStrategy,
+};
+pub use ci_cd::{
+    CiCdConfig, CiCdError, CiCdManager, CiCdProvider, CiCdResult, GitHubActions, GitLabCi,
+    JenkinsConfig, PipelineStage,
+};
+pub use configuration::{
+    ConfigManager, DeploymentConfig, DevelopmentConfig, Environment, ProductionConfig,
+    StagingConfig,
 };
 pub use containers::{
-    ContainerManager, ContainerConfig, ContainerResult, ContainerError, ContainerRuntime,
+    ContainerConfig, ContainerError, ContainerManager, ContainerResult, ContainerRuntime,
     DockerConfig, PodmanConfig,
 };
 pub use distributions::{
-    DistributionManager, DistributionConfig, DistributionResult, DistributionError,
-    AurPackage, NixPackage, HomebrewPackage, SnapPackage,
-};
-pub use ci_cd::{
-    CiCdManager, CiCdConfig, CiCdResult, CiCdError, CiCdProvider, PipelineStage,
-    GitHubActions, GitLabCi, JenkinsConfig,
-};
-pub use version_manager::{
-    VersionManager, VersionConfig, VersionResult, VersionError, SemanticVersion,
-    VersionBump, ReleaseType, ChangelogEntry,
-};
-pub use configuration::{
-    ConfigManager, DeploymentConfig, Environment,
-    ProductionConfig, StagingConfig, DevelopmentConfig,
+    AurPackage, DistributionConfig, DistributionError, DistributionManager, DistributionResult,
+    HomebrewPackage, NixPackage, SnapPackage,
 };
 pub use health_checks::{
-    HealthCheckManager, HealthCheckConfig, HealthCheckResult, HealthCheckError,
-    HealthCheck, MonitoringConfig, AlertConfig,
+    AlertConfig, HealthCheck, HealthCheckConfig, HealthCheckError, HealthCheckManager,
+    HealthCheckResult, MonitoringConfig,
 };
-pub use auto_update::{
-    AutoUpdateManager, AutoUpdateConfig, AutoUpdateResult, AutoUpdateError,
-    UpdateChannel, UpdateStrategy, UpdatePolicy,
+pub use packaging::{
+    AppImagePackage, DebianPackage, FlatpakPackage, PackageConfig, PackageError, PackageManager,
+    PackageResult, PackageType, RpmPackage,
+};
+pub use version_manager::{
+    ChangelogEntry, ReleaseType, SemanticVersion, VersionBump, VersionConfig, VersionError,
+    VersionManager, VersionResult,
 };
 
 use chrono::{DateTime, Utc};
@@ -100,7 +100,7 @@ impl Architecture {
     pub fn as_str(&self) -> &str {
         match self {
             Architecture::X86_64 => "x86_64",
-            Architecture::Aarch64 => "aarch64", 
+            Architecture::Aarch64 => "aarch64",
             Architecture::Armv7 => "armv7",
             Architecture::I686 => "i686",
             Architecture::Riscv64 => "riscv64",
@@ -113,7 +113,7 @@ impl Architecture {
             Architecture::X86_64 => "x86_64-unknown-linux-gnu",
             Architecture::Aarch64 => "aarch64-unknown-linux-gnu",
             Architecture::Armv7 => "armv7-unknown-linux-gnueabihf",
-            Architecture::I686 => "i686-unknown-linux-gnu", 
+            Architecture::I686 => "i686-unknown-linux-gnu",
             Architecture::Riscv64 => "riscv64gc-unknown-linux-gnu",
             Architecture::Custom(target) => target,
         }
@@ -306,7 +306,7 @@ impl DeploymentOrchestrator {
         artifacts: Vec<DeploymentArtifact>,
     ) -> DeploymentResult<Uuid> {
         let deployment_id = Uuid::new_v4();
-        
+
         let deployment_status = DeploymentStatus {
             id: deployment_id,
             target: target.clone(),
@@ -320,42 +320,59 @@ impl DeploymentOrchestrator {
             health_checks: Vec::new(),
         };
 
-        self.active_deployments.insert(deployment_id, deployment_status);
+        self.active_deployments
+            .insert(deployment_id, deployment_status);
 
         // Pre-deployment checks with CI/CD manager
-        self.ci_cd_manager.validate_deployment_readiness(&artifacts).await?;
-        
+        self.ci_cd_manager
+            .validate_deployment_readiness(&artifacts)
+            .await?;
+
         // Version management
-        self.version_manager.prepare_version_rollback(&version).await?;
+        self.version_manager
+            .prepare_version_rollback(&version)
+            .await?;
 
         // Execute deployment strategy
         match strategy {
             DeploymentStrategy::Recreate => {
-                self.execute_recreate_deployment(deployment_id, &artifacts).await?;
+                self.execute_recreate_deployment(deployment_id, &artifacts)
+                    .await?;
             }
             DeploymentStrategy::RollingUpdate => {
-                self.execute_rolling_update(deployment_id, &artifacts).await?;
+                self.execute_rolling_update(deployment_id, &artifacts)
+                    .await?;
             }
             DeploymentStrategy::BlueGreen => {
-                self.execute_blue_green_deployment(deployment_id, &artifacts).await?;
+                self.execute_blue_green_deployment(deployment_id, &artifacts)
+                    .await?;
             }
             DeploymentStrategy::Canary { percentage } => {
-                self.execute_canary_deployment(deployment_id, &artifacts, percentage).await?;
+                self.execute_canary_deployment(deployment_id, &artifacts, percentage)
+                    .await?;
             }
             DeploymentStrategy::Custom(strategy_name) => {
-                self.execute_custom_deployment(deployment_id, &artifacts, &strategy_name).await?;
+                self.execute_custom_deployment(deployment_id, &artifacts, &strategy_name)
+                    .await?;
             }
         }
 
         // Run health checks
-        self.run_post_deployment_health_checks(deployment_id).await?;
-        
+        self.run_post_deployment_health_checks(deployment_id)
+            .await?;
+
         // Post-deployment tasks
-        self.distribution_manager.register_deployed_version(&version, &artifacts).await?;
-        self.auto_update_manager.schedule_update_checks(deployment_id).await?;
-        
+        self.distribution_manager
+            .register_deployed_version(&version, &artifacts)
+            .await?;
+        self.auto_update_manager
+            .schedule_update_checks(deployment_id)
+            .await?;
+
         // CI/CD post-deployment notifications
-        self.ci_cd_manager.notify_deployment_complete(deployment_id).await?;
+        self.ci_cd_manager
+            .notify_deployment_complete(deployment_id)
+            .await?;
 
         Ok(deployment_id)
     }
@@ -378,23 +395,25 @@ impl DeploymentOrchestrator {
     ) -> DeploymentResult<()> {
         // Update deployment status
         if let Some(deployment) = self.active_deployments.get_mut(&deployment_id) {
-            deployment.status = Status::InProgress { 
-                stage: "Deploying".to_string(), 
-                progress: 0.0 
+            deployment.status = Status::InProgress {
+                stage: "Deploying".to_string(),
+                progress: 0.0,
             };
         }
 
         // Stop existing deployment
         self.container_manager.stop_all_containers().await?;
-        
+
         // Deploy artifacts using package manager
         for artifact in artifacts {
             self.package_manager.install_artifact(artifact).await?;
         }
-        
+
         // Start containers
-        self.container_manager.start_deployment(deployment_id, artifacts).await?;
-        
+        self.container_manager
+            .start_deployment(deployment_id, artifacts)
+            .await?;
+
         // Update deployment status
         if let Some(deployment) = self.active_deployments.get_mut(&deployment_id) {
             deployment.status = Status::Completed;
@@ -411,9 +430,9 @@ impl DeploymentOrchestrator {
     ) -> DeploymentResult<()> {
         // Update deployment status
         if let Some(deployment) = self.active_deployments.get_mut(&deployment_id) {
-            deployment.status = Status::InProgress { 
-                stage: "Deploying".to_string(), 
-                progress: 0.0 
+            deployment.status = Status::InProgress {
+                stage: "Deploying".to_string(),
+                progress: 0.0,
             };
         }
 
@@ -421,13 +440,17 @@ impl DeploymentOrchestrator {
         for artifact in artifacts {
             self.package_manager.install_artifact(artifact).await?;
         }
-        
+
         // Rolling update with container manager
-        self.container_manager.rolling_update(deployment_id, artifacts).await?;
-        
+        self.container_manager
+            .rolling_update(deployment_id, artifacts)
+            .await?;
+
         // Run health checks after each update step
-        self.health_check_manager.run_health_checks(deployment_id).await?;
-        
+        self.health_check_manager
+            .run_health_checks(deployment_id)
+            .await?;
+
         // Update deployment status
         if let Some(deployment) = self.active_deployments.get_mut(&deployment_id) {
             deployment.status = Status::Completed;
@@ -444,21 +467,27 @@ impl DeploymentOrchestrator {
     ) -> DeploymentResult<()> {
         // Update deployment status
         if let Some(deployment) = self.active_deployments.get_mut(&deployment_id) {
-            deployment.status = Status::InProgress { 
-                stage: "Deploying".to_string(), 
-                progress: 0.0 
+            deployment.status = Status::InProgress {
+                stage: "Deploying".to_string(),
+                progress: 0.0,
             };
         }
 
         // Deploy to green environment
-        self.container_manager.deploy_to_green_environment(deployment_id, artifacts).await?;
-        
+        self.container_manager
+            .deploy_to_green_environment(deployment_id, artifacts)
+            .await?;
+
         // Run comprehensive health checks on green environment
-        self.health_check_manager.run_health_checks(deployment_id).await?;
-        
+        self.health_check_manager
+            .run_health_checks(deployment_id)
+            .await?;
+
         // Switch traffic from blue to green
-        self.container_manager.switch_blue_green_traffic(deployment_id).await?;
-        
+        self.container_manager
+            .switch_blue_green_traffic(deployment_id)
+            .await?;
+
         // Update deployment status
         if let Some(deployment) = self.active_deployments.get_mut(&deployment_id) {
             deployment.status = Status::Completed;
@@ -476,24 +505,32 @@ impl DeploymentOrchestrator {
     ) -> DeploymentResult<()> {
         // Update deployment status
         if let Some(deployment) = self.active_deployments.get_mut(&deployment_id) {
-            deployment.status = Status::InProgress { 
-                stage: "Deploying".to_string(), 
-                progress: 0.0 
+            deployment.status = Status::InProgress {
+                stage: "Deploying".to_string(),
+                progress: 0.0,
             };
         }
 
         // Deploy canary version to percentage of traffic
-        self.container_manager.deploy_canary(deployment_id, artifacts, percentage).await?;
-        
+        self.container_manager
+            .deploy_canary(deployment_id, artifacts, percentage)
+            .await?;
+
         // Monitor canary deployment
-        self.health_check_manager.monitor_canary_deployment(deployment_id, percentage).await?;
-        
+        self.health_check_manager
+            .monitor_canary_deployment(deployment_id, percentage)
+            .await?;
+
         // Gradually increase traffic if health checks pass
         for traffic_percentage in (percentage..100).step_by(10) {
-            self.container_manager.update_canary_traffic(deployment_id, traffic_percentage).await?;
-            self.health_check_manager.run_health_checks(deployment_id).await?;
+            self.container_manager
+                .update_canary_traffic(deployment_id, traffic_percentage)
+                .await?;
+            self.health_check_manager
+                .run_health_checks(deployment_id)
+                .await?;
         }
-        
+
         // Update deployment status
         if let Some(deployment) = self.active_deployments.get_mut(&deployment_id) {
             deployment.status = Status::Completed;
@@ -511,23 +548,32 @@ impl DeploymentOrchestrator {
     ) -> DeploymentResult<()> {
         // Update deployment status
         if let Some(deployment) = self.active_deployments.get_mut(&deployment_id) {
-            deployment.status = Status::InProgress { 
-                stage: "Deploying".to_string(), 
-                progress: 0.0 
+            deployment.status = Status::InProgress {
+                stage: "Deploying".to_string(),
+                progress: 0.0,
             };
         }
 
         // Load and execute custom deployment strategy
-        let custom_config = self.config_manager.load_custom_strategy(strategy_name).await?;
-        
+        let custom_config = self
+            .config_manager
+            .load_custom_strategy(strategy_name)
+            .await?;
+
         // Execute custom deployment steps
         for artifact in artifacts {
-            self.package_manager.install_artifact_with_config(artifact, &custom_config).await?;
+            self.package_manager
+                .install_artifact_with_config(artifact, &custom_config)
+                .await?;
         }
-        
-        self.container_manager.deploy_with_custom_strategy(deployment_id, artifacts, &custom_config).await?;
-        self.health_check_manager.run_custom_health_checks(deployment_id, &custom_config).await?;
-        
+
+        self.container_manager
+            .deploy_with_custom_strategy(deployment_id, artifacts, &custom_config)
+            .await?;
+        self.health_check_manager
+            .run_custom_health_checks(deployment_id, &custom_config)
+            .await?;
+
         // Update deployment status
         if let Some(deployment) = self.active_deployments.get_mut(&deployment_id) {
             deployment.status = Status::Completed;
@@ -542,22 +588,30 @@ impl DeploymentOrchestrator {
         deployment_id: Uuid,
     ) -> DeploymentResult<()> {
         // Run comprehensive post-deployment health checks
-        let health_results = self.health_check_manager.run_full_health_suite(deployment_id).await?;
-        
+        let health_results = self
+            .health_check_manager
+            .run_full_health_suite(deployment_id)
+            .await?;
+
         // Update deployment with health check results
         if let Some(deployment) = self.active_deployments.get_mut(&deployment_id) {
             deployment.health_checks = health_results;
-            
+
             // Set status based on health check results
-            let all_healthy = deployment.health_checks.iter().all(|check| check.status == HealthStatus::Healthy);
+            let all_healthy = deployment
+                .health_checks
+                .iter()
+                .all(|check| check.status == HealthStatus::Healthy);
             if !all_healthy {
-                deployment.status = Status::Failed { 
-                    error: "Health checks failed".to_string() 
+                deployment.status = Status::Failed {
+                    error: "Health checks failed".to_string(),
                 };
-                return Err(DeploymentError::DeploymentFailed("Health checks failed".to_string()));
+                return Err(DeploymentError::DeploymentFailed(
+                    "Health checks failed".to_string(),
+                ));
             }
         }
-        
+
         Ok(())
     }
 }
@@ -576,41 +630,40 @@ pub type DeploymentResult<T> = Result<T, DeploymentError>;
 pub enum DeploymentError {
     #[error("Package error: {0}")]
     Package(#[from] PackageError),
-    
+
     #[error("Container error: {0}")]
     Container(#[from] ContainerError),
-    
+
     #[error("Distribution error: {0}")]
     Distribution(#[from] DistributionError),
-    
+
     #[error("CI/CD error: {0}")]
     CiCd(#[from] CiCdError),
-    
+
     #[error("Version error: {0}")]
     Version(#[from] VersionError),
-    
+
     #[error("Configuration error: {0}")]
     Configuration(#[from] configuration::DeploymentConfigError),
-    
+
     #[error("Health check error: {0}")]
     HealthCheck(#[from] HealthCheckError),
-    
+
     #[error("Auto-update error: {0}")]
     AutoUpdate(#[from] AutoUpdateError),
-    
+
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
-    
+
     #[error("Deployment not found: {0}")]
     DeploymentNotFound(Uuid),
-    
+
     #[error("Deployment failed: {0}")]
     DeploymentFailed(String),
-    
+
     #[error("Invalid configuration: {0}")]
     InvalidConfiguration(String),
-    
+
     #[error("Platform not supported: {0}")]
     PlatformNotSupported(String),
 }
-

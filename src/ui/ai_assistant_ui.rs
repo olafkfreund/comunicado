@@ -1,6 +1,9 @@
 //! AI assistant UI components for email management
 
-use crate::email::{AIEmailAssistant, EmailCompositionAssistance, EmailReplyAssistance, EmailSummary, BulkEmailAnalysis, BulkAnalysisStats};
+use crate::email::{
+    AIEmailAssistant, BulkAnalysisStats, BulkEmailAnalysis, EmailCompositionAssistance,
+    EmailReplyAssistance, EmailSummary,
+};
 use crate::theme::Theme;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -145,18 +148,16 @@ impl AIAssistantUIState {
     /// Move selection down
     pub fn move_down(&mut self) {
         let max_items = match &self.mode {
-            AIAssistantMode::Compose => {
-                self.composition_assistance
-                    .as_ref()
-                    .map(|a| a.subject_suggestions.len() + a.body_suggestions.len())
-                    .unwrap_or(0)
-            },
-            AIAssistantMode::Reply => {
-                self.reply_assistance
-                    .as_ref()
-                    .map(|a| a.reply_suggestions.len())
-                    .unwrap_or(0)
-            },
+            AIAssistantMode::Compose => self
+                .composition_assistance
+                .as_ref()
+                .map(|a| a.subject_suggestions.len() + a.body_suggestions.len())
+                .unwrap_or(0),
+            AIAssistantMode::Reply => self
+                .reply_assistance
+                .as_ref()
+                .map(|a| a.reply_suggestions.len())
+                .unwrap_or(0),
             _ => 0,
         };
 
@@ -171,21 +172,23 @@ impl AIAssistantUIState {
         match &self.mode {
             AIAssistantMode::Compose => {
                 if let Some(assistance) = &self.composition_assistance {
-                    let all_suggestions: Vec<_> = assistance.subject_suggestions
+                    let all_suggestions: Vec<_> = assistance
+                        .subject_suggestions
                         .iter()
                         .chain(assistance.body_suggestions.iter())
                         .collect();
-                    all_suggestions.get(self.selected_suggestion).map(|s| s.to_string())
+                    all_suggestions
+                        .get(self.selected_suggestion)
+                        .map(|s| s.to_string())
                 } else {
                     None
                 }
-            },
-            AIAssistantMode::Reply => {
-                self.reply_assistance
-                    .as_ref()
-                    .and_then(|a| a.reply_suggestions.get(self.selected_suggestion))
-                    .cloned()
-            },
+            }
+            AIAssistantMode::Reply => self
+                .reply_assistance
+                .as_ref()
+                .and_then(|a| a.reply_suggestions.get(self.selected_suggestion))
+                .cloned(),
             _ => None,
         }
     }
@@ -235,19 +238,19 @@ impl AIAssistantUI {
         match &state.mode {
             AIAssistantMode::Compose => {
                 self.render_compose_assistance(frame, area, state, theme, block);
-            },
+            }
             AIAssistantMode::Reply => {
                 self.render_reply_assistance(frame, area, state, theme, block);
-            },
+            }
             AIAssistantMode::Summarize => {
                 self.render_email_summary(frame, area, state, theme, block);
-            },
+            }
             AIAssistantMode::BulkAnalysis => {
                 self.render_bulk_analysis(frame, area, state, theme, block);
-            },
+            }
             AIAssistantMode::Hidden => {
                 // Already handled above
-            },
+            }
         }
     }
 
@@ -273,7 +276,13 @@ impl AIAssistantUI {
         let assistance = match &state.composition_assistance {
             Some(assistance) => assistance,
             None => {
-                self.render_error(frame, area, theme, block, "No composition assistance available");
+                self.render_error(
+                    frame,
+                    area,
+                    theme,
+                    block,
+                    "No composition assistance available",
+                );
                 return;
             }
         };
@@ -299,16 +308,21 @@ impl AIAssistantUI {
 
         // Suggestions
         let mut items = Vec::new();
-        
+
         // Subject suggestions
         if !assistance.subject_suggestions.is_empty() {
-            items.push(ListItem::new(Line::from(vec![
-                Span::styled("Subject Suggestions:", Style::default().fg(theme.ai_assistant_section()).add_modifier(Modifier::BOLD))
-            ])));
-            
+            items.push(ListItem::new(Line::from(vec![Span::styled(
+                "Subject Suggestions:",
+                Style::default()
+                    .fg(theme.ai_assistant_section())
+                    .add_modifier(Modifier::BOLD),
+            )])));
+
             for (i, suggestion) in assistance.subject_suggestions.iter().enumerate() {
                 let style = if i == state.selected_suggestion {
-                    Style::default().fg(theme.ai_assistant_selected()).add_modifier(Modifier::BOLD)
+                    Style::default()
+                        .fg(theme.ai_assistant_selected())
+                        .add_modifier(Modifier::BOLD)
                 } else {
                     Style::default().fg(theme.ai_assistant_text())
                 };
@@ -318,18 +332,23 @@ impl AIAssistantUI {
 
         // Body suggestions
         if !assistance.body_suggestions.is_empty() {
-            items.push(ListItem::new(Line::from(vec![
-                Span::styled("Body Suggestions:", Style::default().fg(theme.ai_assistant_section()).add_modifier(Modifier::BOLD))
-            ])));
-            
+            items.push(ListItem::new(Line::from(vec![Span::styled(
+                "Body Suggestions:",
+                Style::default()
+                    .fg(theme.ai_assistant_section())
+                    .add_modifier(Modifier::BOLD),
+            )])));
+
             for (i, suggestion) in assistance.body_suggestions.iter().enumerate() {
                 let idx = assistance.subject_suggestions.len() + i;
                 let style = if idx == state.selected_suggestion {
-                    Style::default().fg(theme.ai_assistant_selected()).add_modifier(Modifier::BOLD)
+                    Style::default()
+                        .fg(theme.ai_assistant_selected())
+                        .add_modifier(Modifier::BOLD)
                 } else {
                     Style::default().fg(theme.ai_assistant_text())
                 };
-                
+
                 // Truncate long suggestions for display
                 let display_text = if suggestion.len() > 100 {
                     format!("  • {}...", &suggestion[..97])
@@ -340,9 +359,8 @@ impl AIAssistantUI {
             }
         }
 
-        let list = List::new(items)
-            .style(Style::default().fg(theme.ai_assistant_text()));
-        
+        let list = List::new(items).style(Style::default().fg(theme.ai_assistant_text()));
+
         frame.render_stateful_widget(list, chunks[1], &mut state.list_state.clone());
 
         // Instructions
@@ -416,30 +434,37 @@ impl AIAssistantUI {
         frame.render_widget(context, chunks[1]);
 
         // Reply suggestions
-        let items: Vec<ListItem> = assistance.reply_suggestions
+        let items: Vec<ListItem> = assistance
+            .reply_suggestions
             .iter()
             .enumerate()
             .map(|(i, suggestion)| {
                 let style = if i == state.selected_suggestion {
-                    Style::default().fg(theme.ai_assistant_selected()).add_modifier(Modifier::BOLD)
+                    Style::default()
+                        .fg(theme.ai_assistant_selected())
+                        .add_modifier(Modifier::BOLD)
                 } else {
                     Style::default().fg(theme.ai_assistant_text())
                 };
-                
+
                 let display_text = if suggestion.len() > 150 {
                     format!("{}...", &suggestion[..147])
                 } else {
                     suggestion.clone()
                 };
-                
+
                 ListItem::new(display_text).style(style)
             })
             .collect();
 
         let list = List::new(items)
             .style(Style::default().fg(theme.ai_assistant_text()))
-            .highlight_style(Style::default().fg(theme.ai_assistant_selected()).add_modifier(Modifier::BOLD));
-        
+            .highlight_style(
+                Style::default()
+                    .fg(theme.ai_assistant_selected())
+                    .add_modifier(Modifier::BOLD),
+            );
+
         frame.render_stateful_widget(list, chunks[2], &mut state.list_state.clone());
 
         // Instructions
@@ -559,18 +584,18 @@ impl AIAssistantUI {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(8),  // Stats overview
-                Constraint::Length(6),  // Category distribution
-                Constraint::Min(0),     // Insights
+                Constraint::Length(8), // Stats overview
+                Constraint::Length(6), // Category distribution
+                Constraint::Min(0),    // Insights
             ])
             .split(area);
 
         // Stats overview
         self.render_analysis_stats(frame, chunks[0], &analysis.stats, theme);
-        
+
         // Category distribution
         self.render_category_distribution(frame, chunks[1], &analysis.category_distribution, theme);
-        
+
         // Overall insights
         self.render_analysis_insights(frame, chunks[2], &analysis.insights, theme);
     }
@@ -608,10 +633,10 @@ impl AIAssistantUI {
                 Block::default()
                     .title("Statistics")
                     .borders(Borders::ALL)
-                    .border_style(Style::default().fg(theme.ai_assistant_border()))
+                    .border_style(Style::default().fg(theme.ai_assistant_border())),
             )
             .wrap(Wrap { trim: true });
-        
+
         frame.render_widget(stats_widget, area);
     }
 
@@ -627,7 +652,7 @@ impl AIAssistantUI {
         for (category, count) in categories {
             let category_name = match category {
                 crate::ai::EmailCategory::Work => "💼 Work",
-                crate::ai::EmailCategory::Personal => "👤 Personal", 
+                crate::ai::EmailCategory::Personal => "👤 Personal",
                 crate::ai::EmailCategory::Promotional => "📢 Promotional",
                 crate::ai::EmailCategory::Social => "👥 Social",
                 crate::ai::EmailCategory::Financial => "💰 Financial",
@@ -638,7 +663,10 @@ impl AIAssistantUI {
                 crate::ai::EmailCategory::Spam => "🚫 Spam",
                 crate::ai::EmailCategory::Uncategorized => "📁 Uncategorized",
             };
-            category_items.push(ListItem::new(format!("  {} - {} emails", category_name, count)));
+            category_items.push(ListItem::new(format!(
+                "  {} - {} emails",
+                category_name, count
+            )));
         }
 
         let category_list = List::new(category_items)
@@ -647,7 +675,7 @@ impl AIAssistantUI {
                 Block::default()
                     .title("Email Categories")
                     .borders(Borders::ALL)
-                    .border_style(Style::default().fg(theme.ai_assistant_border()))
+                    .border_style(Style::default().fg(theme.ai_assistant_border())),
             );
 
         frame.render_widget(category_list, area);
@@ -673,7 +701,7 @@ impl AIAssistantUI {
                 Block::default()
                     .title("Analysis Insights")
                     .borders(Borders::ALL)
-                    .border_style(Style::default().fg(theme.ai_assistant_border()))
+                    .border_style(Style::default().fg(theme.ai_assistant_border())),
             )
             .wrap(Wrap { trim: true });
 
@@ -681,17 +709,12 @@ impl AIAssistantUI {
     }
 
     /// Render bulk analysis start screen
-    fn render_bulk_analysis_start_screen(
-        &self,
-        frame: &mut Frame,
-        area: Rect,
-        theme: &Theme,
-    ) {
+    fn render_bulk_analysis_start_screen(&self, frame: &mut Frame, area: Rect, theme: &Theme) {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(6),  // Title and description
-                Constraint::Min(0),     // Instructions
+                Constraint::Length(6), // Title and description
+                Constraint::Min(0),    // Instructions
             ])
             .split(area);
 
@@ -729,7 +752,7 @@ impl AIAssistantUI {
                 Block::default()
                     .title("Getting Started")
                     .borders(Borders::ALL)
-                    .border_style(Style::default().fg(theme.ai_assistant_border()))
+                    .border_style(Style::default().fg(theme.ai_assistant_border())),
             )
             .wrap(Wrap { trim: true });
 
@@ -822,12 +845,18 @@ mod tests {
         };
 
         state.set_compose_mode(assistance);
-        
-        assert_eq!(state.get_selected_suggestion(), Some("Subject 1".to_string()));
-        
+
+        assert_eq!(
+            state.get_selected_suggestion(),
+            Some("Subject 1".to_string())
+        );
+
         state.move_down();
-        assert_eq!(state.get_selected_suggestion(), Some("Subject 2".to_string()));
-        
+        assert_eq!(
+            state.get_selected_suggestion(),
+            Some("Subject 2".to_string())
+        );
+
         state.move_down();
         assert_eq!(state.get_selected_suggestion(), Some("Body 1".to_string()));
     }

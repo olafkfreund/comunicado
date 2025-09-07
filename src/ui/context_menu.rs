@@ -1,8 +1,7 @@
 /// Context menu system for context-aware actions
-/// 
+///
 /// Provides right-click and key-triggered context menus with actions appropriate
 /// for the current UI context (email messages, folders, calendar events, etc.).
-
 use ratatui::{
     layout::Rect,
     style::{Modifier, Style},
@@ -12,7 +11,7 @@ use ratatui::{
 };
 
 use crate::theme::Theme;
-use crate::ui::typography::{TypographySystem, TypographyLevel};
+use crate::ui::typography::{TypographyLevel, TypographySystem};
 
 /// Context menu action types
 #[derive(Debug, Clone, PartialEq)]
@@ -28,7 +27,7 @@ pub enum ContextMenuAction {
     CopyMessage,
     ExportMessage,
     ViewMessageSource,
-    
+
     // Folder actions
     CreateFolder,
     RenameFolder,
@@ -36,7 +35,7 @@ pub enum ContextMenuAction {
     MarkAllAsRead,
     CompactFolder,
     RefreshFolder,
-    
+
     // Calendar actions
     CreateEvent,
     EditEvent,
@@ -44,13 +43,13 @@ pub enum ContextMenuAction {
     DuplicateEvent,
     ExportEvent,
     ViewEventDetails,
-    
+
     // Account actions
     RefreshAccount,
     AccountSettings,
     AddAccount,
     RemoveAccount,
-    
+
     // General actions
     Copy,
     Cut,
@@ -113,29 +112,26 @@ impl ContextMenuItem {
 #[derive(Debug, Clone, PartialEq)]
 pub enum ContextType {
     /// Context menu for an email message
-    EmailMessage { 
-        is_read: bool, 
-        is_draft: bool, 
+    EmailMessage {
+        is_read: bool,
+        is_draft: bool,
         has_attachments: bool,
         folder_name: String,
     },
     /// Context menu for a folder
-    EmailFolder { 
-        folder_name: String, 
-        is_special: bool, 
+    EmailFolder {
+        folder_name: String,
+        is_special: bool,
         unread_count: usize,
     },
     /// Context menu for calendar event
-    CalendarEvent { 
-        event_id: String, 
-        is_recurring: bool, 
+    CalendarEvent {
+        event_id: String,
+        is_recurring: bool,
         is_editable: bool,
     },
     /// Context menu for account
-    Account { 
-        account_id: String, 
-        is_online: bool,
-    },
+    Account { account_id: String, is_online: bool },
     /// Context menu for empty space or general context
     General,
 }
@@ -276,9 +272,12 @@ impl ContextMenu {
 
         // Calculate menu bounds and check if click is within menu
         let menu_rect = self.calculate_menu_rect(Rect::new(0, 0, 100, 100)); // Dummy area for calculation
-        
-        if x >= menu_rect.x && x < menu_rect.x + menu_rect.width &&
-           y >= menu_rect.y && y < menu_rect.y + menu_rect.height {
+
+        if x >= menu_rect.x
+            && x < menu_rect.x + menu_rect.width
+            && y >= menu_rect.y
+            && y < menu_rect.y + menu_rect.height
+        {
             // Click is within menu - calculate which item was clicked
             let item_y = y.saturating_sub(menu_rect.y + 1); // +1 for border
             if (item_y as usize) < self.items.len() {
@@ -298,149 +297,260 @@ impl ContextMenu {
     /// Build context menu items based on context type
     fn build_context_items(&self, context_type: &ContextType) -> Vec<ContextMenuItem> {
         match context_type {
-            ContextType::EmailMessage { is_read, is_draft, has_attachments, folder_name } => {
-                self.build_email_message_items(*is_read, *is_draft, *has_attachments, folder_name)
-            }
-            ContextType::EmailFolder { folder_name, is_special, unread_count } => {
-                self.build_email_folder_items(folder_name, *is_special, *unread_count)
-            }
-            ContextType::CalendarEvent { event_id: _, is_recurring, is_editable } => {
-                self.build_calendar_event_items(*is_recurring, *is_editable)
-            }
-            ContextType::Account { account_id: _, is_online } => {
-                self.build_account_items(*is_online)
-            }
-            ContextType::General => {
-                self.build_general_items()
-            }
+            ContextType::EmailMessage {
+                is_read,
+                is_draft,
+                has_attachments,
+                folder_name,
+            } => self.build_email_message_items(*is_read, *is_draft, *has_attachments, folder_name),
+            ContextType::EmailFolder {
+                folder_name,
+                is_special,
+                unread_count,
+            } => self.build_email_folder_items(folder_name, *is_special, *unread_count),
+            ContextType::CalendarEvent {
+                event_id: _,
+                is_recurring,
+                is_editable,
+            } => self.build_calendar_event_items(*is_recurring, *is_editable),
+            ContextType::Account {
+                account_id: _,
+                is_online,
+            } => self.build_account_items(*is_online),
+            ContextType::General => self.build_general_items(),
         }
     }
 
     /// Build context menu items for email messages
-    fn build_email_message_items(&self, is_read: bool, is_draft: bool, has_attachments: bool, folder_name: &str) -> Vec<ContextMenuItem> {
+    fn build_email_message_items(
+        &self,
+        is_read: bool,
+        is_draft: bool,
+        has_attachments: bool,
+        folder_name: &str,
+    ) -> Vec<ContextMenuItem> {
         let mut items = Vec::new();
 
         if is_draft {
-            items.push(ContextMenuItem::new("Edit Draft".to_string(), ContextMenuAction::ReplyToMessage)
-                .with_icon("📝".to_string())
-                .with_shortcut("E".to_string()));
+            items.push(
+                ContextMenuItem::new("Edit Draft".to_string(), ContextMenuAction::ReplyToMessage)
+                    .with_icon("📝".to_string())
+                    .with_shortcut("E".to_string()),
+            );
         } else {
-            items.push(ContextMenuItem::new("Reply".to_string(), ContextMenuAction::ReplyToMessage)
+            items.push(
+                ContextMenuItem::new("Reply".to_string(), ContextMenuAction::ReplyToMessage)
+                    .with_icon("↩️".to_string())
+                    .with_shortcut("R".to_string()),
+            );
+
+            items.push(
+                ContextMenuItem::new(
+                    "Reply All".to_string(),
+                    ContextMenuAction::ReplyAllToMessage,
+                )
                 .with_icon("↩️".to_string())
-                .with_shortcut("R".to_string()));
-            
-            items.push(ContextMenuItem::new("Reply All".to_string(), ContextMenuAction::ReplyAllToMessage)
-                .with_icon("↩️".to_string())
-                .with_shortcut("Shift+R".to_string()));
+                .with_shortcut("Shift+R".to_string()),
+            );
         }
 
-        items.push(ContextMenuItem::new("Forward".to_string(), ContextMenuAction::ForwardMessage)
-            .with_icon("➡️".to_string())
-            .with_shortcut("F".to_string())
-            .with_separator());
+        items.push(
+            ContextMenuItem::new("Forward".to_string(), ContextMenuAction::ForwardMessage)
+                .with_icon("➡️".to_string())
+                .with_shortcut("F".to_string())
+                .with_separator(),
+        );
 
         // Read/Unread toggle
         if is_read {
-            items.push(ContextMenuItem::new("Mark as Unread".to_string(), ContextMenuAction::MarkAsUnread)
+            items.push(
+                ContextMenuItem::new(
+                    "Mark as Unread".to_string(),
+                    ContextMenuAction::MarkAsUnread,
+                )
                 .with_icon("📧".to_string())
-                .with_shortcut("U".to_string()));
+                .with_shortcut("U".to_string()),
+            );
         } else {
-            items.push(ContextMenuItem::new("Mark as Read".to_string(), ContextMenuAction::MarkAsRead)
-                .with_icon("📖".to_string())
-                .with_shortcut("R".to_string()));
+            items.push(
+                ContextMenuItem::new("Mark as Read".to_string(), ContextMenuAction::MarkAsRead)
+                    .with_icon("📖".to_string())
+                    .with_shortcut("R".to_string()),
+            );
         }
 
-        items.push(ContextMenuItem::new("Move to Folder...".to_string(), ContextMenuAction::MoveToFolder(folder_name.to_string()))
+        items.push(
+            ContextMenuItem::new(
+                "Move to Folder...".to_string(),
+                ContextMenuAction::MoveToFolder(folder_name.to_string()),
+            )
             .with_icon("📁".to_string())
-            .with_shortcut("M".to_string()));
+            .with_shortcut("M".to_string()),
+        );
 
-        items.push(ContextMenuItem::new("Copy".to_string(), ContextMenuAction::Copy)
-            .with_icon("📋".to_string())
-            .with_shortcut("Ctrl+C".to_string())
-            .with_separator());
+        items.push(
+            ContextMenuItem::new("Copy".to_string(), ContextMenuAction::Copy)
+                .with_icon("📋".to_string())
+                .with_shortcut("Ctrl+C".to_string())
+                .with_separator(),
+        );
 
         if has_attachments {
-            items.push(ContextMenuItem::new("View Attachments".to_string(), ContextMenuAction::Properties)
-                .with_icon("📎".to_string()));
+            items.push(
+                ContextMenuItem::new(
+                    "View Attachments".to_string(),
+                    ContextMenuAction::Properties,
+                )
+                .with_icon("📎".to_string()),
+            );
         }
 
-        items.push(ContextMenuItem::new("Export Message".to_string(), ContextMenuAction::ExportMessage)
-            .with_icon("💾".to_string()));
+        items.push(
+            ContextMenuItem::new(
+                "Export Message".to_string(),
+                ContextMenuAction::ExportMessage,
+            )
+            .with_icon("💾".to_string()),
+        );
 
-        items.push(ContextMenuItem::new("View Source".to_string(), ContextMenuAction::ViewMessageSource)
-            .with_icon("🔍".to_string()));
+        items.push(
+            ContextMenuItem::new(
+                "View Source".to_string(),
+                ContextMenuAction::ViewMessageSource,
+            )
+            .with_icon("🔍".to_string()),
+        );
 
-        items.push(ContextMenuItem::new("Delete".to_string(), ContextMenuAction::DeleteMessage)
-            .with_icon("🗑️".to_string())
-            .with_shortcut("Del".to_string())
-            .with_separator());
+        items.push(
+            ContextMenuItem::new("Delete".to_string(), ContextMenuAction::DeleteMessage)
+                .with_icon("🗑️".to_string())
+                .with_shortcut("Del".to_string())
+                .with_separator(),
+        );
 
-        items.push(ContextMenuItem::new("Properties".to_string(), ContextMenuAction::Properties)
-            .with_icon("ℹ️".to_string()));
+        items.push(
+            ContextMenuItem::new("Properties".to_string(), ContextMenuAction::Properties)
+                .with_icon("ℹ️".to_string()),
+        );
 
         items
     }
 
     /// Build context menu items for email folders
-    fn build_email_folder_items(&self, folder_name: &str, is_special: bool, unread_count: usize) -> Vec<ContextMenuItem> {
+    fn build_email_folder_items(
+        &self,
+        folder_name: &str,
+        is_special: bool,
+        unread_count: usize,
+    ) -> Vec<ContextMenuItem> {
         let mut items = Vec::new();
 
-        items.push(ContextMenuItem::new("Refresh Folder".to_string(), ContextMenuAction::RefreshFolder)
+        items.push(
+            ContextMenuItem::new(
+                "Refresh Folder".to_string(),
+                ContextMenuAction::RefreshFolder,
+            )
             .with_icon("🔄".to_string())
-            .with_shortcut("F5".to_string()));
+            .with_shortcut("F5".to_string()),
+        );
 
         if unread_count > 0 {
-            items.push(ContextMenuItem::new("Mark All as Read".to_string(), ContextMenuAction::MarkAllAsRead)
+            items.push(
+                ContextMenuItem::new(
+                    "Mark All as Read".to_string(),
+                    ContextMenuAction::MarkAllAsRead,
+                )
                 .with_icon("📖".to_string())
-                .with_shortcut("Ctrl+Shift+R".to_string()));
+                .with_shortcut("Ctrl+Shift+R".to_string()),
+            );
         }
 
-        items.push(ContextMenuItem::new("Compact Folder".to_string(), ContextMenuAction::CompactFolder)
+        items.push(
+            ContextMenuItem::new(
+                "Compact Folder".to_string(),
+                ContextMenuAction::CompactFolder,
+            )
             .with_icon("📦".to_string())
-            .with_separator());
+            .with_separator(),
+        );
 
         if !is_special {
-            items.push(ContextMenuItem::new("Create Subfolder".to_string(), ContextMenuAction::CreateFolder)
+            items.push(
+                ContextMenuItem::new(
+                    "Create Subfolder".to_string(),
+                    ContextMenuAction::CreateFolder,
+                )
                 .with_icon("📁".to_string())
-                .with_shortcut("Ctrl+Shift+N".to_string()));
+                .with_shortcut("Ctrl+Shift+N".to_string()),
+            );
 
-            items.push(ContextMenuItem::new(format!("Rename '{}'", folder_name), ContextMenuAction::RenameFolder)
+            items.push(
+                ContextMenuItem::new(
+                    format!("Rename '{}'", folder_name),
+                    ContextMenuAction::RenameFolder,
+                )
                 .with_icon("✏️".to_string())
-                .with_shortcut("F2".to_string()));
+                .with_shortcut("F2".to_string()),
+            );
 
-            items.push(ContextMenuItem::new(format!("Delete '{}'", folder_name), ContextMenuAction::DeleteFolder)
+            items.push(
+                ContextMenuItem::new(
+                    format!("Delete '{}'", folder_name),
+                    ContextMenuAction::DeleteFolder,
+                )
                 .with_icon("🗑️".to_string())
                 .with_shortcut("Del".to_string())
-                .with_separator());
+                .with_separator(),
+            );
         }
 
-        items.push(ContextMenuItem::new("Properties".to_string(), ContextMenuAction::Properties)
-            .with_icon("ℹ️".to_string()));
+        items.push(
+            ContextMenuItem::new("Properties".to_string(), ContextMenuAction::Properties)
+                .with_icon("ℹ️".to_string()),
+        );
 
         items
     }
 
     /// Build context menu items for calendar events
-    fn build_calendar_event_items(&self, is_recurring: bool, is_editable: bool) -> Vec<ContextMenuItem> {
+    fn build_calendar_event_items(
+        &self,
+        is_recurring: bool,
+        is_editable: bool,
+    ) -> Vec<ContextMenuItem> {
         let mut items = Vec::new();
 
-        items.push(ContextMenuItem::new("View Details".to_string(), ContextMenuAction::ViewEventDetails)
+        items.push(
+            ContextMenuItem::new(
+                "View Details".to_string(),
+                ContextMenuAction::ViewEventDetails,
+            )
             .with_icon("👁️".to_string())
-            .with_shortcut("Enter".to_string()));
+            .with_shortcut("Enter".to_string()),
+        );
 
         if is_editable {
-            items.push(ContextMenuItem::new("Edit Event".to_string(), ContextMenuAction::EditEvent)
-                .with_icon("✏️".to_string())
-                .with_shortcut("E".to_string()));
+            items.push(
+                ContextMenuItem::new("Edit Event".to_string(), ContextMenuAction::EditEvent)
+                    .with_icon("✏️".to_string())
+                    .with_shortcut("E".to_string()),
+            );
 
-            items.push(ContextMenuItem::new("Duplicate Event".to_string(), ContextMenuAction::DuplicateEvent)
+            items.push(
+                ContextMenuItem::new(
+                    "Duplicate Event".to_string(),
+                    ContextMenuAction::DuplicateEvent,
+                )
                 .with_icon("📄".to_string())
-                .with_shortcut("Ctrl+D".to_string()));
+                .with_shortcut("Ctrl+D".to_string()),
+            );
         }
 
-        items.push(ContextMenuItem::new("Export Event".to_string(), ContextMenuAction::ExportEvent)
-            .with_icon("💾".to_string())
-            .with_separator());
+        items.push(
+            ContextMenuItem::new("Export Event".to_string(), ContextMenuAction::ExportEvent)
+                .with_icon("💾".to_string())
+                .with_separator(),
+        );
 
         if is_editable {
             let delete_text = if is_recurring {
@@ -448,10 +558,12 @@ impl ContextMenu {
             } else {
                 "Delete Event"
             };
-            
-            items.push(ContextMenuItem::new(delete_text.to_string(), ContextMenuAction::DeleteEvent)
-                .with_icon("🗑️".to_string())
-                .with_shortcut("Del".to_string()));
+
+            items.push(
+                ContextMenuItem::new(delete_text.to_string(), ContextMenuAction::DeleteEvent)
+                    .with_icon("🗑️".to_string())
+                    .with_shortcut("Del".to_string()),
+            );
         }
 
         items
@@ -461,22 +573,39 @@ impl ContextMenu {
     fn build_account_items(&self, is_online: bool) -> Vec<ContextMenuItem> {
         let mut items = Vec::new();
 
-        items.push(ContextMenuItem::new("Refresh Account".to_string(), ContextMenuAction::RefreshAccount)
+        items.push(
+            ContextMenuItem::new(
+                "Refresh Account".to_string(),
+                ContextMenuAction::RefreshAccount,
+            )
             .with_icon("🔄".to_string())
-            .with_shortcut("F5".to_string()));
+            .with_shortcut("F5".to_string()),
+        );
 
-        items.push(ContextMenuItem::new("Account Settings".to_string(), ContextMenuAction::AccountSettings)
+        items.push(
+            ContextMenuItem::new(
+                "Account Settings".to_string(),
+                ContextMenuAction::AccountSettings,
+            )
             .with_icon("⚙️".to_string())
             .with_shortcut("Ctrl+,".to_string())
-            .with_separator());
+            .with_separator(),
+        );
 
-        items.push(ContextMenuItem::new("Add Account".to_string(), ContextMenuAction::AddAccount)
-            .with_icon("➕".to_string())
-            .with_shortcut("Ctrl+N".to_string()));
+        items.push(
+            ContextMenuItem::new("Add Account".to_string(), ContextMenuAction::AddAccount)
+                .with_icon("➕".to_string())
+                .with_shortcut("Ctrl+N".to_string()),
+        );
 
-        items.push(ContextMenuItem::new("Remove Account".to_string(), ContextMenuAction::RemoveAccount)
+        items.push(
+            ContextMenuItem::new(
+                "Remove Account".to_string(),
+                ContextMenuAction::RemoveAccount,
+            )
             .with_icon("➖".to_string())
-            .enabled(is_online)); // Only allow removal if account is online/accessible
+            .enabled(is_online),
+        ); // Only allow removal if account is online/accessible
 
         items
     }
@@ -487,12 +616,10 @@ impl ContextMenu {
             ContextMenuItem::new("Refresh".to_string(), ContextMenuAction::RefreshAccount)
                 .with_icon("🔄".to_string())
                 .with_shortcut("F5".to_string()),
-            
             ContextMenuItem::new("Select All".to_string(), ContextMenuAction::SelectAll)
                 .with_icon("☑️".to_string())
                 .with_shortcut("Ctrl+A".to_string())
                 .with_separator(),
-            
             ContextMenuItem::new("Properties".to_string(), ContextMenuAction::Properties)
                 .with_icon("ℹ️".to_string()),
         ]
@@ -523,11 +650,11 @@ impl ContextMenu {
 
         for item in &self.items {
             let mut item_width = item.label.len() as u16;
-            
+
             if let Some(ref icon) = item.icon {
                 item_width += icon.chars().count() as u16 + 1; // +1 for space
             }
-            
+
             if let Some(ref shortcut) = item.shortcut {
                 item_width += shortcut.len() as u16 + 3; // +3 for spacing
             }
@@ -539,7 +666,13 @@ impl ContextMenu {
     }
 
     /// Render the context menu
-    pub fn render(&self, frame: &mut Frame, area: Rect, theme: &Theme, typography: &TypographySystem) {
+    pub fn render(
+        &self,
+        frame: &mut Frame,
+        area: Rect,
+        theme: &Theme,
+        typography: &TypographySystem,
+    ) {
         if !self.visible || self.items.is_empty() {
             return;
         }
@@ -560,10 +693,10 @@ impl ContextMenu {
 
         // Create menu items
         let mut list_items = Vec::new();
-        
+
         for (i, item) in self.items.iter().enumerate() {
             let is_selected = i == self.selected_index;
-            
+
             let mut spans = Vec::new();
 
             // Add icon if present
@@ -574,7 +707,7 @@ impl ContextMenu {
                         Style::default().fg(theme.colors.palette.accent)
                     } else {
                         Style::default().fg(theme.colors.palette.text_muted)
-                    }
+                    },
                 ));
             }
 
@@ -602,7 +735,7 @@ impl ContextMenu {
                             .bg(theme.colors.palette.accent)
                     } else {
                         Style::default().fg(theme.colors.palette.text_muted)
-                    }
+                    },
                 ));
             }
 
@@ -611,12 +744,10 @@ impl ContextMenu {
 
             // Add separator if requested
             if item.separator_after {
-                let separator_line = Line::from(vec![
-                    Span::styled(
-                        "─".repeat(inner_area.width as usize),
-                        Style::default().fg(theme.colors.palette.text_muted)
-                    )
-                ]);
+                let separator_line = Line::from(vec![Span::styled(
+                    "─".repeat(inner_area.width as usize),
+                    Style::default().fg(theme.colors.palette.text_muted),
+                )]);
                 list_items.push(ListItem::new(vec![separator_line]));
             }
         }
@@ -656,11 +787,12 @@ mod tests {
         menu.show_at_position(10, 10, context);
         assert!(menu.is_visible());
         assert!(!menu.items.is_empty());
-        
+
         // Should have reply actions for non-draft messages
-        let has_reply = menu.items.iter().any(|item| 
-            matches!(item.action, ContextMenuAction::ReplyToMessage)
-        );
+        let has_reply = menu
+            .items
+            .iter()
+            .any(|item| matches!(item.action, ContextMenuAction::ReplyToMessage));
         assert!(has_reply);
     }
 
@@ -668,13 +800,13 @@ mod tests {
     fn test_menu_navigation() {
         let mut menu = ContextMenu::new();
         let context = ContextType::General;
-        
+
         menu.show_at_position(0, 0, context);
         assert_eq!(menu.selected_index, 0);
-        
+
         menu.next_item();
         assert!(menu.selected_index > 0 || menu.items.len() <= 1);
-        
+
         menu.previous_item();
         // Should wrap around or go back
     }
@@ -689,11 +821,12 @@ mod tests {
         };
 
         menu.show_at_position(0, 0, context);
-        
+
         // Should have mark all as read when there are unread messages
-        let has_mark_all_read = menu.items.iter().any(|item|
-            matches!(item.action, ContextMenuAction::MarkAllAsRead)
-        );
+        let has_mark_all_read = menu
+            .items
+            .iter()
+            .any(|item| matches!(item.action, ContextMenuAction::MarkAllAsRead));
         assert!(has_mark_all_read);
     }
 }

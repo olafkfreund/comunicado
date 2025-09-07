@@ -46,11 +46,21 @@ impl EncryptionEngine {
         }
     }
 
-    pub async fn encrypt_file(&self, _source: &Path, _target: &Path, _password: &str) -> EncryptionResult<()> {
+    pub async fn encrypt_file(
+        &self,
+        _source: &Path,
+        _target: &Path,
+        _password: &str,
+    ) -> EncryptionResult<()> {
         Ok(()) // Placeholder
     }
 
-    pub async fn decrypt_file(&self, _source: &Path, _target: &Path, _password: &str) -> EncryptionResult<()> {
+    pub async fn decrypt_file(
+        &self,
+        _source: &Path,
+        _target: &Path,
+        _password: &str,
+    ) -> EncryptionResult<()> {
         Ok(()) // Placeholder
     }
 }

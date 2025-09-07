@@ -7,11 +7,11 @@
 //! - Flatpak packages for sandboxed distribution
 //! - Snap packages for Ubuntu Core and other distributions
 
-use crate::deployment::{Platform, DeploymentArtifact, OperatingSystem, ArtifactType};
+use crate::deployment::{ArtifactType, DeploymentArtifact, OperatingSystem, Platform};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::{PathBuf}; // Path
+use std::path::PathBuf; // Path
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -20,25 +20,25 @@ use uuid::Uuid;
 pub enum PackageError {
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
-    
+
     #[error("Unsupported package type: {0:?}")]
     UnsupportedPackageType(PackageType),
-    
+
     #[error("Build failed: {0}")]
     BuildFailed(String),
-    
+
     #[error("Missing dependency: {0}")]
     MissingDependency(String),
-    
+
     #[error("Invalid metadata: {0}")]
     InvalidMetadata(String),
-    
+
     #[error("Platform not supported: {0:?}")]
     PlatformNotSupported(Platform),
-    
+
     #[error("Command execution failed: {0}")]
     CommandFailed(String),
-    
+
     #[error("Template error: {0}")]
     Template(String),
 }
@@ -184,13 +184,13 @@ pub trait PackageBuilder: Send + Sync {
 impl PackageManager {
     pub fn new() -> PackageResult<Self> {
         let mut builders: HashMap<PackageType, Box<dyn PackageBuilder>> = HashMap::new();
-        
+
         // Register package builders
         builders.insert(PackageType::Debian, Box::new(DebianPackage::new()?));
         builders.insert(PackageType::Rpm, Box::new(RpmPackage::new()?));
         builders.insert(PackageType::AppImage, Box::new(AppImagePackage::new()?));
         builders.insert(PackageType::Flatpak, Box::new(FlatpakPackage::new()?));
-        
+
         Ok(Self {
             config: PackageManagerConfig::default(),
             builders,
@@ -199,7 +199,8 @@ impl PackageManager {
 
     /// Build a package with the specified configuration
     pub async fn build_package(&self, config: PackageConfig) -> PackageResult<DeploymentArtifact> {
-        let builder = self.builders
+        let builder = self
+            .builders
             .get(&config.package_type)
             .ok_or_else(|| PackageError::UnsupportedPackageType(config.package_type.clone()))?;
 
@@ -253,14 +254,24 @@ impl PackageManager {
     pub async fn install_artifact(&self, artifact: &DeploymentArtifact) -> PackageResult<()> {
         // Implementation would install the artifact on the system
         // This is a placeholder that simulates the installation process
-        println!("Installing artifact: {} v{}", artifact.name, artifact.version);
+        println!(
+            "Installing artifact: {} v{}",
+            artifact.name, artifact.version
+        );
         Ok(())
     }
 
     /// Install an artifact with custom configuration
-    pub async fn install_artifact_with_config(&self, artifact: &DeploymentArtifact, _config: &serde_json::Value) -> PackageResult<()> {
+    pub async fn install_artifact_with_config(
+        &self,
+        artifact: &DeploymentArtifact,
+        _config: &serde_json::Value,
+    ) -> PackageResult<()> {
         // Implementation would install with custom configuration
-        println!("Installing artifact with custom config: {} v{}", artifact.name, artifact.version);
+        println!(
+            "Installing artifact with custom config: {} v{}",
+            artifact.name, artifact.version
+        );
         Ok(())
     }
 }
@@ -277,7 +288,12 @@ impl Default for PackageManagerConfig {
 }
 
 impl PackageConfig {
-    pub fn new(name: String, version: String, platform: Platform, package_type: PackageType) -> Self {
+    pub fn new(
+        name: String,
+        version: String,
+        platform: Platform,
+        package_type: PackageType,
+    ) -> Self {
         Self {
             id: Uuid::new_v4(),
             name,
@@ -308,7 +324,8 @@ impl PackageConfig {
             package_type,
         );
 
-        config.description = "Modern TUI email and calendar client for terminal enthusiasts".to_string();
+        config.description =
+            "Modern TUI email and calendar client for terminal enthusiasts".to_string();
         config.maintainer = "Comunicado Team <contact@comunicado.app>".to_string();
         config.homepage = Some("https://github.com/comunicado/comunicado".to_string());
         config.license = "MIT".to_string();
@@ -374,14 +391,17 @@ impl PackageBuilder for DebianPackage {
 
         // Implementation placeholder - would create debian package structure
         // and call dpkg-deb to build the .deb file
-        
+
         let artifact = DeploymentArtifact {
             id: config.id,
             name: format!("{}-{}.deb", config.name, config.version),
             version: config.version.clone(),
             platform: config.platform.clone(),
             artifact_type: ArtifactType::Deb,
-            file_path: PathBuf::from(format!("target/packages/{}-{}.deb", config.name, config.version)),
+            file_path: PathBuf::from(format!(
+                "target/packages/{}-{}.deb",
+                config.name, config.version
+            )),
             checksum: "placeholder".to_string(),
             size_bytes: 0,
             created_at: Utc::now(),
@@ -429,7 +449,10 @@ impl PackageBuilder for RpmPackage {
             version: config.version.clone(),
             platform: config.platform.clone(),
             artifact_type: ArtifactType::Rpm,
-            file_path: PathBuf::from(format!("target/packages/{}-{}.rpm", config.name, config.version)),
+            file_path: PathBuf::from(format!(
+                "target/packages/{}-{}.rpm",
+                config.name, config.version
+            )),
             checksum: "placeholder".to_string(),
             size_bytes: 0,
             created_at: Utc::now(),
@@ -474,7 +497,10 @@ impl PackageBuilder for AppImagePackage {
             version: config.version.clone(),
             platform: config.platform.clone(),
             artifact_type: ArtifactType::AppImage,
-            file_path: PathBuf::from(format!("target/packages/{}-{}.AppImage", config.name, config.version)),
+            file_path: PathBuf::from(format!(
+                "target/packages/{}-{}.AppImage",
+                config.name, config.version
+            )),
             checksum: "placeholder".to_string(),
             size_bytes: 0,
             created_at: Utc::now(),
@@ -519,7 +545,10 @@ impl PackageBuilder for FlatpakPackage {
             version: config.version.clone(),
             platform: config.platform.clone(),
             artifact_type: ArtifactType::Flatpak,
-            file_path: PathBuf::from(format!("target/packages/{}-{}.flatpak", config.name, config.version)),
+            file_path: PathBuf::from(format!(
+                "target/packages/{}-{}.flatpak",
+                config.name, config.version
+            )),
             checksum: "placeholder".to_string(),
             size_bytes: 0,
             created_at: Utc::now(),

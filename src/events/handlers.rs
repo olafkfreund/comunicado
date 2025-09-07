@@ -3,7 +3,7 @@
 //! This module provides standard event handlers for common system operations
 //! like logging, notifications, state updates, and cross-component communication.
 
-use crate::events::bus::{Event, EventHandler, EventError, HandlerPriority};
+use crate::events::bus::{Event, EventError, EventHandler, HandlerPriority};
 use crate::events::types::*;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -30,22 +30,22 @@ impl UIStateHandler {
             state_change_listeners: Vec::new(),
         }
     }
-    
+
     pub fn add_listener<F>(&mut self, listener: F)
     where
         F: Fn(&UIEvent) + Send + Sync + 'static,
     {
         self.state_change_listeners.push(Box::new(listener));
     }
-    
+
     pub fn get_current_pane(&self) -> FocusedPane {
         self.current_pane.lock().unwrap().clone()
     }
-    
+
     pub fn get_current_mode(&self) -> UIMode {
         self.current_mode.lock().unwrap().clone()
     }
-    
+
     pub fn get_current_view(&self) -> ViewType {
         self.current_view.lock().unwrap().clone()
     }
@@ -80,15 +80,15 @@ impl EventHandler<UIEventData> for UIStateHandler {
                 tracing::trace!("Unhandled UI event: {:?}", event.event);
             }
         }
-        
+
         // Notify listeners
         for listener in &self.state_change_listeners {
             listener(&event.event);
         }
-        
+
         Ok(())
     }
-    
+
     fn priority(&self) -> HandlerPriority {
         HandlerPriority::High
     }
@@ -130,13 +130,17 @@ impl NotificationHandler {
             ]),
         }
     }
-    
+
     pub fn enable_notification(&mut self, notification_type: String, enabled: bool) {
-        self.enabled_notifications.insert(notification_type, enabled);
+        self.enabled_notifications
+            .insert(notification_type, enabled);
     }
-    
+
     fn is_notification_enabled(&self, notification_type: &str) -> bool {
-        self.enabled_notifications.get(notification_type).copied().unwrap_or(false)
+        self.enabled_notifications
+            .get(notification_type)
+            .copied()
+            .unwrap_or(false)
     }
 }
 
@@ -153,21 +157,28 @@ impl EventHandler<EmailEventData> for NotificationHandler {
                     );
                 }
             }
-            EmailEvent::FolderSynced { account_id, folder_path, message_count } => {
+            EmailEvent::FolderSynced {
+                account_id,
+                folder_path,
+                message_count,
+            } => {
                 if message_count > &0 {
                     let mut service = self.notification_service.lock().unwrap();
                     service.show_toast(
-                        &format!("Synced {} messages from {}/{}", message_count, account_id, folder_path),
+                        &format!(
+                            "Synced {} messages from {}/{}",
+                            message_count, account_id, folder_path
+                        ),
                         3000,
                     );
                 }
             }
             _ => {}
         }
-        
+
         Ok(())
     }
-    
+
     fn priority(&self) -> HandlerPriority {
         HandlerPriority::Normal
     }
@@ -176,7 +187,10 @@ impl EventHandler<EmailEventData> for NotificationHandler {
 impl EventHandler<CalendarEventData> for NotificationHandler {
     fn handle(&mut self, event: &CalendarEventData) -> Result<(), EventError> {
         match &event.event {
-            CalendarEvent::ReminderTriggered { event_id, minutes_before } => {
+            CalendarEvent::ReminderTriggered {
+                event_id,
+                minutes_before,
+            } => {
                 if self.is_notification_enabled("calendar_reminder") {
                     let mut service = self.notification_service.lock().unwrap();
                     service.show_notification(
@@ -196,10 +210,10 @@ impl EventHandler<CalendarEventData> for NotificationHandler {
             }
             _ => {}
         }
-        
+
         Ok(())
     }
-    
+
     fn priority(&self) -> HandlerPriority {
         HandlerPriority::Normal
     }
@@ -232,10 +246,10 @@ impl EventHandler<NetworkEventData> for NotificationHandler {
             }
             _ => {}
         }
-        
+
         Ok(())
     }
-    
+
     fn priority(&self) -> HandlerPriority {
         HandlerPriority::High
     }
@@ -270,11 +284,11 @@ impl AnalyticsHandler {
             enabled: true,
         }
     }
-    
+
     pub fn enable(&mut self, enabled: bool) {
         self.enabled = enabled;
     }
-    
+
     pub fn get_metrics(&self) -> UsageMetrics {
         let metrics = self.metrics.lock().unwrap();
         UsageMetrics {
@@ -286,18 +300,21 @@ impl AnalyticsHandler {
             performance_issues: metrics.performance_issues,
         }
     }
-    
+
     pub fn get_session_id(&self) -> Uuid {
         self.session_id
     }
-    
+
     fn track_event(&self, event_type: &str) {
         if !self.enabled {
             return;
         }
-        
+
         let mut metrics = self.metrics.lock().unwrap();
-        *metrics.session_events.entry(event_type.to_string()).or_insert(0) += 1;
+        *metrics
+            .session_events
+            .entry(event_type.to_string())
+            .or_insert(0) += 1;
     }
 }
 
@@ -310,13 +327,13 @@ impl Default for AnalyticsHandler {
 impl EventHandler<UIEventData> for AnalyticsHandler {
     fn handle(&mut self, event: &UIEventData) -> Result<(), EventError> {
         self.track_event(&format!("ui_{:?}", event.event));
-        
+
         let mut metrics = self.metrics.lock().unwrap();
         metrics.ui_interactions += 1;
-        
+
         Ok(())
     }
-    
+
     fn priority(&self) -> HandlerPriority {
         HandlerPriority::Low
     }
@@ -325,13 +342,13 @@ impl EventHandler<UIEventData> for AnalyticsHandler {
 impl EventHandler<EmailEventData> for AnalyticsHandler {
     fn handle(&mut self, event: &EmailEventData) -> Result<(), EventError> {
         self.track_event(&format!("email_{:?}", event.event));
-        
+
         let mut metrics = self.metrics.lock().unwrap();
         metrics.email_operations += 1;
-        
+
         Ok(())
     }
-    
+
     fn priority(&self) -> HandlerPriority {
         HandlerPriority::Low
     }
@@ -340,13 +357,13 @@ impl EventHandler<EmailEventData> for AnalyticsHandler {
 impl EventHandler<CalendarEventData> for AnalyticsHandler {
     fn handle(&mut self, event: &CalendarEventData) -> Result<(), EventError> {
         self.track_event(&format!("calendar_{:?}", event.event));
-        
+
         let mut metrics = self.metrics.lock().unwrap();
         metrics.calendar_operations += 1;
-        
+
         Ok(())
     }
-    
+
     fn priority(&self) -> HandlerPriority {
         HandlerPriority::Low
     }
@@ -379,31 +396,33 @@ impl ErrorRecoveryHandler {
             recovery_strategies: HashMap::new(),
         }
     }
-    
+
     pub fn add_strategy<F>(&mut self, error_type: String, strategy: F)
     where
         F: Fn(&dyn Event) -> RecoveryAction + Send + Sync + 'static,
     {
-        self.recovery_strategies.insert(error_type, Box::new(strategy));
+        self.recovery_strategies
+            .insert(error_type, Box::new(strategy));
     }
-    
+
     fn handle_error(&mut self, event: &dyn Event, error_type: &str) -> RecoveryAction {
         let event_id = event.metadata().id.to_string();
-        
+
         let retry_count = {
             let mut attempts = self.retry_attempts.lock().unwrap();
             let count = attempts.entry(event_id.clone()).or_insert(0);
             *count += 1;
             *count
         };
-        
+
         if retry_count > self.max_retries {
             tracing::error!("Max retries exceeded for {}: {}", error_type, event_id);
-            return RecoveryAction::UserIntervention(
-                format!("Failed to process {} after {} attempts", error_type, retry_count)
-            );
+            return RecoveryAction::UserIntervention(format!(
+                "Failed to process {} after {} attempts",
+                error_type, retry_count
+            ));
         }
-        
+
         if let Some(strategy) = self.recovery_strategies.get(error_type) {
             strategy(event)
         } else {
@@ -427,7 +446,7 @@ impl EventHandler<NetworkEventData> for ErrorRecoveryHandler {
         match &event.event {
             NetworkEvent::ServerError { server, error: _ } => {
                 let recovery = self.handle_error(event, "server_error");
-                
+
                 match recovery {
                     RecoveryAction::Retry => {
                         tracing::info!("Retrying connection to {}", server);
@@ -451,10 +470,10 @@ impl EventHandler<NetworkEventData> for ErrorRecoveryHandler {
             }
             _ => {}
         }
-        
+
         Ok(())
     }
-    
+
     fn priority(&self) -> HandlerPriority {
         HandlerPriority::Critical
     }
@@ -474,11 +493,11 @@ impl MockNotificationService {
     pub fn new() -> Self {
         Self::default()
     }
-    
+
     pub fn get_notifications(&self) -> &[(String, String, NotificationPriority)] {
         &self.notifications
     }
-    
+
     pub fn get_toasts(&self) -> &[(String, u64)] {
         &self.toasts
     }
@@ -486,13 +505,14 @@ impl MockNotificationService {
 
 impl NotificationService for MockNotificationService {
     fn show_notification(&mut self, title: &str, message: &str, priority: NotificationPriority) {
-        self.notifications.push((title.to_string(), message.to_string(), priority));
+        self.notifications
+            .push((title.to_string(), message.to_string(), priority));
     }
-    
+
     fn show_toast(&mut self, message: &str, duration_ms: u64) {
         self.toasts.push((message.to_string(), duration_ms));
     }
-    
+
     fn clear_notifications(&mut self) {
         self.notifications.clear();
         self.toasts.clear();
@@ -502,47 +522,50 @@ impl NotificationService for MockNotificationService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_ui_state_handler() {
         let mut handler = UIStateHandler::new();
-        
+
         assert_eq!(handler.get_current_pane(), FocusedPane::MessageList);
-        
+
         let event = events::pane_changed(FocusedPane::MessageList, FocusedPane::Calendar);
         assert!(handler.handle(&event).is_ok());
-        
+
         assert_eq!(handler.get_current_pane(), FocusedPane::Calendar);
     }
-    
+
     #[test]
     fn test_notification_handler() {
         let service = MockNotificationService::new();
         let service_arc = Arc::new(Mutex::new(service));
         let mut enabled_notifications = HashMap::new();
         enabled_notifications.insert("email_received".to_string(), true);
-        
+
         let mut handler = NotificationHandler {
             notification_service: service_arc.clone(),
             enabled_notifications,
         };
-        
+
         let event = events::email_received("account1".to_string(), Uuid::new_v4());
         assert!(handler.handle(&event).is_ok());
-        
+
         // Test that notification was triggered by accessing the mock service directly
         let service_guard = service_arc.lock().unwrap();
-        let mock_service = service_guard.as_any().downcast_ref::<MockNotificationService>().unwrap();
+        let mock_service = service_guard
+            .as_any()
+            .downcast_ref::<MockNotificationService>()
+            .unwrap();
         assert_eq!(mock_service.get_notifications().len(), 1);
     }
-    
+
     #[test]
     fn test_analytics_handler() {
         let mut handler = AnalyticsHandler::new();
-        
+
         let event = events::pane_changed(FocusedPane::MessageList, FocusedPane::Calendar);
         assert!(handler.handle(&event).is_ok());
-        
+
         let metrics = handler.get_metrics();
         assert_eq!(metrics.ui_interactions, 1);
         assert!(!metrics.session_events.is_empty());
@@ -554,7 +577,6 @@ mod tests {
 trait AsAny {
     fn as_any(&self) -> &dyn std::any::Any;
 }
-
 
 impl<T: NotificationService + 'static> AsAny for T {
     fn as_any(&self) -> &dyn std::any::Any {

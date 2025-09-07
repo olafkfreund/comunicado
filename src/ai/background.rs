@@ -1,9 +1,9 @@
 //! Background processing system for AI operations
-//! 
+//!
 //! This module provides queuing, streaming, and non-blocking AI operations
 //! to optimize performance and user experience.
 
-use crate::ai::{AIResult, AIError, AIService};
+use crate::ai::{AIError, AIResult, AIService};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -62,10 +62,7 @@ pub enum AIOperationType {
         context: String,
     },
     /// Email categorization
-    EmailCategorization {
-        email_id: String,
-        content: String,
-    },
+    EmailCategorization { email_id: String, content: String },
     /// Calendar event parsing
     CalendarParsing {
         text: String,
@@ -164,7 +161,10 @@ impl AIOperation {
 
     /// Check if this operation is time-sensitive
     pub fn is_time_sensitive(&self) -> bool {
-        matches!(self.priority, OperationPriority::High | OperationPriority::Critical)
+        matches!(
+            self.priority,
+            OperationPriority::High | OperationPriority::Critical
+        )
     }
 
     /// Add metadata to the operation
@@ -280,7 +280,7 @@ impl AIBackgroundProcessor {
     /// Create a new background processor
     pub fn new(ai_service: Arc<AIService>, config: BackgroundConfig) -> Self {
         let concurrency_limiter = Arc::new(Semaphore::new(config.max_concurrent_operations));
-        
+
         Self {
             config: Arc::new(RwLock::new(config)),
             ai_service,
@@ -295,7 +295,12 @@ impl AIBackgroundProcessor {
     }
 
     /// Start the background processor
-    pub async fn start(&self) -> (mpsc::UnboundedReceiver<ProgressUpdate>, mpsc::UnboundedReceiver<OperationResult>) {
+    pub async fn start(
+        &self,
+    ) -> (
+        mpsc::UnboundedReceiver<ProgressUpdate>,
+        mpsc::UnboundedReceiver<OperationResult>,
+    ) {
         let (progress_tx, progress_rx) = mpsc::unbounded_channel();
         let (result_tx, result_rx) = mpsc::unbounded_channel();
 
@@ -359,9 +364,15 @@ impl AIBackgroundProcessor {
 
         // Update priority statistics
         let priority_name = format!("{:?}", queue[insert_pos].priority);
-        *stats.operations_by_priority.entry(priority_name).or_insert(0) += 1;
+        *stats
+            .operations_by_priority
+            .entry(priority_name)
+            .or_insert(0) += 1;
 
-        debug!("Queued AI operation {} with priority {:?}", operation_id, queue[insert_pos].priority);
+        debug!(
+            "Queued AI operation {} with priority {:?}",
+            operation_id, queue[insert_pos].priority
+        );
 
         Ok(operation_id)
     }
@@ -422,7 +433,7 @@ impl AIBackgroundProcessor {
     /// Start the main processing loop
     async fn start_processing_loop(&self) {
         let processor = Arc::new(self.clone());
-        
+
         tokio::spawn(async move {
             loop {
                 // Check shutdown signal
@@ -450,10 +461,10 @@ impl AIBackgroundProcessor {
 
                     // Acquire concurrency permit
                     let permit = processor.concurrency_limiter.clone().acquire_owned().await;
-                    
+
                     if permit.is_ok() {
                         let processor_clone = processor.clone();
-                        
+
                         // Process operation in background
                         tokio::spawn(async move {
                             processor_clone.process_operation(operation).await;
@@ -473,7 +484,7 @@ impl AIBackgroundProcessor {
     /// Start periodic statistics updater
     async fn start_stats_updater(&self) {
         let processor = Arc::new(self.clone());
-        
+
         tokio::spawn(async move {
             loop {
                 if *processor.shutdown_signal.read().await {
@@ -510,10 +521,13 @@ impl AIBackgroundProcessor {
             message: "Starting operation...".to_string(),
             partial_result: None,
             eta: operation.estimated_duration,
-        }).await;
+        })
+        .await;
 
         let config = self.config.read().await.clone();
-        let result = self.execute_operation_with_timeout(&operation, &config).await;
+        let result = self
+            .execute_operation_with_timeout(&operation, &config)
+            .await;
 
         let processing_time = start_time.elapsed();
 
@@ -527,10 +541,12 @@ impl AIBackgroundProcessor {
         let operation_result = OperationResult {
             operation_id: operation.id,
             status: match &result {
-                Ok(result) => OperationStatus::Completed { result: result.clone() },
-                Err(error) => OperationStatus::Failed { 
-                    error: error.to_string(), 
-                    retries_left: 0 
+                Ok(result) => OperationStatus::Completed {
+                    result: result.clone(),
+                },
+                Err(error) => OperationStatus::Failed {
+                    error: error.to_string(),
+                    retries_left: 0,
                 },
             },
             duration: processing_time,
@@ -540,7 +556,7 @@ impl AIBackgroundProcessor {
                 queue_time,
                 processing_time,
                 retry_attempts: 0,
-                cache_hit: false, // Could be enhanced to check cache
+                cache_hit: false,     // Could be enhanced to check cache
                 memory_usage_mb: 0.0, // Could be enhanced with actual memory tracking
                 tokens_processed: None,
             },
@@ -554,14 +570,16 @@ impl AIBackgroundProcessor {
             } else {
                 stats.failed_operations += 1;
             }
-            
+
             // Update average processing time
             let total_completed = stats.successful_operations + stats.failed_operations;
             if total_completed > 1 {
                 stats.avg_processing_time = Duration::from_millis(
-                    ((stats.avg_processing_time.as_millis() * (total_completed - 1) as u128 
-                     + processing_time.as_millis()) / total_completed as u128)
-                     .try_into().unwrap_or(0)
+                    ((stats.avg_processing_time.as_millis() * (total_completed - 1) as u128
+                        + processing_time.as_millis())
+                        / total_completed as u128)
+                        .try_into()
+                        .unwrap_or(0),
                 );
             } else {
                 stats.avg_processing_time = processing_time;
@@ -574,49 +592,70 @@ impl AIBackgroundProcessor {
 
     /// Execute operation with timeout
     async fn execute_operation_with_timeout(
-        &self, 
-        operation: &AIOperation, 
-        config: &BackgroundConfig
+        &self,
+        operation: &AIOperation,
+        config: &BackgroundConfig,
     ) -> AIResult<String> {
         let operation_future = self.execute_operation(operation, config);
-        
+
         match timeout(config.operation_timeout, operation_future).await {
             Ok(result) => result,
             Err(_) => {
-                warn!("AI operation {} timed out after {:?}", operation.id, config.operation_timeout);
+                warn!(
+                    "AI operation {} timed out after {:?}",
+                    operation.id, config.operation_timeout
+                );
                 Err(AIError::timeout(config.operation_timeout))
             }
         }
     }
 
     /// Execute the actual AI operation
-    async fn execute_operation(&self, operation: &AIOperation, config: &BackgroundConfig) -> AIResult<String> {
+    async fn execute_operation(
+        &self,
+        operation: &AIOperation,
+        config: &BackgroundConfig,
+    ) -> AIResult<String> {
         match &operation.operation_type {
-            AIOperationType::EmailSummarization { content, max_length, .. } => {
-                self.ai_service.summarize_email(content, *max_length).await
-            }
-            
-            AIOperationType::EmailReply { content, context, .. } => {
-                let suggestions = self.ai_service.suggest_email_reply(content, context).await?;
+            AIOperationType::EmailSummarization {
+                content,
+                max_length,
+                ..
+            } => self.ai_service.summarize_email(content, *max_length).await,
+
+            AIOperationType::EmailReply {
+                content, context, ..
+            } => {
+                let suggestions = self
+                    .ai_service
+                    .suggest_email_reply(content, context)
+                    .await?;
                 Ok(suggestions.join("\n"))
             }
-            
+
             AIOperationType::EmailCategorization { content, .. } => {
                 let category = self.ai_service.categorize_email(content).await?;
                 Ok(category.to_string())
             }
-            
+
             AIOperationType::CalendarParsing { text, context: _ } => {
                 let intent = self.ai_service.parse_scheduling_intent(text).await?;
-                serde_json::to_string(&intent)
-                    .map_err(|e| AIError::internal_error(format!("Failed to serialize scheduling intent: {}", e)))
+                serde_json::to_string(&intent).map_err(|e| {
+                    AIError::internal_error(format!("Failed to serialize scheduling intent: {}", e))
+                })
             }
-            
-            AIOperationType::BatchEmailProcessing { email_ids, operation } => {
-                self.process_batch_emails(email_ids, operation, config).await
+
+            AIOperationType::BatchEmailProcessing {
+                email_ids,
+                operation,
+            } => {
+                self.process_batch_emails(email_ids, operation, config)
+                    .await
             }
-            
-            AIOperationType::Custom { prompt, context, .. } => {
+
+            AIOperationType::Custom {
+                prompt, context, ..
+            } => {
                 let ai_context = context.as_ref().map(|c| crate::ai::AIContext {
                     user_preferences: std::collections::HashMap::new(),
                     email_thread: Some(c.clone()),
@@ -624,8 +663,10 @@ impl AIBackgroundProcessor {
                     max_length: None,
                     creativity: Some(0.7),
                 });
-                
-                self.ai_service.complete_text(prompt, ai_context.as_ref()).await
+
+                self.ai_service
+                    .complete_text(prompt, ai_context.as_ref())
+                    .await
             }
         }
     }
@@ -644,14 +685,14 @@ impl AIBackgroundProcessor {
             // Update progress
             let _progress = index as f32 / total_emails as f32;
             // Note: In a real implementation, you'd send progress updates here
-            
+
             // Simulate email processing based on operation type
             let result = match operation {
                 "summarize" => format!("Summary for email {}", email_id),
                 "categorize" => format!("Category for email {}", email_id),
                 _ => format!("Processed email {} with operation {}", email_id, operation),
             };
-            
+
             results.push(result);
 
             // Add small delay to prevent overwhelming the AI service
@@ -747,7 +788,7 @@ mod tests {
     #[test]
     fn test_background_config_defaults() {
         let config = BackgroundConfig::default();
-        
+
         assert_eq!(config.max_concurrent_operations, 4);
         assert_eq!(config.max_queue_size, 100);
         assert_eq!(config.operation_timeout, Duration::from_secs(30));

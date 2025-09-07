@@ -3,7 +3,7 @@
 //! This module provides comprehensive performance monitoring, metrics collection,
 //! and optimization suggestions for all system components.
 
-use chrono::{DateTime, Utc, Duration as ChronoDuration};
+use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
@@ -196,7 +196,7 @@ impl OperationTimer {
             operation,
         }
     }
-    
+
     pub fn finish(self) -> (String, String, Duration) {
         (self.component, self.operation, self.start_time.elapsed())
     }
@@ -237,7 +237,7 @@ impl PerformanceMonitor {
             max_history_size: 10000,
         }
     }
-    
+
     /// Start monitoring with periodic collection
     pub async fn start_monitoring(&self) {
         let system_metrics = Arc::clone(&self.system_metrics);
@@ -245,16 +245,16 @@ impl PerformanceMonitor {
         let thresholds = self.thresholds.clone();
         let active_alerts = Arc::clone(&self.active_alerts);
         let max_history = self.max_history_size;
-        
+
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_secs(30));
-            
+
             loop {
                 interval.tick().await;
-                
+
                 // Collect system metrics
                 let usage = Self::collect_system_metrics().await;
-                
+
                 // Store metrics with size limit
                 {
                     let mut metrics = system_metrics.write().await;
@@ -263,18 +263,18 @@ impl PerformanceMonitor {
                         metrics.pop_front();
                     }
                 }
-                
+
                 // Check for alerts
                 Self::check_system_alerts(&usage, &thresholds, &active_alerts).await;
-                
+
                 // Update component performance calculations
                 Self::update_component_calculations(&component_metrics).await;
             }
         });
-        
+
         info!("Performance monitoring started");
     }
-    
+
     /// Record an operation timing
     pub async fn record_operation(
         &self,
@@ -290,7 +290,7 @@ impl PerformanceMonitor {
             timestamp: Utc::now(),
             success,
         };
-        
+
         // Store timing
         {
             let mut timings = self.operation_timings.write().await;
@@ -299,22 +299,24 @@ impl PerformanceMonitor {
                 timings.pop_front();
             }
         }
-        
+
         // Update component metrics
-        self.update_component_performance(&component, duration, success).await;
+        self.update_component_performance(&component, duration, success)
+            .await;
     }
-    
+
     /// Create an operation timer
     pub fn start_timer(&self, component: String, operation: String) -> OperationTimer {
         OperationTimer::new(component, operation)
     }
-    
+
     /// Finish timing an operation
     pub async fn finish_timer(&self, timer: OperationTimer, success: bool) {
         let (component, operation, duration) = timer.finish();
-        self.record_operation(component, operation, duration, success).await;
+        self.record_operation(component, operation, duration, success)
+            .await;
     }
-    
+
     /// Update component performance metrics
     async fn update_component_performance(
         &self,
@@ -323,25 +325,25 @@ impl PerformanceMonitor {
         success: bool,
     ) {
         let mut components = self.component_metrics.write().await;
-        let performance = components.entry(component.to_string())
-            .or_insert_with(|| {
-                let mut perf = ComponentPerformance::default();
-                perf.component_name = component.to_string();
-                perf
-            });
-        
+        let performance = components.entry(component.to_string()).or_insert_with(|| {
+            let mut perf = ComponentPerformance::default();
+            perf.component_name = component.to_string();
+            perf
+        });
+
         let duration_ms = duration.as_millis() as f64;
-        
+
         // Update timing statistics
         performance.total_operations += 1;
         if !success {
             performance.failed_operations += 1;
         }
-        
-        performance.success_rate_percent = 
-            ((performance.total_operations - performance.failed_operations) as f64 
-             / performance.total_operations as f64) * 100.0;
-        
+
+        performance.success_rate_percent = ((performance.total_operations
+            - performance.failed_operations) as f64
+            / performance.total_operations as f64)
+            * 100.0;
+
         // Update response time statistics
         if performance.min_response_time_ms == f64::MAX {
             performance.min_response_time_ms = duration_ms;
@@ -349,28 +351,32 @@ impl PerformanceMonitor {
             performance.min_response_time_ms = performance.min_response_time_ms.min(duration_ms);
         }
         performance.max_response_time_ms = performance.max_response_time_ms.max(duration_ms);
-        
+
         // Calculate running average
-        let total_time = performance.average_response_time_ms * (performance.total_operations - 1) as f64;
-        performance.average_response_time_ms = (total_time + duration_ms) / performance.total_operations as f64;
-        
+        let total_time =
+            performance.average_response_time_ms * (performance.total_operations - 1) as f64;
+        performance.average_response_time_ms =
+            (total_time + duration_ms) / performance.total_operations as f64;
+
         performance.last_operation_time = Some(Utc::now());
-        
+
         // Update error/warning counts
         if !success {
             performance.error_count += 1;
         }
-        
+
         // Check for performance alerts
         self.check_component_alerts(component, performance).await;
     }
-    
+
     /// Check for component-specific performance alerts
     async fn check_component_alerts(&self, component: &str, performance: &ComponentPerformance) {
         let mut alerts_to_add = Vec::new();
-        
+
         // Check response time
-        if performance.average_response_time_ms > self.thresholds.database_query_time_critical_ms as f64 {
+        if performance.average_response_time_ms
+            > self.thresholds.database_query_time_critical_ms as f64
+        {
             alerts_to_add.push(PerformanceAlert {
                 id: format!("{}_response_time_critical", component),
                 level: AlertLevel::Critical,
@@ -378,7 +384,10 @@ impl PerformanceMonitor {
                 metric: "average_response_time".to_string(),
                 current_value: performance.average_response_time_ms,
                 threshold: self.thresholds.database_query_time_critical_ms as f64,
-                message: format!("Critical response time in {}: {:.2}ms", component, performance.average_response_time_ms),
+                message: format!(
+                    "Critical response time in {}: {:.2}ms",
+                    component, performance.average_response_time_ms
+                ),
                 timestamp: Utc::now(),
                 suggestions: vec![
                     "Check database indexes".to_string(),
@@ -386,7 +395,9 @@ impl PerformanceMonitor {
                     "Consider database connection pooling".to_string(),
                 ],
             });
-        } else if performance.average_response_time_ms > self.thresholds.database_query_time_warning_ms as f64 {
+        } else if performance.average_response_time_ms
+            > self.thresholds.database_query_time_warning_ms as f64
+        {
             alerts_to_add.push(PerformanceAlert {
                 id: format!("{}_response_time_warning", component),
                 level: AlertLevel::Warning,
@@ -394,7 +405,10 @@ impl PerformanceMonitor {
                 metric: "average_response_time".to_string(),
                 current_value: performance.average_response_time_ms,
                 threshold: self.thresholds.database_query_time_warning_ms as f64,
-                message: format!("Elevated response time in {}: {:.2}ms", component, performance.average_response_time_ms),
+                message: format!(
+                    "Elevated response time in {}: {:.2}ms",
+                    component, performance.average_response_time_ms
+                ),
                 timestamp: Utc::now(),
                 suggestions: vec![
                     "Monitor database performance".to_string(),
@@ -402,17 +416,24 @@ impl PerformanceMonitor {
                 ],
             });
         }
-        
+
         // Check success rate
         if performance.success_rate_percent < 95.0 {
             alerts_to_add.push(PerformanceAlert {
                 id: format!("{}_success_rate", component),
-                level: if performance.success_rate_percent < 90.0 { AlertLevel::Critical } else { AlertLevel::Warning },
+                level: if performance.success_rate_percent < 90.0 {
+                    AlertLevel::Critical
+                } else {
+                    AlertLevel::Warning
+                },
                 component: component.to_string(),
                 metric: "success_rate".to_string(),
                 current_value: performance.success_rate_percent,
                 threshold: 95.0,
-                message: format!("Low success rate in {}: {:.1}%", component, performance.success_rate_percent),
+                message: format!(
+                    "Low success rate in {}: {:.1}%",
+                    component, performance.success_rate_percent
+                ),
                 timestamp: Utc::now(),
                 suggestions: vec![
                     "Check error logs".to_string(),
@@ -421,7 +442,7 @@ impl PerformanceMonitor {
                 ],
             });
         }
-        
+
         // Add new alerts
         if !alerts_to_add.is_empty() {
             let mut active_alerts = self.active_alerts.write().await;
@@ -434,12 +455,12 @@ impl PerformanceMonitor {
             }
         }
     }
-    
+
     /// Collect system resource metrics
     async fn collect_system_metrics() -> SystemResourceUsage {
         // In a real implementation, this would use system monitoring libraries
         // For now, provide simulated but realistic values
-        
+
         SystemResourceUsage {
             cpu_usage_percent: Self::get_cpu_usage(),
             memory_usage_mb: Self::get_memory_usage_mb(),
@@ -454,7 +475,7 @@ impl PerformanceMonitor {
             timestamp: Utc::now(),
         }
     }
-    
+
     /// Check for system-level alerts
     async fn check_system_alerts(
         usage: &SystemResourceUsage,
@@ -462,7 +483,7 @@ impl PerformanceMonitor {
         active_alerts: &Arc<RwLock<Vec<PerformanceAlert>>>,
     ) {
         let mut new_alerts = Vec::new();
-        
+
         // Check CPU usage
         if usage.cpu_usage_percent > thresholds.cpu_usage_critical {
             new_alerts.push(PerformanceAlert {
@@ -496,7 +517,7 @@ impl PerformanceMonitor {
                 ],
             });
         }
-        
+
         // Check memory usage
         if usage.memory_usage_percent > thresholds.memory_usage_critical {
             new_alerts.push(PerformanceAlert {
@@ -515,7 +536,7 @@ impl PerformanceMonitor {
                 ],
             });
         }
-        
+
         // Add new alerts (avoiding duplicates)
         if !new_alerts.is_empty() {
             let mut alerts = active_alerts.write().await;
@@ -527,14 +548,14 @@ impl PerformanceMonitor {
             }
         }
     }
-    
+
     /// Update component performance calculations
     async fn update_component_calculations(
         component_metrics: &Arc<RwLock<HashMap<String, ComponentPerformance>>>,
     ) {
         let mut components = component_metrics.write().await;
         let now = Utc::now();
-        
+
         for performance in components.values_mut() {
             // Calculate operations per second
             if let Some(last_time) = performance.last_operation_time {
@@ -543,11 +564,11 @@ impl PerformanceMonitor {
             }
         }
     }
-    
+
     /// Generate comprehensive performance report
     pub async fn generate_report(&self, period_hours: u32) -> PerformanceReport {
         let cutoff_time = Utc::now() - ChronoDuration::hours(period_hours as i64);
-        
+
         // Get current system resources
         let system_resources = {
             let metrics = self.system_metrics.read().await;
@@ -568,24 +589,28 @@ impl PerformanceMonitor {
                 }
             })
         };
-        
+
         // Get component performances
         let component_performances = self.component_metrics.read().await.clone();
-        
+
         // Get active and resolved alerts
         let active_alerts = self.active_alerts.read().await.clone();
-        let resolved_alerts = self.resolved_alerts.read().await
+        let resolved_alerts = self
+            .resolved_alerts
+            .read()
+            .await
             .iter()
             .filter(|alert| alert.timestamp > cutoff_time)
             .cloned()
             .collect();
-        
+
         // Generate optimization suggestions
-        let optimization_suggestions = self.generate_optimization_suggestions(&component_performances);
-        
+        let optimization_suggestions =
+            self.generate_optimization_suggestions(&component_performances);
+
         // Perform trend analysis
         let trend_analysis = self.analyze_trends(period_hours).await;
-        
+
         PerformanceReport {
             generated_at: Utc::now(),
             report_period: ChronoDuration::hours(period_hours as i64),
@@ -597,14 +622,14 @@ impl PerformanceMonitor {
             trend_analysis,
         }
     }
-    
+
     /// Generate optimization suggestions based on performance data
     fn generate_optimization_suggestions(
         &self,
         components: &HashMap<String, ComponentPerformance>,
     ) -> Vec<OptimizationSuggestion> {
         let mut suggestions = Vec::new();
-        
+
         for (component, performance) in components {
             // High response time suggestions
             if performance.average_response_time_ms > 1000.0 {
@@ -625,7 +650,7 @@ impl PerformanceMonitor {
                     component: component.clone(),
                 });
             }
-            
+
             // Low success rate suggestions
             if performance.success_rate_percent < 95.0 {
                 suggestions.push(OptimizationSuggestion {
@@ -646,20 +671,20 @@ impl PerformanceMonitor {
                 });
             }
         }
-        
+
         suggestions
     }
-    
+
     /// Analyze performance trends
     async fn analyze_trends(&self, period_hours: u32) -> TrendAnalysis {
         let metrics = self.system_metrics.read().await;
         let cutoff_time = Utc::now() - ChronoDuration::hours(period_hours as i64);
-        
+
         let recent_metrics: Vec<&SystemResourceUsage> = metrics
             .iter()
             .filter(|m| m.timestamp > cutoff_time)
             .collect();
-        
+
         if recent_metrics.len() < 2 {
             return TrendAnalysis {
                 cpu_trend: TrendDirection::InsufficientData,
@@ -671,15 +696,21 @@ impl PerformanceMonitor {
                 confidence_level: 0.0,
             };
         }
-        
+
         // Calculate trends (simplified linear trend)
         let cpu_trend = Self::calculate_trend(
-            &recent_metrics.iter().map(|m| m.cpu_usage_percent).collect::<Vec<_>>()
+            &recent_metrics
+                .iter()
+                .map(|m| m.cpu_usage_percent)
+                .collect::<Vec<_>>(),
         );
         let memory_trend = Self::calculate_trend(
-            &recent_metrics.iter().map(|m| m.memory_usage_percent).collect::<Vec<_>>()
+            &recent_metrics
+                .iter()
+                .map(|m| m.memory_usage_percent)
+                .collect::<Vec<_>>(),
         );
-        
+
         TrendAnalysis {
             cpu_trend,
             memory_trend,
@@ -690,57 +721,77 @@ impl PerformanceMonitor {
             confidence_level: if recent_metrics.len() > 10 { 0.8 } else { 0.5 },
         }
     }
-    
+
     /// Calculate trend direction for a series of values
     fn calculate_trend(values: &[f64]) -> TrendDirection {
         if values.len() < 2 {
             return TrendDirection::InsufficientData;
         }
-        
+
         let mid = values.len() / 2;
         let first_half_avg: f64 = values[0..mid].iter().sum::<f64>() / mid as f64;
         let second_half_avg: f64 = values[mid..].iter().sum::<f64>() / (values.len() - mid) as f64;
-        
+
         let change_percent = ((second_half_avg - first_half_avg) / first_half_avg) * 100.0;
-        
+
         match change_percent {
             x if x > 10.0 => TrendDirection::Degrading,
             x if x < -10.0 => TrendDirection::Improving,
             _ => TrendDirection::Stable,
         }
     }
-    
+
     /// Get current alerts
     pub async fn get_active_alerts(&self) -> Vec<PerformanceAlert> {
         self.active_alerts.read().await.clone()
     }
-    
+
     /// Resolve an alert
     pub async fn resolve_alert(&self, alert_id: &str) {
         let mut active = self.active_alerts.write().await;
         if let Some(pos) = active.iter().position(|a| a.id == alert_id) {
             let mut alert = active.remove(pos);
             alert.timestamp = Utc::now(); // Update to resolution time
-            
+
             let mut resolved = self.resolved_alerts.write().await;
             resolved.push(alert);
-            
+
             // Keep only recent resolved alerts
             resolved.retain(|a| a.timestamp > Utc::now() - ChronoDuration::days(7));
         }
     }
-    
+
     /// System monitoring helper functions (would use real system APIs)
-    fn get_cpu_usage() -> f64 { 25.0 }
-    fn get_memory_usage_mb() -> f64 { 1024.0 }
-    fn get_total_memory_mb() -> f64 { 8192.0 }
-    fn get_memory_usage_percent() -> f64 { Self::get_memory_usage_mb() / Self::get_total_memory_mb() * 100.0 }
-    fn get_disk_usage_mb() -> f64 { 50000.0 }
-    fn get_disk_free_mb() -> f64 { 200000.0 }
-    fn get_network_rx_mb() -> f64 { 5.0 }
-    fn get_network_tx_mb() -> f64 { 2.5 }
-    fn get_open_fds() -> u32 { 150 }
-    fn get_thread_count() -> u32 { 25 }
+    fn get_cpu_usage() -> f64 {
+        25.0
+    }
+    fn get_memory_usage_mb() -> f64 {
+        1024.0
+    }
+    fn get_total_memory_mb() -> f64 {
+        8192.0
+    }
+    fn get_memory_usage_percent() -> f64 {
+        Self::get_memory_usage_mb() / Self::get_total_memory_mb() * 100.0
+    }
+    fn get_disk_usage_mb() -> f64 {
+        50000.0
+    }
+    fn get_disk_free_mb() -> f64 {
+        200000.0
+    }
+    fn get_network_rx_mb() -> f64 {
+        5.0
+    }
+    fn get_network_tx_mb() -> f64 {
+        2.5
+    }
+    fn get_open_fds() -> u32 {
+        150
+    }
+    fn get_thread_count() -> u32 {
+        25
+    }
 }
 
 #[cfg(test)]
@@ -765,20 +816,29 @@ mod tests {
     #[test]
     fn test_trend_calculation() {
         let improving_values = vec![100.0, 90.0, 80.0, 70.0];
-        assert_eq!(PerformanceMonitor::calculate_trend(&improving_values), TrendDirection::Improving);
-        
+        assert_eq!(
+            PerformanceMonitor::calculate_trend(&improving_values),
+            TrendDirection::Improving
+        );
+
         let degrading_values = vec![50.0, 60.0, 70.0, 80.0];
-        assert_eq!(PerformanceMonitor::calculate_trend(&degrading_values), TrendDirection::Degrading);
-        
+        assert_eq!(
+            PerformanceMonitor::calculate_trend(&degrading_values),
+            TrendDirection::Degrading
+        );
+
         let stable_values = vec![50.0, 52.0, 48.0, 51.0];
-        assert_eq!(PerformanceMonitor::calculate_trend(&stable_values), TrendDirection::Stable);
+        assert_eq!(
+            PerformanceMonitor::calculate_trend(&stable_values),
+            TrendDirection::Stable
+        );
     }
 
     #[tokio::test]
     async fn test_performance_monitor_creation() {
         let thresholds = PerformanceThresholds::default();
         let monitor = PerformanceMonitor::new(thresholds);
-        
+
         let alerts = monitor.get_active_alerts().await;
         assert!(alerts.is_empty());
     }

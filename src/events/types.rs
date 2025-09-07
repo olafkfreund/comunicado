@@ -5,8 +5,8 @@
 //! and consistent patterns.
 
 use crate::events::bus::{Event, EventMetadata, EventPriority};
-use uuid::Uuid;
 use std::collections::HashMap;
+use uuid::Uuid;
 
 // =============================================================================
 // UI Events - User interface interactions and state changes
@@ -16,27 +16,53 @@ use std::collections::HashMap;
 #[derive(Debug, Clone)]
 pub enum UIEvent {
     // Navigation events
-    PaneChanged { from: FocusedPane, to: FocusedPane },
-    ModeChanged { from: UIMode, to: UIMode },
-    ViewChanged { view: ViewType },
-    
+    PaneChanged {
+        from: FocusedPane,
+        to: FocusedPane,
+    },
+    ModeChanged {
+        from: UIMode,
+        to: UIMode,
+    },
+    ViewChanged {
+        view: ViewType,
+    },
+
     // Input events
-    KeyPressed { key: KeyEventData },
-    MouseClicked { position: (u16, u16), button: MouseButton },
-    
+    KeyPressed {
+        key: KeyEventData,
+    },
+    MouseClicked {
+        position: (u16, u16),
+        button: MouseButton,
+    },
+
     // Component state events
-    ComponentFocused { component_id: String },
-    ComponentBlurred { component_id: String },
-    ComponentResized { component_id: String, new_size: (u16, u16) },
-    
+    ComponentFocused {
+        component_id: String,
+    },
+    ComponentBlurred {
+        component_id: String,
+    },
+    ComponentResized {
+        component_id: String,
+        new_size: (u16, u16),
+    },
+
     // Window events
-    WindowResized { new_size: (u16, u16) },
+    WindowResized {
+        new_size: (u16, u16),
+    },
     WindowMinimized,
     WindowRestored,
-    
+
     // Theme events
-    ThemeChanged { theme_name: String },
-    ColorSchemeChanged { scheme: ColorScheme },
+    ThemeChanged {
+        theme_name: String,
+    },
+    ColorSchemeChanged {
+        scheme: ColorScheme,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -58,7 +84,7 @@ impl Event for UIEventData {
     fn event_type(&self) -> &'static str {
         "UIEvent"
     }
-    
+
     fn metadata(&self) -> &EventMetadata {
         &self.metadata
     }
@@ -72,31 +98,89 @@ impl Event for UIEventData {
 #[derive(Debug, Clone)]
 pub enum EmailEvent {
     // Email lifecycle
-    EmailReceived { account_id: String, email_id: Uuid },
-    EmailSent { account_id: String, email_id: Uuid },
-    EmailDeleted { account_id: String, email_id: Uuid },
-    EmailArchived { account_id: String, email_id: Uuid },
-    EmailMarkedRead { account_id: String, email_id: Uuid },
-    EmailMarkedUnread { account_id: String, email_id: Uuid },
-    EmailFlagged { account_id: String, email_id: Uuid },
-    EmailUnflagged { account_id: String, email_id: Uuid },
-    
+    EmailReceived {
+        account_id: String,
+        email_id: Uuid,
+    },
+    EmailSent {
+        account_id: String,
+        email_id: Uuid,
+    },
+    EmailDeleted {
+        account_id: String,
+        email_id: Uuid,
+    },
+    EmailArchived {
+        account_id: String,
+        email_id: Uuid,
+    },
+    EmailMarkedRead {
+        account_id: String,
+        email_id: Uuid,
+    },
+    EmailMarkedUnread {
+        account_id: String,
+        email_id: Uuid,
+    },
+    EmailFlagged {
+        account_id: String,
+        email_id: Uuid,
+    },
+    EmailUnflagged {
+        account_id: String,
+        email_id: Uuid,
+    },
+
     // Email operations
-    EmailComposed { draft_id: Uuid },
-    EmailReplied { original_id: Uuid, reply_id: Uuid },
-    EmailForwarded { original_id: Uuid, forward_id: Uuid },
-    
+    EmailComposed {
+        draft_id: Uuid,
+    },
+    EmailReplied {
+        original_id: Uuid,
+        reply_id: Uuid,
+    },
+    EmailForwarded {
+        original_id: Uuid,
+        forward_id: Uuid,
+    },
+
     // Folder operations
-    FolderChanged { account_id: String, folder_path: String },
-    FolderSynced { account_id: String, folder_path: String, message_count: usize },
-    FolderCreated { account_id: String, folder_path: String },
-    FolderDeleted { account_id: String, folder_path: String },
-    FolderRenamed { account_id: String, old_path: String, new_path: String },
-    
+    FolderChanged {
+        account_id: String,
+        folder_path: String,
+    },
+    FolderSynced {
+        account_id: String,
+        folder_path: String,
+        message_count: usize,
+    },
+    FolderCreated {
+        account_id: String,
+        folder_path: String,
+    },
+    FolderDeleted {
+        account_id: String,
+        folder_path: String,
+    },
+    FolderRenamed {
+        account_id: String,
+        old_path: String,
+        new_path: String,
+    },
+
     // Search events
-    SearchStarted { query: String, scope: SearchScope },
-    SearchCompleted { query: String, results: Vec<Uuid> },
-    SearchFailed { query: String, error: String },
+    SearchStarted {
+        query: String,
+        scope: SearchScope,
+    },
+    SearchCompleted {
+        query: String,
+        results: Vec<Uuid>,
+    },
+    SearchFailed {
+        query: String,
+        error: String,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -118,7 +202,7 @@ impl Event for EmailEventData {
     fn event_type(&self) -> &'static str {
         "EmailEvent"
     }
-    
+
     fn metadata(&self) -> &EventMetadata {
         &self.metadata
     }
@@ -128,26 +212,65 @@ impl Event for EmailEventData {
 #[derive(Debug, Clone)]
 pub enum CalendarEvent {
     // Event lifecycle
-    EventCreated { calendar_id: String, event_id: String },
-    EventUpdated { calendar_id: String, event_id: String },
-    EventDeleted { calendar_id: String, event_id: String },
-    EventRescheduled { calendar_id: String, event_id: String, old_time: i64, new_time: i64 },
-    
+    EventCreated {
+        calendar_id: String,
+        event_id: String,
+    },
+    EventUpdated {
+        calendar_id: String,
+        event_id: String,
+    },
+    EventDeleted {
+        calendar_id: String,
+        event_id: String,
+    },
+    EventRescheduled {
+        calendar_id: String,
+        event_id: String,
+        old_time: i64,
+        new_time: i64,
+    },
+
     // Calendar operations
-    CalendarSynced { calendar_id: String, event_count: usize },
-    CalendarAdded { calendar_id: String, name: String },
-    CalendarRemoved { calendar_id: String },
-    
+    CalendarSynced {
+        calendar_id: String,
+        event_count: usize,
+    },
+    CalendarAdded {
+        calendar_id: String,
+        name: String,
+    },
+    CalendarRemoved {
+        calendar_id: String,
+    },
+
     // Invitation events
-    InvitationReceived { event_id: String, from: String },
-    InvitationAccepted { event_id: String },
-    InvitationDeclined { event_id: String },
-    InvitationTentative { event_id: String },
-    
+    InvitationReceived {
+        event_id: String,
+        from: String,
+    },
+    InvitationAccepted {
+        event_id: String,
+    },
+    InvitationDeclined {
+        event_id: String,
+    },
+    InvitationTentative {
+        event_id: String,
+    },
+
     // Reminder events
-    ReminderTriggered { event_id: String, minutes_before: u32 },
-    ReminderDismissed { event_id: String },
-    ReminderSnoozed { event_id: String, snooze_minutes: u32 },
+    ReminderTriggered {
+        event_id: String,
+        minutes_before: u32,
+    },
+    ReminderDismissed {
+        event_id: String,
+    },
+    ReminderSnoozed {
+        event_id: String,
+        snooze_minutes: u32,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -169,7 +292,7 @@ impl Event for CalendarEventData {
     fn event_type(&self) -> &'static str {
         "CalendarEvent"
     }
-    
+
     fn metadata(&self) -> &EventMetadata {
         &self.metadata
     }
@@ -178,12 +301,29 @@ impl Event for CalendarEventData {
 /// Contact management events
 #[derive(Debug, Clone)]
 pub enum ContactEvent {
-    ContactAdded { contact_id: Uuid, name: String, email: String },
-    ContactUpdated { contact_id: Uuid },
-    ContactDeleted { contact_id: Uuid },
-    ContactImported { source: String, count: usize },
-    ContactExported { destination: String, count: usize },
-    ContactMerged { primary_id: Uuid, merged_ids: Vec<Uuid> },
+    ContactAdded {
+        contact_id: Uuid,
+        name: String,
+        email: String,
+    },
+    ContactUpdated {
+        contact_id: Uuid,
+    },
+    ContactDeleted {
+        contact_id: Uuid,
+    },
+    ContactImported {
+        source: String,
+        count: usize,
+    },
+    ContactExported {
+        destination: String,
+        count: usize,
+    },
+    ContactMerged {
+        primary_id: Uuid,
+        merged_ids: Vec<Uuid>,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -205,7 +345,7 @@ impl Event for ContactEventData {
     fn event_type(&self) -> &'static str {
         "ContactEvent"
     }
-    
+
     fn metadata(&self) -> &EventMetadata {
         &self.metadata
     }
@@ -218,16 +358,40 @@ impl Event for ContactEventData {
 /// Account management events
 #[derive(Debug, Clone)]
 pub enum AccountEvent {
-    AccountAdded { account_id: String, provider: String },
-    AccountRemoved { account_id: String },
-    AccountUpdated { account_id: String },
-    AccountConnected { account_id: String },
-    AccountDisconnected { account_id: String },
-    AccountSyncStarted { account_id: String },
-    AccountSyncCompleted { account_id: String, duration_ms: u64 },
-    AccountSyncFailed { account_id: String, error: String },
-    AccountAuthRefreshed { account_id: String },
-    AccountAuthFailed { account_id: String, error: String },
+    AccountAdded {
+        account_id: String,
+        provider: String,
+    },
+    AccountRemoved {
+        account_id: String,
+    },
+    AccountUpdated {
+        account_id: String,
+    },
+    AccountConnected {
+        account_id: String,
+    },
+    AccountDisconnected {
+        account_id: String,
+    },
+    AccountSyncStarted {
+        account_id: String,
+    },
+    AccountSyncCompleted {
+        account_id: String,
+        duration_ms: u64,
+    },
+    AccountSyncFailed {
+        account_id: String,
+        error: String,
+    },
+    AccountAuthRefreshed {
+        account_id: String,
+    },
+    AccountAuthFailed {
+        account_id: String,
+        error: String,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -249,7 +413,7 @@ impl Event for AccountEventData {
     fn event_type(&self) -> &'static str {
         "AccountEvent"
     }
-    
+
     fn metadata(&self) -> &EventMetadata {
         &self.metadata
     }
@@ -287,7 +451,7 @@ impl Event for NetworkEventData {
     fn event_type(&self) -> &'static str {
         "NetworkEvent"
     }
-    
+
     fn metadata(&self) -> &EventMetadata {
         &self.metadata
     }
@@ -296,19 +460,46 @@ impl Event for NetworkEventData {
 /// Application lifecycle events
 #[derive(Debug, Clone)]
 pub enum AppEvent {
-    AppStarted { version: String, startup_time_ms: u64 },
+    AppStarted {
+        version: String,
+        startup_time_ms: u64,
+    },
     AppShuttingDown,
     AppSuspended,
     AppResumed,
-    ConfigLoaded { config_path: String },
-    ConfigSaved { config_path: String },
-    ConfigChanged { setting: String, old_value: String, new_value: String },
-    PluginLoaded { plugin_name: String },
-    PluginUnloaded { plugin_name: String },
-    PluginError { plugin_name: String, error: String },
-    BackgroundTaskStarted { task_id: Uuid, task_type: String },
-    BackgroundTaskCompleted { task_id: Uuid, duration_ms: u64 },
-    BackgroundTaskFailed { task_id: Uuid, error: String },
+    ConfigLoaded {
+        config_path: String,
+    },
+    ConfigSaved {
+        config_path: String,
+    },
+    ConfigChanged {
+        setting: String,
+        old_value: String,
+        new_value: String,
+    },
+    PluginLoaded {
+        plugin_name: String,
+    },
+    PluginUnloaded {
+        plugin_name: String,
+    },
+    PluginError {
+        plugin_name: String,
+        error: String,
+    },
+    BackgroundTaskStarted {
+        task_id: Uuid,
+        task_type: String,
+    },
+    BackgroundTaskCompleted {
+        task_id: Uuid,
+        duration_ms: u64,
+    },
+    BackgroundTaskFailed {
+        task_id: Uuid,
+        error: String,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -330,7 +521,7 @@ impl Event for AppEventData {
     fn event_type(&self) -> &'static str {
         "AppEvent"
     }
-    
+
     fn metadata(&self) -> &EventMetadata {
         &self.metadata
     }
@@ -339,14 +530,35 @@ impl Event for AppEventData {
 /// Performance monitoring events
 #[derive(Debug, Clone)]
 pub enum PerformanceEvent {
-    MemoryUsageChanged { usage_mb: u64, threshold_exceeded: bool },
-    CpuUsageChanged { usage_percent: f32 },
-    RenderTimeChanged { time_ms: u32 },
-    DatabaseQuerySlow { query: String, duration_ms: u64 },
-    CacheHit { cache_type: String, key: String },
-    CacheMiss { cache_type: String, key: String },
-    PerformanceProfileStarted { profile_id: Uuid },
-    PerformanceProfileCompleted { profile_id: Uuid, results: HashMap<String, u64> },
+    MemoryUsageChanged {
+        usage_mb: u64,
+        threshold_exceeded: bool,
+    },
+    CpuUsageChanged {
+        usage_percent: f32,
+    },
+    RenderTimeChanged {
+        time_ms: u32,
+    },
+    DatabaseQuerySlow {
+        query: String,
+        duration_ms: u64,
+    },
+    CacheHit {
+        cache_type: String,
+        key: String,
+    },
+    CacheMiss {
+        cache_type: String,
+        key: String,
+    },
+    PerformanceProfileStarted {
+        profile_id: Uuid,
+    },
+    PerformanceProfileCompleted {
+        profile_id: Uuid,
+        results: HashMap<String, u64>,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -368,7 +580,7 @@ impl Event for PerformanceEventData {
     fn event_type(&self) -> &'static str {
         "PerformanceEvent"
     }
-    
+
     fn metadata(&self) -> &EventMetadata {
         &self.metadata
     }
@@ -455,60 +667,80 @@ pub enum SearchScope {
 /// Factory functions for creating common events
 pub mod events {
     use super::*;
-    
+
     // UI event factories
     pub fn pane_changed(from: FocusedPane, to: FocusedPane) -> UIEventData {
         UIEventData::new(UIEvent::PaneChanged { from, to })
     }
-    
+
     pub fn mode_changed(from: UIMode, to: UIMode) -> UIEventData {
         UIEventData::new(UIEvent::ModeChanged { from, to })
     }
-    
+
     pub fn theme_changed(theme_name: String) -> UIEventData {
         UIEventData::new(UIEvent::ThemeChanged { theme_name })
     }
-    
+
     // Email event factories
     pub fn email_received(account_id: String, email_id: Uuid) -> EmailEventData {
-        EmailEventData::new(EmailEvent::EmailReceived { account_id, email_id })
+        EmailEventData::new(EmailEvent::EmailReceived {
+            account_id,
+            email_id,
+        })
     }
-    
+
     pub fn email_sent(account_id: String, email_id: Uuid) -> EmailEventData {
-        EmailEventData::new(EmailEvent::EmailSent { account_id, email_id })
+        EmailEventData::new(EmailEvent::EmailSent {
+            account_id,
+            email_id,
+        })
     }
-    
-    pub fn folder_synced(account_id: String, folder_path: String, message_count: usize) -> EmailEventData {
-        EmailEventData::new(EmailEvent::FolderSynced { account_id, folder_path, message_count })
+
+    pub fn folder_synced(
+        account_id: String,
+        folder_path: String,
+        message_count: usize,
+    ) -> EmailEventData {
+        EmailEventData::new(EmailEvent::FolderSynced {
+            account_id,
+            folder_path,
+            message_count,
+        })
     }
-    
+
     // Calendar event factories
     pub fn event_created(calendar_id: String, event_id: String) -> CalendarEventData {
-        CalendarEventData::new(CalendarEvent::EventCreated { calendar_id, event_id })
+        CalendarEventData::new(CalendarEvent::EventCreated {
+            calendar_id,
+            event_id,
+        })
     }
-    
+
     pub fn invitation_received(event_id: String, from: String) -> CalendarEventData {
         CalendarEventData::new(CalendarEvent::InvitationReceived { event_id, from })
     }
-    
+
     // System event factories
     pub fn account_connected(account_id: String) -> AccountEventData {
         AccountEventData::new(AccountEvent::AccountConnected { account_id })
     }
-    
+
     pub fn network_disconnected() -> NetworkEventData {
         NetworkEventData::new(NetworkEvent::NetworkDisconnected)
     }
-    
+
     pub fn app_started(version: String, startup_time_ms: u64) -> AppEventData {
-        AppEventData::new(AppEvent::AppStarted { version, startup_time_ms })
+        AppEventData::new(AppEvent::AppStarted {
+            version,
+            startup_time_ms,
+        })
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_ui_event_creation() {
         let event = events::pane_changed(FocusedPane::MessageList, FocusedPane::ContentPreview);
@@ -516,7 +748,7 @@ mod tests {
         assert_eq!(event.metadata().priority, EventPriority::High);
         assert_eq!(event.metadata().source, "ui");
     }
-    
+
     #[test]
     fn test_email_event_creation() {
         let event = events::email_received("account1".to_string(), Uuid::new_v4());
@@ -524,7 +756,7 @@ mod tests {
         assert_eq!(event.metadata().priority, EventPriority::Normal);
         assert_eq!(event.metadata().source, "email");
     }
-    
+
     #[test]
     fn test_system_event_creation() {
         let event = events::app_started("1.0.0".to_string(), 1500);

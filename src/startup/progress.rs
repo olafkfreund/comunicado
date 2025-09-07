@@ -2,10 +2,22 @@ use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum StartupPhase {
-    Database { timeout: Duration, status: PhaseStatus },
-    ImapManager { timeout: Duration, status: PhaseStatus },
-    AccountSetup { timeout: Duration, status: PhaseStatus },
-    Services { timeout: Duration, status: PhaseStatus },
+    Database {
+        timeout: Duration,
+        status: PhaseStatus,
+    },
+    ImapManager {
+        timeout: Duration,
+        status: PhaseStatus,
+    },
+    AccountSetup {
+        timeout: Duration,
+        status: PhaseStatus,
+    },
+    Services {
+        timeout: Duration,
+        status: PhaseStatus,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -100,7 +112,10 @@ impl PhaseStatus {
     }
 
     pub fn is_failed(&self) -> bool {
-        matches!(self, PhaseStatus::Failed { .. } | PhaseStatus::TimedOut { .. })
+        matches!(
+            self,
+            PhaseStatus::Failed { .. } | PhaseStatus::TimedOut { .. }
+        )
     }
 
     pub fn duration(&self) -> Option<Duration> {
@@ -161,7 +176,10 @@ mod tests {
         };
 
         assert_eq!(phase.name(), "Database");
-        assert_eq!(phase.description(), "Initializing database connection and schema");
+        assert_eq!(
+            phase.description(),
+            "Initializing database connection and schema"
+        );
         assert_eq!(phase.timeout(), Duration::from_secs(30));
         assert!(phase.is_critical());
         assert_eq!(phase.status_icon(), "⏳");

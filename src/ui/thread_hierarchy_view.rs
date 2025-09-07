@@ -6,8 +6,10 @@
 //! thread summarization.
 
 use crate::theme::Theme;
-use crate::ui::threading_display::{ThreadingDisplay, ThreadingStyle, ThreadContext, ConnectionType};
 use crate::ui::message_list::MessageItem;
+use crate::ui::threading_display::{
+    ConnectionType, ThreadContext, ThreadingDisplay, ThreadingStyle,
+};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
@@ -20,10 +22,10 @@ use std::collections::HashMap;
 /// Thread hierarchy visualization modes
 #[derive(Debug, Clone, PartialEq)]
 pub enum HierarchyMode {
-    Conversation,   // Chat-like conversation view
-    TreeStructure,  // Traditional tree structure
-    Timeline,       // Chronological timeline view
-    Compact,        // Space-efficient compact view
+    Conversation,  // Chat-like conversation view
+    TreeStructure, // Traditional tree structure
+    Timeline,      // Chronological timeline view
+    Compact,       // Space-efficient compact view
 }
 
 /// Thread participant information
@@ -79,24 +81,24 @@ impl ThreadHierarchyView {
         self.hierarchy_mode = mode;
         self
     }
-    
+
     /// Configure focus behavior for unread messages
     pub fn with_focus_on_unread(mut self, focus: bool) -> Self {
         self.focus_on_unread = focus;
         self
     }
-    
+
     /// Set maximum number of preview lines for messages
     pub fn with_max_preview_lines(mut self, lines: usize) -> Self {
         self.max_preview_lines = lines;
         self
     }
-    
+
     /// Check if focus on unread is enabled
     pub fn focus_on_unread_enabled(&self) -> bool {
         self.focus_on_unread
     }
-    
+
     /// Get the maximum preview lines setting
     pub fn max_preview_lines(&self) -> usize {
         self.max_preview_lines
@@ -121,7 +123,14 @@ impl ThreadHierarchyView {
     }
 
     /// Render the complete thread hierarchy view
-    pub fn render(&mut self, frame: &mut Frame, area: Rect, theme: &Theme, messages: &[MessageItem], selected_index: usize) {
+    pub fn render(
+        &mut self,
+        frame: &mut Frame,
+        area: Rect,
+        theme: &Theme,
+        messages: &[MessageItem],
+        selected_index: usize,
+    ) {
         let layout = if self.show_participants_panel && area.width > 80 {
             // Three-column layout: hierarchy | messages | participants
             Layout::default()
@@ -171,12 +180,14 @@ impl ThreadHierarchyView {
     /// Render thread summary header
     fn render_thread_summary(&self, frame: &mut Frame, area: Rect, theme: &Theme) {
         let summary_text = self.create_thread_summary_text(theme);
-        
+
         let paragraph = Paragraph::new(summary_text)
-            .block(Block::default()
-                .title("Thread Overview")
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(theme.colors.palette.border)))
+            .block(
+                Block::default()
+                    .title("Thread Overview")
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(theme.colors.palette.border)),
+            )
             .alignment(Alignment::Left)
             .wrap(ratatui::widgets::Wrap { trim: true });
 
@@ -189,7 +200,10 @@ impl ThreadHierarchyView {
         let mut spans = Vec::new();
 
         // Message count with icon
-        spans.push(Span::styled("📧 ", Style::default().fg(theme.colors.palette.info)));
+        spans.push(Span::styled(
+            "📧 ",
+            Style::default().fg(theme.colors.palette.info),
+        ));
         spans.push(Span::styled(
             format!("{} msgs", stats.total_messages),
             Style::default().fg(theme.colors.palette.text_primary),
@@ -198,16 +212,24 @@ impl ThreadHierarchyView {
         // Unread count if any
         if stats.unread_count > 0 {
             spans.push(Span::raw(" • "));
-            spans.push(Span::styled("● ", Style::default().fg(theme.colors.palette.warning)));
+            spans.push(Span::styled(
+                "● ",
+                Style::default().fg(theme.colors.palette.warning),
+            ));
             spans.push(Span::styled(
                 format!("{} unread", stats.unread_count),
-                Style::default().fg(theme.colors.palette.warning).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(theme.colors.palette.warning)
+                    .add_modifier(Modifier::BOLD),
             ));
         }
 
         // Participants
         spans.push(Span::raw(" • "));
-        spans.push(Span::styled("👥 ", Style::default().fg(theme.colors.palette.accent)));
+        spans.push(Span::styled(
+            "👥 ",
+            Style::default().fg(theme.colors.palette.accent),
+        ));
         spans.push(Span::styled(
             format!("{} participants", stats.participants_count),
             Style::default().fg(theme.colors.palette.text_secondary),
@@ -216,36 +238,64 @@ impl ThreadHierarchyView {
         // Important/attachments indicators
         if stats.has_important {
             spans.push(Span::raw(" • "));
-            spans.push(Span::styled("🔴 Important", Style::default().fg(theme.colors.palette.error)));
+            spans.push(Span::styled(
+                "🔴 Important",
+                Style::default().fg(theme.colors.palette.error),
+            ));
         }
 
         if stats.has_attachments {
             spans.push(Span::raw(" • "));
-            spans.push(Span::styled("📎 Files", Style::default().fg(theme.colors.palette.success)));
+            spans.push(Span::styled(
+                "📎 Files",
+                Style::default().fg(theme.colors.palette.success),
+            ));
         }
 
         Line::from(spans)
     }
 
     /// Render the main hierarchy view based on current mode
-    fn render_hierarchy_view(&self, frame: &mut Frame, area: Rect, theme: &Theme, messages: &[MessageItem], selected_index: usize) {
+    fn render_hierarchy_view(
+        &self,
+        frame: &mut Frame,
+        area: Rect,
+        theme: &Theme,
+        messages: &[MessageItem],
+        selected_index: usize,
+    ) {
         match self.hierarchy_mode {
-            HierarchyMode::Conversation => self.render_conversation_view(frame, area, theme, messages, selected_index),
-            HierarchyMode::TreeStructure => self.render_tree_structure_view(frame, area, theme, messages, selected_index),
-            HierarchyMode::Timeline => self.render_timeline_view(frame, area, theme, messages, selected_index),
-            HierarchyMode::Compact => self.render_compact_view(frame, area, theme, messages, selected_index),
+            HierarchyMode::Conversation => {
+                self.render_conversation_view(frame, area, theme, messages, selected_index)
+            }
+            HierarchyMode::TreeStructure => {
+                self.render_tree_structure_view(frame, area, theme, messages, selected_index)
+            }
+            HierarchyMode::Timeline => {
+                self.render_timeline_view(frame, area, theme, messages, selected_index)
+            }
+            HierarchyMode::Compact => {
+                self.render_compact_view(frame, area, theme, messages, selected_index)
+            }
         }
     }
 
     /// Render conversation-style view (chat-like)
-    fn render_conversation_view(&self, frame: &mut Frame, area: Rect, theme: &Theme, messages: &[MessageItem], selected_index: usize) {
+    fn render_conversation_view(
+        &self,
+        frame: &mut Frame,
+        area: Rect,
+        theme: &Theme,
+        messages: &[MessageItem],
+        selected_index: usize,
+    ) {
         let mut list_items = Vec::new();
         let _context = ThreadContext::new();
 
         for (index, message) in messages.iter().enumerate() {
             let is_selected = index == selected_index;
             let is_current_user = self.is_current_user(&message.sender);
-            
+
             // Create conversation bubble style
             let bubble_style = if is_current_user {
                 Style::default()
@@ -258,16 +308,16 @@ impl ThreadHierarchyView {
             };
 
             let alignment = if is_current_user { "→" } else { "←" };
-            
+
             let mut spans = Vec::new();
-            
+
             // Add alignment indicator
             spans.push(Span::styled(
                 format!("{} ", alignment),
-                Style::default().fg(if is_current_user { 
-                    theme.colors.palette.success 
-                } else { 
-                    theme.colors.palette.info 
+                Style::default().fg(if is_current_user {
+                    theme.colors.palette.success
+                } else {
+                    theme.colors.palette.info
                 }),
             ));
 
@@ -287,7 +337,9 @@ impl ThreadHierarchyView {
             // Time indicator
             spans.push(Span::styled(
                 format!(" ({})", self.format_relative_time(&message.date)),
-                Style::default().fg(theme.colors.palette.text_muted).add_modifier(Modifier::ITALIC),
+                Style::default()
+                    .fg(theme.colors.palette.text_muted)
+                    .add_modifier(Modifier::ITALIC),
             ));
 
             let item_style = if is_selected {
@@ -300,10 +352,12 @@ impl ThreadHierarchyView {
         }
 
         let list = List::new(list_items)
-            .block(Block::default()
-                .title("💬 Conversation")
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(theme.colors.palette.border)))
+            .block(
+                Block::default()
+                    .title("💬 Conversation")
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(theme.colors.palette.border)),
+            )
             .highlight_style(Style::default().add_modifier(Modifier::BOLD))
             .highlight_symbol("• ");
 
@@ -311,7 +365,14 @@ impl ThreadHierarchyView {
     }
 
     /// Render tree structure view (traditional)
-    fn render_tree_structure_view(&self, frame: &mut Frame, area: Rect, theme: &Theme, messages: &[MessageItem], selected_index: usize) {
+    fn render_tree_structure_view(
+        &self,
+        frame: &mut Frame,
+        area: Rect,
+        theme: &Theme,
+        messages: &[MessageItem],
+        selected_index: usize,
+    ) {
         let mut list_items = Vec::new();
         let mut context = ThreadContext::new();
 
@@ -321,7 +382,7 @@ impl ThreadHierarchyView {
                 let next_message = &messages[i + 1];
                 context.set_continuation_at_depth(
                     message.thread_depth,
-                    next_message.thread_depth > message.thread_depth
+                    next_message.thread_depth > message.thread_depth,
                 );
             }
         }
@@ -329,22 +390,26 @@ impl ThreadHierarchyView {
         for (index, message) in messages.iter().enumerate() {
             let is_selected = index == selected_index;
             let connection_type = self.determine_connection_type(message, messages, index);
-            
-            let prefix = self.threading_display.get_threading_prefix(message, connection_type, &context);
-            
+
+            let prefix =
+                self.threading_display
+                    .get_threading_prefix(message, connection_type, &context);
+
             let mut spans = prefix.spans;
-            
+
             // Add status indicators
             self.add_status_indicators(&mut spans, message, theme);
-            
+
             // Add subject
             spans.push(Span::styled(
                 self.truncate_text(&message.subject, 50),
                 if message.is_read {
                     Style::default().fg(theme.colors.palette.text_primary)
                 } else {
-                    Style::default().fg(theme.colors.palette.warning).add_modifier(Modifier::BOLD)
-                }
+                    Style::default()
+                        .fg(theme.colors.palette.warning)
+                        .add_modifier(Modifier::BOLD)
+                },
             ));
 
             // Add sender info
@@ -363,10 +428,12 @@ impl ThreadHierarchyView {
         }
 
         let list = List::new(list_items)
-            .block(Block::default()
-                .title("🌳 Thread Structure")
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(theme.colors.palette.border)))
+            .block(
+                Block::default()
+                    .title("🌳 Thread Structure")
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(theme.colors.palette.border)),
+            )
             .highlight_style(Style::default().add_modifier(Modifier::BOLD))
             .highlight_symbol("► ");
 
@@ -374,7 +441,14 @@ impl ThreadHierarchyView {
     }
 
     /// Render timeline view (chronological)
-    fn render_timeline_view(&self, frame: &mut Frame, area: Rect, theme: &Theme, messages: &[MessageItem], selected_index: usize) {
+    fn render_timeline_view(
+        &self,
+        frame: &mut Frame,
+        area: Rect,
+        theme: &Theme,
+        messages: &[MessageItem],
+        selected_index: usize,
+    ) {
         let mut list_items = Vec::new();
 
         for (index, message) in messages.iter().enumerate() {
@@ -382,7 +456,13 @@ impl ThreadHierarchyView {
             let mut spans = Vec::new();
 
             // Timeline indicator
-            let timeline_symbol = if index == 0 { "●" } else if index == messages.len() - 1 { "○" } else { "●" };
+            let timeline_symbol = if index == 0 {
+                "●"
+            } else if index == messages.len() - 1 {
+                "○"
+            } else {
+                "●"
+            };
             spans.push(Span::styled(
                 format!("{} ", timeline_symbol),
                 Style::default().fg(theme.colors.palette.accent),
@@ -391,13 +471,17 @@ impl ThreadHierarchyView {
             // Time/date
             spans.push(Span::styled(
                 format!("{} ", self.format_timeline_date(&message.date)),
-                Style::default().fg(theme.colors.palette.text_muted).add_modifier(Modifier::ITALIC),
+                Style::default()
+                    .fg(theme.colors.palette.text_muted)
+                    .add_modifier(Modifier::ITALIC),
             ));
 
             // Sender
             spans.push(Span::styled(
                 format!("{}: ", self.format_sender_short(&message.sender)),
-                Style::default().fg(theme.colors.palette.text_secondary).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(theme.colors.palette.text_secondary)
+                    .add_modifier(Modifier::BOLD),
             ));
 
             // Subject
@@ -406,8 +490,10 @@ impl ThreadHierarchyView {
                 if message.is_read {
                     Style::default().fg(theme.colors.palette.text_primary)
                 } else {
-                    Style::default().fg(theme.colors.palette.warning).add_modifier(Modifier::BOLD)
-                }
+                    Style::default()
+                        .fg(theme.colors.palette.warning)
+                        .add_modifier(Modifier::BOLD)
+                },
             ));
 
             let item_style = if is_selected {
@@ -420,10 +506,12 @@ impl ThreadHierarchyView {
         }
 
         let list = List::new(list_items)
-            .block(Block::default()
-                .title("⏰ Timeline")
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(theme.colors.palette.border)))
+            .block(
+                Block::default()
+                    .title("⏰ Timeline")
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(theme.colors.palette.border)),
+            )
             .highlight_style(Style::default().add_modifier(Modifier::BOLD))
             .highlight_symbol("▶ ");
 
@@ -431,7 +519,14 @@ impl ThreadHierarchyView {
     }
 
     /// Render compact view (space-efficient)
-    fn render_compact_view(&self, frame: &mut Frame, area: Rect, theme: &Theme, messages: &[MessageItem], selected_index: usize) {
+    fn render_compact_view(
+        &self,
+        frame: &mut Frame,
+        area: Rect,
+        theme: &Theme,
+        messages: &[MessageItem],
+        selected_index: usize,
+    ) {
         let mut list_items = Vec::new();
 
         for (index, message) in messages.iter().enumerate() {
@@ -455,12 +550,13 @@ impl ThreadHierarchyView {
             } else {
                 theme.colors.palette.text_muted
             };
-            
+
             spans.push(Span::styled("● ", Style::default().fg(status_color)));
 
             // Abbreviated content
             spans.push(Span::styled(
-                format!("{}: {}", 
+                format!(
+                    "{}: {}",
                     self.format_sender_short(&message.sender),
                     self.truncate_text(&message.subject, 35)
                 ),
@@ -477,10 +573,12 @@ impl ThreadHierarchyView {
         }
 
         let list = List::new(list_items)
-            .block(Block::default()
-                .title("📋 Compact")
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(theme.colors.palette.border)))
+            .block(
+                Block::default()
+                    .title("📋 Compact")
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(theme.colors.palette.border)),
+            )
             .highlight_style(Style::default().add_modifier(Modifier::BOLD))
             .highlight_symbol("→ ");
 
@@ -488,40 +586,73 @@ impl ThreadHierarchyView {
     }
 
     /// Render message preview panel
-    fn render_message_preview(&self, frame: &mut Frame, area: Rect, theme: &Theme, messages: &[MessageItem], selected_index: usize) {
+    fn render_message_preview(
+        &self,
+        frame: &mut Frame,
+        area: Rect,
+        theme: &Theme,
+        messages: &[MessageItem],
+        selected_index: usize,
+    ) {
         if selected_index < messages.len() {
             let message = &messages[selected_index];
             let mut lines = Vec::new();
 
             // Message header
             lines.push(Line::from(vec![
-                Span::styled("From: ", Style::default().fg(theme.colors.palette.text_muted)),
-                Span::styled(message.sender.clone(), Style::default().fg(theme.colors.palette.text_primary).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    "From: ",
+                    Style::default().fg(theme.colors.palette.text_muted),
+                ),
+                Span::styled(
+                    message.sender.clone(),
+                    Style::default()
+                        .fg(theme.colors.palette.text_primary)
+                        .add_modifier(Modifier::BOLD),
+                ),
             ]));
 
             lines.push(Line::from(vec![
-                Span::styled("Date: ", Style::default().fg(theme.colors.palette.text_muted)),
-                Span::styled(message.date.clone(), Style::default().fg(theme.colors.palette.text_secondary)),
+                Span::styled(
+                    "Date: ",
+                    Style::default().fg(theme.colors.palette.text_muted),
+                ),
+                Span::styled(
+                    message.date.clone(),
+                    Style::default().fg(theme.colors.palette.text_secondary),
+                ),
             ]));
 
             lines.push(Line::from(vec![
-                Span::styled("Subject: ", Style::default().fg(theme.colors.palette.text_muted)),
-                Span::styled(message.subject.clone(), Style::default().fg(theme.colors.palette.text_primary).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    "Subject: ",
+                    Style::default().fg(theme.colors.palette.text_muted),
+                ),
+                Span::styled(
+                    message.subject.clone(),
+                    Style::default()
+                        .fg(theme.colors.palette.text_primary)
+                        .add_modifier(Modifier::BOLD),
+                ),
             ]));
 
             lines.push(Line::from(""));
 
             // Message preview (this would typically come from email content)
-            lines.push(Line::from(vec![
-                Span::styled("[Message preview would appear here...]", 
-                    Style::default().fg(theme.colors.palette.text_secondary).add_modifier(Modifier::ITALIC)),
-            ]));
+            lines.push(Line::from(vec![Span::styled(
+                "[Message preview would appear here...]",
+                Style::default()
+                    .fg(theme.colors.palette.text_secondary)
+                    .add_modifier(Modifier::ITALIC),
+            )]));
 
             let paragraph = Paragraph::new(lines)
-                .block(Block::default()
-                    .title("📖 Message Preview")
-                    .borders(Borders::ALL)
-                    .border_style(Style::default().fg(theme.colors.palette.border)))
+                .block(
+                    Block::default()
+                        .title("📖 Message Preview")
+                        .borders(Borders::ALL)
+                        .border_style(Style::default().fg(theme.colors.palette.border)),
+                )
                 .wrap(ratatui::widgets::Wrap { trim: true });
 
             frame.render_widget(paragraph, area);
@@ -536,7 +667,11 @@ impl ThreadHierarchyView {
             let mut spans = Vec::new();
 
             // User indicator
-            let user_symbol = if participant.is_current_user { "👤" } else { "👥" };
+            let user_symbol = if participant.is_current_user {
+                "👤"
+            } else {
+                "👥"
+            };
             spans.push(Span::styled(
                 format!("{} ", user_symbol),
                 Style::default().fg(theme.colors.palette.accent),
@@ -545,7 +680,9 @@ impl ThreadHierarchyView {
             // Name
             spans.push(Span::styled(
                 participant.display_name.clone(),
-                Style::default().fg(theme.colors.palette.text_primary).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(theme.colors.palette.text_primary)
+                    .add_modifier(Modifier::BOLD),
             ));
 
             // Message count
@@ -557,11 +694,12 @@ impl ThreadHierarchyView {
             list_items.push(ListItem::new(Line::from(spans)));
         }
 
-        let list = List::new(list_items)
-            .block(Block::default()
+        let list = List::new(list_items).block(
+            Block::default()
                 .title("👥 Participants")
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(theme.colors.palette.border)));
+                .border_style(Style::default().fg(theme.colors.palette.border)),
+        );
 
         frame.render_widget(list, area);
     }
@@ -576,16 +714,19 @@ impl ThreadHierarchyView {
             let display_name = self.format_sender_short(&email).to_string();
             let is_current_user = self.is_current_user(&email);
 
-            self.participants.entry(email.clone()).and_modify(|p| {
-                p.message_count += 1;
-                p.last_message_date = message.date.clone();
-            }).or_insert(ThreadParticipant {
-                email: email.clone(),
-                display_name,
-                message_count: 1,
-                is_current_user,
-                last_message_date: message.date.clone(),
-            });
+            self.participants
+                .entry(email.clone())
+                .and_modify(|p| {
+                    p.message_count += 1;
+                    p.last_message_date = message.date.clone();
+                })
+                .or_insert(ThreadParticipant {
+                    email: email.clone(),
+                    display_name,
+                    message_count: 1,
+                    is_current_user,
+                    last_message_date: message.date.clone(),
+                });
         }
     }
 
@@ -604,12 +745,20 @@ impl ThreadHierarchyView {
         if messages.is_empty() {
             return ("".to_string(), "".to_string());
         }
-        
+
         // This is a simplified implementation - would need proper date parsing
-        (messages.last().unwrap().date.clone(), messages.first().unwrap().date.clone())
+        (
+            messages.last().unwrap().date.clone(),
+            messages.first().unwrap().date.clone(),
+        )
     }
 
-    fn determine_connection_type(&self, message: &MessageItem, messages: &[MessageItem], index: usize) -> ConnectionType {
+    fn determine_connection_type(
+        &self,
+        message: &MessageItem,
+        messages: &[MessageItem],
+        index: usize,
+    ) -> ConnectionType {
         if message.thread_depth == 0 {
             ConnectionType::Root
         } else if index == messages.len() - 1 {
@@ -626,13 +775,19 @@ impl ThreadHierarchyView {
 
     fn add_status_indicators(&self, spans: &mut Vec<Span>, message: &MessageItem, theme: &Theme) {
         if !message.is_read {
-            spans.push(Span::styled("● ", Style::default().fg(theme.colors.palette.warning)));
+            spans.push(Span::styled(
+                "● ",
+                Style::default().fg(theme.colors.palette.warning),
+            ));
         }
         if message.is_important {
             spans.push(Span::styled("🔴 ", Style::default()));
         }
         if message.has_attachments {
-            spans.push(Span::styled("📎 ", Style::default().fg(theme.colors.palette.success)));
+            spans.push(Span::styled(
+                "📎 ",
+                Style::default().fg(theme.colors.palette.success),
+            ));
         }
     }
 
@@ -706,10 +861,10 @@ mod tests {
     fn test_mode_toggling() {
         let mut view = ThreadHierarchyView::new();
         assert_eq!(view.hierarchy_mode, HierarchyMode::TreeStructure);
-        
+
         view.toggle_mode();
         assert_eq!(view.hierarchy_mode, HierarchyMode::Conversation);
-        
+
         view.toggle_mode();
         assert_eq!(view.hierarchy_mode, HierarchyMode::Timeline);
     }

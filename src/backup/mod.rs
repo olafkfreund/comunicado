@@ -11,30 +11,26 @@
 pub mod backup_engine;
 pub mod backup_manager;
 pub mod backup_ui;
-pub mod sync_engine;
-pub mod scheduler;
 pub mod compression;
 pub mod encryption;
-pub mod versioning;
 pub mod remote_sync;
+pub mod scheduler;
+pub mod sync_engine;
+pub mod versioning;
 
 pub use backup_engine::{
-    BackupEngine, BackupConfig, BackupResult, BackupError, BackupType, BackupStatus, BackupMetadata,
+    BackupConfig, BackupEngine, BackupError, BackupMetadata, BackupResult, BackupStatus, BackupType,
 };
-pub use backup_manager::{
-    BackupManager, BackupPlan, BackupRestorePoint,
-};
-pub use backup_ui::{BackupUI, BackupAction, BackupTab};
-pub use sync_engine::{
-    SyncEngine, SyncConfig, SyncResult, SyncError, SyncDirection, ConflictResolution,
-};
-pub use scheduler::{
-    BackupScheduler, ScheduleConfig, ScheduleFrequency, ScheduledTask,
-};
-pub use compression::{CompressionEngine, CompressionType, CompressionLevel};
+pub use backup_manager::{BackupManager, BackupPlan, BackupRestorePoint};
+pub use backup_ui::{BackupAction, BackupTab, BackupUI};
+pub use compression::{CompressionEngine, CompressionLevel, CompressionType};
 pub use encryption::{EncryptionEngine, EncryptionType, KeyDerivation};
-pub use versioning::{VersionManager, Version, VersionHistory, VersionDiff};
-pub use remote_sync::{RemoteSyncProvider, RemoteConfig, RemoteCredentials};
+pub use remote_sync::{RemoteConfig, RemoteCredentials, RemoteSyncProvider};
+pub use scheduler::{BackupScheduler, ScheduleConfig, ScheduleFrequency, ScheduledTask};
+pub use sync_engine::{
+    ConflictResolution, SyncConfig, SyncDirection, SyncEngine, SyncError, SyncResult,
+};
+pub use versioning::{Version, VersionDiff, VersionHistory, VersionManager};
 
 // use chrono::{Utc}; // DateTime
 use serde::{Deserialize, Serialize};

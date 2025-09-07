@@ -41,11 +41,20 @@ impl CompressionEngine {
         Self { compression_type }
     }
 
-    pub async fn compress_directory(&self, _source: &Path, _target: &Path, _level: CompressionLevel) -> CompressionResult<u64> {
+    pub async fn compress_directory(
+        &self,
+        _source: &Path,
+        _target: &Path,
+        _level: CompressionLevel,
+    ) -> CompressionResult<u64> {
         Ok(0) // Placeholder
     }
 
-    pub async fn decompress_archive(&self, _source: &Path, _target: &Path) -> CompressionResult<()> {
+    pub async fn decompress_archive(
+        &self,
+        _source: &Path,
+        _target: &Path,
+    ) -> CompressionResult<()> {
         Ok(()) // Placeholder
     }
 }

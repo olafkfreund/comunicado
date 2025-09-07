@@ -6,7 +6,7 @@ pub mod utils;
 pub use simple_client::KdeConnectClient;
 
 pub use types::{
-    SmsMessage, MobileNotification, SmsConversation, ContactInfo, 
-    MessageType, Attachment, NotificationAction, DeviceInfo
+    Attachment, ContactInfo, DeviceInfo, MessageType, MobileNotification, NotificationAction,
+    SmsConversation, SmsMessage,
 };
 pub use utils::{format_phone_number, parse_message_timestamp, sanitize_message_content};

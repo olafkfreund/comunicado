@@ -71,7 +71,7 @@ impl AIPrivacyDialogState {
         self.privacy_mode = privacy_mode;
         self.selected_option = 1; // Default to deny
         self.remember_decision = false;
-        
+
         self.list_state.select(Some(self.selected_option));
     }
 
@@ -124,7 +124,8 @@ impl AIPrivacyDialogState {
         match provider {
             AIProviderType::OpenAI => vec![
                 "Data will be sent to OpenAI's servers in the United States".to_string(),
-                "OpenAI may store and process your data according to their privacy policy".to_string(),
+                "OpenAI may store and process your data according to their privacy policy"
+                    .to_string(),
                 "Data transmission occurs over encrypted connections".to_string(),
                 "OpenAI has committed to not using API data for training".to_string(),
                 "Your data may be subject to US data protection laws".to_string(),
@@ -149,9 +150,7 @@ impl AIPrivacyDialogState {
                 "All processing remains under your control".to_string(),
                 "No external privacy policies apply".to_string(),
             ],
-            AIProviderType::None => vec![
-                "No AI processing will occur".to_string(),
-            ],
+            AIProviderType::None => vec!["No AI processing will occur".to_string()],
         }
     }
 }
@@ -192,7 +191,7 @@ impl AIPrivacyDialog {
 
         // Create a large centered dialog
         let dialog_area = self.centered_rect(80, 70, area);
-        
+
         // Clear the area
         frame.render_widget(Clear, dialog_area);
 
@@ -261,7 +260,11 @@ impl AIPrivacyDialog {
 
         let paragraph = Paragraph::new(text)
             .style(Style::default().fg(theme.ai_assistant_text()))
-            .block(Block::default().title("Operation Details").borders(Borders::ALL))
+            .block(
+                Block::default()
+                    .title("Operation Details")
+                    .borders(Borders::ALL),
+            )
             .wrap(Wrap { trim: true });
 
         frame.render_widget(paragraph, area);
@@ -277,7 +280,11 @@ impl AIPrivacyDialog {
     ) {
         let paragraph = Paragraph::new(state.data_description.clone())
             .style(Style::default().fg(theme.ai_assistant_text()))
-            .block(Block::default().title("Data to be Processed").borders(Borders::ALL))
+            .block(
+                Block::default()
+                    .title("Data to be Processed")
+                    .borders(Borders::ALL),
+            )
             .wrap(Wrap { trim: true });
 
         frame.render_widget(paragraph, area);
@@ -299,7 +306,11 @@ impl AIPrivacyDialog {
 
         let paragraph = Paragraph::new(text)
             .style(Style::default().fg(theme.ai_assistant_context()))
-            .block(Block::default().title("Privacy Implications").borders(Borders::ALL))
+            .block(
+                Block::default()
+                    .title("Privacy Implications")
+                    .borders(Borders::ALL),
+            )
             .wrap(Wrap { trim: true });
 
         frame.render_widget(paragraph, area);
@@ -325,23 +336,25 @@ impl AIPrivacyDialog {
             .enumerate()
             .map(|(i, (name, description))| {
                 let is_selected = i == state.selected_option;
-                
+
                 let spans = vec![
                     Span::styled(
                         format!("● {} ", name),
-                        Style::default().fg(if is_selected {
-                            theme.ai_assistant_selected()
-                        } else {
-                            theme.ai_assistant_text()
-                        }).add_modifier(if is_selected {
-                            Modifier::BOLD
-                        } else {
-                            Modifier::empty()
-                        })
+                        Style::default()
+                            .fg(if is_selected {
+                                theme.ai_assistant_selected()
+                            } else {
+                                theme.ai_assistant_text()
+                            })
+                            .add_modifier(if is_selected {
+                                Modifier::BOLD
+                            } else {
+                                Modifier::empty()
+                            }),
                     ),
                     Span::styled(
                         format!("- {}", description),
-                        Style::default().fg(theme.ai_assistant_context())
+                        Style::default().fg(theme.ai_assistant_context()),
                     ),
                 ];
 
@@ -350,7 +363,11 @@ impl AIPrivacyDialog {
             .collect();
 
         let list = List::new(items)
-            .block(Block::default().title("Your Decision").borders(Borders::ALL))
+            .block(
+                Block::default()
+                    .title("Your Decision")
+                    .borders(Borders::ALL),
+            )
             .style(Style::default().fg(theme.ai_assistant_text()));
 
         frame.render_stateful_widget(list, area, &mut state.list_state.clone());
@@ -364,7 +381,8 @@ impl AIPrivacyDialog {
         _state: &AIPrivacyDialogState,
         theme: &Theme,
     ) {
-        let instructions = "↑/↓: Navigate options • Enter: Confirm decision • Esc: Cancel • r: Toggle remember";
+        let instructions =
+            "↑/↓: Navigate options • Enter: Confirm decision • Esc: Cancel • r: Toggle remember";
 
         let paragraph = Paragraph::new(instructions)
             .style(Style::default().fg(theme.ai_assistant_help()))
@@ -420,18 +438,18 @@ impl PrivacyConsentManager {
             PrivacyMode::LocalOnly => {
                 // Only allow local processing
                 !matches!(provider, AIProviderType::Ollama | AIProviderType::None)
-            },
+            }
             PrivacyMode::CloudAllowed => {
                 // Always allow cloud processing
                 false
-            },
+            }
             PrivacyMode::LocalPreferred | PrivacyMode::CloudWithConsent => {
                 // Check if we have a cached decision
                 if let Some(decision) = self.consent_cache.get(operation) {
                     match decision {
                         ConsentDecision::AllowAlways => false,
                         ConsentDecision::DenyAlways => false, // Will be handled as denial
-                        _ => true, // Need to ask again
+                        _ => true,                            // Need to ask again
                     }
                 } else {
                     // Need consent for cloud providers
@@ -440,7 +458,7 @@ impl PrivacyConsentManager {
                         AIProviderType::OpenAI | AIProviderType::Anthropic | AIProviderType::Google
                     )
                 }
-            },
+            }
         }
     }
 
@@ -449,7 +467,7 @@ impl PrivacyConsentManager {
         match decision {
             ConsentDecision::AllowAlways | ConsentDecision::DenyAlways => {
                 self.consent_cache.insert(operation, decision);
-            },
+            }
             _ => {
                 // Don't cache one-time decisions
             }
@@ -458,9 +476,9 @@ impl PrivacyConsentManager {
 
     /// Check if an operation is allowed based on cached consent
     pub fn is_operation_allowed(&self, operation: &str) -> Option<bool> {
-        self.consent_cache.get(operation).map(|decision| {
-            matches!(decision, ConsentDecision::AllowAlways)
-        })
+        self.consent_cache
+            .get(operation)
+            .map(|decision| matches!(decision, ConsentDecision::AllowAlways))
     }
 
     /// Clear all consent decisions
@@ -526,26 +544,14 @@ mod tests {
         ));
 
         // Test consent recording
-        manager.record_consent(
-            "email_summary".to_string(),
-            ConsentDecision::AllowAlways
-        );
+        manager.record_consent("email_summary".to_string(), ConsentDecision::AllowAlways);
 
-        assert_eq!(
-            manager.is_operation_allowed("email_summary"),
-            Some(true)
-        );
+        assert_eq!(manager.is_operation_allowed("email_summary"), Some(true));
 
         // Test that one-time decisions aren't cached
-        manager.record_consent(
-            "email_compose".to_string(),
-            ConsentDecision::Allow
-        );
+        manager.record_consent("email_compose".to_string(), ConsentDecision::Allow);
 
-        assert_eq!(
-            manager.is_operation_allowed("email_compose"),
-            None
-        );
+        assert_eq!(manager.is_operation_allowed("email_compose"), None);
     }
 
     #[test]

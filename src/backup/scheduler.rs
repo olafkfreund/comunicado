@@ -8,8 +8,8 @@ use uuid::Uuid;
 pub enum ScheduleFrequency {
     Once(DateTime<Utc>),
     Hourly,
-    Daily(u8), // hour of day (0-23)
-    Weekly(u8, u8), // day of week (0-6), hour (0-23)  
+    Daily(u8),       // hour of day (0-23)
+    Weekly(u8, u8),  // day of week (0-6), hour (0-23)
     Monthly(u8, u8), // day of month (1-31), hour (0-23)
     Custom(Duration),
 }

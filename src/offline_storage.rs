@@ -36,11 +36,13 @@ impl OfflineStorageManager {
         let contacts_dir = base_dir.join("contacts");
 
         // Create directories if they don't exist
-        async_fs::create_dir_all(&calendar_dir).await
-            .map_err(|e| OfflineStorageError::IoError(format!("Failed to create calendar directory: {}", e)))?;
-        
-        async_fs::create_dir_all(&contacts_dir).await
-            .map_err(|e| OfflineStorageError::IoError(format!("Failed to create contacts directory: {}", e)))?;
+        async_fs::create_dir_all(&calendar_dir).await.map_err(|e| {
+            OfflineStorageError::IoError(format!("Failed to create calendar directory: {}", e))
+        })?;
+
+        async_fs::create_dir_all(&contacts_dir).await.map_err(|e| {
+            OfflineStorageError::IoError(format!("Failed to create contacts directory: {}", e))
+        })?;
 
         info!("Initialized offline storage at: {}", base_dir.display());
         debug!("Calendar storage: {}", calendar_dir.display());
@@ -69,18 +71,20 @@ impl OfflineStorageManager {
         debug!("Loading calendars from offline storage");
         let mut calendars = Vec::new();
 
-        let mut entries = async_fs::read_dir(&self.calendar_dir).await
-            .map_err(|e| OfflineStorageError::IoError(format!("Failed to read calendar directory: {}", e)))?;
+        let mut entries = async_fs::read_dir(&self.calendar_dir).await.map_err(|e| {
+            OfflineStorageError::IoError(format!("Failed to read calendar directory: {}", e))
+        })?;
 
-        while let Some(entry) = entries.next_entry().await
-            .map_err(|e| OfflineStorageError::IoError(format!("Failed to read directory entry: {}", e)))? {
-            
+        while let Some(entry) = entries.next_entry().await.map_err(|e| {
+            OfflineStorageError::IoError(format!("Failed to read directory entry: {}", e))
+        })? {
             let path = entry.path();
             if path.extension().and_then(|s| s.to_str()) == Some("ics") {
                 match self.load_calendar_from_file(&path).await {
                     Ok(calendar) => {
                         debug!("Loaded calendar: {} from {}", calendar.name, path.display());
-                        self.calendar_cache.insert(calendar.id.clone(), calendar.clone());
+                        self.calendar_cache
+                            .insert(calendar.id.clone(), calendar.clone());
                         calendars.push(calendar);
                     }
                     Err(e) => {
@@ -99,19 +103,25 @@ impl OfflineStorageManager {
         debug!("Loading contacts from offline storage");
         let mut contacts = Vec::new();
 
-        let mut entries = async_fs::read_dir(&self.contacts_dir).await
-            .map_err(|e| OfflineStorageError::IoError(format!("Failed to read contacts directory: {}", e)))?;
+        let mut entries = async_fs::read_dir(&self.contacts_dir).await.map_err(|e| {
+            OfflineStorageError::IoError(format!("Failed to read contacts directory: {}", e))
+        })?;
 
-        while let Some(entry) = entries.next_entry().await
-            .map_err(|e| OfflineStorageError::IoError(format!("Failed to read directory entry: {}", e)))? {
-            
+        while let Some(entry) = entries.next_entry().await.map_err(|e| {
+            OfflineStorageError::IoError(format!("Failed to read directory entry: {}", e))
+        })? {
             let path = entry.path();
             if path.extension().and_then(|s| s.to_str()) == Some("vcf") {
                 match self.load_contacts_from_file(&path).await {
                     Ok(mut file_contacts) => {
-                        debug!("Loaded {} contacts from {}", file_contacts.len(), path.display());
+                        debug!(
+                            "Loaded {} contacts from {}",
+                            file_contacts.len(),
+                            path.display()
+                        );
                         for contact in &file_contacts {
-                            self.contact_cache.insert(contact.external_id.clone(), contact.clone());
+                            self.contact_cache
+                                .insert(contact.external_id.clone(), contact.clone());
                         }
                         contacts.append(&mut file_contacts);
                     }
@@ -137,41 +147,63 @@ impl OfflineStorageManager {
         let events = self.load_calendar_events(&calendar.id).await?;
 
         // Convert to iCalendar format using RFC standards parser
-        let icalendar_content = RfcStandardsParser::event_to_icalendar(&events)
-            .map_err(|e| OfflineStorageError::ParseError(format!("Failed to generate iCalendar: {}", e)))?;
+        let icalendar_content = RfcStandardsParser::event_to_icalendar(&events).map_err(|e| {
+            OfflineStorageError::ParseError(format!("Failed to generate iCalendar: {}", e))
+        })?;
 
         // Write to file
-        async_fs::write(&file_path, icalendar_content).await
-            .map_err(|e| OfflineStorageError::IoError(format!("Failed to write calendar file: {}", e)))?;
+        async_fs::write(&file_path, icalendar_content)
+            .await
+            .map_err(|e| {
+                OfflineStorageError::IoError(format!("Failed to write calendar file: {}", e))
+            })?;
 
         // Update cache and sync timestamp
-        self.calendar_cache.insert(calendar.id.clone(), calendar.clone());
+        self.calendar_cache
+            .insert(calendar.id.clone(), calendar.clone());
         self.last_sync.insert(calendar.id.clone(), Utc::now());
 
-        info!("Saved calendar {} to {}", calendar.name, file_path.display());
+        info!(
+            "Saved calendar {} to {}",
+            calendar.name,
+            file_path.display()
+        );
         Ok(())
     }
 
     /// Save a contact to offline storage
     pub async fn save_contact(&mut self, contact: &Contact) -> Result<(), OfflineStorageError> {
-        debug!("Saving contact: {} to offline storage", contact.display_name);
+        debug!(
+            "Saving contact: {} to offline storage",
+            contact.display_name
+        );
 
         let filename = format!("{}.vcf", sanitize_filename(&contact.display_name));
         let file_path = self.contacts_dir.join(filename);
 
         // Convert to vCard format using RFC standards parser
-        let vcard_content = RfcStandardsParser::contact_to_vcard(contact)
-            .map_err(|e| OfflineStorageError::ParseError(format!("Failed to generate vCard: {}", e)))?;
+        let vcard_content = RfcStandardsParser::contact_to_vcard(contact).map_err(|e| {
+            OfflineStorageError::ParseError(format!("Failed to generate vCard: {}", e))
+        })?;
 
         // Write to file
-        async_fs::write(&file_path, vcard_content).await
-            .map_err(|e| OfflineStorageError::IoError(format!("Failed to write contact file: {}", e)))?;
+        async_fs::write(&file_path, vcard_content)
+            .await
+            .map_err(|e| {
+                OfflineStorageError::IoError(format!("Failed to write contact file: {}", e))
+            })?;
 
         // Update cache and sync timestamp
-        self.contact_cache.insert(contact.external_id.clone(), contact.clone());
-        self.last_sync.insert(contact.external_id.clone(), Utc::now());
+        self.contact_cache
+            .insert(contact.external_id.clone(), contact.clone());
+        self.last_sync
+            .insert(contact.external_id.clone(), Utc::now());
 
-        info!("Saved contact {} to {}", contact.display_name, file_path.display());
+        info!(
+            "Saved contact {} to {}",
+            contact.display_name,
+            file_path.display()
+        );
         Ok(())
     }
 
@@ -185,9 +217,10 @@ impl OfflineStorageManager {
             let file_path = self.calendar_dir.join(filename);
 
             if file_path.exists() {
-                async_fs::remove_file(&file_path).await
-                    .map_err(|e| OfflineStorageError::IoError(format!("Failed to delete calendar file: {}", e)))?;
-                
+                async_fs::remove_file(&file_path).await.map_err(|e| {
+                    OfflineStorageError::IoError(format!("Failed to delete calendar file: {}", e))
+                })?;
+
                 info!("Deleted calendar file: {}", file_path.display());
             }
         }
@@ -209,9 +242,10 @@ impl OfflineStorageManager {
             let file_path = self.contacts_dir.join(filename);
 
             if file_path.exists() {
-                async_fs::remove_file(&file_path).await
-                    .map_err(|e| OfflineStorageError::IoError(format!("Failed to delete contact file: {}", e)))?;
-                
+                async_fs::remove_file(&file_path).await.map_err(|e| {
+                    OfflineStorageError::IoError(format!("Failed to delete contact file: {}", e))
+                })?;
+
                 info!("Deleted contact file: {}", file_path.display());
             }
         }
@@ -227,32 +261,39 @@ impl OfflineStorageManager {
     pub async fn export_calendars(&self, export_dir: &Path) -> Result<usize, OfflineStorageError> {
         debug!("Exporting calendars to: {}", export_dir.display());
 
-        async_fs::create_dir_all(export_dir).await
-            .map_err(|e| OfflineStorageError::IoError(format!("Failed to create export directory: {}", e)))?;
+        async_fs::create_dir_all(export_dir).await.map_err(|e| {
+            OfflineStorageError::IoError(format!("Failed to create export directory: {}", e))
+        })?;
 
         let mut exported_count = 0;
 
         // Copy all .ics files to export directory
-        let mut entries = async_fs::read_dir(&self.calendar_dir).await
-            .map_err(|e| OfflineStorageError::IoError(format!("Failed to read calendar directory: {}", e)))?;
+        let mut entries = async_fs::read_dir(&self.calendar_dir).await.map_err(|e| {
+            OfflineStorageError::IoError(format!("Failed to read calendar directory: {}", e))
+        })?;
 
-        while let Some(entry) = entries.next_entry().await
-            .map_err(|e| OfflineStorageError::IoError(format!("Failed to read directory entry: {}", e)))? {
-            
+        while let Some(entry) = entries.next_entry().await.map_err(|e| {
+            OfflineStorageError::IoError(format!("Failed to read directory entry: {}", e))
+        })? {
             let path = entry.path();
             if path.extension().and_then(|s| s.to_str()) == Some("ics") {
                 let filename = path.file_name().unwrap();
                 let dest_path = export_dir.join(filename);
 
-                async_fs::copy(&path, &dest_path).await
-                    .map_err(|e| OfflineStorageError::IoError(format!("Failed to copy calendar file: {}", e)))?;
+                async_fs::copy(&path, &dest_path).await.map_err(|e| {
+                    OfflineStorageError::IoError(format!("Failed to copy calendar file: {}", e))
+                })?;
 
                 exported_count += 1;
                 debug!("Exported calendar: {}", dest_path.display());
             }
         }
 
-        info!("Exported {} calendars to {}", exported_count, export_dir.display());
+        info!(
+            "Exported {} calendars to {}",
+            exported_count,
+            export_dir.display()
+        );
         Ok(exported_count)
     }
 
@@ -260,47 +301,58 @@ impl OfflineStorageManager {
     pub async fn export_contacts(&self, export_dir: &Path) -> Result<usize, OfflineStorageError> {
         debug!("Exporting contacts to: {}", export_dir.display());
 
-        async_fs::create_dir_all(export_dir).await
-            .map_err(|e| OfflineStorageError::IoError(format!("Failed to create export directory: {}", e)))?;
+        async_fs::create_dir_all(export_dir).await.map_err(|e| {
+            OfflineStorageError::IoError(format!("Failed to create export directory: {}", e))
+        })?;
 
         let mut exported_count = 0;
 
         // Copy all .vcf files to export directory
-        let mut entries = async_fs::read_dir(&self.contacts_dir).await
-            .map_err(|e| OfflineStorageError::IoError(format!("Failed to read contacts directory: {}", e)))?;
+        let mut entries = async_fs::read_dir(&self.contacts_dir).await.map_err(|e| {
+            OfflineStorageError::IoError(format!("Failed to read contacts directory: {}", e))
+        })?;
 
-        while let Some(entry) = entries.next_entry().await
-            .map_err(|e| OfflineStorageError::IoError(format!("Failed to read directory entry: {}", e)))? {
-            
+        while let Some(entry) = entries.next_entry().await.map_err(|e| {
+            OfflineStorageError::IoError(format!("Failed to read directory entry: {}", e))
+        })? {
             let path = entry.path();
             if path.extension().and_then(|s| s.to_str()) == Some("vcf") {
                 let filename = path.file_name().unwrap();
                 let dest_path = export_dir.join(filename);
 
-                async_fs::copy(&path, &dest_path).await
-                    .map_err(|e| OfflineStorageError::IoError(format!("Failed to copy contact file: {}", e)))?;
+                async_fs::copy(&path, &dest_path).await.map_err(|e| {
+                    OfflineStorageError::IoError(format!("Failed to copy contact file: {}", e))
+                })?;
 
                 exported_count += 1;
                 debug!("Exported contact: {}", dest_path.display());
             }
         }
 
-        info!("Exported {} contacts to {}", exported_count, export_dir.display());
+        info!(
+            "Exported {} contacts to {}",
+            exported_count,
+            export_dir.display()
+        );
         Ok(exported_count)
     }
 
     /// Import calendars from a directory
-    pub async fn import_calendars(&mut self, import_dir: &Path) -> Result<usize, OfflineStorageError> {
+    pub async fn import_calendars(
+        &mut self,
+        import_dir: &Path,
+    ) -> Result<usize, OfflineStorageError> {
         debug!("Importing calendars from: {}", import_dir.display());
 
         let mut imported_count = 0;
 
-        let mut entries = async_fs::read_dir(import_dir).await
-            .map_err(|e| OfflineStorageError::IoError(format!("Failed to read import directory: {}", e)))?;
+        let mut entries = async_fs::read_dir(import_dir).await.map_err(|e| {
+            OfflineStorageError::IoError(format!("Failed to read import directory: {}", e))
+        })?;
 
-        while let Some(entry) = entries.next_entry().await
-            .map_err(|e| OfflineStorageError::IoError(format!("Failed to read directory entry: {}", e)))? {
-            
+        while let Some(entry) = entries.next_entry().await.map_err(|e| {
+            OfflineStorageError::IoError(format!("Failed to read directory entry: {}", e))
+        })? {
             let path = entry.path();
             if path.extension().and_then(|s| s.to_str()) == Some("ics") {
                 match self.import_calendar_file(&path).await {
@@ -315,28 +367,40 @@ impl OfflineStorageManager {
             }
         }
 
-        info!("Imported {} calendars from {}", imported_count, import_dir.display());
+        info!(
+            "Imported {} calendars from {}",
+            imported_count,
+            import_dir.display()
+        );
         Ok(imported_count)
     }
 
     /// Import contacts from a directory
-    pub async fn import_contacts(&mut self, import_dir: &Path) -> Result<usize, OfflineStorageError> {
+    pub async fn import_contacts(
+        &mut self,
+        import_dir: &Path,
+    ) -> Result<usize, OfflineStorageError> {
         debug!("Importing contacts from: {}", import_dir.display());
 
         let mut imported_count = 0;
 
-        let mut entries = async_fs::read_dir(import_dir).await
-            .map_err(|e| OfflineStorageError::IoError(format!("Failed to read import directory: {}", e)))?;
+        let mut entries = async_fs::read_dir(import_dir).await.map_err(|e| {
+            OfflineStorageError::IoError(format!("Failed to read import directory: {}", e))
+        })?;
 
-        while let Some(entry) = entries.next_entry().await
-            .map_err(|e| OfflineStorageError::IoError(format!("Failed to read directory entry: {}", e)))? {
-            
+        while let Some(entry) = entries.next_entry().await.map_err(|e| {
+            OfflineStorageError::IoError(format!("Failed to read directory entry: {}", e))
+        })? {
             let path = entry.path();
             if path.extension().and_then(|s| s.to_str()) == Some("vcf") {
                 match self.import_contacts_file(&path).await {
                     Ok(contact_count) => {
                         imported_count += contact_count;
-                        debug!("Imported {} contacts from {}", contact_count, path.display());
+                        debug!(
+                            "Imported {} contacts from {}",
+                            contact_count,
+                            path.display()
+                        );
                     }
                     Err(e) => {
                         warn!("Failed to import contacts from {}: {}", path.display(), e);
@@ -345,14 +409,22 @@ impl OfflineStorageManager {
             }
         }
 
-        info!("Imported {} contacts from {}", imported_count, import_dir.display());
+        info!(
+            "Imported {} contacts from {}",
+            imported_count,
+            import_dir.display()
+        );
         Ok(imported_count)
     }
 
     /// Get storage statistics
     pub async fn get_storage_stats(&self) -> Result<StorageStats, OfflineStorageError> {
-        let calendar_count = self.count_files_with_extension(&self.calendar_dir, "ics").await?;
-        let contact_count = self.count_files_with_extension(&self.contacts_dir, "vcf").await?;
+        let calendar_count = self
+            .count_files_with_extension(&self.calendar_dir, "ics")
+            .await?;
+        let contact_count = self
+            .count_files_with_extension(&self.contacts_dir, "vcf")
+            .await?;
 
         let calendar_size = self.calculate_directory_size(&self.calendar_dir).await?;
         let contact_size = self.calculate_directory_size(&self.contacts_dir).await?;
@@ -370,13 +442,18 @@ impl OfflineStorageManager {
     // Private helper methods
 
     /// Load a calendar from an .ics file
-    async fn load_calendar_from_file(&self, file_path: &Path) -> Result<Calendar, OfflineStorageError> {
-        let _content = async_fs::read_to_string(file_path).await
-            .map_err(|e| OfflineStorageError::IoError(format!("Failed to read calendar file: {}", e)))?;
+    async fn load_calendar_from_file(
+        &self,
+        file_path: &Path,
+    ) -> Result<Calendar, OfflineStorageError> {
+        let _content = async_fs::read_to_string(file_path).await.map_err(|e| {
+            OfflineStorageError::IoError(format!("Failed to read calendar file: {}", e))
+        })?;
 
         // TODO: Parse iCalendar content and extract calendar metadata
         // For now, create a basic calendar from filename
-        let name = file_path.file_stem()
+        let name = file_path
+            .file_stem()
             .and_then(|s| s.to_str())
             .unwrap_or("Unknown Calendar")
             .to_string();
@@ -396,16 +473,23 @@ impl OfflineStorageManager {
     }
 
     /// Load contacts from a .vcf file
-    async fn load_contacts_from_file(&self, file_path: &Path) -> Result<Vec<Contact>, OfflineStorageError> {
-        let content = async_fs::read_to_string(file_path).await
-            .map_err(|e| OfflineStorageError::IoError(format!("Failed to read contact file: {}", e)))?;
+    async fn load_contacts_from_file(
+        &self,
+        file_path: &Path,
+    ) -> Result<Vec<Contact>, OfflineStorageError> {
+        let content = async_fs::read_to_string(file_path).await.map_err(|e| {
+            OfflineStorageError::IoError(format!("Failed to read contact file: {}", e))
+        })?;
 
         RfcStandardsParser::parse_vcard_to_contact(&content, ContactSource::Local)
             .map_err(|e| OfflineStorageError::ParseError(format!("Failed to parse vCard: {}", e)))
     }
 
     /// Load events for a calendar (placeholder - would integrate with calendar manager)
-    async fn load_calendar_events(&self, _calendar_id: &str) -> Result<Vec<Event>, OfflineStorageError> {
+    async fn load_calendar_events(
+        &self,
+        _calendar_id: &str,
+    ) -> Result<Vec<Event>, OfflineStorageError> {
         // TODO: Integrate with calendar manager to get events for calendar
         Ok(Vec::new())
     }
@@ -415,14 +499,18 @@ impl OfflineStorageManager {
         let filename = file_path.file_name().unwrap();
         let dest_path = self.calendar_dir.join(filename);
 
-        async_fs::copy(file_path, &dest_path).await
-            .map_err(|e| OfflineStorageError::IoError(format!("Failed to copy calendar file: {}", e)))?;
+        async_fs::copy(file_path, &dest_path).await.map_err(|e| {
+            OfflineStorageError::IoError(format!("Failed to copy calendar file: {}", e))
+        })?;
 
         Ok(())
     }
 
     /// Import a single contacts file
-    async fn import_contacts_file(&mut self, file_path: &Path) -> Result<usize, OfflineStorageError> {
+    async fn import_contacts_file(
+        &mut self,
+        file_path: &Path,
+    ) -> Result<usize, OfflineStorageError> {
         let contacts = self.load_contacts_from_file(file_path).await?;
         let contact_count = contacts.len();
 
@@ -434,14 +522,19 @@ impl OfflineStorageManager {
     }
 
     /// Count files with a specific extension in a directory
-    async fn count_files_with_extension(&self, dir: &Path, extension: &str) -> Result<usize, OfflineStorageError> {
+    async fn count_files_with_extension(
+        &self,
+        dir: &Path,
+        extension: &str,
+    ) -> Result<usize, OfflineStorageError> {
         let mut count = 0;
-        let mut entries = async_fs::read_dir(dir).await
-            .map_err(|e| OfflineStorageError::IoError(format!("Failed to read directory: {}", e)))?;
+        let mut entries = async_fs::read_dir(dir).await.map_err(|e| {
+            OfflineStorageError::IoError(format!("Failed to read directory: {}", e))
+        })?;
 
-        while let Some(entry) = entries.next_entry().await
-            .map_err(|e| OfflineStorageError::IoError(format!("Failed to read directory entry: {}", e)))? {
-            
+        while let Some(entry) = entries.next_entry().await.map_err(|e| {
+            OfflineStorageError::IoError(format!("Failed to read directory entry: {}", e))
+        })? {
             if entry.path().extension().and_then(|s| s.to_str()) == Some(extension) {
                 count += 1;
             }
@@ -453,15 +546,17 @@ impl OfflineStorageManager {
     /// Calculate total size of files in a directory
     async fn calculate_directory_size(&self, dir: &Path) -> Result<u64, OfflineStorageError> {
         let mut total_size = 0;
-        let mut entries = async_fs::read_dir(dir).await
-            .map_err(|e| OfflineStorageError::IoError(format!("Failed to read directory: {}", e)))?;
+        let mut entries = async_fs::read_dir(dir).await.map_err(|e| {
+            OfflineStorageError::IoError(format!("Failed to read directory: {}", e))
+        })?;
 
-        while let Some(entry) = entries.next_entry().await
-            .map_err(|e| OfflineStorageError::IoError(format!("Failed to read directory entry: {}", e)))? {
-            
-            let metadata = entry.metadata().await
-                .map_err(|e| OfflineStorageError::IoError(format!("Failed to read file metadata: {}", e)))?;
-            
+        while let Some(entry) = entries.next_entry().await.map_err(|e| {
+            OfflineStorageError::IoError(format!("Failed to read directory entry: {}", e))
+        })? {
+            let metadata = entry.metadata().await.map_err(|e| {
+                OfflineStorageError::IoError(format!("Failed to read file metadata: {}", e))
+            })?;
+
             if metadata.is_file() {
                 total_size += metadata.len();
             }
@@ -559,7 +654,9 @@ mod tests {
     #[tokio::test]
     async fn test_offline_storage_creation() {
         let temp_dir = TempDir::new().unwrap();
-        let storage = OfflineStorageManager::new(temp_dir.path().to_path_buf()).await.unwrap();
+        let storage = OfflineStorageManager::new(temp_dir.path().to_path_buf())
+            .await
+            .unwrap();
 
         assert!(storage.calendar_dir.exists());
         assert!(storage.contacts_dir.exists());
@@ -568,8 +665,14 @@ mod tests {
     #[test]
     fn test_sanitize_filename() {
         assert_eq!(sanitize_filename("normal_name"), "normal_name");
-        assert_eq!(sanitize_filename("name/with\\bad:chars"), "name_with_bad_chars");
-        assert_eq!(sanitize_filename("file<>with|bad*chars?"), "file__with_bad_chars_");
+        assert_eq!(
+            sanitize_filename("name/with\\bad:chars"),
+            "name_with_bad_chars"
+        );
+        assert_eq!(
+            sanitize_filename("file<>with|bad*chars?"),
+            "file__with_bad_chars_"
+        );
     }
 
     #[test]

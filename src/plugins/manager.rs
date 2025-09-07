@@ -7,17 +7,20 @@
 //! - Health monitoring
 //! - Dependency resolution
 
-use super::core::{PluginConfig, PluginError, PluginInfo, PluginResult, PluginStatus, PluginType, PluginContext, PluginEnvironment};
-use super::registry::PluginRegistry;
+use super::core::{
+    PluginConfig, PluginContext, PluginEnvironment, PluginError, PluginInfo, PluginResult,
+    PluginStatus, PluginType,
+};
 use super::loader::PluginLoader;
+use super::registry::PluginRegistry;
 
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
 use uuid::Uuid;
-use serde::{Deserialize, Serialize};
 
 /// Plugin manager for coordinating all plugin operations
 pub struct PluginManager {
@@ -154,7 +157,8 @@ impl PluginManager {
     /// Initialize the plugin manager
     pub async fn initialize(&mut self) -> PluginResult<()> {
         // Create base directories
-        tokio::fs::create_dir_all(&self.base_data_dir).await
+        tokio::fs::create_dir_all(&self.base_data_dir)
+            .await
             .map_err(|e| PluginError::Io(e))?;
 
         // Load plugin configurations
@@ -183,12 +187,11 @@ impl PluginManager {
                 continue;
             }
 
-            let mut entries = tokio::fs::read_dir(plugin_dir).await
+            let mut entries = tokio::fs::read_dir(plugin_dir)
+                .await
                 .map_err(|e| PluginError::Io(e))?;
 
-            while let Some(entry) = entries.next_entry().await
-                .map_err(|e| PluginError::Io(e))? {
-                
+            while let Some(entry) = entries.next_entry().await.map_err(|e| PluginError::Io(e))? {
                 if let Ok(plugin_info) = self.scan_plugin_directory(&entry.path()).await {
                     discovered_plugins.push(plugin_info);
                 }
@@ -201,16 +204,17 @@ impl PluginManager {
     /// Scan a specific directory for plugin metadata
     async fn scan_plugin_directory(&self, path: &std::path::Path) -> PluginResult<PluginInfo> {
         let manifest_path = path.join("plugin.json");
-        
+
         if !manifest_path.exists() {
             return Err(PluginError::NotFound("plugin.json not found".to_string()));
         }
 
-        let manifest_content = tokio::fs::read_to_string(&manifest_path).await
+        let manifest_content = tokio::fs::read_to_string(&manifest_path)
+            .await
             .map_err(|e| PluginError::Io(e))?;
 
-        let plugin_info: PluginInfo = serde_json::from_str(&manifest_content)
-            .map_err(|e| PluginError::Serialization(e))?;
+        let plugin_info: PluginInfo =
+            serde_json::from_str(&manifest_content).map_err(|e| PluginError::Serialization(e))?;
 
         // Validate plugin compatibility
         if !plugin_info.is_compatible(&self.app_version) {
@@ -281,7 +285,9 @@ impl PluginManager {
     async fn initialize_plugin(&mut self, plugin_id: Uuid) -> PluginResult<()> {
         let _config = {
             let configs = self.configs.read().unwrap();
-            configs.get(&plugin_id).cloned()
+            configs
+                .get(&plugin_id)
+                .cloned()
                 .ok_or_else(|| PluginError::NotFound("Plugin config not found".to_string()))?
         };
 
@@ -418,7 +424,11 @@ impl PluginManager {
     }
 
     /// Update plugin configuration
-    pub async fn update_plugin_config(&mut self, plugin_id: Uuid, config: PluginConfig) -> PluginResult<()> {
+    pub async fn update_plugin_config(
+        &mut self,
+        plugin_id: Uuid,
+        config: PluginConfig,
+    ) -> PluginResult<()> {
         // Validate configuration with plugin
         {
             let registry = self.registry.read().unwrap();
@@ -468,10 +478,10 @@ impl PluginManager {
     /// Auto-load plugins based on configuration
     async fn auto_load_plugins(&mut self) -> PluginResult<()> {
         let available_plugins = self.scan_plugins().await?;
-        
+
         for plugin_info in available_plugins {
             let config = self.get_or_create_config(plugin_info.id);
-            
+
             if config.enabled {
                 if let Err(e) = self.load_plugin(plugin_info.id).await {
                     eprintln!("Failed to auto-load plugin {}: {}", plugin_info.name, e);
@@ -492,19 +502,19 @@ impl PluginManager {
     /// Load plugin configurations from disk
     async fn load_configurations(&mut self) -> PluginResult<()> {
         let config_dir = self.base_data_dir.join("configs");
-        
+
         if !config_dir.exists() {
-            tokio::fs::create_dir_all(&config_dir).await
+            tokio::fs::create_dir_all(&config_dir)
+                .await
                 .map_err(|e| PluginError::Io(e))?;
             return Ok(());
         }
 
-        let mut entries = tokio::fs::read_dir(&config_dir).await
+        let mut entries = tokio::fs::read_dir(&config_dir)
+            .await
             .map_err(|e| PluginError::Io(e))?;
 
-        while let Some(entry) = entries.next_entry().await
-            .map_err(|e| PluginError::Io(e))? {
-            
+        while let Some(entry) = entries.next_entry().await.map_err(|e| PluginError::Io(e))? {
             if let Some(extension) = entry.path().extension() {
                 if extension == "json" {
                     if let Ok(config) = self.load_configuration(&entry.path()).await {
@@ -520,11 +530,12 @@ impl PluginManager {
 
     /// Load a single plugin configuration
     async fn load_configuration(&self, path: &std::path::Path) -> PluginResult<PluginConfig> {
-        let content = tokio::fs::read_to_string(path).await
+        let content = tokio::fs::read_to_string(path)
+            .await
             .map_err(|e| PluginError::Io(e))?;
 
-        let config: PluginConfig = serde_json::from_str(&content)
-            .map_err(|e| PluginError::Serialization(e))?;
+        let config: PluginConfig =
+            serde_json::from_str(&content).map_err(|e| PluginError::Serialization(e))?;
 
         Ok(config)
     }
@@ -534,10 +545,11 @@ impl PluginManager {
         let config_dir = self.base_data_dir.join("configs");
         let config_file = config_dir.join(format!("{}.json", plugin_id));
 
-        let content = serde_json::to_string_pretty(config)
-            .map_err(|e| PluginError::Serialization(e))?;
+        let content =
+            serde_json::to_string_pretty(config).map_err(|e| PluginError::Serialization(e))?;
 
-        tokio::fs::write(&config_file, content).await
+        tokio::fs::write(&config_file, content)
+            .await
             .map_err(|e| PluginError::Io(e))?;
 
         Ok(())
@@ -546,14 +558,17 @@ impl PluginManager {
     /// Get or create a plugin configuration
     fn get_or_create_config(&self, plugin_id: Uuid) -> PluginConfig {
         let configs = self.configs.read().unwrap();
-        configs.get(&plugin_id).cloned()
+        configs
+            .get(&plugin_id)
+            .cloned()
             .unwrap_or_else(|| PluginConfig::new(plugin_id))
     }
 
     /// Find plugin info by ID
     fn find_plugin_info(&self, plugin_id: Uuid) -> PluginResult<PluginInfo> {
         let registry = self.registry.read().unwrap();
-        registry.get_plugin_info(&plugin_id)
+        registry
+            .get_plugin_info(&plugin_id)
             .ok_or_else(|| PluginError::NotFound(plugin_id.to_string()))
     }
 }

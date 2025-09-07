@@ -240,7 +240,11 @@ impl RealTimeSync {
     }
 
     /// Unsubscribe from changes
-    pub async fn unsubscribe(&mut self, subscriber_id: Uuid, data_types: Vec<SyncDataType>) -> CloudSyncResult<()> {
+    pub async fn unsubscribe(
+        &mut self,
+        subscriber_id: Uuid,
+        data_types: Vec<SyncDataType>,
+    ) -> CloudSyncResult<()> {
         {
             let mut subscribers = self.subscribers.write().await;
             for data_type in &data_types {
@@ -272,7 +276,9 @@ impl RealTimeSync {
 
         // Send to remote subscribers via WebSocket
         if let Some(client) = &mut self.websocket_client {
-            let change_msg = WebSocketMessage::Change { event: event.clone() };
+            let change_msg = WebSocketMessage::Change {
+                event: event.clone(),
+            };
             client.send_message(&change_msg).await?;
         }
 
@@ -288,7 +294,7 @@ impl RealTimeSync {
     /// Process incoming change events
     pub async fn process_change_events(&mut self) -> CloudSyncResult<u32> {
         let mut processed_count = 0;
-        
+
         {
             let mut queue = self.change_stream.processing_queue.write().await;
             let events = queue.drain(..).collect::<Vec<_>>();
@@ -348,7 +354,7 @@ impl RealTimeSync {
 
     async fn notify_local_subscribers(&self, event: &ChangeEvent) {
         let subscribers = self.subscribers.read().await;
-        
+
         if let Some(type_subscribers) = subscribers.get(&event.data_type) {
             for subscriber in type_subscribers {
                 // Apply filter if present
@@ -437,48 +443,49 @@ impl WebSocketClient {
 
     async fn connect(&mut self) -> CloudSyncResult<()> {
         self.connection_status = ConnectionStatus::Connecting;
-        
+
         // Simulate connection process
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-        
+
         self.connection_status = ConnectionStatus::Connected;
-        
+
         // Start heartbeat
         self.start_heartbeat().await?;
-        
+
         Ok(())
     }
 
     async fn send_message(&mut self, message: &WebSocketMessage) -> CloudSyncResult<()> {
         if self.connection_status != ConnectionStatus::Connected {
-            return Err(CloudSyncError::Network("WebSocket not connected".to_string()));
+            return Err(CloudSyncError::Network(
+                "WebSocket not connected".to_string(),
+            ));
         }
 
         // Simulate message sending
-        let _serialized = serde_json::to_string(message)
-            .map_err(|e| CloudSyncError::Serialization(e))?;
-        
+        let _serialized =
+            serde_json::to_string(message).map_err(|e| CloudSyncError::Serialization(e))?;
+
         // In a real implementation, send via WebSocket
-        
+
         Ok(())
     }
 
     async fn start_heartbeat(&mut self) -> CloudSyncResult<()> {
         let heartbeat_interval = self.heartbeat_interval_ms;
-        
+
         tokio::spawn(async move {
-            let mut interval = tokio::time::interval(
-                tokio::time::Duration::from_millis(heartbeat_interval)
-            );
-            
+            let mut interval =
+                tokio::time::interval(tokio::time::Duration::from_millis(heartbeat_interval));
+
             loop {
                 interval.tick().await;
-                
+
                 // Send ping message
                 let ping_msg = WebSocketMessage::Ping {
                     timestamp: Utc::now(),
                 };
-                
+
                 // In a real implementation, send ping and handle pong
                 let _ = serde_json::to_string(&ping_msg);
             }
@@ -489,9 +496,9 @@ impl WebSocketClient {
 
     fn get_statistics(&self) -> RealTimeSyncStats {
         RealTimeSyncStats {
-            connection_uptime_ms: 0, // Calculate based on connection time
-            messages_sent: 0,        // Track in implementation
-            messages_received: 0,    // Track in implementation
+            connection_uptime_ms: 0,    // Calculate based on connection time
+            messages_sent: 0,           // Track in implementation
+            messages_received: 0,       // Track in implementation
             change_events_processed: 0, // Track in implementation
             reconnection_count: self.reconnect_attempts,
             last_heartbeat: self.last_ping,

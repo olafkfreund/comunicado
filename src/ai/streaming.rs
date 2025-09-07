@@ -1,6 +1,6 @@
 //! Streaming response system for real-time AI operation feedback
 
-use crate::ai::{AIResult, AIError};
+use crate::ai::{AIError, AIResult};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -64,7 +64,7 @@ impl StreamingSession {
         self.chunks_received += 1;
         self.accumulated_content.push_str(&chunk.content);
         self.is_complete = chunk.is_final;
-        
+
         // Merge chunk metadata
         for (key, value) in &chunk.metadata {
             self.metadata.insert(key.clone(), value.clone());
@@ -118,7 +118,7 @@ impl Default for StreamingConfig {
             max_active_streams: 10,
             buffer_size: 1000,
             stream_timeout: Duration::from_secs(300), // 5 minutes
-            max_chunk_size: 8192, // 8KB
+            max_chunk_size: 8192,                     // 8KB
             min_chunk_interval: Duration::from_millis(10),
             enable_compression: false,
         }
@@ -168,14 +168,19 @@ impl AIStreamingManager {
     }
 
     /// Start a new streaming session for an operation
-    pub async fn start_stream(&self, operation_id: Uuid) -> AIResult<mpsc::UnboundedReceiver<StreamChunk>> {
+    pub async fn start_stream(
+        &self,
+        operation_id: Uuid,
+    ) -> AIResult<mpsc::UnboundedReceiver<StreamChunk>> {
         let config = self.config.read().await;
         let mut sessions = self.sessions.write().await;
         let mut senders = self.stream_senders.write().await;
 
         // Check if we've reached the maximum number of active streams
         if sessions.len() >= config.max_active_streams {
-            return Err(AIError::internal_error("Maximum number of active streams reached"));
+            return Err(AIError::internal_error(
+                "Maximum number of active streams reached",
+            ));
         }
 
         // Create new session
@@ -194,7 +199,10 @@ impl AIStreamingManager {
         stats.total_streams += 1;
         stats.active_streams = sessions.len();
 
-        info!("Started streaming session {} for operation {}", session_id, operation_id);
+        info!(
+            "Started streaming session {} for operation {}",
+            session_id, operation_id
+        );
 
         Ok(rx)
     }
@@ -202,7 +210,7 @@ impl AIStreamingManager {
     /// Send a chunk to a streaming session
     pub async fn send_chunk(&self, chunk: StreamChunk) -> AIResult<()> {
         let operation_id = chunk.operation_id;
-        
+
         // Validate chunk size
         {
             let config = self.config.read().await;
@@ -214,7 +222,10 @@ impl AIStreamingManager {
         // Find and update session
         {
             let mut sessions = self.sessions.write().await;
-            if let Some(session) = sessions.values_mut().find(|s| s.operation_id == operation_id) {
+            if let Some(session) = sessions
+                .values_mut()
+                .find(|s| s.operation_id == operation_id)
+            {
                 session.add_chunk(&chunk);
             }
         }
@@ -244,7 +255,10 @@ impl AIStreamingManager {
             self.end_stream(operation_id).await?;
         }
 
-        debug!("Sent chunk {} for operation {}", chunk.sequence, operation_id);
+        debug!(
+            "Sent chunk {} for operation {}",
+            chunk.sequence, operation_id
+        );
 
         Ok(())
     }
@@ -271,14 +285,16 @@ impl AIStreamingManager {
             {
                 let mut stats = self.stats.write().await;
                 stats.active_streams = sessions.len();
-                
+
                 // Update average duration
                 let total_completed = stats.total_streams - stats.active_streams;
                 if total_completed > 1 {
                     stats.avg_stream_duration = Duration::from_millis(
                         ((stats.avg_stream_duration.as_millis() * (total_completed - 1) as u128
-                         + session.duration().as_millis()) / total_completed as u128)
-                         .try_into().unwrap_or(0)
+                            + session.duration().as_millis())
+                            / total_completed as u128)
+                            .try_into()
+                            .unwrap_or(0),
                     );
                 } else {
                     stats.avg_stream_duration = session.duration();
@@ -286,12 +302,18 @@ impl AIStreamingManager {
 
                 // Update average chunks per stream
                 if total_completed > 0 {
-                    stats.avg_chunks_per_stream = stats.total_chunks as f64 / total_completed as f64;
+                    stats.avg_chunks_per_stream =
+                        stats.total_chunks as f64 / total_completed as f64;
                 }
             }
 
-            info!("Ended streaming session {} for operation {} (duration: {:?}, chunks: {})", 
-                  session.id, operation_id, session.duration(), session.chunks_received);
+            info!(
+                "Ended streaming session {} for operation {} (duration: {:?}, chunks: {})",
+                session.id,
+                operation_id,
+                session.duration(),
+                session.chunks_received
+            );
 
             Ok(session)
         } else {
@@ -302,7 +324,10 @@ impl AIStreamingManager {
     /// Get streaming session information
     pub async fn get_session(&self, operation_id: Uuid) -> Option<StreamingSession> {
         let sessions = self.sessions.read().await;
-        sessions.values().find(|s| s.operation_id == operation_id).cloned()
+        sessions
+            .values()
+            .find(|s| s.operation_id == operation_id)
+            .cloned()
     }
 
     /// Get all active sessions
@@ -353,7 +378,7 @@ impl AIStreamingManager {
     /// Start periodic cleanup task
     pub async fn start_cleanup_task(&self) {
         let manager = Arc::new(self.clone());
-        
+
         tokio::spawn(async move {
             loop {
                 tokio::time::sleep(Duration::from_secs(60)).await; // Check every minute
@@ -418,7 +443,7 @@ mod tests {
     async fn test_streaming_session_creation() {
         let operation_id = Uuid::new_v4();
         let session = StreamingSession::new(operation_id);
-        
+
         assert_eq!(session.operation_id, operation_id);
         assert_eq!(session.chunks_received, 0);
         assert!(!session.is_complete);
@@ -429,7 +454,7 @@ mod tests {
     async fn test_chunk_addition() {
         let operation_id = Uuid::new_v4();
         let mut session = StreamingSession::new(operation_id);
-        
+
         let chunk = StreamChunk {
             operation_id,
             sequence: 1,
@@ -438,9 +463,9 @@ mod tests {
             timestamp: std::time::SystemTime::now(),
             metadata: HashMap::new(),
         };
-        
+
         session.add_chunk(&chunk);
-        
+
         assert_eq!(session.chunks_received, 1);
         assert_eq!(session.accumulated_content, "Hello ");
         assert!(!session.is_complete);
@@ -456,13 +481,9 @@ mod tests {
         let mut rx = manager.start_stream(operation_id).await.unwrap();
 
         // Send chunk
-        let chunk = AIStreamingManager::create_chunk(
-            operation_id,
-            1,
-            "Test content".to_string(),
-            false,
-        );
-        
+        let chunk =
+            AIStreamingManager::create_chunk(operation_id, 1, "Test content".to_string(), false);
+
         manager.send_chunk(chunk).await.unwrap();
 
         // Receive chunk
@@ -470,19 +491,15 @@ mod tests {
             .await
             .unwrap()
             .unwrap();
-        
+
         assert_eq!(received_chunk.content, "Test content");
         assert_eq!(received_chunk.sequence, 1);
         assert!(!received_chunk.is_final);
 
         // Send final chunk
-        let final_chunk = AIStreamingManager::create_chunk(
-            operation_id,
-            2,
-            " Final".to_string(),
-            true,
-        );
-        
+        let final_chunk =
+            AIStreamingManager::create_chunk(operation_id, 2, " Final".to_string(), true);
+
         manager.send_chunk(final_chunk).await.unwrap();
 
         // Receive final chunk
@@ -490,7 +507,7 @@ mod tests {
             .await
             .unwrap()
             .unwrap();
-        
+
         assert_eq!(final_received.content, " Final");
         assert!(final_received.is_final);
 
@@ -522,7 +539,7 @@ mod tests {
             "Test".to_string(),
             true, // Final chunk
         );
-        
+
         manager.send_chunk(chunk).await.unwrap();
 
         let final_stats = manager.get_stats().await;

@@ -1,10 +1,10 @@
 //! Context-Aware Calendar Integration
-//! 
+//!
 //! Automatically shows relevant calendar information based on email content
 //! and user context, without cluttering the interface unnecessarily.
 
 use crate::{
-    calendar::{Event, Calendar},
+    calendar::{Calendar, Event},
     email::StoredMessage,
     theme::Theme,
 };
@@ -33,22 +33,22 @@ pub struct EmailCalendarContext {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ContextUrgency {
-    None,        // No calendar relevance
-    Low,         // Minor date mentions
-    Medium,      // Meeting references
-    High,        // Calendar invitations
-    Critical,    // Conflicts or urgent responses needed
+    None,     // No calendar relevance
+    Low,      // Minor date mentions
+    Medium,   // Meeting references
+    High,     // Calendar invitations
+    Critical, // Conflicts or urgent responses needed
 }
 
 /// Calendar information display modes
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CalendarDisplayMode {
-    Hidden,              // No calendar info shown
-    InvitationDetails,   // Show event details and RSVP options
-    DailyAgenda,         // Show today's schedule
-    WeeklyOverview,      // Show week view
-    ConflictWarning,     // Show scheduling conflicts
-    QuickSchedule,       // Show relevant time slots
+    Hidden,            // No calendar info shown
+    InvitationDetails, // Show event details and RSVP options
+    DailyAgenda,       // Show today's schedule
+    WeeklyOverview,    // Show week view
+    ConflictWarning,   // Show scheduling conflicts
+    QuickSchedule,     // Show relevant time slots
 }
 
 /// Context-aware calendar widget
@@ -56,20 +56,20 @@ pub struct ContextAwareCalendar {
     // Current context
     current_context: EmailCalendarContext,
     display_mode: CalendarDisplayMode,
-    
+
     // Calendar data
     events: Vec<Event>,
     calendars: Vec<Calendar>,
     #[allow(dead_code)]
     current_date: NaiveDate,
-    
+
     // UI state
     #[allow(dead_code)]
     is_visible: bool,
     selected_action: usize,
     #[allow(dead_code)]
     rsvp_response: Option<RsvpResponse>,
-    
+
     // Cache for performance
     agenda_cache: HashMap<NaiveDate, Vec<Event>>,
     last_update: DateTime<Utc>,
@@ -113,7 +113,7 @@ impl ContextAwareCalendar {
     pub fn analyze_email_context(&mut self, email: &StoredMessage) -> CalendarDisplayMode {
         let content = email.body_text.as_deref().unwrap_or(&email.subject);
         let subject = &email.subject;
-        
+
         // Reset context
         self.current_context = EmailCalendarContext::default();
         self.current_context.email_id = Some(email.id.to_string());
@@ -122,10 +122,13 @@ impl ContextAwareCalendar {
     }
 
     /// Analyze email content and determine calendar context from MessageItem
-    pub fn analyze_message_item_context(&mut self, message: &crate::ui::message_list::MessageItem) -> CalendarDisplayMode {
+    pub fn analyze_message_item_context(
+        &mut self,
+        message: &crate::ui::message_list::MessageItem,
+    ) -> CalendarDisplayMode {
         let content = &message.subject; // MessageItem doesn't have body content
         let subject = &message.subject;
-        
+
         // Reset context
         self.current_context = EmailCalendarContext::default();
         self.current_context.email_id = message.message_id.map(|id| id.to_string());
@@ -134,7 +137,11 @@ impl ContextAwareCalendar {
     }
 
     /// Internal method to analyze content for calendar context
-    fn analyze_content_for_calendar_context(&mut self, content: &str, subject: &str) -> CalendarDisplayMode {
+    fn analyze_content_for_calendar_context(
+        &mut self,
+        content: &str,
+        subject: &str,
+    ) -> CalendarDisplayMode {
         // Check for calendar invitations
         if self.is_calendar_invitation(content, subject) {
             self.current_context.has_calendar_invitation = true;
@@ -175,16 +182,16 @@ impl ContextAwareCalendar {
         match self.display_mode {
             CalendarDisplayMode::InvitationDetails => {
                 self.render_invitation_details(frame, area, theme);
-            },
+            }
             CalendarDisplayMode::DailyAgenda => {
                 self.render_daily_agenda(frame, area, theme);
-            },
+            }
             CalendarDisplayMode::QuickSchedule => {
                 self.render_quick_schedule(frame, area, theme);
-            },
+            }
             CalendarDisplayMode::ConflictWarning => {
                 self.render_conflict_warning(frame, area, theme);
-            },
+            }
             _ => {}
         }
     }
@@ -203,8 +210,8 @@ impl ContextAwareCalendar {
         let sections = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Min(1),     // Event details
-                Constraint::Length(3),  // RSVP buttons
+                Constraint::Min(1),    // Event details
+                Constraint::Length(3), // RSVP buttons
             ])
             .split(inner);
 
@@ -212,7 +219,10 @@ impl ContextAwareCalendar {
         let event_details = vec![
             Line::from(vec![
                 Span::styled("📍 ", Style::default().fg(Color::Blue)),
-                Span::styled("Team Meeting", Style::default().add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    "Team Meeting",
+                    Style::default().add_modifier(Modifier::BOLD),
+                ),
             ]),
             Line::from(vec![
                 Span::styled("🕐 ", Style::default().fg(Color::Green)),
@@ -227,40 +237,59 @@ impl ContextAwareCalendar {
             Line::from("Please bring your current sprint reports."),
         ];
 
-        let details_paragraph = Paragraph::new(event_details)
-            .wrap(Wrap { trim: true });
+        let details_paragraph = Paragraph::new(event_details).wrap(Wrap { trim: true });
         frame.render_widget(details_paragraph, sections[0]);
 
         // RSVP buttons
         let rsvp_line = Line::from(vec![
             Span::styled(
-                if self.selected_action == 0 { " [✅ Accept] " } else { " ✅ Accept " },
                 if self.selected_action == 0 {
-                    Style::default().bg(theme.colors.palette.success).fg(Color::Black).add_modifier(Modifier::BOLD)
+                    " [✅ Accept] "
+                } else {
+                    " ✅ Accept "
+                },
+                if self.selected_action == 0 {
+                    Style::default()
+                        .bg(theme.colors.palette.success)
+                        .fg(Color::Black)
+                        .add_modifier(Modifier::BOLD)
                 } else {
                     Style::default().fg(theme.colors.palette.success)
-                }
+                },
             ),
             Span::styled(
-                if self.selected_action == 1 { " [❌ Decline] " } else { " ❌ Decline " },
                 if self.selected_action == 1 {
-                    Style::default().bg(Color::Red).fg(Color::White).add_modifier(Modifier::BOLD)
+                    " [❌ Decline] "
+                } else {
+                    " ❌ Decline "
+                },
+                if self.selected_action == 1 {
+                    Style::default()
+                        .bg(Color::Red)
+                        .fg(Color::White)
+                        .add_modifier(Modifier::BOLD)
                 } else {
                     Style::default().fg(Color::Red)
-                }
+                },
             ),
             Span::styled(
-                if self.selected_action == 2 { " [❓ Maybe] " } else { " ❓ Maybe " },
                 if self.selected_action == 2 {
-                    Style::default().bg(Color::Yellow).fg(Color::Black).add_modifier(Modifier::BOLD)
+                    " [❓ Maybe] "
+                } else {
+                    " ❓ Maybe "
+                },
+                if self.selected_action == 2 {
+                    Style::default()
+                        .bg(Color::Yellow)
+                        .fg(Color::Black)
+                        .add_modifier(Modifier::BOLD)
                 } else {
                     Style::default().fg(Color::Yellow)
-                }
+                },
             ),
         ]);
 
-        let rsvp_paragraph = Paragraph::new(rsvp_line)
-            .alignment(Alignment::Center);
+        let rsvp_paragraph = Paragraph::new(rsvp_line).alignment(Alignment::Center);
         frame.render_widget(rsvp_paragraph, sections[1]);
     }
 
@@ -294,7 +323,10 @@ impl ContextAwareCalendar {
             ListItem::new(Line::from("")),
             ListItem::new(Line::from(vec![
                 Span::styled("💡 ", Style::default().fg(theme.colors.palette.accent)),
-                Span::styled("Free time: 10:00 AM - 1:00 PM", Style::default().fg(theme.colors.palette.text_muted)),
+                Span::styled(
+                    "Free time: 10:00 AM - 1:00 PM",
+                    Style::default().fg(theme.colors.palette.text_muted),
+                ),
             ])),
         ];
 
@@ -315,7 +347,10 @@ impl ContextAwareCalendar {
         let schedule_info = vec![
             Line::from(vec![
                 Span::styled("📅 ", Style::default().fg(Color::Blue)),
-                Span::styled("Referenced: Thu, Jul 30", Style::default().add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    "Referenced: Thu, Jul 30",
+                    Style::default().add_modifier(Modifier::BOLD),
+                ),
             ]),
             Line::from(""),
             Line::from("Available time slots:"),
@@ -351,7 +386,10 @@ impl ContextAwareCalendar {
         let warning_text = vec![
             Line::from(vec![
                 Span::styled("❌ ", Style::default().fg(Color::Red)),
-                Span::styled("Time conflict detected!", Style::default().add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    "Time conflict detected!",
+                    Style::default().add_modifier(Modifier::BOLD),
+                ),
             ]),
             Line::from(""),
             Line::from("The proposed meeting time conflicts with:"),
@@ -378,48 +416,43 @@ impl ContextAwareCalendar {
     /// Handle keyboard input for calendar actions
     pub fn handle_key(&mut self, key: crossterm::event::KeyCode) -> Option<CalendarAction> {
         match self.display_mode {
-            CalendarDisplayMode::InvitationDetails => {
-                match key {
-                    crossterm::event::KeyCode::Left => {
-                        if self.selected_action > 0 {
-                            self.selected_action -= 1;
-                        }
-                        None
-                    },
-                    crossterm::event::KeyCode::Right => {
-                        if self.selected_action < 2 {
-                            self.selected_action += 1;
-                        }
-                        None
-                    },
-                    crossterm::event::KeyCode::Enter => {
-                        let response = match self.selected_action {
-                            0 => RsvpResponse::Accept,
-                            1 => RsvpResponse::Decline,
-                            2 => RsvpResponse::Maybe,
-                            _ => RsvpResponse::NoResponse,
-                        };
-                        
-                        if let Some(event_id) = &self.current_context.invitation_event_id {
-                            Some(CalendarAction::RespondToInvitation(event_id.clone(), response))
-                        } else {
-                            None
-                        }
-                    },
-                    crossterm::event::KeyCode::Esc => {
-                        Some(CalendarAction::HideCalendarContext)
-                    },
-                    _ => None,
+            CalendarDisplayMode::InvitationDetails => match key {
+                crossterm::event::KeyCode::Left => {
+                    if self.selected_action > 0 {
+                        self.selected_action -= 1;
+                    }
+                    None
                 }
+                crossterm::event::KeyCode::Right => {
+                    if self.selected_action < 2 {
+                        self.selected_action += 1;
+                    }
+                    None
+                }
+                crossterm::event::KeyCode::Enter => {
+                    let response = match self.selected_action {
+                        0 => RsvpResponse::Accept,
+                        1 => RsvpResponse::Decline,
+                        2 => RsvpResponse::Maybe,
+                        _ => RsvpResponse::NoResponse,
+                    };
+
+                    if let Some(event_id) = &self.current_context.invitation_event_id {
+                        Some(CalendarAction::RespondToInvitation(
+                            event_id.clone(),
+                            response,
+                        ))
+                    } else {
+                        None
+                    }
+                }
+                crossterm::event::KeyCode::Esc => Some(CalendarAction::HideCalendarContext),
+                _ => None,
             },
-            _ => {
-                match key {
-                    crossterm::event::KeyCode::Esc => {
-                        Some(CalendarAction::HideCalendarContext)
-                    },
-                    _ => None,
-                }
-            }
+            _ => match key {
+                crossterm::event::KeyCode::Esc => Some(CalendarAction::HideCalendarContext),
+                _ => None,
+            },
         }
     }
 
@@ -428,7 +461,7 @@ impl ContextAwareCalendar {
         self.events = events;
         self.calendars = calendars;
         self.last_update = Utc::now();
-        
+
         // Rebuild agenda cache
         self.rebuild_agenda_cache();
     }
@@ -448,40 +481,80 @@ impl ContextAwareCalendar {
     /// Check if email contains calendar invitation
     fn is_calendar_invitation(&self, content: &str, subject: &str) -> bool {
         let invitation_keywords = [
-            "calendar invitation", "meeting invitation", "event invitation",
-            "rsvp", "please respond", "accept", "decline", "meeting request",
-            "calendar event", "when2meet", "doodle poll", "scheduling",
-            "BEGIN:VCALENDAR", "VEVENT", "ics attachment"
+            "calendar invitation",
+            "meeting invitation",
+            "event invitation",
+            "rsvp",
+            "please respond",
+            "accept",
+            "decline",
+            "meeting request",
+            "calendar event",
+            "when2meet",
+            "doodle poll",
+            "scheduling",
+            "BEGIN:VCALENDAR",
+            "VEVENT",
+            "ics attachment",
         ];
 
         let text = format!("{} {}", content.to_lowercase(), subject.to_lowercase());
-        invitation_keywords.iter().any(|keyword| text.contains(keyword))
+        invitation_keywords
+            .iter()
+            .any(|keyword| text.contains(keyword))
     }
 
     /// Check for meeting-related keywords
     fn has_meeting_keywords(&self, content: &str, subject: &str) -> bool {
         let meeting_keywords = [
-            "meeting", "call", "conference", "sync", "standup", "review",
-            "presentation", "demo", "discussion", "catch up", "check-in",
-            "interview", "1:1", "one-on-one", "team meeting", "all hands"
+            "meeting",
+            "call",
+            "conference",
+            "sync",
+            "standup",
+            "review",
+            "presentation",
+            "demo",
+            "discussion",
+            "catch up",
+            "check-in",
+            "interview",
+            "1:1",
+            "one-on-one",
+            "team meeting",
+            "all hands",
         ];
 
         let text = format!("{} {}", content.to_lowercase(), subject.to_lowercase());
-        meeting_keywords.iter().any(|keyword| text.contains(keyword))
+        meeting_keywords
+            .iter()
+            .any(|keyword| text.contains(keyword))
     }
 
     /// Extract date mentions from email content
     fn extract_date_mentions(&self, content: &str, subject: &str) -> Vec<NaiveDate> {
         let mut dates = Vec::new();
         let text = format!("{} {}", content, subject);
-        
+
         // Simple date pattern matching (this could be enhanced with better parsing)
         let date_patterns = [
-            "today", "tomorrow", "next week", "monday", "tuesday", "wednesday",
-            "thursday", "friday", "saturday", "sunday", "this week"
+            "today",
+            "tomorrow",
+            "next week",
+            "monday",
+            "tuesday",
+            "wednesday",
+            "thursday",
+            "friday",
+            "saturday",
+            "sunday",
+            "this week",
         ];
 
-        if date_patterns.iter().any(|pattern| text.to_lowercase().contains(pattern)) {
+        if date_patterns
+            .iter()
+            .any(|pattern| text.to_lowercase().contains(pattern))
+        {
             // For now, just add today's date as an example
             dates.push(Local::now().date_naive());
         }
@@ -492,10 +565,11 @@ impl ContextAwareCalendar {
     /// Rebuild the agenda cache for quick lookups
     fn rebuild_agenda_cache(&mut self) {
         self.agenda_cache.clear();
-        
+
         for event in &self.events {
             let start_date = event.start_time.date_naive();
-            self.agenda_cache.entry(start_date)
+            self.agenda_cache
+                .entry(start_date)
                 .or_insert_with(Vec::new)
                 .push(event.clone());
         }

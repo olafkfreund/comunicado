@@ -1,8 +1,10 @@
 //! AI provider factory for creating and managing AI providers
 
-use crate::ai::{AIResult, AIConfig, AIProviderType, AIProviderManager, AIResponseCache, AIService};
 use crate::ai::error::AIError;
 use crate::ai::providers::{AnthropicProvider, GoogleProvider, OllamaProvider, OpenAIProvider};
+use crate::ai::{
+    AIConfig, AIProviderManager, AIProviderType, AIResponseCache, AIResult, AIService,
+};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -14,13 +16,13 @@ impl AIFactory {
     pub async fn create_ai_service(config: AIConfig) -> AIResult<AIService> {
         let config = Arc::new(RwLock::new(config));
         let mut provider_manager = AIProviderManager::new(config.clone());
-        
+
         // Register all available providers based on configuration
         Self::register_providers(&mut provider_manager, &config).await?;
-        
+
         let provider_manager = Arc::new(RwLock::new(provider_manager));
         let cache = Arc::new(AIResponseCache::default());
-        
+
         Ok(AIService::new(provider_manager, cache, config))
     }
 
@@ -30,10 +32,13 @@ impl AIFactory {
         config: &Arc<RwLock<AIConfig>>,
     ) -> AIResult<()> {
         let config_read = config.read().await;
-        
+
         // Register Ollama provider if configured
-        if config_read.provider == AIProviderType::Ollama || 
-           config_read.fallback_providers.contains(&AIProviderType::Ollama) {
+        if config_read.provider == AIProviderType::Ollama
+            || config_read
+                .fallback_providers
+                .contains(&AIProviderType::Ollama)
+        {
             if let Ok(provider) = Self::create_ollama_provider(&config_read) {
                 manager.register_provider(AIProviderType::Ollama, Box::new(provider));
                 tracing::info!("Registered Ollama AI provider");
@@ -43,8 +48,11 @@ impl AIFactory {
         }
 
         // Register OpenAI provider if configured
-        if config_read.provider == AIProviderType::OpenAI || 
-           config_read.fallback_providers.contains(&AIProviderType::OpenAI) {
+        if config_read.provider == AIProviderType::OpenAI
+            || config_read
+                .fallback_providers
+                .contains(&AIProviderType::OpenAI)
+        {
             if let Ok(provider) = Self::create_openai_provider(&config_read) {
                 manager.register_provider(AIProviderType::OpenAI, Box::new(provider));
                 tracing::info!("Registered OpenAI AI provider");
@@ -54,19 +62,27 @@ impl AIFactory {
         }
 
         // Register Anthropic provider if configured
-        if config_read.provider == AIProviderType::Anthropic || 
-           config_read.fallback_providers.contains(&AIProviderType::Anthropic) {
+        if config_read.provider == AIProviderType::Anthropic
+            || config_read
+                .fallback_providers
+                .contains(&AIProviderType::Anthropic)
+        {
             if let Ok(provider) = Self::create_anthropic_provider(&config_read) {
                 manager.register_provider(AIProviderType::Anthropic, Box::new(provider));
                 tracing::info!("Registered Anthropic AI provider");
             } else {
-                tracing::warn!("Failed to register Anthropic provider - check API key configuration");
+                tracing::warn!(
+                    "Failed to register Anthropic provider - check API key configuration"
+                );
             }
         }
 
         // Register Google provider if configured
-        if config_read.provider == AIProviderType::Google || 
-           config_read.fallback_providers.contains(&AIProviderType::Google) {
+        if config_read.provider == AIProviderType::Google
+            || config_read
+                .fallback_providers
+                .contains(&AIProviderType::Google)
+        {
             if let Ok(provider) = Self::create_google_provider(&config_read) {
                 manager.register_provider(AIProviderType::Google, Box::new(provider));
                 tracing::info!("Registered Google AI provider");
@@ -103,19 +119,19 @@ impl AIFactory {
         let mut privacy_config = config;
         privacy_config.provider = AIProviderType::Ollama;
         privacy_config.fallback_providers = vec![]; // No fallbacks for privacy-first
-        
+
         Self::create_ai_service(privacy_config).await
     }
 
     /// Create a cloud-optimized AI service with fallbacks
     pub async fn create_cloud_service(config: AIConfig) -> AIResult<AIService> {
         let mut cloud_config = config;
-        
+
         // Set up cloud providers with intelligent fallbacks
         if cloud_config.provider == AIProviderType::None {
             cloud_config.provider = AIProviderType::OpenAI;
         }
-        
+
         // Ensure we have good fallback options
         if cloud_config.fallback_providers.is_empty() {
             cloud_config.fallback_providers = vec![
@@ -124,7 +140,7 @@ impl AIFactory {
                 AIProviderType::Ollama, // Local fallback
             ];
         }
-        
+
         Self::create_ai_service(cloud_config).await
     }
 
@@ -144,25 +160,27 @@ impl AIFactory {
                 if config.ollama_endpoint.is_empty() {
                     return Err(AIError::config_error("Ollama endpoint not configured"));
                 }
-            },
+            }
             AIProviderType::OpenAI => {
                 if !config.api_keys.contains_key("openai") {
                     return Err(AIError::config_error("OpenAI API key not configured"));
                 }
-            },
+            }
             AIProviderType::Anthropic => {
                 if !config.api_keys.contains_key("anthropic") {
                     return Err(AIError::config_error("Anthropic API key not configured"));
                 }
-            },
+            }
             AIProviderType::Google => {
                 if !config.api_keys.contains_key("google") {
                     return Err(AIError::config_error("Google API key not configured"));
                 }
-            },
+            }
             AIProviderType::None => {
-                return Err(AIError::config_error("AI provider cannot be None when enabled"));
-            },
+                return Err(AIError::config_error(
+                    "AI provider cannot be None when enabled",
+                ));
+            }
         }
 
         Ok(())
@@ -172,18 +190,39 @@ impl AIFactory {
     pub fn get_provider_recommendations(use_case: &str) -> Vec<AIProviderType> {
         match use_case {
             "privacy" => vec![AIProviderType::Ollama],
-            "speed" => vec![AIProviderType::Google, AIProviderType::OpenAI, AIProviderType::Anthropic],
-            "accuracy" => vec![AIProviderType::Anthropic, AIProviderType::OpenAI, AIProviderType::Google],
-            "cost-effective" => vec![AIProviderType::Ollama, AIProviderType::Google, AIProviderType::OpenAI],
-            "enterprise" => vec![AIProviderType::OpenAI, AIProviderType::Anthropic, AIProviderType::Google],
-            _ => vec![AIProviderType::OpenAI, AIProviderType::Anthropic, AIProviderType::Google, AIProviderType::Ollama],
+            "speed" => vec![
+                AIProviderType::Google,
+                AIProviderType::OpenAI,
+                AIProviderType::Anthropic,
+            ],
+            "accuracy" => vec![
+                AIProviderType::Anthropic,
+                AIProviderType::OpenAI,
+                AIProviderType::Google,
+            ],
+            "cost-effective" => vec![
+                AIProviderType::Ollama,
+                AIProviderType::Google,
+                AIProviderType::OpenAI,
+            ],
+            "enterprise" => vec![
+                AIProviderType::OpenAI,
+                AIProviderType::Anthropic,
+                AIProviderType::Google,
+            ],
+            _ => vec![
+                AIProviderType::OpenAI,
+                AIProviderType::Anthropic,
+                AIProviderType::Google,
+                AIProviderType::Ollama,
+            ],
         }
     }
 
     /// Create a balanced AI service with multiple providers for resilience
     pub async fn create_resilient_service(config: AIConfig) -> AIResult<AIService> {
         let mut resilient_config = config;
-        
+
         // Ensure we have multiple providers configured for resilience
         resilient_config.fallback_providers = vec![
             AIProviderType::OpenAI,
@@ -193,8 +232,10 @@ impl AIFactory {
         ];
 
         // Remove the primary provider from fallbacks to avoid duplication
-        resilient_config.fallback_providers.retain(|p| *p != resilient_config.provider);
-        
+        resilient_config
+            .fallback_providers
+            .retain(|p| *p != resilient_config.provider);
+
         Self::create_ai_service(resilient_config).await
     }
 }
@@ -242,7 +283,7 @@ mod tests {
         config.enabled = true;
         config.provider = AIProviderType::OpenAI; // Will be overridden
         config.local_model = Some("llama2".to_string());
-        
+
         let service = AIFactory::create_privacy_first_service(config).await;
         // This will fail without actual Ollama setup, but tests the configuration logic
         assert!(service.is_err() || service.is_ok());
@@ -253,7 +294,7 @@ mod tests {
         let mut config = AIConfig::default();
         config.enabled = true;
         config.provider = AIProviderType::None; // Should be set to OpenAI
-        
+
         let service = AIFactory::create_cloud_service(config).await;
         // This will fail without API keys, but tests the configuration logic
         assert!(service.is_err() || service.is_ok());
@@ -265,7 +306,7 @@ mod tests {
         config.enabled = true;
         config.provider = AIProviderType::OpenAI;
         config.set_api_key("openai".to_string(), "test-key".to_string());
-        
+
         let service = AIFactory::create_resilient_service(config).await;
         // This will fail without valid API keys, but tests the configuration logic
         assert!(service.is_err() || service.is_ok());

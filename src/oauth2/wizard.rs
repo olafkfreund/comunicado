@@ -505,7 +505,7 @@ impl SetupWizard {
     }
 
     fn draw(&mut self, f: &mut Frame) {
-        let area = f.size();
+        let area = f.area();
 
         // Main layout
         let chunks = Layout::default()

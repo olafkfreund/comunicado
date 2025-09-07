@@ -1,6 +1,6 @@
 //! AI-powered email categorization system
 
-use super::{AiError, AiResult, AIProvider};
+use super::{AIProvider, AiError, AiResult};
 // use crate::notifications::types::NotificationPriority;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -283,15 +283,18 @@ impl EmailCategorizer {
     }
 
     /// Batch categorize multiple emails
-    pub async fn categorize_batch(&self, emails: Vec<EmailContent>) -> AiResult<Vec<ClassificationResult>> {
+    pub async fn categorize_batch(
+        &self,
+        emails: Vec<EmailContent>,
+    ) -> AiResult<Vec<ClassificationResult>> {
         let mut results = Vec::new();
 
         // Process in chunks to avoid overwhelming the AI provider
         const BATCH_SIZE: usize = 10;
-        
+
         for chunk in emails.chunks(BATCH_SIZE) {
             let mut chunk_results = Vec::new();
-            
+
             for email in chunk {
                 match self.categorize_email(email).await {
                     Ok(result) => chunk_results.push(result),
@@ -310,9 +313,9 @@ impl EmailCategorizer {
                     }
                 }
             }
-            
+
             results.extend(chunk_results);
-            
+
             // Small delay between batches
             tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
         }
@@ -328,15 +331,20 @@ impl EmailCategorizer {
     }
 
     /// Update category
-    pub async fn update_category(&self, category_id: &str, category: EmailCategory) -> AiResult<()> {
+    pub async fn update_category(
+        &self,
+        category_id: &str,
+        category: EmailCategory,
+    ) -> AiResult<()> {
         let mut categories = self.categories.write().await;
         if categories.contains_key(category_id) {
             categories.insert(category_id.to_string(), category);
             Ok(())
         } else {
-            Err(AiError::Configuration(
-                format!("Category not found: {}", category_id)
-            ))
+            Err(AiError::Configuration(format!(
+                "Category not found: {}",
+                category_id
+            )))
         }
     }
 
@@ -346,9 +354,10 @@ impl EmailCategorizer {
         if categories.remove(category_id).is_some() {
             Ok(())
         } else {
-            Err(AiError::Configuration(
-                format!("Category not found: {}", category_id)
-            ))
+            Err(AiError::Configuration(format!(
+                "Category not found: {}",
+                category_id
+            )))
         }
     }
 
@@ -395,7 +404,10 @@ impl EmailCategorizer {
     }
 
     /// Suggest actions for an email based on its category
-    pub async fn suggest_actions(&self, classification: &ClassificationResult) -> AiResult<Vec<SuggestedAction>> {
+    pub async fn suggest_actions(
+        &self,
+        classification: &ClassificationResult,
+    ) -> AiResult<Vec<SuggestedAction>> {
         let categories = self.categories.read().await;
         let mut actions = Vec::new();
 
@@ -419,9 +431,7 @@ impl EmailCategorizer {
                         action_type: ActionType::CreateTask,
                         description: format!("Set reminder in {} minutes", minutes),
                         confidence: 0.7,
-                        parameters: HashMap::from([
-                            ("minutes".to_string(), minutes.to_string())
-                        ]),
+                        parameters: HashMap::from([("minutes".to_string(), minutes.to_string())]),
                     },
                     AutoAction::AddToCalendar => SuggestedAction {
                         action_type: ActionType::AddToCalendar,
@@ -444,9 +454,12 @@ impl EmailCategorizer {
 
     // Private helper methods
 
-    async fn prepare_analysis_context(&self, email: &EmailContent) -> AiResult<EmailAnalysisContext> {
+    async fn prepare_analysis_context(
+        &self,
+        email: &EmailContent,
+    ) -> AiResult<EmailAnalysisContext> {
         let categories = self.categories.read().await;
-        
+
         Ok(EmailAnalysisContext {
             email: email.clone(),
             available_categories: categories.keys().cloned().collect(),
@@ -479,7 +492,7 @@ impl EmailCategorizer {
 
     async fn cache_result(&self, result: &ClassificationResult) {
         let mut cache = self.classification_cache.write().await;
-        
+
         // Implement cache size limit
         const MAX_CACHE_SIZE: usize = 10000;
         if cache.len() >= MAX_CACHE_SIZE {
@@ -489,7 +502,7 @@ impl EmailCategorizer {
                 cache.remove(&key);
             }
         }
-        
+
         cache.insert(result.email_id.clone(), result.clone());
     }
 
@@ -534,6 +547,9 @@ pub struct TrainingData {
 #[async_trait::async_trait]
 pub trait CategorizationProvider {
     async fn analyze_email(&self, context: &EmailAnalysisContext) -> AiResult<AiAnalysisResponse>;
-    async fn suggest_actions(&self, classification: &ClassificationResult) -> AiResult<Vec<SuggestedAction>>;
+    async fn suggest_actions(
+        &self,
+        classification: &ClassificationResult,
+    ) -> AiResult<Vec<SuggestedAction>>;
     async fn learn_from_feedback(&self, training_data: &TrainingData) -> AiResult<()>;
 }

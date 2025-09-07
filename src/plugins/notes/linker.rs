@@ -1,5 +1,5 @@
 //! Link resolution implementation
-//! 
+//!
 //! Handles wiki-style link resolution and backlink discovery.
 
 // Linker error types will be used when implementation is added

@@ -1,6 +1,6 @@
 //! AI-powered smart reply generation
 
-use super::{AiError, AiResult, AIProvider};
+use super::{AIProvider, AiError, AiResult};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tokio::sync::RwLock;
@@ -84,10 +84,10 @@ pub enum ReplyTone {
 /// Reply length preferences
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ReplyLength {
-    Brief,     // 1-2 sentences
-    Short,     // 1 paragraph
-    Medium,    // 2-3 paragraphs
-    Detailed,  // Multiple paragraphs
+    Brief,    // 1-2 sentences
+    Short,    // 1 paragraph
+    Medium,   // 2-3 paragraphs
+    Detailed, // Multiple paragraphs
 }
 
 /// User preferences for reply generation
@@ -319,13 +319,20 @@ impl SmartReplyGenerator {
         let matching_templates = self.find_matching_templates(request).await;
 
         // Generate reply using AI provider
-        let prompt = format!("Generate a {:?} reply to this email:\n{}", 
-                           request.reply_type,
-                           request.email_content.body);
-        let ai_response = self.provider.suggest_reply(&request.email_content.body, &prompt).await?;
+        let prompt = format!(
+            "Generate a {:?} reply to this email:\n{}",
+            request.reply_type, request.email_content.body
+        );
+        let ai_response = self
+            .provider
+            .suggest_reply(&request.email_content.body, &prompt)
+            .await?;
 
         // Process AI response - use first suggestion or create default
-        let reply_text = ai_response.first().unwrap_or(&"Thank you for your email.".to_string()).clone();
+        let reply_text = ai_response
+            .first()
+            .unwrap_or(&"Thank you for your email.".to_string())
+            .clone();
         let generated_reply = GeneratedReply {
             id: uuid::Uuid::new_v4().to_string(),
             subject: format!("Re: {}", request.email_content.subject),
@@ -354,11 +361,11 @@ impl SmartReplyGenerator {
         count: usize,
     ) -> AiResult<Vec<GeneratedReply>> {
         let mut replies = Vec::new();
-        
+
         // Generate different variations
         for i in 0..count {
             let mut varied_request = request.clone();
-            
+
             // Vary the tone for different options
             varied_request.tone = match i {
                 0 => request.tone.clone(),
@@ -387,24 +394,32 @@ impl SmartReplyGenerator {
     /// Get suggested reply types for an email
     pub async fn suggest_reply_types(&self, email: &EmailContext) -> AiResult<Vec<ReplyType>> {
         let analysis = self.provider.extract_key_info(&email.body).await?;
-        
+
         let mut suggested_types = Vec::new();
-        
+
         // Based on email content, suggest appropriate reply types
-        if analysis.iter().any(|s| s.contains("meeting")) || analysis.iter().any(|s| s.contains("invitation")) {
+        if analysis.iter().any(|s| s.contains("meeting"))
+            || analysis.iter().any(|s| s.contains("invitation"))
+        {
             suggested_types.push(ReplyType::Accept);
             suggested_types.push(ReplyType::Decline);
         }
-        
-        if analysis.iter().any(|s| s.contains("question")) || analysis.iter().any(|s| s.contains("?")) {
+
+        if analysis.iter().any(|s| s.contains("question"))
+            || analysis.iter().any(|s| s.contains("?"))
+        {
             suggested_types.push(ReplyType::Inform);
         }
-        
-        if analysis.iter().any(|s| s.contains("thank")) || analysis.iter().any(|s| s.contains("appreciation")) {
+
+        if analysis.iter().any(|s| s.contains("thank"))
+            || analysis.iter().any(|s| s.contains("appreciation"))
+        {
             suggested_types.push(ReplyType::Acknowledge);
         }
-        
-        if analysis.iter().any(|s| s.contains("request")) || analysis.iter().any(|s| s.contains("need")) {
+
+        if analysis.iter().any(|s| s.contains("request"))
+            || analysis.iter().any(|s| s.contains("need"))
+        {
             suggested_types.push(ReplyType::RequestInfo);
         }
 
@@ -423,15 +438,20 @@ impl SmartReplyGenerator {
     }
 
     /// Update template
-    pub async fn update_template(&self, template_id: &str, template: ReplyTemplate) -> AiResult<()> {
+    pub async fn update_template(
+        &self,
+        template_id: &str,
+        template: ReplyTemplate,
+    ) -> AiResult<()> {
         let mut templates = self.reply_templates.write().await;
         if templates.contains_key(template_id) {
             templates.insert(template_id.to_string(), template);
             Ok(())
         } else {
-            Err(AiError::Configuration(
-                format!("Template not found: {}", template_id)
-            ))
+            Err(AiError::Configuration(format!(
+                "Template not found: {}",
+                template_id
+            )))
         }
     }
 
@@ -486,13 +506,15 @@ impl SmartReplyGenerator {
 
         // Sort by usage count (most used first)
         matching.sort_by(|a, b| b.usage_count.cmp(&a.usage_count));
-        
+
         matching
     }
 
     fn template_matches(&self, template: &ReplyTemplate, request: &ReplyRequest) -> bool {
         // Check reply type match
-        if std::mem::discriminant(&template.reply_type) != std::mem::discriminant(&request.reply_type) {
+        if std::mem::discriminant(&template.reply_type)
+            != std::mem::discriminant(&request.reply_type)
+        {
             return false;
         }
 
@@ -508,8 +530,11 @@ impl SmartReplyGenerator {
 
     fn evaluate_condition(&self, condition: &str, email: &EmailContext) -> bool {
         if let Some(content) = condition.strip_prefix("contains:") {
-            email.body.to_lowercase().contains(&content.to_lowercase()) ||
-            email.subject.to_lowercase().contains(&content.to_lowercase())
+            email.body.to_lowercase().contains(&content.to_lowercase())
+                || email
+                    .subject
+                    .to_lowercase()
+                    .contains(&content.to_lowercase())
         } else if condition == "type:question" {
             email.body.contains('?') || email.subject.contains('?')
         } else {
@@ -546,12 +571,16 @@ impl SmartReplyGenerator {
             subject: self.generate_subject(&request.email_content, &ai_response.subject),
             body: ai_response.body,
             confidence: ai_response.confidence,
-            alternatives: ai_response.alternatives.into_iter().map(|alt| ReplyAlternative {
-                variant: alt.0,
-                body: alt.1,
-                tone_description: alt.2,
-                confidence: alt.3,
-            }).collect(),
+            alternatives: ai_response
+                .alternatives
+                .into_iter()
+                .map(|alt| ReplyAlternative {
+                    variant: alt.0,
+                    body: alt.1,
+                    tone_description: alt.2,
+                    confidence: alt.3,
+                })
+                .collect(),
             suggested_actions: ai_response.suggested_actions,
             reasoning: ai_response.reasoning,
             estimated_send_time: None,
@@ -560,7 +589,11 @@ impl SmartReplyGenerator {
     }
 
     #[allow(dead_code)]
-    fn generate_subject(&self, original_email: &EmailContext, ai_subject: &Option<String>) -> String {
+    fn generate_subject(
+        &self,
+        original_email: &EmailContext,
+        ai_subject: &Option<String>,
+    ) -> String {
         if let Some(subject) = ai_subject {
             subject.clone()
         } else if original_email.subject.starts_with("Re: ") {
@@ -579,7 +612,7 @@ impl SmartReplyGenerator {
         format!("{:?}", request.reply_type).hash(&mut hasher);
         format!("{:?}", request.tone).hash(&mut hasher);
         format!("{:?}", request.length).hash(&mut hasher);
-        
+
         format!("{:x}", hasher.finish())
     }
 
@@ -599,7 +632,7 @@ impl SmartReplyGenerator {
 
     async fn cache_response(&self, cache_key: String, reply: &GeneratedReply) {
         let mut cache = self.response_cache.write().await;
-        
+
         // Implement cache size limit
         const MAX_CACHE_SIZE: usize = 1000;
         if cache.len() >= MAX_CACHE_SIZE {
@@ -609,17 +642,20 @@ impl SmartReplyGenerator {
                 cache.remove(&key);
             }
         }
-        
-        cache.insert(cache_key, CachedResponse {
-            reply: reply.clone(),
-            generated_at: chrono::Utc::now(),
-            hits: 0,
-        });
+
+        cache.insert(
+            cache_key,
+            CachedResponse {
+                reply: reply.clone(),
+                generated_at: chrono::Utc::now(),
+                hits: 0,
+            },
+        );
     }
 
     async fn update_template_stats(&self, templates: &[ReplyTemplate]) {
         let mut template_store = self.reply_templates.write().await;
-        
+
         for template in templates {
             if let Some(stored_template) = template_store.get_mut(&template.id) {
                 stored_template.usage_count += 1;
@@ -666,7 +702,10 @@ pub struct ReplyLearningData {
 pub trait SmartReplyProvider {
     async fn generate_reply(&self, context: &ReplyAiContext) -> AiResult<AiReplyResponse>;
     async fn analyze_email_intent(&self, email: &EmailContext) -> AiResult<String>;
-    async fn learn_from_reply_modification(&self, learning_data: &ReplyLearningData) -> AiResult<()>;
+    async fn learn_from_reply_modification(
+        &self,
+        learning_data: &ReplyLearningData,
+    ) -> AiResult<()>;
 }
 
 impl Default for UserPreferences {

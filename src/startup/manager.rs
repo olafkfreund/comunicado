@@ -45,10 +45,9 @@ impl StartupProgressManager {
         }
     }
 
-
     pub fn start_phase(&mut self, phase_name: &str) -> Result<(), String> {
         let phase_index = self.find_phase_by_name(phase_name)?;
-        
+
         // Mark current phase as in progress
         if let Some(phase) = self.phases.get_mut(phase_index) {
             *phase.status_mut() = PhaseStatus::InProgress {
@@ -56,12 +55,13 @@ impl StartupProgressManager {
             };
             self.current_phase = phase_index;
             self.current_phase_progress = 0.0;
-            
+
             // Initialize logs for this phase
-            self.phase_logs.insert(phase_name.to_string(), vec![
-                format!("🔄 Starting {}", phase_name)
-            ]);
-            
+            self.phase_logs.insert(
+                phase_name.to_string(),
+                vec![format!("🔄 Starting {}", phase_name)],
+            );
+
             Ok(())
         } else {
             Err(format!("Phase {} not found", phase_name))
@@ -70,20 +70,20 @@ impl StartupProgressManager {
 
     pub fn complete_phase(&mut self, phase_name: &str) -> Result<(), String> {
         let phase_index = self.find_phase_by_name(phase_name)?;
-        
+
         if let Some(phase) = self.phases.get_mut(phase_index) {
             let duration = match phase.status() {
                 PhaseStatus::InProgress { started_at } => started_at.elapsed(),
                 _ => Duration::from_secs(0),
             };
-            
+
             *phase.status_mut() = PhaseStatus::Completed { duration };
-            
+
             // Advance to next phase if this was the current phase
             if phase_index == self.current_phase && self.current_phase + 1 < self.phases.len() {
                 self.current_phase += 1;
             }
-            
+
             Ok(())
         } else {
             Err(format!("Phase {} not found", phase_name))
@@ -92,10 +92,10 @@ impl StartupProgressManager {
 
     pub fn fail_phase(&mut self, phase_name: &str, error_message: String) -> Result<(), String> {
         let phase_index = self.find_phase_by_name(phase_name)?;
-        
+
         if let Some(phase) = self.phases.get_mut(phase_index) {
             let is_critical = phase.is_critical();
-            
+
             *phase.status_mut() = PhaseStatus::Failed {
                 error: error_message.clone(),
             };
@@ -109,10 +109,13 @@ impl StartupProgressManager {
             self.error_states.insert(phase_name.to_string(), error);
 
             // Advance to next phase if this was the current phase and it's not critical
-            if phase_index == self.current_phase && !is_critical && self.current_phase + 1 < self.phases.len() {
+            if phase_index == self.current_phase
+                && !is_critical
+                && self.current_phase + 1 < self.phases.len()
+            {
                 self.current_phase += 1;
             }
-            
+
             Ok(())
         } else {
             Err(format!("Phase {} not found", phase_name))
@@ -121,30 +124,36 @@ impl StartupProgressManager {
 
     pub fn timeout_phase(&mut self, phase_name: &str) -> Result<(), String> {
         let phase_index = self.find_phase_by_name(phase_name)?;
-        
+
         if let Some(phase) = self.phases.get_mut(phase_index) {
             let duration = match phase.status() {
                 PhaseStatus::InProgress { started_at } => started_at.elapsed(),
                 _ => phase.timeout(),
             };
-            
+
             let is_critical = phase.is_critical();
-            
+
             *phase.status_mut() = PhaseStatus::TimedOut { duration };
 
             // Store error state
             let error = if is_critical {
                 StartupError::critical(phase_name.to_string(), "Operation timed out".to_string())
             } else {
-                StartupError::non_critical(phase_name.to_string(), "Operation timed out".to_string())
+                StartupError::non_critical(
+                    phase_name.to_string(),
+                    "Operation timed out".to_string(),
+                )
             };
             self.error_states.insert(phase_name.to_string(), error);
 
             // Advance to next phase if this was the current phase and it's not critical
-            if phase_index == self.current_phase && !is_critical && self.current_phase + 1 < self.phases.len() {
+            if phase_index == self.current_phase
+                && !is_critical
+                && self.current_phase + 1 < self.phases.len()
+            {
                 self.current_phase += 1;
             }
-            
+
             Ok(())
         } else {
             Err(format!("Phase {} not found", phase_name))
@@ -156,7 +165,9 @@ impl StartupProgressManager {
             return 100.0;
         }
 
-        let completed_count = self.phases.iter()
+        let completed_count = self
+            .phases
+            .iter()
             .filter(|phase| phase.status().is_completed())
             .count();
 
@@ -173,7 +184,8 @@ impl StartupProgressManager {
                         };
                         let elapsed = started_at.elapsed();
                         let timeout = self.phases[self.current_phase].timeout();
-                        (elapsed.as_secs_f64() / timeout.as_secs_f64()).min(0.8) // Max 80% for time-based
+                        (elapsed.as_secs_f64() / timeout.as_secs_f64()).min(0.8)
+                        // Max 80% for time-based
                     }
                 }
                 _ => 0.0,
@@ -193,14 +205,14 @@ impl StartupProgressManager {
 
         let elapsed = self.started_at.elapsed();
         let progress = self.overall_progress_percentage() / 100.0;
-        
+
         if progress <= 0.0 {
             return None;
         }
 
         let estimated_total = elapsed.as_secs_f64() / progress;
         let remaining = estimated_total - elapsed.as_secs_f64();
-        
+
         if remaining > 0.0 {
             Some(Duration::from_secs_f64(remaining))
         } else {
@@ -253,15 +265,32 @@ impl StartupProgressManager {
     /// Force completion of startup (for when initialization is done but phases weren't properly tracked)
     pub fn force_complete(&mut self) {
         let total_duration = self.started_at.elapsed();
-        let phase_duration = Duration::from_millis(total_duration.as_millis() as u64 / self.phases.len() as u64);
-        
+        let phase_duration =
+            Duration::from_millis(total_duration.as_millis() as u64 / self.phases.len() as u64);
+
         // Mark all phases as completed
         for phase in &mut self.phases {
             match phase {
-                StartupPhase::Database { status, .. } => *status = PhaseStatus::Completed { duration: phase_duration },
-                StartupPhase::ImapManager { status, .. } => *status = PhaseStatus::Completed { duration: phase_duration },
-                StartupPhase::AccountSetup { status, .. } => *status = PhaseStatus::Completed { duration: phase_duration },
-                StartupPhase::Services { status, .. } => *status = PhaseStatus::Completed { duration: phase_duration },
+                StartupPhase::Database { status, .. } => {
+                    *status = PhaseStatus::Completed {
+                        duration: phase_duration,
+                    }
+                }
+                StartupPhase::ImapManager { status, .. } => {
+                    *status = PhaseStatus::Completed {
+                        duration: phase_duration,
+                    }
+                }
+                StartupPhase::AccountSetup { status, .. } => {
+                    *status = PhaseStatus::Completed {
+                        duration: phase_duration,
+                    }
+                }
+                StartupPhase::Services { status, .. } => {
+                    *status = PhaseStatus::Completed {
+                        duration: phase_duration,
+                    }
+                }
             }
         }
         self.current_phase = self.phases.len();
@@ -270,7 +299,7 @@ impl StartupProgressManager {
 
     pub fn check_timeout(&mut self, phase_name: &str) -> Result<bool, String> {
         let phase_index = self.find_phase_by_name(phase_name)?;
-        
+
         if let Some(phase) = self.phases.get(phase_index) {
             match phase.status() {
                 PhaseStatus::InProgress { started_at } => {
@@ -286,7 +315,7 @@ impl StartupProgressManager {
 
     pub fn time_until_timeout(&self, phase_name: &str) -> Result<Option<Duration>, String> {
         let phase_index = self.find_phase_by_name(phase_name)?;
-        
+
         if let Some(phase) = self.phases.get(phase_index) {
             match phase.status() {
                 PhaseStatus::InProgress { started_at } => {
@@ -306,42 +335,52 @@ impl StartupProgressManager {
     }
 
     /// Update progress for the current phase
-    pub fn update_phase_progress(&mut self, phase_name: &str, progress: f64, log_message: Option<String>) -> Result<(), String> {
+    pub fn update_phase_progress(
+        &mut self,
+        phase_name: &str,
+        progress: f64,
+        log_message: Option<String>,
+    ) -> Result<(), String> {
         let phase_index = self.find_phase_by_name(phase_name)?;
-        
+
         if phase_index == self.current_phase {
             self.current_phase_progress = progress.clamp(0.0, 100.0);
-            
+
             // Add log message if provided
             if let Some(message) = log_message {
-                self.phase_logs.entry(phase_name.to_string())
+                self.phase_logs
+                    .entry(phase_name.to_string())
                     .or_insert_with(Vec::new)
                     .push(message);
             }
-            
+
             Ok(())
         } else {
-            Err(format!("Cannot update progress for non-current phase {}", phase_name))
+            Err(format!(
+                "Cannot update progress for non-current phase {}",
+                phase_name
+            ))
         }
     }
-    
+
     /// Add a log message to a specific phase
     pub fn add_phase_log(&mut self, phase_name: &str, message: String) {
-        self.phase_logs.entry(phase_name.to_string())
+        self.phase_logs
+            .entry(phase_name.to_string())
             .or_insert_with(Vec::new)
             .push(message);
     }
-    
+
     /// Get logs for a specific phase
     pub fn get_phase_logs(&self, phase_name: &str) -> Vec<String> {
         self.phase_logs.get(phase_name).cloned().unwrap_or_default()
     }
-    
+
     /// Get current phase progress (0-100)
     pub fn current_phase_progress(&self) -> f64 {
         self.current_phase_progress
     }
-    
+
     /// Get current phase name
     pub fn current_phase_name(&self) -> Option<String> {
         self.current_phase().map(|phase| phase.name().to_string())
@@ -369,7 +408,7 @@ mod tests {
     #[test]
     fn test_startup_progress_manager_creation() {
         let manager = StartupProgressManager::new();
-        
+
         assert_eq!(manager.phases.len(), 4);
         assert_eq!(manager.current_phase, 0);
         assert!(manager.is_visible());
@@ -381,17 +420,17 @@ mod tests {
     #[test]
     fn test_phase_progression() {
         let mut manager = StartupProgressManager::new();
-        
+
         // Start first phase
         manager.start_phase("Database").unwrap();
         assert_eq!(manager.current_phase, 0);
         assert!(manager.current_phase().unwrap().status().is_in_progress());
-        
+
         // Complete first phase
         manager.complete_phase("Database").unwrap();
         assert_eq!(manager.current_phase, 1);
         assert!(manager.phases[0].status().is_completed());
-        
+
         // Start second phase
         manager.start_phase("IMAP Manager").unwrap();
         assert_eq!(manager.current_phase, 1);
@@ -401,35 +440,37 @@ mod tests {
     #[test]
     fn test_progress_calculation() {
         let mut manager = StartupProgressManager::new();
-        
+
         // No progress initially
         assert_eq!(manager.overall_progress_percentage(), 0.0);
-        
+
         // Complete first phase (25% of 4 phases)
         manager.start_phase("Database").unwrap();
         manager.complete_phase("Database").unwrap();
-        
+
         assert_eq!(manager.overall_progress_percentage(), 25.0); // 1/4 = 25%
-        
+
         // Complete second phase (50% total)
         manager.start_phase("IMAP Manager").unwrap();
         manager.complete_phase("IMAP Manager").unwrap();
-        
+
         assert_eq!(manager.overall_progress_percentage(), 50.0); // 2/4 = 50%
     }
 
     #[test]
     fn test_error_handling() {
         let mut manager = StartupProgressManager::new();
-        
+
         // Fail a non-critical phase
         manager.start_phase("IMAP Manager").unwrap();
-        manager.fail_phase("IMAP Manager", "Connection failed".to_string()).unwrap();
-        
+        manager
+            .fail_phase("IMAP Manager", "Connection failed".to_string())
+            .unwrap();
+
         assert!(manager.phases[1].status().is_failed());
         assert!(!manager.has_critical_errors());
         assert_eq!(manager.current_phase, 2); // Should advance to next phase
-        
+
         let errors = manager.error_states();
         assert!(errors.contains_key("IMAP Manager"));
         assert!(!errors["IMAP Manager"].is_critical);
@@ -438,15 +479,17 @@ mod tests {
     #[test]
     fn test_critical_error_handling() {
         let mut manager = StartupProgressManager::new();
-        
+
         // Fail the critical database phase
         manager.start_phase("Database").unwrap();
-        manager.fail_phase("Database", "Database connection failed".to_string()).unwrap();
-        
+        manager
+            .fail_phase("Database", "Database connection failed".to_string())
+            .unwrap();
+
         assert!(manager.phases[0].status().is_failed());
         assert!(manager.has_critical_errors());
         assert_eq!(manager.current_phase, 0); // Should not advance for critical error
-        
+
         let errors = manager.error_states();
         assert!(errors.contains_key("Database"));
         assert!(errors["Database"].is_critical);
@@ -455,32 +498,35 @@ mod tests {
     #[test]
     fn test_timeout_detection() {
         let mut manager = StartupProgressManager::new();
-        
+
         // Start a phase
         manager.start_phase("Services").unwrap();
-        
+
         // Should not be timed out initially
         assert!(!manager.check_timeout("Services").unwrap());
         assert!(manager.time_until_timeout("Services").unwrap().is_some());
-        
+
         // Simulate timeout
         manager.timeout_phase("Services").unwrap();
         assert!(manager.phases[3].status().is_failed());
-        assert_eq!(manager.phases[3].status().error_message(), Some("Operation timed out"));
+        assert_eq!(
+            manager.phases[3].status().error_message(),
+            Some("Operation timed out")
+        );
     }
 
     #[test]
     fn test_completion_detection() {
         let mut manager = StartupProgressManager::new();
-        
+
         assert!(!manager.is_complete());
-        
+
         // Complete all phases
         for phase_name in &["Database", "IMAP Manager", "Account Setup", "Services"] {
             manager.start_phase(phase_name).unwrap();
             manager.complete_phase(phase_name).unwrap();
         }
-        
+
         assert!(manager.is_complete());
         assert_eq!(manager.overall_progress_percentage(), 100.0);
         assert!(!manager.is_visible()); // Should hide when complete
@@ -489,23 +535,24 @@ mod tests {
     #[test]
     fn test_partial_completion_with_non_critical_failures() {
         let mut manager = StartupProgressManager::new();
-        
+
         // Complete database (critical)
         manager.start_phase("Database").unwrap();
         manager.complete_phase("Database").unwrap();
-        
+
         // Fail IMAP Manager (non-critical)
         manager.start_phase("IMAP Manager").unwrap();
-        manager.fail_phase("IMAP Manager", "Network error".to_string()).unwrap();
-        
+        manager
+            .fail_phase("IMAP Manager", "Network error".to_string())
+            .unwrap();
+
         // Complete remaining phases
         manager.start_phase("Account Setup").unwrap();
         manager.complete_phase("Account Setup").unwrap();
-        
+
         manager.start_phase("Services").unwrap();
         manager.complete_phase("Services").unwrap();
-        
-        
+
         // Should be considered complete despite non-critical failure
         assert!(manager.is_complete());
         assert!(!manager.has_critical_errors());
@@ -514,18 +561,18 @@ mod tests {
     #[test]
     fn test_estimated_time_remaining() {
         let mut manager = StartupProgressManager::new();
-        
+
         // No progress, no estimate
         assert!(manager.estimated_time_remaining().is_none());
-        
+
         // Complete one phase quickly, then start another
         manager.start_phase("Database").unwrap();
         sleep(Duration::from_millis(10));
         manager.complete_phase("Database").unwrap();
-        
+
         manager.start_phase("IMAP Manager").unwrap();
         sleep(Duration::from_millis(10));
-        
+
         let eta = manager.estimated_time_remaining();
         assert!(eta.is_some());
         // Should have some reasonable estimate based on progress
@@ -535,15 +582,15 @@ mod tests {
     #[test]
     fn test_visibility_management() {
         let mut manager = StartupProgressManager::new();
-        
+
         assert!(manager.is_visible());
-        
+
         manager.set_visible(false);
         assert!(!manager.is_visible());
-        
+
         manager.set_visible(true);
         assert!(manager.is_visible());
-        
+
         manager.hide();
         assert!(!manager.is_visible());
     }
@@ -551,10 +598,12 @@ mod tests {
     #[test]
     fn test_invalid_phase_name() {
         let mut manager = StartupProgressManager::new();
-        
+
         assert!(manager.start_phase("Invalid Phase").is_err());
         assert!(manager.complete_phase("Invalid Phase").is_err());
-        assert!(manager.fail_phase("Invalid Phase", "Error".to_string()).is_err());
+        assert!(manager
+            .fail_phase("Invalid Phase", "Error".to_string())
+            .is_err());
         assert!(manager.timeout_phase("Invalid Phase").is_err());
         assert!(manager.check_timeout("Invalid Phase").is_err());
         assert!(manager.time_until_timeout("Invalid Phase").is_err());

@@ -35,13 +35,13 @@ impl ValidationMessage {
             code: None,
         }
     }
-    
+
     /// Add a suggestion to the message
     pub fn with_suggestion(mut self, suggestion: impl Into<String>) -> Self {
         self.suggestion = Some(suggestion.into());
         self
     }
-    
+
     /// Add an error code to the message
     pub fn with_code(mut self, code: impl Into<String>) -> Self {
         self.code = Some(code.into());
@@ -72,13 +72,13 @@ impl ValidationRule {
             debounce_ms: 300,
         }
     }
-    
+
     /// Set the trigger for this rule
     pub fn with_trigger(mut self, trigger: ValidationTrigger) -> Self {
         self.trigger = trigger;
         self
     }
-    
+
     /// Set the debounce delay
     pub fn with_debounce(mut self, debounce_ms: u64) -> Self {
         self.debounce_ms = debounce_ms;
@@ -162,18 +162,17 @@ impl ValidatedField {
             show_suggestions: true,
         }
     }
-    
+
     /// Check if field needs validation based on debounce
     pub fn needs_validation(&self) -> bool {
         if let Some(timer) = self.debounce_timer {
-            timer.elapsed() >= Duration::from_millis(
-                self.rules.first().map(|r| r.debounce_ms).unwrap_or(300)
-            )
+            timer.elapsed()
+                >= Duration::from_millis(self.rules.first().map(|r| r.debounce_ms).unwrap_or(300))
         } else {
             false
         }
     }
-    
+
     /// Mark field as focused
     pub fn set_focused(&mut self, focused: bool) {
         if self.is_focused && !focused {
@@ -181,7 +180,7 @@ impl ValidatedField {
         }
         self.is_focused = focused;
     }
-    
+
     /// Update field value
     pub fn set_value(&mut self, value: String) {
         if self.value != value {
@@ -190,24 +189,24 @@ impl ValidatedField {
             self.debounce_timer = Some(Instant::now());
         }
     }
-    
+
     /// Set validation result
     pub fn set_validation_result(&mut self, result: ValidationResult) {
         self.validation_result = result;
         self.last_validation = Some(Instant::now());
         self.debounce_timer = None;
     }
-    
+
     /// Check if field has errors
     pub fn has_error(&self) -> bool {
         matches!(self.validation_result, ValidationResult::Error(_))
     }
-    
+
     /// Check if field has warnings
     pub fn has_warning(&self) -> bool {
         matches!(self.validation_result, ValidationResult::Warning(_))
     }
-    
+
     /// Check if field is valid
     pub fn is_valid(&self) -> bool {
         matches!(self.validation_result, ValidationResult::Valid)

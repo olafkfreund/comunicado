@@ -52,15 +52,24 @@ impl CiCdManager {
     }
 
     /// Validate deployment readiness through CI/CD checks
-    pub async fn validate_deployment_readiness(&self, artifacts: &[crate::deployment::DeploymentArtifact]) -> CiCdResult<()> {
-        println!("CI/CD: Validating deployment readiness for {} artifacts", artifacts.len());
+    pub async fn validate_deployment_readiness(
+        &self,
+        artifacts: &[crate::deployment::DeploymentArtifact],
+    ) -> CiCdResult<()> {
+        println!(
+            "CI/CD: Validating deployment readiness for {} artifacts",
+            artifacts.len()
+        );
         // Implementation would check if artifacts passed CI/CD pipeline
         Ok(())
     }
 
     /// Notify CI/CD system of deployment completion
     pub async fn notify_deployment_complete(&self, deployment_id: uuid::Uuid) -> CiCdResult<()> {
-        println!("CI/CD: Notifying deployment complete for: {}", deployment_id);
+        println!(
+            "CI/CD: Notifying deployment complete for: {}",
+            deployment_id
+        );
         // Implementation would update CI/CD pipeline status
         Ok(())
     }

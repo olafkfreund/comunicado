@@ -1,8 +1,8 @@
 //! AI-powered calendar assistant for natural language event processing
 
-use crate::ai::{AIService, AIContext};
-use crate::calendar::{CalendarError, CalendarResult, Event};
+use crate::ai::{AIContext, AIService};
 use crate::calendar::manager::CalendarManager;
+use crate::calendar::{CalendarError, CalendarResult, Event};
 use chrono::{DateTime, Datelike, Duration, Timelike, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -121,7 +121,9 @@ impl AICalendarAssistant {
         request: &NaturalLanguageEventRequest,
     ) -> CalendarResult<ParsedEventInfo> {
         if !self.ai_service.is_enabled().await {
-            return Err(CalendarError::InvalidData("AI service is not available".to_string()));
+            return Err(CalendarError::InvalidData(
+                "AI service is not available".to_string(),
+            ));
         }
 
         // Prepare the parsing prompt
@@ -154,7 +156,8 @@ impl AICalendarAssistant {
             creativity: Some(0.3), // Lower creativity for more accurate parsing
         };
 
-        let response = self.ai_service
+        let response = self
+            .ai_service
             .complete_text(&parsing_prompt, Some(&ai_context))
             .await
             .map_err(|e| CalendarError::InvalidData(format!("AI parsing failed: {}", e)))?;
@@ -169,9 +172,10 @@ impl AICalendarAssistant {
         request: &NaturalLanguageEventRequest,
     ) -> CalendarResult<Event> {
         let parsed_info = self.parse_natural_language_event(request).await?;
-        
+
         // Determine which calendar to use
-        let calendar_id = request.calendar_id
+        let calendar_id = request
+            .calendar_id
             .clone()
             .or(parsed_info.suggested_calendar)
             .unwrap_or_else(|| "default".to_string());
@@ -194,7 +198,9 @@ impl AICalendarAssistant {
         }
 
         // Save the event through the calendar manager
-        self.calendar_manager.create_event(final_event.clone()).await?;
+        self.calendar_manager
+            .create_event(final_event.clone())
+            .await?;
 
         Ok(final_event)
     }
@@ -206,7 +212,9 @@ impl AICalendarAssistant {
         modification_request: &str,
     ) -> CalendarResult<EventModificationSuggestions> {
         if !self.ai_service.is_enabled().await {
-            return Err(CalendarError::InvalidData("AI service is not available".to_string()));
+            return Err(CalendarError::InvalidData(
+                "AI service is not available".to_string(),
+            ));
         }
 
         let modification_prompt = format!(
@@ -247,7 +255,8 @@ impl AICalendarAssistant {
             creativity: Some(0.7),
         };
 
-        let response = self.ai_service
+        let response = self
+            .ai_service
             .complete_text(&modification_prompt, Some(&ai_context))
             .await
             .map_err(|e| CalendarError::InvalidData(format!("AI suggestion failed: {}", e)))?;
@@ -263,7 +272,9 @@ impl AICalendarAssistant {
         preferred_times: Option<&str>,
     ) -> CalendarResult<MeetingScheduleAnalysis> {
         if !self.ai_service.is_enabled().await {
-            return Err(CalendarError::InvalidData("AI service is not available".to_string()));
+            return Err(CalendarError::InvalidData(
+                "AI service is not available".to_string(),
+            ));
         }
 
         // Get events for the next week for each attendee (simplified for this implementation)
@@ -302,12 +313,14 @@ impl AICalendarAssistant {
             creativity: Some(0.4),
         };
 
-        let response = self.ai_service
+        let response = self
+            .ai_service
             .complete_text(&analysis_prompt, Some(&ai_context))
             .await
             .map_err(|e| CalendarError::InvalidData(format!("AI analysis failed: {}", e)))?;
 
-        self.parse_schedule_analysis(&response, duration_minutes).await
+        self.parse_schedule_analysis(&response, duration_minutes)
+            .await
     }
 
     /// Generate calendar insights and productivity recommendations
@@ -316,14 +329,17 @@ impl AICalendarAssistant {
         time_period_days: u32,
     ) -> CalendarResult<CalendarInsights> {
         if !self.ai_service.is_enabled().await {
-            return Err(CalendarError::InvalidData("AI service is not available".to_string()));
+            return Err(CalendarError::InvalidData(
+                "AI service is not available".to_string(),
+            ));
         }
 
         // Get events for the specified time period
         let end_date = Utc::now();
         let start_date = end_date - Duration::days(time_period_days as i64);
 
-        let events = self.calendar_manager
+        let events = self
+            .calendar_manager
             .get_events_in_range(start_date, end_date)
             .await
             .unwrap_or_default();
@@ -358,7 +374,8 @@ impl AICalendarAssistant {
             creativity: Some(0.6),
         };
 
-        let response = self.ai_service
+        let response = self
+            .ai_service
             .complete_text(&insights_prompt, Some(&ai_context))
             .await
             .map_err(|e| CalendarError::InvalidData(format!("AI insights failed: {}", e)))?;
@@ -431,7 +448,10 @@ impl AICalendarAssistant {
     }
 
     /// Parse modification suggestions from AI response
-    async fn parse_modification_suggestions(&self, response: &str) -> CalendarResult<EventModificationSuggestions> {
+    async fn parse_modification_suggestions(
+        &self,
+        response: &str,
+    ) -> CalendarResult<EventModificationSuggestions> {
         // Simple parsing - extract bullet points by category
         let lines: Vec<&str> = response.lines().collect();
         let mut time_suggestions = Vec::new();
@@ -441,10 +461,10 @@ impl AICalendarAssistant {
         let mut optimization_tips = Vec::new();
 
         let mut current_category = "";
-        
+
         for line in lines {
             let line = line.trim();
-            
+
             if line.to_lowercase().contains("time") && line.contains(":") {
                 current_category = "time";
                 continue;
@@ -457,13 +477,18 @@ impl AICalendarAssistant {
             } else if line.to_lowercase().contains("attendee") && line.contains(":") {
                 current_category = "attendee";
                 continue;
-            } else if line.to_lowercase().contains("optimization") || line.to_lowercase().contains("tip") {
+            } else if line.to_lowercase().contains("optimization")
+                || line.to_lowercase().contains("tip")
+            {
                 current_category = "optimization";
                 continue;
             }
 
             if line.starts_with("- ") || line.starts_with("• ") {
-                let suggestion = line.trim_start_matches("- ").trim_start_matches("• ").to_string();
+                let suggestion = line
+                    .trim_start_matches("- ")
+                    .trim_start_matches("• ")
+                    .to_string();
                 match current_category {
                     "time" => time_suggestions.push(suggestion),
                     "location" => location_suggestions.push(suggestion),
@@ -485,10 +510,14 @@ impl AICalendarAssistant {
     }
 
     /// Parse schedule analysis from AI response
-    async fn parse_schedule_analysis(&self, _response: &str, requested_duration: u32) -> CalendarResult<MeetingScheduleAnalysis> {
+    async fn parse_schedule_analysis(
+        &self,
+        _response: &str,
+        requested_duration: u32,
+    ) -> CalendarResult<MeetingScheduleAnalysis> {
         // For this implementation, we'll create a simplified analysis
         // In a real implementation, you'd parse the AI response more thoroughly
-        
+
         let optimal_times = vec![
             Utc::now() + Duration::days(1) + Duration::hours(10), // Tomorrow at 10 AM
             Utc::now() + Duration::days(1) + Duration::hours(14), // Tomorrow at 2 PM
@@ -515,10 +544,10 @@ impl AICalendarAssistant {
         let mut focus_time_suggestions = Vec::new();
 
         let mut current_category = "";
-        
+
         for line in lines {
             let line = line.trim();
-            
+
             if line.to_lowercase().contains("pattern") && line.contains(":") {
                 current_category = "patterns";
                 continue;
@@ -537,7 +566,10 @@ impl AICalendarAssistant {
             }
 
             if line.starts_with("- ") || line.starts_with("• ") {
-                let insight = line.trim_start_matches("- ").trim_start_matches("• ").to_string();
+                let insight = line
+                    .trim_start_matches("- ")
+                    .trim_start_matches("• ")
+                    .to_string();
                 match current_category {
                     "patterns" => meeting_patterns.push(insight),
                     "time_management" => time_management_tips.push(insight),
@@ -565,15 +597,25 @@ impl AICalendarAssistant {
         }
 
         let mut summary = format!("Total events: {}\n", events.len());
-        
+
         // Meeting frequency analysis
-        let total_duration: i64 = events.iter()
+        let total_duration: i64 = events
+            .iter()
             .map(|e| (e.end_time - e.start_time).num_minutes())
             .sum();
-        
-        summary.push_str(&format!("Total meeting time: {} hours\n", total_duration / 60));
-        summary.push_str(&format!("Average meeting duration: {} minutes\n", 
-            if events.len() > 0 { total_duration / events.len() as i64 } else { 0 }));
+
+        summary.push_str(&format!(
+            "Total meeting time: {} hours\n",
+            total_duration / 60
+        ));
+        summary.push_str(&format!(
+            "Average meeting duration: {} minutes\n",
+            if events.len() > 0 {
+                total_duration / events.len() as i64
+            } else {
+                0
+            }
+        ));
 
         // Day distribution
         let mut day_counts = HashMap::new();
@@ -617,17 +659,17 @@ mod tests {
         // For now, we'll test the structure
         let config = AIConfig::default();
         let _ai_service = Arc::new(AIFactory::create_ai_service(config).await.unwrap());
-        
+
         // Test would use a mock calendar manager
         // let calendar_manager = Arc::new(mock_calendar_manager());
         // let assistant = AICalendarAssistant::new(ai_service, calendar_manager);
-        
+
         // let request = NaturalLanguageEventRequest {
         //     description: "Team meeting tomorrow at 2 PM for 1 hour".to_string(),
         //     context: None,
         //     calendar_id: None,
         // };
-        
+
         // This would test the actual parsing logic
         // let result = assistant.parse_natural_language_event(&request).await;
         // assert!(result.is_ok());

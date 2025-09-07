@@ -1,14 +1,13 @@
 /// Enhanced context indicators for better user orientation
-/// 
+///
 /// This module provides a comprehensive context awareness system that helps users
 /// understand their current location, available actions, and navigation options
 /// within the application through multiple visual indicators.
-
 use crate::theme::Theme;
-use crate::ui::{UIMode, FocusedPane};
+use crate::ui::layout::{LayoutBreakpoint, LayoutMode};
 use crate::ui::mode_indicator::ModeIndicator;
-use crate::ui::layout::{LayoutMode, LayoutBreakpoint};
-use crate::ui::typography::{TypographySystem, TypographyLevel};
+use crate::ui::typography::{TypographyLevel, TypographySystem};
+use crate::ui::{FocusedPane, UIMode};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
@@ -137,7 +136,8 @@ impl ContextIndicators {
 
     /// Configure the context indicators
     pub fn configure(&mut self, config: ContextIndicatorConfig) {
-        self.mode_indicator.set_show_breadcrumb(config.show_breadcrumb);
+        self.mode_indicator
+            .set_show_breadcrumb(config.show_breadcrumb);
         self.config = config;
     }
 
@@ -149,8 +149,9 @@ impl ContextIndicators {
         sub_context: Option<String>,
     ) {
         // Update mode indicator
-        self.mode_indicator.set_mode(mode.clone(), sub_context.clone());
-        
+        self.mode_indicator
+            .set_mode(mode.clone(), sub_context.clone());
+
         // Track focus changes
         if focused_pane != self.focused_pane {
             self.focused_pane = focused_pane;
@@ -158,7 +159,8 @@ impl ContextIndicators {
         }
 
         // Update context history
-        self.context_history.push((mode.clone(), focused_pane, Instant::now()));
+        self.context_history
+            .push((mode.clone(), focused_pane, Instant::now()));
         if self.context_history.len() > 10 {
             self.context_history.remove(0);
         }
@@ -192,7 +194,13 @@ impl ContextIndicators {
     }
 
     /// Render all context indicators
-    pub fn render(&mut self, frame: &mut Frame, area: Rect, theme: &Theme, typography: &TypographySystem) {
+    pub fn render(
+        &mut self,
+        frame: &mut Frame,
+        area: Rect,
+        theme: &Theme,
+        typography: &TypographySystem,
+    ) {
         // Main mode indicator (top priority)
         if area.height >= 1 {
             let mode_area = Rect {
@@ -238,14 +246,22 @@ impl ContextIndicators {
     }
 
     /// Render breadcrumb navigation
-    pub fn render_breadcrumb(&self, frame: &mut Frame, area: Rect, theme: &Theme, typography: &TypographySystem) {
+    pub fn render_breadcrumb(
+        &self,
+        frame: &mut Frame,
+        area: Rect,
+        theme: &Theme,
+        typography: &TypographySystem,
+    ) {
         if !self.config.show_breadcrumb || self.breadcrumb.is_empty() {
             return;
         }
 
         let mut spans = Vec::new();
         let max_items = (area.width as usize / 15).max(3); // Estimate space per item
-        let items_to_show = self.breadcrumb.iter()
+        let items_to_show = self
+            .breadcrumb
+            .iter()
             .rev()
             .take(max_items)
             .collect::<Vec<_>>();
@@ -282,7 +298,10 @@ impl ContextIndicators {
         if spans.len() > max_items * 3 {
             // Truncate if too long and add ellipsis
             spans.truncate(max_items * 3 - 1);
-            spans.push(Span::styled("...", Style::default().fg(theme.colors.palette.text_muted)));
+            spans.push(Span::styled(
+                "...",
+                Style::default().fg(theme.colors.palette.text_muted),
+            ));
         }
 
         let paragraph = Paragraph::new(Line::from(spans))
@@ -293,22 +312,27 @@ impl ContextIndicators {
     }
 
     /// Render available actions hints
-    pub fn render_action_hints(&self, frame: &mut Frame, area: Rect, theme: &Theme, typography: &TypographySystem) {
+    pub fn render_action_hints(
+        &self,
+        frame: &mut Frame,
+        area: Rect,
+        theme: &Theme,
+        typography: &TypographySystem,
+    ) {
         if !self.config.show_action_hints || self.available_actions.is_empty() {
             return;
         }
 
-        let actions: Vec<String> = self.available_actions
+        let actions: Vec<String> = self
+            .available_actions
             .iter()
             .take(5) // Limit to 5 most important actions
-            .map(|(key, desc)| {
-                format!("{}: {}", key, desc)
-            })
+            .map(|(key, desc)| format!("{}: {}", key, desc))
             .collect();
 
         let content = actions.join(" | ");
         let span = typography.create_span(content, TypographyLevel::Caption, theme);
-        
+
         let paragraph = Paragraph::new(Line::from(vec![span]))
             .alignment(Alignment::Center)
             .wrap(Wrap { trim: true });
@@ -317,7 +341,13 @@ impl ContextIndicators {
     }
 
     /// Render layout context information
-    pub fn render_layout_context(&self, frame: &mut Frame, area: Rect, theme: &Theme, typography: &TypographySystem) {
+    pub fn render_layout_context(
+        &self,
+        frame: &mut Frame,
+        area: Rect,
+        theme: &Theme,
+        typography: &TypographySystem,
+    ) {
         if !self.config.show_layout_context {
             return;
         }
@@ -334,8 +364,7 @@ impl ContextIndicators {
         };
 
         let span = typography.create_span(context_info, TypographyLevel::Metadata, theme);
-        let paragraph = Paragraph::new(Line::from(vec![span]))
-            .alignment(Alignment::Right);
+        let paragraph = Paragraph::new(Line::from(vec![span])).alignment(Alignment::Right);
 
         frame.render_widget(paragraph, area);
     }
@@ -363,7 +392,13 @@ impl ContextIndicators {
     // Private helper methods
 
     /// Render extended context information
-    fn render_extended_context(&self, frame: &mut Frame, area: Rect, theme: &Theme, typography: &TypographySystem) {
+    fn render_extended_context(
+        &self,
+        frame: &mut Frame,
+        area: Rect,
+        theme: &Theme,
+        typography: &TypographySystem,
+    ) {
         if area.height < 2 {
             return;
         }
@@ -394,10 +429,12 @@ impl ContextIndicators {
     /// Render outline focus indicator
     fn render_outline_focus(&self, frame: &mut Frame, area: Rect, theme: &Theme) {
         let focus_color = theme.colors.palette.accent;
-        let block = Block::default()
-            .borders(Borders::ALL)
-            .border_style(Style::default().fg(focus_color).add_modifier(Modifier::BOLD));
-        
+        let block = Block::default().borders(Borders::ALL).border_style(
+            Style::default()
+                .fg(focus_color)
+                .add_modifier(Modifier::BOLD),
+        );
+
         frame.render_widget(Clear, area);
         frame.render_widget(block, area);
     }
@@ -405,86 +442,114 @@ impl ContextIndicators {
     /// Render border focus indicator
     fn render_border_focus(&self, frame: &mut Frame, area: Rect, theme: &Theme) {
         let focus_color = theme.colors.palette.accent;
-        
+
         // Top border
         let top_border = "━".repeat(area.width as usize);
-        let top_para = Paragraph::new(top_border)
-            .style(Style::default().fg(focus_color));
-        frame.render_widget(top_para, Rect {
-            x: area.x,
-            y: area.y,
-            width: area.width,
-            height: 1,
-        });
+        let top_para = Paragraph::new(top_border).style(Style::default().fg(focus_color));
+        frame.render_widget(
+            top_para,
+            Rect {
+                x: area.x,
+                y: area.y,
+                width: area.width,
+                height: 1,
+            },
+        );
 
         // Bottom border if area is tall enough
         if area.height > 1 {
             let bottom_para = Paragraph::new("━".repeat(area.width as usize))
                 .style(Style::default().fg(focus_color));
-            frame.render_widget(bottom_para, Rect {
-                x: area.x,
-                y: area.y + area.height - 1,
-                width: area.width,
-                height: 1,
-            });
+            frame.render_widget(
+                bottom_para,
+                Rect {
+                    x: area.x,
+                    y: area.y + area.height - 1,
+                    width: area.width,
+                    height: 1,
+                },
+            );
         }
     }
 
     /// Render background focus indicator
     fn render_background_focus(&self, frame: &mut Frame, area: Rect, theme: &Theme) {
         let focus_bg = theme.colors.palette.surface;
-        let highlight = Block::default()
-            .style(Style::default().bg(focus_bg));
-        
+        let highlight = Block::default().style(Style::default().bg(focus_bg));
+
         frame.render_widget(highlight, area);
     }
 
     /// Render corner focus indicator
     fn render_corner_focus(&self, frame: &mut Frame, area: Rect, theme: &Theme) {
         let focus_color = theme.colors.palette.accent;
-        
-        // Top-left corner
-        let tl_para = Paragraph::new("┏")
-            .style(Style::default().fg(focus_color).add_modifier(Modifier::BOLD));
-        frame.render_widget(tl_para, Rect {
-            x: area.x,
-            y: area.y,
-            width: 1,
-            height: 1,
-        });
 
-        // Top-right corner
-        if area.width > 1 {
-            let tr_para = Paragraph::new("┓")
-                .style(Style::default().fg(focus_color).add_modifier(Modifier::BOLD));
-            frame.render_widget(tr_para, Rect {
-                x: area.x + area.width - 1,
+        // Top-left corner
+        let tl_para = Paragraph::new("┏").style(
+            Style::default()
+                .fg(focus_color)
+                .add_modifier(Modifier::BOLD),
+        );
+        frame.render_widget(
+            tl_para,
+            Rect {
+                x: area.x,
                 y: area.y,
                 width: 1,
                 height: 1,
-            });
+            },
+        );
+
+        // Top-right corner
+        if area.width > 1 {
+            let tr_para = Paragraph::new("┓").style(
+                Style::default()
+                    .fg(focus_color)
+                    .add_modifier(Modifier::BOLD),
+            );
+            frame.render_widget(
+                tr_para,
+                Rect {
+                    x: area.x + area.width - 1,
+                    y: area.y,
+                    width: 1,
+                    height: 1,
+                },
+            );
         }
 
         // Bottom corners if tall enough
         if area.height > 1 {
-            let bl_para = Paragraph::new("┗")
-                .style(Style::default().fg(focus_color).add_modifier(Modifier::BOLD));
-            frame.render_widget(bl_para, Rect {
-                x: area.x,
-                y: area.y + area.height - 1,
-                width: 1,
-                height: 1,
-            });
-
-            if area.width > 1 {
-                let br_para = Paragraph::new("┛")
-                    .style(Style::default().fg(focus_color).add_modifier(Modifier::BOLD));
-                frame.render_widget(br_para, Rect {
-                    x: area.x + area.width - 1,
+            let bl_para = Paragraph::new("┗").style(
+                Style::default()
+                    .fg(focus_color)
+                    .add_modifier(Modifier::BOLD),
+            );
+            frame.render_widget(
+                bl_para,
+                Rect {
+                    x: area.x,
                     y: area.y + area.height - 1,
                     width: 1,
                     height: 1,
-                });
+                },
+            );
+
+            if area.width > 1 {
+                let br_para = Paragraph::new("┛").style(
+                    Style::default()
+                        .fg(focus_color)
+                        .add_modifier(Modifier::BOLD),
+                );
+                frame.render_widget(
+                    br_para,
+                    Rect {
+                        x: area.x + area.width - 1,
+                        y: area.y + area.height - 1,
+                        width: 1,
+                        height: 1,
+                    },
+                );
             }
         }
     }
@@ -510,7 +575,7 @@ impl ContextIndicators {
                 let glow_block = Block::default()
                     .borders(Borders::ALL)
                     .border_style(Style::default().fg(color).add_modifier(Modifier::DIM));
-                
+
                 frame.render_widget(glow_block, glow_area);
             }
         }
@@ -522,46 +587,75 @@ impl ContextIndicators {
 
         match (mode, focused_pane) {
             (UIMode::Normal, FocusedPane::MessageList) => {
-                self.available_actions.insert("Enter".to_string(), "Open email".to_string());
-                self.available_actions.insert("c".to_string(), "Compose".to_string());
-                self.available_actions.insert("r".to_string(), "Reply".to_string());
-                self.available_actions.insert("d".to_string(), "Delete".to_string());
-                self.available_actions.insert("/".to_string(), "Search".to_string());
+                self.available_actions
+                    .insert("Enter".to_string(), "Open email".to_string());
+                self.available_actions
+                    .insert("c".to_string(), "Compose".to_string());
+                self.available_actions
+                    .insert("r".to_string(), "Reply".to_string());
+                self.available_actions
+                    .insert("d".to_string(), "Delete".to_string());
+                self.available_actions
+                    .insert("/".to_string(), "Search".to_string());
             }
             (UIMode::Normal, FocusedPane::FolderTree) => {
-                self.available_actions.insert("Enter".to_string(), "Open folder".to_string());
-                self.available_actions.insert("n".to_string(), "New folder".to_string());
-                self.available_actions.insert("Tab".to_string(), "Switch pane".to_string());
+                self.available_actions
+                    .insert("Enter".to_string(), "Open folder".to_string());
+                self.available_actions
+                    .insert("n".to_string(), "New folder".to_string());
+                self.available_actions
+                    .insert("Tab".to_string(), "Switch pane".to_string());
             }
             (UIMode::Compose, _) => {
-                self.available_actions.insert("Ctrl+S".to_string(), "Send email".to_string());
-                self.available_actions.insert("Ctrl+D".to_string(), "Save draft".to_string());
-                self.available_actions.insert("Esc".to_string(), "Cancel".to_string());
-                self.available_actions.insert("Tab".to_string(), "Next field".to_string());
+                self.available_actions
+                    .insert("Ctrl+S".to_string(), "Send email".to_string());
+                self.available_actions
+                    .insert("Ctrl+D".to_string(), "Save draft".to_string());
+                self.available_actions
+                    .insert("Esc".to_string(), "Cancel".to_string());
+                self.available_actions
+                    .insert("Tab".to_string(), "Next field".to_string());
             }
             (UIMode::Calendar, _) => {
-                self.available_actions.insert("n".to_string(), "New event".to_string());
-                self.available_actions.insert("d".to_string(), "Day view".to_string());
-                self.available_actions.insert("w".to_string(), "Week view".to_string());
-                self.available_actions.insert("m".to_string(), "Month view".to_string());
-                self.available_actions.insert("t".to_string(), "Go to today".to_string());
+                self.available_actions
+                    .insert("n".to_string(), "New event".to_string());
+                self.available_actions
+                    .insert("d".to_string(), "Day view".to_string());
+                self.available_actions
+                    .insert("w".to_string(), "Week view".to_string());
+                self.available_actions
+                    .insert("m".to_string(), "Month view".to_string());
+                self.available_actions
+                    .insert("t".to_string(), "Go to today".to_string());
             }
             (UIMode::Search, _) => {
-                self.available_actions.insert("Enter".to_string(), "Open result".to_string());
-                self.available_actions.insert("n".to_string(), "Next result".to_string());
-                self.available_actions.insert("N".to_string(), "Previous result".to_string());
-                self.available_actions.insert("Esc".to_string(), "Clear search".to_string());
+                self.available_actions
+                    .insert("Enter".to_string(), "Open result".to_string());
+                self.available_actions
+                    .insert("n".to_string(), "Next result".to_string());
+                self.available_actions
+                    .insert("N".to_string(), "Previous result".to_string());
+                self.available_actions
+                    .insert("Esc".to_string(), "Clear search".to_string());
             }
             _ => {
-                self.available_actions.insert("?".to_string(), "Help".to_string());
-                self.available_actions.insert("Esc".to_string(), "Back".to_string());
-                self.available_actions.insert("q".to_string(), "Quit mode".to_string());
+                self.available_actions
+                    .insert("?".to_string(), "Help".to_string());
+                self.available_actions
+                    .insert("Esc".to_string(), "Back".to_string());
+                self.available_actions
+                    .insert("q".to_string(), "Quit mode".to_string());
             }
         }
     }
 
     /// Update contextual tip based on current state
-    fn update_contextual_tip(&mut self, mode: &UIMode, focused_pane: &FocusedPane, sub_context: Option<&str>) {
+    fn update_contextual_tip(
+        &mut self,
+        mode: &UIMode,
+        focused_pane: &FocusedPane,
+        sub_context: Option<&str>,
+    ) {
         self.current_tip = match (mode, focused_pane) {
             (UIMode::Normal, FocusedPane::MessageList) if sub_context.is_some() => {
                 Some(format!("Viewing messages in {}", sub_context.unwrap()))
@@ -572,9 +666,7 @@ impl ContextIndicators {
             (UIMode::Normal, FocusedPane::FolderTree) => {
                 Some("Navigate folders with j/k, Enter to select".to_string())
             }
-            (UIMode::Compose, _) => {
-                Some("Fill in email details, Ctrl+S to send".to_string())
-            }
+            (UIMode::Compose, _) => Some("Fill in email details, Ctrl+S to send".to_string()),
             (UIMode::Calendar, _) => {
                 Some("Navigate calendar events, 'n' for new event".to_string())
             }
@@ -660,13 +752,13 @@ mod tests {
     #[test]
     fn test_context_updates() {
         let mut indicators = ContextIndicators::new();
-        
+
         indicators.update_context(
             UIMode::Compose,
             FocusedPane::MessageList,
-            Some("New email".to_string())
+            Some("New email".to_string()),
         );
-        
+
         assert_eq!(indicators.focused_pane, FocusedPane::MessageList);
         assert!(!indicators.available_actions.is_empty());
         assert!(indicators.current_tip.is_some());
@@ -680,7 +772,7 @@ mod tests {
             "INBOX".to_string(),
             "Important email".to_string(),
         ];
-        
+
         indicators.set_location_path(path);
         assert_eq!(indicators.breadcrumb.len(), 3);
         assert!(indicators.breadcrumb.last().unwrap().is_current);
@@ -689,11 +781,11 @@ mod tests {
     #[test]
     fn test_available_actions() {
         let mut indicators = ContextIndicators::new();
-        
+
         indicators.update_context(UIMode::Normal, FocusedPane::MessageList, None);
         assert!(indicators.available_actions.contains_key("Enter"));
         assert!(indicators.available_actions.contains_key("c"));
-        
+
         indicators.update_context(UIMode::Compose, FocusedPane::MessageList, None);
         assert!(indicators.available_actions.contains_key("Ctrl+S"));
         assert!(!indicators.available_actions.contains_key("c"));
@@ -702,10 +794,10 @@ mod tests {
     #[test]
     fn test_focus_styles() {
         let mut indicators = ContextIndicators::new();
-        
+
         indicators.set_focus_style(FocusIndicatorStyle::Glow);
         assert_eq!(indicators.focus_style, FocusIndicatorStyle::Glow);
-        
+
         indicators.set_focus_style(FocusIndicatorStyle::Border);
         assert_eq!(indicators.focus_style, FocusIndicatorStyle::Border);
     }

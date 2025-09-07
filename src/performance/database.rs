@@ -1,6 +1,6 @@
 //! Database performance optimization and monitoring
 
-use crate::performance::{PerformanceResult, PerformanceError};
+use crate::performance::{PerformanceError, PerformanceResult};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -233,15 +233,15 @@ impl SlowQuery {
     pub fn query(&self) -> &str {
         &self.query
     }
-    
+
     pub fn duration(&self) -> Duration {
         self.duration
     }
-    
+
     pub fn parameters(&self) -> &Option<Vec<String>> {
         &self.parameters
     }
-    
+
     pub fn execution_plan(&self) -> &Option<String> {
         &self.execution_plan
     }
@@ -260,11 +260,11 @@ impl CachedQuery {
     pub fn result_hash(&self) -> u64 {
         self.result_hash
     }
-    
+
     pub fn last_accessed(&self) -> Instant {
         self.last_accessed
     }
-    
+
     pub fn access_count(&self) -> u64 {
         self.access_count
     }
@@ -290,7 +290,7 @@ impl DatabaseOptimizer {
         _success: bool,
     ) -> PerformanceResult<()> {
         let mut stats = self.query_stats.write().await;
-        
+
         let query_stat = stats.entry(query_id.clone()).or_insert_with(|| QueryStats {
             query_id: query_id.clone(),
             execution_count: 0,
@@ -311,10 +311,11 @@ impl DatabaseOptimizer {
         query_stat.min_duration = query_stat.min_duration.min(duration);
         query_stat.max_duration = query_stat.max_duration.max(duration);
         query_stat.last_executed = Some(Instant::now());
-        
+
         // Update average rows affected
         let total_rows = query_stat.avg_rows_affected * (query_stat.execution_count - 1) as f64;
-        query_stat.avg_rows_affected = (total_rows + rows_affected as f64) / query_stat.execution_count as f64;
+        query_stat.avg_rows_affected =
+            (total_rows + rows_affected as f64) / query_stat.execution_count as f64;
 
         // Log slow queries if enabled
         if self.config.log_slow_queries && duration >= self.config.slow_query_threshold {
@@ -326,7 +327,7 @@ impl DatabaseOptimizer {
                 parameters: None,
                 execution_plan: None,
             });
-            
+
             // Limit slow query log size
             if slow_queries.len() > 1000 {
                 slow_queries.truncate(800);
@@ -352,7 +353,7 @@ impl DatabaseOptimizer {
     pub async fn get_slow_queries(&self, limit: Option<usize>) -> Vec<SlowQuery> {
         let slow_queries = self.slow_queries.read().await;
         let limit = limit.unwrap_or(100);
-        
+
         if slow_queries.len() <= limit {
             slow_queries.clone()
         } else {
@@ -361,32 +362,42 @@ impl DatabaseOptimizer {
     }
 
     /// Analyze query performance and provide recommendations
-    pub async fn analyze_query_performance(&self, query_id: &str) -> PerformanceResult<QueryAnalysis> {
+    pub async fn analyze_query_performance(
+        &self,
+        query_id: &str,
+    ) -> PerformanceResult<QueryAnalysis> {
         let stats = self.query_stats.read().await;
-        
+
         if let Some(query_stat) = stats.get(query_id) {
             let mut recommendations = Vec::new();
-            
+
             // Check for slow queries
             if query_stat.avg_duration > Duration::from_millis(100) {
-                recommendations.push("Consider optimizing query - average execution time is high".to_string());
+                recommendations
+                    .push("Consider optimizing query - average execution time is high".to_string());
             }
-            
+
             // Check for frequent queries
             if query_stat.execution_count > 1000 {
                 recommendations.push("Consider caching this frequently executed query".to_string());
             }
-            
+
             // Check for high variance in execution time
-            let variance_ratio = query_stat.max_duration.as_millis() as f64 / 
-                               query_stat.min_duration.as_millis().max(1) as f64;
+            let variance_ratio = query_stat.max_duration.as_millis() as f64
+                / query_stat.min_duration.as_millis().max(1) as f64;
             if variance_ratio > 10.0 {
-                recommendations.push("High variance in execution time - investigate query plan instability".to_string());
+                recommendations.push(
+                    "High variance in execution time - investigate query plan instability"
+                        .to_string(),
+                );
             }
-            
+
             // Check cache hit ratio
             if query_stat.cache_hit_ratio < 0.8 && query_stat.execution_count > 100 {
-                recommendations.push("Low cache hit ratio - consider query optimization or cache warming".to_string());
+                recommendations.push(
+                    "Low cache hit ratio - consider query optimization or cache warming"
+                        .to_string(),
+                );
             }
 
             let analysis = QueryAnalysis {
@@ -396,11 +407,12 @@ impl DatabaseOptimizer {
                 optimization_potential: calculate_optimization_potential(query_stat),
                 resource_impact: calculate_resource_impact(query_stat),
             };
-            
+
             Ok(analysis)
         } else {
             Err(PerformanceError::DatabaseError(format!(
-                "No statistics found for query: {}", query_id
+                "No statistics found for query: {}",
+                query_id
             )))
         }
     }
@@ -409,7 +421,7 @@ impl DatabaseOptimizer {
     pub async fn cleanup_old_stats(&self, retention_days: u64) -> PerformanceResult<usize> {
         let cutoff = Instant::now() - Duration::from_secs(retention_days * 24 * 3600);
         let mut removed_count = 0;
-        
+
         // Clean up query stats
         {
             let mut stats = self.query_stats.write().await;
@@ -422,19 +434,19 @@ impl DatabaseOptimizer {
                 })
                 .map(|(key, _)| key.clone())
                 .collect();
-            
+
             for key in keys_to_remove {
                 stats.remove(&key);
                 removed_count += 1;
             }
         }
-        
+
         // Clean up slow queries
         {
             let mut slow_queries = self.slow_queries.write().await;
             slow_queries.retain(|query| query.timestamp >= cutoff);
         }
-        
+
         // Clean up query cache
         {
             let mut cache = self.query_cache.write().await;
@@ -447,7 +459,7 @@ impl DatabaseOptimizer {
                 is_recent && (recently_accessed || is_active || hash_valid)
             });
         }
-        
+
         Ok(removed_count)
     }
 }
@@ -481,7 +493,7 @@ impl QueryOptimizer {
     pub fn config(&self) -> &QueryOptimizerConfig {
         &self.config
     }
-    
+
     pub fn optimizer(&self) -> &DatabaseOptimizer {
         &self.optimizer
     }
@@ -491,25 +503,25 @@ impl QueryOptimizer {
     /// Create a new query optimizer
     pub fn new(config: QueryOptimizerConfig) -> Self {
         let optimizer = DatabaseOptimizer::new(config.clone());
-        Self {
-            config,
-            optimizer,
-        }
+        Self { config, optimizer }
     }
 
     /// Optimize query execution plan
     pub async fn optimize_query(&self, query: &str) -> PerformanceResult<OptimizedQuery> {
         // This would integrate with actual database query planner
         // For now, we provide basic optimization suggestions
-        
+
         let mut optimizations = Vec::new();
         let mut estimated_improvement = 0.0f64;
-        
+
         // Basic query pattern analysis
         let query_lower = query.to_lowercase();
-        
+
         // Check for missing WHERE clause
-        if query_lower.contains("select") && !query_lower.contains("where") && !query_lower.contains("limit") {
+        if query_lower.contains("select")
+            && !query_lower.contains("where")
+            && !query_lower.contains("limit")
+        {
             optimizations.push(QueryOptimization {
                 optimization_type: "Add WHERE clause".to_string(),
                 description: "Consider adding WHERE clause to limit result set".to_string(),
@@ -517,7 +529,7 @@ impl QueryOptimizer {
             });
             estimated_improvement += 0.3;
         }
-        
+
         // Check for SELECT *
         if query_lower.contains("select *") {
             optimizations.push(QueryOptimization {
@@ -527,7 +539,7 @@ impl QueryOptimizer {
             });
             estimated_improvement += 0.15;
         }
-        
+
         // Check for ORDER BY without LIMIT
         if query_lower.contains("order by") && !query_lower.contains("limit") {
             optimizations.push(QueryOptimization {
@@ -537,12 +549,13 @@ impl QueryOptimizer {
             });
             estimated_improvement += 0.2;
         }
-        
+
         // Check for subqueries that could be joins
         if query_lower.contains("in (select") {
             optimizations.push(QueryOptimization {
                 optimization_type: "Convert subquery to JOIN".to_string(),
-                description: "Consider converting IN subquery to JOIN for better performance".to_string(),
+                description: "Consider converting IN subquery to JOIN for better performance"
+                    .to_string(),
                 estimated_improvement: 0.25,
             });
             estimated_improvement += 0.25;
@@ -560,18 +573,18 @@ impl QueryOptimizer {
     pub async fn suggest_indexes(&self, query: &str) -> PerformanceResult<Vec<IndexSuggestion>> {
         let mut suggestions = Vec::new();
         let query_lower = query.to_lowercase();
-        
+
         // Parse WHERE clauses for potential indexes
         if let Some(where_start) = query_lower.find("where") {
             let where_clause = &query_lower[where_start + 5..];
-            
+
             // Look for column comparisons
             let conditions: Vec<&str> = where_clause
                 .split(&['=', '<', '>', '!'][..])
                 .map(|s| s.trim())
                 .filter(|s| !s.is_empty() && !s.contains(' '))
                 .collect();
-            
+
             for condition in conditions {
                 if condition.chars().all(|c| c.is_alphanumeric() || c == '_') {
                     suggestions.push(IndexSuggestion {
@@ -584,12 +597,12 @@ impl QueryOptimizer {
                 }
             }
         }
-        
+
         // Look for ORDER BY columns
         if let Some(order_start) = query_lower.find("order by") {
             let order_clause = &query_lower[order_start + 8..];
             let order_column = order_clause.split_whitespace().next().unwrap_or("");
-            
+
             if !order_column.is_empty() {
                 suggestions.push(IndexSuggestion {
                     table_name: "unknown".to_string(),
@@ -680,25 +693,26 @@ impl ConnectionPool {
         let stats = self.get_statistics().await;
         let active = *self.active_connections.read().await;
         let idle = *self.idle_connections.read().await;
-        
+
         let utilization = active as f32 / self.config.max_connections as f32;
         let health_score = calculate_pool_health_score(&stats, utilization);
-        
+
         let mut issues = Vec::new();
         let mut recommendations = Vec::new();
-        
+
         // Check for high utilization
         if utilization > 0.8 {
             issues.push("High connection pool utilization".to_string());
             recommendations.push("Consider increasing max_connections".to_string());
         }
-        
+
         // Check for frequent timeouts
         if stats.timeout_count > stats.total_created / 20 {
             issues.push("Frequent connection timeouts".to_string());
-            recommendations.push("Consider increasing acquire_timeout or optimizing queries".to_string());
+            recommendations
+                .push("Consider increasing acquire_timeout or optimizing queries".to_string());
         }
-        
+
         // Check for connection churn
         let churn_ratio = stats.total_closed as f32 / stats.total_created.max(1) as f32;
         if churn_ratio > 0.5 {
@@ -744,13 +758,13 @@ impl IndexAnalyzer {
     pub async fn analyze_index_usage(&self) -> PerformanceResult<Vec<IndexAnalysisResult>> {
         // This would integrate with actual database metadata
         // For now, we provide a framework for analysis
-        
+
         let mut results = Vec::new();
-        
+
         // This would query database metadata tables to get actual index statistics
         // For example: sys.dm_db_index_usage_stats in SQL Server
         // or information_schema.statistics in MySQL
-        
+
         results.push(IndexAnalysisResult {
             index_name: "example_idx".to_string(),
             table_name: "example_table".to_string(),
@@ -767,7 +781,7 @@ impl IndexAnalyzer {
     pub async fn suggest_missing_indexes(&self) -> PerformanceResult<Vec<IndexSuggestion>> {
         // This would analyze query execution plans and missing index hints
         let mut suggestions = Vec::new();
-        
+
         // Framework for missing index detection
         suggestions.push(IndexSuggestion {
             table_name: "users".to_string(),
@@ -809,7 +823,7 @@ fn calculate_performance_score(stats: &QueryStats) -> f32 {
     let frequency_score = (stats.execution_count as f32).ln().min(10.0) / 10.0;
     let speed_score = 1.0 - (stats.avg_duration.as_millis() as f32 / 1000.0).min(1.0);
     let cache_score = stats.cache_hit_ratio as f32;
-    
+
     (frequency_score + speed_score + cache_score) / 3.0
 }
 
@@ -822,14 +836,14 @@ fn calculate_optimization_potential(stats: &QueryStats) -> f32 {
     } else {
         1.0
     };
-    
+
     (frequency_factor * slowness_factor * variance_factor.ln()).min(1.0)
 }
 
 fn calculate_resource_impact(stats: &QueryStats) -> ResourceImpact {
     let base_impact = stats.avg_duration.as_millis() as f32 / 1000.0;
     let frequency_multiplier = (stats.execution_count as f32).ln() / 10.0;
-    
+
     ResourceImpact {
         cpu_impact: base_impact * frequency_multiplier,
         memory_impact: (stats.avg_rows_affected as f32 / 10000.0).min(1.0),
@@ -841,7 +855,7 @@ fn calculate_resource_impact(stats: &QueryStats) -> ResourceImpact {
 fn calculate_query_complexity(query: &str) -> f32 {
     let query_lower = query.to_lowercase();
     let mut complexity = 0.0;
-    
+
     // Basic complexity indicators
     complexity += query_lower.matches("join").count() as f32 * 0.2;
     complexity += query_lower.matches("subquery").count() as f32 * 0.3;
@@ -849,28 +863,28 @@ fn calculate_query_complexity(query: &str) -> f32 {
     complexity += query_lower.matches("order by").count() as f32 * 0.1;
     complexity += query_lower.matches("group by").count() as f32 * 0.15;
     complexity += query_lower.matches("having").count() as f32 * 0.1;
-    
+
     complexity.min(1.0)
 }
 
 fn calculate_pool_health_score(stats: &ConnectionPoolStats, utilization: f32) -> f32 {
     let mut score = 1.0;
-    
+
     // Penalize high utilization
     if utilization > 0.8 {
         score -= (utilization - 0.8) * 2.0;
     }
-    
+
     // Penalize timeouts
     let timeout_ratio = stats.timeout_count as f32 / stats.total_created.max(1) as f32;
     score -= timeout_ratio;
-    
+
     // Penalize high connection churn
     let churn_ratio = stats.total_closed as f32 / stats.total_created.max(1) as f32;
     if churn_ratio > 0.3 {
         score -= (churn_ratio - 0.3) * 0.5;
     }
-    
+
     score.max(0.0).min(1.0)
 }
 
@@ -923,15 +937,20 @@ mod tests {
         let optimizer = DatabaseOptimizer::new(config);
 
         // Record some query executions
-        optimizer.record_query_execution(
-            "SELECT * FROM users WHERE id = ?".to_string(),
-            Duration::from_millis(50),
-            1,
-            true,
-        ).await.unwrap();
+        optimizer
+            .record_query_execution(
+                "SELECT * FROM users WHERE id = ?".to_string(),
+                Duration::from_millis(50),
+                1,
+                true,
+            )
+            .await
+            .unwrap();
 
         // Get statistics
-        let stats = optimizer.get_query_stats("SELECT * FROM users WHERE id = ?").await;
+        let stats = optimizer
+            .get_query_stats("SELECT * FROM users WHERE id = ?")
+            .await;
         assert!(stats.is_some());
 
         let stats = stats.unwrap();
@@ -939,13 +958,16 @@ mod tests {
         assert_eq!(stats.avg_duration, Duration::from_millis(50));
     }
 
-    #[tokio::test] 
+    #[tokio::test]
     async fn test_query_optimizer() {
         let config = QueryOptimizerConfig::default();
         let optimizer = QueryOptimizer::new(config);
 
         // Test query optimization
-        let result = optimizer.optimize_query("SELECT * FROM users ORDER BY name").await.unwrap();
+        let result = optimizer
+            .optimize_query("SELECT * FROM users ORDER BY name")
+            .await
+            .unwrap();
         assert!(!result.optimizations.is_empty());
         assert!(result.estimated_improvement > 0.0);
     }

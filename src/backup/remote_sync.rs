@@ -79,15 +79,29 @@ impl RemoteSyncEngine {
         self.providers.insert(config.id, config);
     }
 
-    pub async fn upload_backup(&self, _provider_id: Uuid, _local_path: &Path, _remote_path: &str) -> RemoteResult<()> {
+    pub async fn upload_backup(
+        &self,
+        _provider_id: Uuid,
+        _local_path: &Path,
+        _remote_path: &str,
+    ) -> RemoteResult<()> {
         Ok(()) // Placeholder
     }
 
-    pub async fn download_backup(&self, _provider_id: Uuid, _remote_path: &str, _local_path: &Path) -> RemoteResult<()> {
+    pub async fn download_backup(
+        &self,
+        _provider_id: Uuid,
+        _remote_path: &str,
+        _local_path: &Path,
+    ) -> RemoteResult<()> {
         Ok(()) // Placeholder
     }
 
-    pub async fn list_backups(&self, _provider_id: Uuid, _remote_path: &str) -> RemoteResult<Vec<String>> {
+    pub async fn list_backups(
+        &self,
+        _provider_id: Uuid,
+        _remote_path: &str,
+    ) -> RemoteResult<Vec<String>> {
         Ok(Vec::new()) // Placeholder
     }
 }

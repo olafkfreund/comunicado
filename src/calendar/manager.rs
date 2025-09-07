@@ -114,11 +114,8 @@ impl CalendarManager {
                 calendar_id: google_cal.id.clone(),
             };
 
-            let mut calendar = Calendar::new(
-                uuid::Uuid::new_v4().to_string(),
-                google_cal.summary,
-                source,
-            );
+            let mut calendar =
+                Calendar::new(uuid::Uuid::new_v4().to_string(), google_cal.summary, source);
 
             calendar.description = google_cal.description;
             calendar.color = google_cal.background_color;
@@ -336,10 +333,7 @@ impl CalendarManager {
                             );
                         }
                         Err(e) => {
-                            tracing::error!(
-                                "Failed to delete event from Google Calendar: {}",
-                                e
-                            );
+                            tracing::error!("Failed to delete event from Google Calendar: {}", e);
                             // Continue with local deletion even if Google deletion fails
                         }
                     }

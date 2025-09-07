@@ -8,22 +8,22 @@
 //! - Remote session support
 //! - Notification forwarding
 
-pub mod tmux;
-pub mod screen;
-pub mod session;
-pub mod window_manager;
-pub mod status_integration;
 pub mod clipboard_sync;
 pub mod remote_session;
+pub mod screen;
+pub mod session;
+pub mod status_integration;
+pub mod tmux;
+pub mod window_manager;
 
-pub use tmux::{TmuxIntegration, TmuxSession, TmuxWindow, TmuxPane};
+pub use clipboard_sync::{ClipboardMode, ClipboardSync};
+pub use remote_session::{MoshSession, RemoteSession, SSHSession};
 pub use screen::{ScreenIntegration, ScreenSession, ScreenWindow};
-pub use session::{SessionManager, SessionState, SessionConfig, SessionResult};
-pub use window_manager::{WindowManager, WindowLayout};
 pub use session::PaneArrangement;
-pub use status_integration::{StatusLineProvider, StatusFormat, StatusUpdate};
-pub use clipboard_sync::{ClipboardSync, ClipboardMode};
-pub use remote_session::{RemoteSession, SSHSession, MoshSession};
+pub use session::{SessionConfig, SessionManager, SessionResult, SessionState};
+pub use status_integration::{StatusFormat, StatusLineProvider, StatusUpdate};
+pub use tmux::{TmuxIntegration, TmuxPane, TmuxSession, TmuxWindow};
+pub use window_manager::{WindowLayout, WindowManager};
 
 use serde::{Deserialize, Serialize};
 // use std::collections::HashMap;
@@ -36,22 +36,22 @@ use thiserror::Error;
 pub enum MultiplexerError {
     #[error("Multiplexer not found: {0}")]
     NotFound(String),
-    
+
     #[error("Session error: {0}")]
     SessionError(String),
-    
+
     #[error("Command failed: {0}")]
     CommandFailed(String),
-    
+
     #[error("Connection error: {0}")]
     ConnectionError(String),
-    
+
     #[error("Permission denied: {0}")]
     PermissionDenied(String),
-    
+
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
-    
+
     #[error("Serialization error: {0}")]
     Serialization(#[from] serde_json::Error),
 }
@@ -161,7 +161,7 @@ impl MultiplexerDetector {
     fn get_screen_info(&self) -> MultiplexerResult<SessionInfo> {
         let sty = std::env::var("STY")
             .map_err(|_| MultiplexerError::SessionError("STY not set".to_string()))?;
-        
+
         let parts: Vec<&str> = sty.split('.').collect();
         let session_name = if parts.len() > 1 {
             parts[1].to_string()
@@ -245,7 +245,9 @@ impl MultiplexerManager {
     pub fn is_multiplexer_active(&self) -> bool {
         matches!(
             self.detector.detected_type,
-            Some(MultiplexerType::Tmux) | Some(MultiplexerType::Screen) | Some(MultiplexerType::Zellij)
+            Some(MultiplexerType::Tmux)
+                | Some(MultiplexerType::Screen)
+                | Some(MultiplexerType::Zellij)
         )
     }
 
@@ -295,7 +297,9 @@ impl MultiplexerManager {
                     Err(MultiplexerError::NotFound("Tmux".to_string()))
                 }
             }
-            _ => Err(MultiplexerError::NotFound("Split not supported".to_string())),
+            _ => Err(MultiplexerError::NotFound(
+                "Split not supported".to_string(),
+            )),
         }
     }
 
@@ -333,10 +337,10 @@ impl MultiplexerManager {
         if let Some(ref mut tmux) = self.tmux {
             // Configure status line
             tmux.configure_status_line()?;
-            
+
             // Set up key bindings
             tmux.setup_keybindings()?;
-            
+
             // Enable mouse support
             tmux.enable_mouse_support()?;
         }
@@ -348,7 +352,7 @@ impl MultiplexerManager {
         if let Some(ref mut screen) = self.screen {
             // Configure hardstatus line
             screen.configure_hardstatus()?;
-            
+
             // Set up key bindings
             screen.setup_keybindings()?;
         }

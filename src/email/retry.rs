@@ -6,7 +6,7 @@
 use std::future::Future;
 use std::time::Duration;
 use tokio::time::sleep;
-use tracing::{debug, warn, error};
+use tracing::{debug, error, warn};
 
 /// Configuration for retry behavior
 #[derive(Debug, Clone)]
@@ -55,7 +55,7 @@ impl Default for RetryPolicies {
                 backoff_multiplier: 2.0,
                 jitter: true,
             },
-            
+
             // Calendar operations: More aggressive retry for CalDAV
             calendar_operations: RetryConfig {
                 max_attempts: 5,
@@ -64,7 +64,7 @@ impl Default for RetryPolicies {
                 backoff_multiplier: 1.5,
                 jitter: true,
             },
-            
+
             // Search operations: Quick retry for user-facing operations
             search_operations: RetryConfig {
                 max_attempts: 2,
@@ -73,7 +73,7 @@ impl Default for RetryPolicies {
                 backoff_multiplier: 2.0,
                 jitter: false,
             },
-            
+
             // Sync operations: Patient retry for background operations
             sync_operations: RetryConfig {
                 max_attempts: 5,
@@ -149,12 +149,15 @@ where
 {
     let start_time = std::time::Instant::now();
     let mut current_delay = config.initial_delay;
-    
+
     for attempt in 1..=config.max_attempts {
         let attempt_start = std::time::Instant::now();
-        
-        debug!("Attempting {} (attempt {}/{})", operation_name, attempt, config.max_attempts);
-        
+
+        debug!(
+            "Attempting {} (attempt {}/{})",
+            operation_name, attempt, config.max_attempts
+        );
+
         match operation().await {
             Ok(result) => {
                 if attempt > 1 {
@@ -170,7 +173,7 @@ where
             Err(error) => {
                 let attempt_duration = attempt_start.elapsed();
                 let total_duration = start_time.elapsed();
-                
+
                 if attempt == config.max_attempts {
                     error!(
                         "{} failed permanently after {} attempts ({:?} total): {:?}",
@@ -178,7 +181,7 @@ where
                     );
                     return Err(error);
                 }
-                
+
                 if error.is_permanent() {
                     error!(
                         "{} failed with permanent error on attempt {}: {:?}",
@@ -186,41 +189,42 @@ where
                     );
                     return Err(error);
                 }
-                
+
                 warn!(
                     "{} failed on attempt {} (took {:?}), retrying in {:?}: {:?}",
                     operation_name, attempt, attempt_duration, current_delay, error
                 );
-                
+
                 // Wait before next attempt
                 if config.jitter {
                     let jitter_factor = 1.0 + (rand::random::<f64>() - 0.5) * 0.2; // ±10% jitter
-                    let jittered_delay = Duration::from_secs_f64(
-                        current_delay.as_secs_f64() * jitter_factor
-                    );
+                    let jittered_delay =
+                        Duration::from_secs_f64(current_delay.as_secs_f64() * jitter_factor);
                     sleep(jittered_delay).await;
                 } else {
                     sleep(current_delay).await;
                 }
-                
+
                 // Calculate next delay with exponential backoff
                 current_delay = std::cmp::min(
-                    Duration::from_secs_f64(current_delay.as_secs_f64() * config.backoff_multiplier),
+                    Duration::from_secs_f64(
+                        current_delay.as_secs_f64() * config.backoff_multiplier,
+                    ),
                     config.max_delay,
                 );
             }
         }
     }
-    
+
     unreachable!("Loop should have returned or reached max attempts")
 }
 
 /// Circuit breaker state
 #[derive(Debug, Clone, PartialEq)]
 pub enum CircuitState {
-    Closed,      // Normal operation
-    Open,        // Failing fast
-    HalfOpen,    // Testing if service recovered
+    Closed,   // Normal operation
+    Open,     // Failing fast
+    HalfOpen, // Testing if service recovered
 }
 
 /// Circuit breaker configuration
@@ -297,18 +301,16 @@ impl CircuitBreaker {
                 debug!("Circuit breaker is OPEN, failing fast");
                 return Err(CircuitBreakerError::Open);
             }
-            CircuitState::Closed | CircuitState::HalfOpen => {
-                match operation().await {
-                    Ok(result) => {
-                        self.on_success().await;
-                        Ok(result)
-                    }
-                    Err(error) => {
-                        self.on_failure().await;
-                        Err(CircuitBreakerError::Operation(error))
-                    }
+            CircuitState::Closed | CircuitState::HalfOpen => match operation().await {
+                Ok(result) => {
+                    self.on_success().await;
+                    Ok(result)
                 }
-            }
+                Err(error) => {
+                    self.on_failure().await;
+                    Err(CircuitBreakerError::Operation(error))
+                }
+            },
         }
     }
 
@@ -322,7 +324,10 @@ impl CircuitBreaker {
         match *state {
             CircuitState::HalfOpen => {
                 if *success_count >= self.config.success_threshold {
-                    debug!("Circuit breaker transitioning to CLOSED after {} successes", *success_count);
+                    debug!(
+                        "Circuit breaker transitioning to CLOSED after {} successes",
+                        *success_count
+                    );
                     *state = CircuitState::Closed;
                     *failure_count = 0;
                     *success_count = 0;
@@ -354,12 +359,17 @@ impl CircuitBreaker {
         match *state {
             CircuitState::Closed => {
                 if *failure_count >= self.config.failure_threshold {
-                    debug!("Circuit breaker transitioning to OPEN after {} failures", *failure_count);
+                    debug!(
+                        "Circuit breaker transitioning to OPEN after {} failures",
+                        *failure_count
+                    );
                     *state = CircuitState::Open;
                 }
             }
             CircuitState::HalfOpen => {
-                debug!("Circuit breaker transitioning back to OPEN after failure in half-open state");
+                debug!(
+                    "Circuit breaker transitioning back to OPEN after failure in half-open state"
+                );
                 *state = CircuitState::Open;
             }
             CircuitState::Open => {
@@ -380,7 +390,7 @@ impl CircuitBreaker {
                 if *state == CircuitState::Open {
                     debug!("Circuit breaker transitioning to HALF_OPEN for recovery test");
                     *state = CircuitState::HalfOpen;
-                    
+
                     // Reset counters
                     let mut success_count = self.success_count.write().await;
                     *success_count = 0;
@@ -438,7 +448,8 @@ mod tests {
             "test_operation",
             || async { Ok::<i32, TestError>(42) },
             &config,
-        ).await;
+        )
+        .await;
 
         assert_eq!(result.unwrap(), 42);
     }
@@ -467,7 +478,8 @@ mod tests {
                 }
             },
             &config,
-        ).await;
+        )
+        .await;
 
         assert_eq!(result.unwrap(), 42);
         assert_eq!(attempt_count.load(Ordering::SeqCst), 3);
@@ -485,7 +497,8 @@ mod tests {
             "test_operation",
             || async { Err::<i32, TestError>(TestError { retryable: false }) },
             &config,
-        ).await;
+        )
+        .await;
 
         assert!(result.is_err());
         assert!(!result.unwrap_err().is_retryable());
@@ -499,18 +512,20 @@ mod tests {
             success_threshold: 2,
             rolling_window: Duration::from_secs(60),
         };
-        
+
         let circuit_breaker = CircuitBreaker::new(config);
-        
+
         // Cause failures to open circuit
         for _ in 0..3 {
-            let result = circuit_breaker.call(|| async { Err::<(), &str>("test error") }).await;
+            let result = circuit_breaker
+                .call(|| async { Err::<(), &str>("test error") })
+                .await;
             assert!(matches!(result, Err(CircuitBreakerError::Operation(_))));
         }
-        
+
         // Circuit should be open now
         assert_eq!(circuit_breaker.get_state().await, CircuitState::Open);
-        
+
         // Next call should fail fast
         let result = circuit_breaker.call(|| async { Ok::<(), &str>(()) }).await;
         assert!(matches!(result, Err(CircuitBreakerError::Open)));
@@ -524,23 +539,25 @@ mod tests {
             success_threshold: 1,
             rolling_window: Duration::from_secs(60),
         };
-        
+
         let circuit_breaker = CircuitBreaker::new(config);
-        
+
         // Cause failures to open circuit
         for _ in 0..2 {
-            let _ = circuit_breaker.call(|| async { Err::<(), &str>("test error") }).await;
+            let _ = circuit_breaker
+                .call(|| async { Err::<(), &str>("test error") })
+                .await;
         }
-        
+
         assert_eq!(circuit_breaker.get_state().await, CircuitState::Open);
-        
+
         // Wait for recovery timeout
         sleep(Duration::from_millis(60)).await;
-        
+
         // Circuit should transition to half-open and allow success
         let result = circuit_breaker.call(|| async { Ok::<(), &str>(()) }).await;
         assert!(result.is_ok());
-        
+
         // Circuit should be closed now
         assert_eq!(circuit_breaker.get_state().await, CircuitState::Closed);
     }

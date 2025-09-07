@@ -53,61 +53,61 @@ pub enum PrivacyMode {
 pub struct AIConfig {
     /// Whether AI functionality is enabled globally
     pub enabled: bool,
-    
+
     /// Active AI provider
     pub provider: AIProviderType,
-    
+
     /// Privacy mode for data handling
     pub privacy_mode: PrivacyMode,
-    
+
     /// Local AI model settings
     pub local_model: Option<String>,
-    
+
     /// Ollama server configuration
     pub ollama_endpoint: String,
-    
+
     /// API keys for cloud providers (stored securely)
     pub api_keys: HashMap<String, String>,
-    
+
     /// Whether to cache AI responses for performance
     pub cache_responses: bool,
-    
+
     /// Cache TTL for AI responses
     pub cache_ttl: Duration,
-    
+
     /// Maximum context length for AI requests
     pub max_context_length: usize,
-    
+
     /// Request timeout duration
     pub request_timeout: Duration,
-    
+
     /// Maximum number of retry attempts
     pub max_retries: u32,
-    
+
     /// Whether to enable AI email suggestions
     pub email_suggestions_enabled: bool,
-    
+
     /// Whether to enable automatic email summarization
     pub email_summarization_enabled: bool,
-    
+
     /// Whether to enable AI calendar assistance
     pub calendar_assistance_enabled: bool,
-    
+
     /// Whether to enable email categorization
     pub email_categorization_enabled: bool,
-    
+
     /// Whether to enable AI email triage and prioritization
     pub email_triage_enabled: bool,
-    
+
     /// Temperature/creativity setting for AI responses (0.0-1.0)
     pub creativity: f32,
-    
+
     /// Fallback providers in order of preference
     pub fallback_providers: Vec<AIProviderType>,
-    
+
     /// User consent tracking
     pub consent_given: HashMap<String, bool>,
-    
+
     /// Feature-specific settings
     pub feature_settings: HashMap<String, serde_json::Value>,
 }
@@ -170,9 +170,9 @@ impl AIConfig {
             .map_err(|e| AIError::config_error(format!("Failed to serialize config: {}", e)))?;
 
         if let Some(parent) = path.parent() {
-            tokio::fs::create_dir_all(parent)
-                .await
-                .map_err(|e| AIError::config_error(format!("Failed to create config directory: {}", e)))?;
+            tokio::fs::create_dir_all(parent).await.map_err(|e| {
+                AIError::config_error(format!("Failed to create config directory: {}", e))
+            })?;
         }
 
         tokio::fs::write(path, content)
@@ -186,17 +186,23 @@ impl AIConfig {
     pub fn validate(&self) -> AIResult<()> {
         // Validate creativity setting
         if !(0.0..=1.0).contains(&self.creativity) {
-            return Err(AIError::config_error("Creativity must be between 0.0 and 1.0"));
+            return Err(AIError::config_error(
+                "Creativity must be between 0.0 and 1.0",
+            ));
         }
 
         // Validate context length
         if self.max_context_length == 0 {
-            return Err(AIError::config_error("Max context length must be greater than 0"));
+            return Err(AIError::config_error(
+                "Max context length must be greater than 0",
+            ));
         }
 
         // Validate timeout settings
         if self.request_timeout.is_zero() {
-            return Err(AIError::config_error("Request timeout must be greater than 0"));
+            return Err(AIError::config_error(
+                "Request timeout must be greater than 0",
+            ));
         }
 
         // Validate provider-specific settings
@@ -280,7 +286,7 @@ impl AIConfig {
     }
 
     /// Get feature-specific setting
-    pub fn get_feature_setting<T>(&self, feature: &str) -> Option<T> 
+    pub fn get_feature_setting<T>(&self, feature: &str) -> Option<T>
     where
         T: serde::de::DeserializeOwned,
     {
@@ -296,7 +302,7 @@ impl AIConfig {
     {
         let json_value = serde_json::to_value(value)
             .map_err(|e| AIError::config_error(format!("Failed to serialize setting: {}", e)))?;
-        
+
         self.feature_settings.insert(feature, json_value);
         Ok(())
     }
@@ -332,15 +338,15 @@ mod tests {
     #[test]
     fn test_config_validation() {
         let mut config = AIConfig::default();
-        
+
         // Invalid creativity
         config.creativity = 1.5;
         assert!(config.validate().is_err());
-        
+
         // Valid creativity
         config.creativity = 0.5;
         assert!(config.validate().is_ok());
-        
+
         // Invalid context length
         config.max_context_length = 0;
         assert!(config.validate().is_err());
@@ -349,12 +355,12 @@ mod tests {
     #[test]
     fn test_consent_management() {
         let mut config = AIConfig::default();
-        
+
         assert!(!config.has_consent("test_operation"));
-        
+
         config.grant_consent("test_operation".to_string());
         assert!(config.has_consent("test_operation"));
-        
+
         config.revoke_consent("test_operation".to_string());
         assert!(!config.has_consent("test_operation"));
     }
@@ -362,11 +368,11 @@ mod tests {
     #[test]
     fn test_privacy_mode_behavior() {
         let mut config = AIConfig::default();
-        
+
         config.privacy_mode = PrivacyMode::LocalOnly;
         assert!(!config.allows_cloud_processing());
         assert!(config.prefers_local_processing());
-        
+
         config.privacy_mode = PrivacyMode::CloudAllowed;
         assert!(config.allows_cloud_processing());
         assert!(!config.prefers_local_processing());
@@ -376,14 +382,14 @@ mod tests {
     async fn test_config_file_operations() {
         let temp_dir = tempdir().unwrap();
         let config_path = temp_dir.path().join("ai_config.toml");
-        
+
         let mut config = AIConfig::default();
         config.enabled = true;
         config.provider = AIProviderType::Ollama;
-        
+
         // Save config
         assert!(config.save_to_file(&config_path).await.is_ok());
-        
+
         // Load config
         let loaded_config = AIConfig::load_from_file(&config_path).await.unwrap();
         assert_eq!(loaded_config.enabled, true);

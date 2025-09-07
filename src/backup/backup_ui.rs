@@ -1,16 +1,17 @@
 //! User interface for backup management
 
 use crate::backup::{
-    BackupEngine, BackupConfig, BackupMetadata, BackupStatus, // BackupType, BackupTarget,
+    BackupConfig,
+    BackupEngine,
+    BackupMetadata,
+    BackupStatus, // BackupType, BackupTarget,
     DataCategory,
 };
 use crate::theme::Theme;
 use crossterm::event::{KeyCode, KeyModifiers};
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
-    widgets::{
-        Block, Borders, Clear, List, ListItem, ListState, Paragraph, Tabs, Wrap,
-    },
+    widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Tabs, Wrap},
     Frame,
 };
 use std::collections::HashSet;
@@ -179,17 +180,13 @@ impl BackupUI {
                 self.previous_tab();
                 None
             }
-            KeyCode::Enter => {
-                self.handle_enter()
-            }
-            KeyCode::Char(c) if modifiers.contains(KeyModifiers::CONTROL) => {
-                match c {
-                    'n' => self.handle_new_backup(),
-                    'r' => Some(BackupAction::RefreshStatus),
-                    's' => self.handle_save_config(),
-                    _ => None,
-                }
-            }
+            KeyCode::Enter => self.handle_enter(),
+            KeyCode::Char(c) if modifiers.contains(KeyModifiers::CONTROL) => match c {
+                'n' => self.handle_new_backup(),
+                'r' => Some(BackupAction::RefreshStatus),
+                's' => self.handle_save_config(),
+                _ => None,
+            },
             KeyCode::Char(c) => {
                 if self.state.config_editor.edit_mode {
                     self.state.config_editor.input_buffer.push(c);
@@ -224,13 +221,19 @@ impl BackupUI {
 
     fn next_tab(&mut self) {
         let tabs = BackupTab::all();
-        let current_index = tabs.iter().position(|&t| t == self.state.current_tab).unwrap_or(0);
+        let current_index = tabs
+            .iter()
+            .position(|&t| t == self.state.current_tab)
+            .unwrap_or(0);
         self.state.current_tab = tabs[(current_index + 1) % tabs.len()];
     }
 
     fn previous_tab(&mut self) {
         let tabs = BackupTab::all();
-        let current_index = tabs.iter().position(|&t| t == self.state.current_tab).unwrap_or(0);
+        let current_index = tabs
+            .iter()
+            .position(|&t| t == self.state.current_tab)
+            .unwrap_or(0);
         self.state.current_tab = tabs[(current_index + tabs.len() - 1) % tabs.len()];
     }
 
@@ -241,7 +244,9 @@ impl BackupUI {
                     self.apply_config_edit();
                     None
                 } else {
-                    Some(BackupAction::CreateBackup(self.state.config_editor.config.clone()))
+                    Some(BackupAction::CreateBackup(
+                        self.state.config_editor.config.clone(),
+                    ))
                 }
             }
             BackupTab::RestoreData => {
@@ -293,10 +298,12 @@ impl BackupUI {
     fn apply_config_edit(&mut self) {
         match self.state.config_editor.selected_field {
             ConfigField::Name => {
-                self.state.config_editor.config.name = self.state.config_editor.input_buffer.clone();
+                self.state.config_editor.config.name =
+                    self.state.config_editor.input_buffer.clone();
             }
             ConfigField::Description => {
-                self.state.config_editor.config.description = self.state.config_editor.input_buffer.clone();
+                self.state.config_editor.config.description =
+                    self.state.config_editor.input_buffer.clone();
             }
             ConfigField::CompressionLevel => {
                 if let Ok(level) = self.state.config_editor.input_buffer.parse::<u8>() {
@@ -448,7 +455,8 @@ impl BackupUI {
     }
 
     fn render_backup_list(&mut self, frame: &mut Frame, area: Rect, theme: &Theme) {
-        let items: Vec<ListItem> = self.backup_metadata
+        let items: Vec<ListItem> = self
+            .backup_metadata
             .iter()
             .map(|backup| {
                 let status_icon = match &backup.status {
@@ -459,7 +467,8 @@ impl BackupUI {
                     BackupStatus::Preparing => "🔄",
                 };
 
-                let line = format!("{} {} (v{})", 
+                let line = format!(
+                    "{} {} (v{})",
                     status_icon,
                     backup.started_at.format("%Y-%m-%d %H:%M"),
                     backup.version
@@ -470,9 +479,11 @@ impl BackupUI {
             .collect();
 
         let list = List::new(items)
-            .block(Block::default()
-                .title("Recent Backups")
-                .borders(Borders::ALL))
+            .block(
+                Block::default()
+                    .title("Recent Backups")
+                    .borders(Borders::ALL),
+            )
             .style(theme.get_component_style("secondary", false))
             .highlight_style(theme.get_component_style("primary", true));
 
@@ -483,10 +494,19 @@ impl BackupUI {
         let text = if let Some(selected_index) = self.state.backup_list_state.selected() {
             if let Some(backup) = self.backup_metadata.get(selected_index) {
                 let status_text = match &backup.status {
-                    BackupStatus::Completed { duration_ms, bytes_backed_up } => {
-                        format!("Completed in {}ms, {} bytes backed up", duration_ms, bytes_backed_up)
+                    BackupStatus::Completed {
+                        duration_ms,
+                        bytes_backed_up,
+                    } => {
+                        format!(
+                            "Completed in {}ms, {} bytes backed up",
+                            duration_ms, bytes_backed_up
+                        )
                     }
-                    BackupStatus::Running { progress, current_item } => {
+                    BackupStatus::Running {
+                        progress,
+                        current_item,
+                    } => {
                         format!("Running: {:.1}% - {}", progress, current_item)
                     }
                     BackupStatus::Failed { error } => {
@@ -513,9 +533,11 @@ impl BackupUI {
         };
 
         let paragraph = Paragraph::new(text)
-            .block(Block::default()
-                .title("Backup Details")
-                .borders(Borders::ALL))
+            .block(
+                Block::default()
+                    .title("Backup Details")
+                    .borders(Borders::ALL),
+            )
             .wrap(Wrap { trim: true })
             .style(theme.get_component_style("secondary", false));
 
@@ -526,9 +548,11 @@ impl BackupUI {
         let text = "Create Backup Configuration\n\nPress 'n' to create a new backup\nPress Ctrl+S to save configuration";
 
         let paragraph = Paragraph::new(text)
-            .block(Block::default()
-                .title("Create Backup")
-                .borders(Borders::ALL))
+            .block(
+                Block::default()
+                    .title("Create Backup")
+                    .borders(Borders::ALL),
+            )
             .wrap(Wrap { trim: true })
             .style(theme.get_component_style("secondary", false));
 
@@ -539,9 +563,7 @@ impl BackupUI {
         let text = "Restore Data from Backup\n\nSelect a backup and press Enter to restore";
 
         let paragraph = Paragraph::new(text)
-            .block(Block::default()
-                .title("Restore Data")
-                .borders(Borders::ALL))
+            .block(Block::default().title("Restore Data").borders(Borders::ALL))
             .wrap(Wrap { trim: true })
             .style(theme.get_component_style("secondary", false));
 
@@ -552,9 +574,7 @@ impl BackupUI {
         let text = "Backup Scheduling\n\nConfigure automatic backups";
 
         let paragraph = Paragraph::new(text)
-            .block(Block::default()
-                .title("Schedule")
-                .borders(Borders::ALL))
+            .block(Block::default().title("Schedule").borders(Borders::ALL))
             .wrap(Wrap { trim: true })
             .style(theme.get_component_style("secondary", false));
 
@@ -565,9 +585,7 @@ impl BackupUI {
         let text = "Backup Settings\n\nConfigure backup preferences";
 
         let paragraph = Paragraph::new(text)
-            .block(Block::default()
-                .title("Settings")
-                .borders(Borders::ALL))
+            .block(Block::default().title("Settings").borders(Borders::ALL))
             .wrap(Wrap { trim: true })
             .style(theme.get_component_style("secondary", false));
 

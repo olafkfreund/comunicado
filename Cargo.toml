@@ -12,7 +12,7 @@ default-run = "comunicado"
 
 [dependencies]
 # TUI Framework
-ratatui = { version = "0.26", features = ["serde"] }
+ratatui = { version = "0.28", features = ["serde"] }
 crossterm = "0.27"
 tui-textarea = "0.4"
 arboard = "3.4"
@@ -95,7 +95,7 @@ keyring = "2.3"
 sequoia-openpgp = { version = "1.19", default-features = false, features = ["compression", "crypto-rust"] }
 
 # Database and caching - optimized features
-sqlx = { version = "0.7", default-features = false, features = ["runtime-tokio-rustls", "sqlite", "chrono", "uuid", "macros", "migrate"] }
+sqlx = { version = "0.8.1", default-features = false, features = ["runtime-tokio-rustls", "sqlite", "chrono", "uuid", "macros", "migrate"] }
 uuid = { version = "1.6", default-features = false, features = ["v4", "v5", "serde"] }
 
 # System directories

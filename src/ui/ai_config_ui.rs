@@ -176,7 +176,7 @@ impl AIConfigUIState {
     /// Get maximum items for current tab
     fn get_max_items_for_current_tab(&self) -> usize {
         match self.current_tab {
-            AIConfigTab::General => 3, // Enable/Disable, Provider, Model
+            AIConfigTab::General => 3,   // Enable/Disable, Provider, Model
             AIConfigTab::Providers => 5, // Ollama, OpenAI, Anthropic, Google, None
             AIConfigTab::Privacy => 4, // LocalOnly, LocalPreferred, CloudWithConsent, CloudAllowed
             AIConfigTab::Features => 4, // Email suggestions, summarization, calendar, categorization
@@ -198,7 +198,7 @@ impl AIConfigUIState {
                 "ollama_endpoint" => {
                     self.config.ollama_endpoint = self.input_buffer.clone();
                     self.modified = true;
-                },
+                }
                 "local_model" => {
                     self.config.local_model = if self.input_buffer.is_empty() {
                         None
@@ -206,25 +206,28 @@ impl AIConfigUIState {
                         Some(self.input_buffer.clone())
                     };
                     self.modified = true;
-                },
+                }
                 "openai_api_key" => {
                     if !self.input_buffer.is_empty() {
-                        self.config.set_api_key("openai".to_string(), self.input_buffer.clone());
+                        self.config
+                            .set_api_key("openai".to_string(), self.input_buffer.clone());
                         self.modified = true;
                     }
-                },
+                }
                 "anthropic_api_key" => {
                     if !self.input_buffer.is_empty() {
-                        self.config.set_api_key("anthropic".to_string(), self.input_buffer.clone());
+                        self.config
+                            .set_api_key("anthropic".to_string(), self.input_buffer.clone());
                         self.modified = true;
                     }
-                },
+                }
                 "google_api_key" => {
                     if !self.input_buffer.is_empty() {
-                        self.config.set_api_key("google".to_string(), self.input_buffer.clone());
+                        self.config
+                            .set_api_key("google".to_string(), self.input_buffer.clone());
                         self.modified = true;
                     }
-                },
+                }
                 "creativity" => {
                     if let Ok(value) = self.input_buffer.parse::<f32>() {
                         if (0.0..=1.0).contains(&value) {
@@ -236,7 +239,7 @@ impl AIConfigUIState {
                     } else {
                         self.set_error("Invalid creativity value".to_string());
                     }
-                },
+                }
                 "max_context_length" => {
                     if let Ok(value) = self.input_buffer.parse::<usize>() {
                         if value > 0 {
@@ -248,7 +251,7 @@ impl AIConfigUIState {
                     } else {
                         self.set_error("Invalid context length value".to_string());
                     }
-                },
+                }
                 "max_retries" => {
                     if let Ok(value) = self.input_buffer.parse::<u32>() {
                         self.config.max_retries = value;
@@ -256,11 +259,11 @@ impl AIConfigUIState {
                     } else {
                         self.set_error("Invalid retry count value".to_string());
                     }
-                },
+                }
                 _ => {}
             }
         }
-        
+
         self.input_mode = false;
         self.current_input_field = None;
         self.input_buffer.clear();
@@ -290,14 +293,12 @@ impl AIConfigUIState {
     /// Toggle a boolean setting
     pub fn toggle_setting(&mut self) {
         match self.current_tab {
-            AIConfigTab::General => {
-                match self.selected_index {
-                    0 => {
-                        self.config.enabled = !self.config.enabled;
-                        self.modified = true;
-                    },
-                    _ => {}
+            AIConfigTab::General => match self.selected_index {
+                0 => {
+                    self.config.enabled = !self.config.enabled;
+                    self.modified = true;
                 }
+                _ => {}
             },
             AIConfigTab::Providers => {
                 let provider = match self.selected_index {
@@ -310,7 +311,7 @@ impl AIConfigUIState {
                 };
                 self.config.provider = provider;
                 self.modified = true;
-            },
+            }
             AIConfigTab::Privacy => {
                 let privacy_mode = match self.selected_index {
                     0 => PrivacyMode::LocalOnly,
@@ -321,36 +322,35 @@ impl AIConfigUIState {
                 };
                 self.config.privacy_mode = privacy_mode;
                 self.modified = true;
-            },
-            AIConfigTab::Features => {
-                match self.selected_index {
-                    0 => {
-                        self.config.email_suggestions_enabled = !self.config.email_suggestions_enabled;
-                        self.modified = true;
-                    },
-                    1 => {
-                        self.config.email_summarization_enabled = !self.config.email_summarization_enabled;
-                        self.modified = true;
-                    },
-                    2 => {
-                        self.config.calendar_assistance_enabled = !self.config.calendar_assistance_enabled;
-                        self.modified = true;
-                    },
-                    3 => {
-                        self.config.email_categorization_enabled = !self.config.email_categorization_enabled;
-                        self.modified = true;
-                    },
-                    _ => {}
+            }
+            AIConfigTab::Features => match self.selected_index {
+                0 => {
+                    self.config.email_suggestions_enabled = !self.config.email_suggestions_enabled;
+                    self.modified = true;
                 }
-            },
-            AIConfigTab::Advanced => {
-                match self.selected_index {
-                    3 => {
-                        self.config.cache_responses = !self.config.cache_responses;
-                        self.modified = true;
-                    },
-                    _ => {}
+                1 => {
+                    self.config.email_summarization_enabled =
+                        !self.config.email_summarization_enabled;
+                    self.modified = true;
                 }
+                2 => {
+                    self.config.calendar_assistance_enabled =
+                        !self.config.calendar_assistance_enabled;
+                    self.modified = true;
+                }
+                3 => {
+                    self.config.email_categorization_enabled =
+                        !self.config.email_categorization_enabled;
+                    self.modified = true;
+                }
+                _ => {}
+            },
+            AIConfigTab::Advanced => match self.selected_index {
+                3 => {
+                    self.config.cache_responses = !self.config.cache_responses;
+                    self.modified = true;
+                }
+                _ => {}
             },
         }
     }
@@ -437,18 +437,12 @@ impl AIConfigUI {
     }
 
     /// Render tab navigation
-    fn render_tabs(
-        &self,
-        frame: &mut Frame,
-        area: Rect,
-        state: &AIConfigUIState,
-        theme: &Theme,
-    ) {
+    fn render_tabs(&self, frame: &mut Frame, area: Rect, state: &AIConfigUIState, theme: &Theme) {
         let tab_titles = vec!["General", "Providers", "Privacy", "Features", "Advanced"];
         let selected_tab = match state.current_tab {
             AIConfigTab::General => 0,
             AIConfigTab::Providers => 1,
-            AIConfigTab::Privacy => 2,  
+            AIConfigTab::Privacy => 2,
             AIConfigTab::Features => 3,
             AIConfigTab::Advanced => 4,
         };
@@ -456,7 +450,11 @@ impl AIConfigUI {
         let tabs = Tabs::new(tab_titles)
             .block(Block::default().borders(Borders::ALL))
             .style(Style::default().fg(theme.ai_assistant_text()))
-            .highlight_style(Style::default().fg(theme.ai_assistant_selected()).add_modifier(Modifier::BOLD))
+            .highlight_style(
+                Style::default()
+                    .fg(theme.ai_assistant_selected())
+                    .add_modifier(Modifier::BOLD),
+            )
             .select(selected_tab);
 
         frame.render_widget(tabs, area);
@@ -471,23 +469,32 @@ impl AIConfigUI {
         theme: &Theme,
     ) {
         let items = vec![
-            self.create_bool_item("AI Enabled", state.config.enabled, 0 == state.selected_index, theme),
-            self.create_text_item(
-                "Current Provider", 
-                &state.config.provider.to_string(), 
-                1 == state.selected_index, 
-                theme
+            self.create_bool_item(
+                "AI Enabled",
+                state.config.enabled,
+                0 == state.selected_index,
+                theme,
             ),
             self.create_text_item(
-                "Local Model", 
-                state.config.local_model.as_deref().unwrap_or("Not set"), 
-                2 == state.selected_index, 
-                theme
+                "Current Provider",
+                &state.config.provider.to_string(),
+                1 == state.selected_index,
+                theme,
+            ),
+            self.create_text_item(
+                "Local Model",
+                state.config.local_model.as_deref().unwrap_or("Not set"),
+                2 == state.selected_index,
+                theme,
             ),
         ];
 
         let list = List::new(items)
-            .block(Block::default().title("General Settings").borders(Borders::ALL))
+            .block(
+                Block::default()
+                    .title("General Settings")
+                    .borders(Borders::ALL),
+            )
             .style(Style::default().fg(theme.ai_assistant_text()));
 
         frame.render_stateful_widget(list, area, &mut state.list_state.clone());
@@ -515,27 +522,29 @@ impl AIConfigUI {
             .map(|(i, (name, provider_type))| {
                 let is_selected = i == state.selected_index;
                 let is_current = *provider_type == state.config.provider;
-                
+
                 let mut spans = vec![
                     Span::styled(
                         if is_current { "● " } else { "○ " },
-                        Style::default().fg(if is_current { 
-                            theme.ai_assistant_selected() 
-                        } else { 
-                            theme.ai_assistant_text() 
-                        })
-                    ),
-                    Span::styled(
-                        *name,
-                        Style::default().fg(if is_selected {
+                        Style::default().fg(if is_current {
                             theme.ai_assistant_selected()
                         } else {
                             theme.ai_assistant_text()
-                        }).add_modifier(if is_selected {
-                            Modifier::BOLD
-                        } else {
-                            Modifier::empty()
-                        })
+                        }),
+                    ),
+                    Span::styled(
+                        *name,
+                        Style::default()
+                            .fg(if is_selected {
+                                theme.ai_assistant_selected()
+                            } else {
+                                theme.ai_assistant_text()
+                            })
+                            .add_modifier(if is_selected {
+                                Modifier::BOLD
+                            } else {
+                                Modifier::empty()
+                            }),
                     ),
                 ];
 
@@ -544,43 +553,31 @@ impl AIConfigUI {
                     AIProviderType::Ollama => {
                         spans.push(Span::styled(
                             format!(" ({})", state.config.ollama_endpoint),
-                            Style::default().fg(theme.ai_assistant_context())
+                            Style::default().fg(theme.ai_assistant_context()),
                         ));
-                    },
+                    }
                     AIProviderType::OpenAI => {
                         let has_key = state.config.get_api_key("openai").is_some();
                         spans.push(Span::styled(
                             if has_key { " ✓" } else { " ✗" },
-                            Style::default().fg(if has_key { 
-                                Color::Green 
-                            } else { 
-                                Color::Red 
-                            })
+                            Style::default().fg(if has_key { Color::Green } else { Color::Red }),
                         ));
-                    },
+                    }
                     AIProviderType::Anthropic => {
                         let has_key = state.config.get_api_key("anthropic").is_some();
                         spans.push(Span::styled(
                             if has_key { " ✓" } else { " ✗" },
-                            Style::default().fg(if has_key { 
-                                Color::Green 
-                            } else { 
-                                Color::Red 
-                            })
+                            Style::default().fg(if has_key { Color::Green } else { Color::Red }),
                         ));
-                    },
+                    }
                     AIProviderType::Google => {
                         let has_key = state.config.get_api_key("google").is_some();
                         spans.push(Span::styled(
                             if has_key { " ✓" } else { " ✗" },
-                            Style::default().fg(if has_key { 
-                                Color::Green 
-                            } else { 
-                                Color::Red 
-                            })
+                            Style::default().fg(if has_key { Color::Green } else { Color::Red }),
                         ));
-                    },
-                    AIProviderType::None => {},
+                    }
+                    AIProviderType::None => {}
                 }
 
                 ListItem::new(Line::from(spans))
@@ -603,10 +600,26 @@ impl AIConfigUI {
         theme: &Theme,
     ) {
         let privacy_modes = vec![
-            ("Local Only", PrivacyMode::LocalOnly, "Only use local AI processing"),
-            ("Local Preferred", PrivacyMode::LocalPreferred, "Prefer local, fallback to cloud"),
-            ("Cloud with Consent", PrivacyMode::CloudWithConsent, "Allow cloud with explicit consent"),
-            ("Cloud Allowed", PrivacyMode::CloudAllowed, "Allow cloud processing freely"),
+            (
+                "Local Only",
+                PrivacyMode::LocalOnly,
+                "Only use local AI processing",
+            ),
+            (
+                "Local Preferred",
+                PrivacyMode::LocalPreferred,
+                "Prefer local, fallback to cloud",
+            ),
+            (
+                "Cloud with Consent",
+                PrivacyMode::CloudWithConsent,
+                "Allow cloud with explicit consent",
+            ),
+            (
+                "Cloud Allowed",
+                PrivacyMode::CloudAllowed,
+                "Allow cloud processing freely",
+            ),
         ];
 
         let items: Vec<ListItem> = privacy_modes
@@ -615,31 +628,33 @@ impl AIConfigUI {
             .map(|(i, (name, mode, description))| {
                 let is_selected = i == state.selected_index;
                 let is_current = *mode == state.config.privacy_mode;
-                
+
                 let spans = vec![
                     Span::styled(
                         if is_current { "● " } else { "○ " },
-                        Style::default().fg(if is_current { 
-                            theme.ai_assistant_selected() 
-                        } else { 
-                            theme.ai_assistant_text() 
-                        })
-                    ),
-                    Span::styled(
-                        *name,
-                        Style::default().fg(if is_selected {
+                        Style::default().fg(if is_current {
                             theme.ai_assistant_selected()
                         } else {
                             theme.ai_assistant_text()
-                        }).add_modifier(if is_selected {
-                            Modifier::BOLD
-                        } else {
-                            Modifier::empty()
-                        })
+                        }),
+                    ),
+                    Span::styled(
+                        *name,
+                        Style::default()
+                            .fg(if is_selected {
+                                theme.ai_assistant_selected()
+                            } else {
+                                theme.ai_assistant_text()
+                            })
+                            .add_modifier(if is_selected {
+                                Modifier::BOLD
+                            } else {
+                                Modifier::empty()
+                            }),
                     ),
                     Span::styled(
                         format!(" - {}", description),
-                        Style::default().fg(theme.ai_assistant_context())
+                        Style::default().fg(theme.ai_assistant_context()),
                     ),
                 ];
 
@@ -648,7 +663,11 @@ impl AIConfigUI {
             .collect();
 
         let list = List::new(items)
-            .block(Block::default().title("Privacy & Data Handling").borders(Borders::ALL))
+            .block(
+                Block::default()
+                    .title("Privacy & Data Handling")
+                    .borders(Borders::ALL),
+            )
             .style(Style::default().fg(theme.ai_assistant_text()));
 
         frame.render_stateful_widget(list, area, &mut state.list_state.clone());
@@ -664,9 +683,18 @@ impl AIConfigUI {
     ) {
         let features = vec![
             ("Email Suggestions", state.config.email_suggestions_enabled),
-            ("Email Summarization", state.config.email_summarization_enabled),
-            ("Calendar Assistance", state.config.calendar_assistance_enabled),
-            ("Email Categorization", state.config.email_categorization_enabled),
+            (
+                "Email Summarization",
+                state.config.email_summarization_enabled,
+            ),
+            (
+                "Calendar Assistance",
+                state.config.calendar_assistance_enabled,
+            ),
+            (
+                "Email Categorization",
+                state.config.email_categorization_enabled,
+            ),
         ];
 
         let items: Vec<ListItem> = features
@@ -697,36 +725,40 @@ impl AIConfigUI {
                 "Creativity",
                 &format!("{:.1}", state.config.creativity),
                 0 == state.selected_index,
-                theme
+                theme,
             ),
             self.create_text_item(
                 "Request Timeout",
                 &format!("{}s", state.config.request_timeout.as_secs()),
                 1 == state.selected_index,
-                theme
+                theme,
             ),
             self.create_text_item(
                 "Max Retries",
                 &state.config.max_retries.to_string(),
                 2 == state.selected_index,
-                theme
+                theme,
             ),
             self.create_bool_item(
                 "Cache Responses",
                 state.config.cache_responses,
                 3 == state.selected_index,
-                theme
+                theme,
             ),
             self.create_text_item(
                 "Max Context Length",
                 &state.config.max_context_length.to_string(),
                 4 == state.selected_index,
-                theme
+                theme,
             ),
         ];
 
         let list = List::new(items)
-            .block(Block::default().title("Advanced Settings").borders(Borders::ALL))
+            .block(
+                Block::default()
+                    .title("Advanced Settings")
+                    .borders(Borders::ALL),
+            )
             .style(Style::default().fg(theme.ai_assistant_text()));
 
         frame.render_stateful_widget(list, area, &mut state.list_state.clone());
@@ -786,9 +818,13 @@ impl AIConfigUI {
         if state.modified {
             let modified_text = " [Modified]";
             let modified_widget = Paragraph::new(modified_text)
-                .style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))
+                .style(
+                    Style::default()
+                        .fg(Color::Yellow)
+                        .add_modifier(Modifier::BOLD),
+                )
                 .alignment(Alignment::Right);
-            
+
             // Render in the bottom right corner
             let modified_area = Rect {
                 x: chunks[1].x + chunks[1].width.saturating_sub(modified_text.len() as u16),
@@ -810,7 +846,7 @@ impl AIConfigUI {
     ) {
         // Center the dialog
         let dialog_area = self.centered_rect(50, 20, area);
-        
+
         // Clear the area
         frame.render_widget(Clear, dialog_area);
 
@@ -842,33 +878,25 @@ impl AIConfigUI {
     }
 
     /// Create a boolean setting list item
-    fn create_bool_item(
-        &self,
-        name: &str,
-        value: bool,
-        selected: bool,
-        theme: &Theme,
-    ) -> ListItem {
+    fn create_bool_item(&self, name: &str, value: bool, selected: bool, theme: &Theme) -> ListItem {
         let spans = vec![
             Span::styled(
                 format!("{}: ", name),
-                Style::default().fg(if selected {
-                    theme.ai_assistant_selected()
-                } else {
-                    theme.ai_assistant_text()
-                }).add_modifier(if selected {
-                    Modifier::BOLD
-                } else {
-                    Modifier::empty()
-                })
+                Style::default()
+                    .fg(if selected {
+                        theme.ai_assistant_selected()
+                    } else {
+                        theme.ai_assistant_text()
+                    })
+                    .add_modifier(if selected {
+                        Modifier::BOLD
+                    } else {
+                        Modifier::empty()
+                    }),
             ),
             Span::styled(
                 if value { "Enabled" } else { "Disabled" },
-                Style::default().fg(if value {
-                    Color::Green
-                } else {
-                    Color::Red
-                })
+                Style::default().fg(if value { Color::Green } else { Color::Red }),
             ),
         ];
 
@@ -886,19 +914,21 @@ impl AIConfigUI {
         let spans = vec![
             Span::styled(
                 format!("{}: ", name),
-                Style::default().fg(if selected {
-                    theme.ai_assistant_selected()
-                } else {
-                    theme.ai_assistant_text()
-                }).add_modifier(if selected {
-                    Modifier::BOLD
-                } else {
-                    Modifier::empty()
-                })
+                Style::default()
+                    .fg(if selected {
+                        theme.ai_assistant_selected()
+                    } else {
+                        theme.ai_assistant_text()
+                    })
+                    .add_modifier(if selected {
+                        Modifier::BOLD
+                    } else {
+                        Modifier::empty()
+                    }),
             ),
             Span::styled(
                 value.to_string(),
-                Style::default().fg(theme.ai_assistant_context())
+                Style::default().fg(theme.ai_assistant_context()),
             ),
         ];
 
@@ -995,7 +1025,7 @@ mod tests {
         state.current_tab = AIConfigTab::General;
         state.selected_index = 0;
         state.toggle_setting();
-        
+
         assert_eq!(state.config.enabled, !original_enabled);
         assert!(state.modified);
     }

@@ -1,12 +1,12 @@
 //! Memory management and optimization system
 
-use crate::performance::{PerformanceResult, PerformanceError};
+use crate::performance::{PerformanceError, PerformanceResult};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
-use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 
 // Helper function for serde default
 fn default_instant() -> Instant {
@@ -217,7 +217,7 @@ impl MemoryProfiler {
         category: String,
     ) -> PerformanceResult<u64> {
         let allocation_id = self.allocation_counter.fetch_add(1, Ordering::SeqCst);
-        
+
         let allocation = AllocationInfo {
             id: allocation_id,
             size,
@@ -230,7 +230,7 @@ impl MemoryProfiler {
 
         // Store location before moving allocation
         let allocation_location = allocation.location.clone();
-        
+
         // Update tracking
         {
             let mut allocations = self.allocations.write().await;
@@ -242,7 +242,10 @@ impl MemoryProfiler {
         let mut peak = self.peak_memory.load(Ordering::SeqCst);
         while current > peak {
             match self.peak_memory.compare_exchange_weak(
-                peak, current, Ordering::SeqCst, Ordering::SeqCst
+                peak,
+                current,
+                Ordering::SeqCst,
+                Ordering::SeqCst,
             ) {
                 Ok(_) => break,
                 Err(actual) => peak = actual,
@@ -259,7 +262,9 @@ impl MemoryProfiler {
         }
 
         // Check for large allocations
-        if self.config.large_allocation_threshold > 0 && size >= self.config.large_allocation_threshold {
+        if self.config.large_allocation_threshold > 0
+            && size >= self.config.large_allocation_threshold
+        {
             tracing::warn!(
                 "Large allocation detected: {} bytes at {}",
                 size,
@@ -273,15 +278,16 @@ impl MemoryProfiler {
     /// Track a memory deallocation
     pub async fn track_deallocation(&self, allocation_id: u64) -> PerformanceResult<()> {
         let mut allocations = self.allocations.write().await;
-        
+
         if let Some(allocation) = allocations.get_mut(&allocation_id) {
             if allocation.is_active {
                 allocation.is_active = false;
                 allocation.deallocated_at = Some(Instant::now());
-                
+
                 // Update current memory usage
-                self.current_memory.fetch_sub(allocation.size, Ordering::SeqCst);
-                
+                self.current_memory
+                    .fetch_sub(allocation.size, Ordering::SeqCst);
+
                 // Update statistics
                 let mut stats = self.stats.write().await;
                 stats.total_deallocated += allocation.size;
@@ -308,20 +314,23 @@ impl MemoryProfiler {
         let allocations = self.allocations.read().await;
         let mut detected_leaks = self.detected_leaks.write().await;
         let current_time = Instant::now();
-        
+
         // Look for long-lived allocations
         let leak_threshold = Duration::from_secs(3600); // 1 hour
         let mut new_leaks = Vec::new();
-        
+
         for (id, allocation) in allocations.iter() {
-            if allocation.is_active && 
-               current_time.duration_since(allocation.allocated_at) > leak_threshold {
-                
+            if allocation.is_active
+                && current_time.duration_since(allocation.allocated_at) > leak_threshold
+            {
                 // Calculate confidence based on allocation age and size
-                let age_hours = current_time.duration_since(allocation.allocated_at).as_secs() as f64 / 3600.0;
+                let age_hours = current_time
+                    .duration_since(allocation.allocated_at)
+                    .as_secs() as f64
+                    / 3600.0;
                 let size_factor = (allocation.size as f64 / 1024.0).ln().max(1.0) / 10.0;
                 let confidence = (age_hours / 24.0 * size_factor).min(1.0);
-                
+
                 let leak = MemoryLeak {
                     id: *id,
                     leaked_bytes: allocation.size,
@@ -331,16 +340,16 @@ impl MemoryProfiler {
                     confidence,
                     stack_trace: None, // Would be populated with actual stack trace
                 };
-                
+
                 new_leaks.push(leak);
             }
         }
-        
+
         // Add new leaks to detection history
         for leak in &new_leaks {
             detected_leaks.push(leak.clone());
         }
-        
+
         // Limit leak history size
         if detected_leaks.len() > 1000 {
             detected_leaks.truncate(800);
@@ -360,19 +369,20 @@ impl MemoryProfiler {
         let cutoff = Instant::now() - Duration::from_secs(retention_hours * 3600);
         let mut allocations = self.allocations.write().await;
         let mut removed_count = 0;
-        
+
         // Remove old, inactive allocations
         let keys_to_remove: Vec<u64> = allocations
             .iter()
             .filter(|(_, allocation)| {
-                !allocation.is_active &&
-                allocation.deallocated_at
-                    .map(|dealloc_time| dealloc_time < cutoff)
-                    .unwrap_or(false)
+                !allocation.is_active
+                    && allocation
+                        .deallocated_at
+                        .map(|dealloc_time| dealloc_time < cutoff)
+                        .unwrap_or(false)
             })
             .map(|(id, _)| *id)
             .collect();
-        
+
         for key in keys_to_remove {
             allocations.remove(&key);
             removed_count += 1;
@@ -425,11 +435,10 @@ impl AllocationTracker {
 
     /// Track allocation for this category
     pub async fn allocate(&self, size: usize, location: String) -> PerformanceResult<u64> {
-        let allocation_id = self.profiler.track_allocation(
-            size,
-            location,
-            self.category.clone(),
-        ).await?;
+        let allocation_id = self
+            .profiler
+            .track_allocation(size, location, self.category.clone())
+            .await?;
 
         // Update category stats
         {
@@ -513,13 +522,13 @@ impl GarbageCollector {
         }
 
         let start_time = Instant::now();
-        
+
         // This would trigger actual garbage collection
         // For now, we simulate the process
         let bytes_freed = simulate_gc_collection().await;
         let objects_freed = (bytes_freed / 64) as u64; // Assume average object size
         let gc_duration = start_time.elapsed();
-        
+
         // Update statistics
         {
             let mut stats = self.gc_stats.write().await;
@@ -529,7 +538,7 @@ impl GarbageCollector {
             stats.last_gc_time = Some(start_time);
             stats.bytes_collected += bytes_freed;
             stats.objects_collected += objects_freed as u64;
-            
+
             // Calculate efficiency (bytes collected per millisecond)
             let gc_ms = gc_duration.as_millis().max(1) as f64;
             stats.gc_efficiency = bytes_freed as f64 / gc_ms;
@@ -585,14 +594,14 @@ impl HeapAnalyzer {
     pub async fn analyze_heap(&self) -> PerformanceResult<HeapAnalysis> {
         if !self.config.heap_analysis_enabled {
             return Err(PerformanceError::ConfigurationError(
-                "Heap analysis is disabled".to_string()
+                "Heap analysis is disabled".to_string(),
             ));
         }
 
         // This would integrate with actual heap introspection
         // For now, we simulate the analysis
         let heap_info = simulate_heap_analysis().await;
-        
+
         Ok(heap_info)
     }
 
@@ -612,7 +621,9 @@ impl HeapAnalyzer {
             FragmentationSeverity::High | FragmentationSeverity::Critical => {
                 recommendations.push(HeapOptimization {
                     optimization_type: "Defragmentation".to_string(),
-                    description: "High heap fragmentation detected - consider triggering compaction".to_string(),
+                    description:
+                        "High heap fragmentation detected - consider triggering compaction"
+                            .to_string(),
                     priority: OptimizationPriority::High,
                     estimated_benefit: 0.4,
                 });
@@ -620,7 +631,9 @@ impl HeapAnalyzer {
             FragmentationSeverity::Medium => {
                 recommendations.push(HeapOptimization {
                     optimization_type: "Monitoring".to_string(),
-                    description: "Moderate fragmentation - monitor and consider future optimization".to_string(),
+                    description:
+                        "Moderate fragmentation - monitor and consider future optimization"
+                            .to_string(),
                     priority: OptimizationPriority::Medium,
                     estimated_benefit: 0.2,
                 });
@@ -642,7 +655,8 @@ impl HeapAnalyzer {
         if analysis.largest_free_block < analysis.avg_block_size * 2 {
             recommendations.push(HeapOptimization {
                 optimization_type: "Memory Compaction".to_string(),
-                description: "Limited large free blocks available - compaction may help".to_string(),
+                description: "Limited large free blocks available - compaction may help"
+                    .to_string(),
                 priority: OptimizationPriority::Medium,
                 estimated_benefit: 0.25,
             });
@@ -699,8 +713,9 @@ impl MemoryManager {
     /// Get allocation tracker for a category
     pub async fn get_tracker(&self, category: &str) -> Arc<AllocationTracker> {
         let mut trackers = self.category_trackers.write().await;
-        
-        trackers.entry(category.to_string())
+
+        trackers
+            .entry(category.to_string())
             .or_insert_with(|| {
                 Arc::new(AllocationTracker::new(
                     category.to_string(),
@@ -716,7 +731,7 @@ impl MemoryManager {
         let gc_stats = self.gc.get_gc_stats().await;
         let heap_analysis = self.heap_analyzer.analyze_heap().await?;
         let detected_leaks = self.profiler.get_detected_leaks().await;
-        
+
         // Get category statistics
         let trackers = self.category_trackers.read().await;
         let mut category_stats = HashMap::new();
@@ -744,8 +759,7 @@ impl MemoryManager {
         total_bytes_freed += gc_result.bytes_freed;
         optimizations.push(format!(
             "GC freed {} bytes in {:?}",
-            gc_result.bytes_freed,
-            gc_result.gc_duration
+            gc_result.bytes_freed, gc_result.gc_duration
         ));
 
         // Detect memory leaks
@@ -756,7 +770,10 @@ impl MemoryManager {
 
         // Clean up old allocation records
         let cleaned_allocations = self.profiler.cleanup_old_allocations(24).await?;
-        optimizations.push(format!("Cleaned up {} old allocation records", cleaned_allocations));
+        optimizations.push(format!(
+            "Cleaned up {} old allocation records",
+            cleaned_allocations
+        ));
 
         // Get heap recommendations
         let heap_recommendations = self.heap_analyzer.recommend_optimizations().await?;
@@ -805,14 +822,14 @@ async fn simulate_gc_collection() -> usize {
 async fn simulate_heap_analysis() -> HeapAnalysis {
     // Simulate heap analysis - in practice this would inspect actual heap
     tokio::time::sleep(Duration::from_millis(5)).await;
-    
+
     HeapAnalysis {
         total_heap_size: 64 * 1024 * 1024, // 64MB
         used_heap_size: 48 * 1024 * 1024,  // 48MB
         free_heap_size: 16 * 1024 * 1024,  // 16MB
         utilization_ratio: 0.75,
         block_count: 1000,
-        avg_block_size: 64 * 1024, // 64KB
+        avg_block_size: 64 * 1024,           // 64KB
         largest_free_block: 2 * 1024 * 1024, // 2MB
         fragmentation_info: FragmentationInfo {
             external_fragmentation: 0.15,
@@ -850,11 +867,10 @@ mod tests {
         let profiler = MemoryProfiler::new(config);
 
         // Track an allocation
-        let allocation_id = profiler.track_allocation(
-            1024,
-            "test.rs:100".to_string(),
-            "test".to_string(),
-        ).await.unwrap();
+        let allocation_id = profiler
+            .track_allocation(1024, "test.rs:100".to_string(), "test".to_string())
+            .await
+            .unwrap();
 
         // Check statistics
         let stats = profiler.get_memory_stats().await;
@@ -876,7 +892,10 @@ mod tests {
         let tracker = AllocationTracker::new("test_category".to_string(), profiler);
 
         // Track allocation
-        let allocation_id = tracker.allocate(2048, "test.rs:200".to_string()).await.unwrap();
+        let allocation_id = tracker
+            .allocate(2048, "test.rs:200".to_string())
+            .await
+            .unwrap();
 
         // Check category stats
         let stats = tracker.get_stats().await;
@@ -912,7 +931,10 @@ mod tests {
 
         // Get tracker and use it
         let tracker = manager.get_tracker("test").await;
-        let _allocation_id = tracker.allocate(1024, "test.rs:300".to_string()).await.unwrap();
+        let _allocation_id = tracker
+            .allocate(1024, "test.rs:300".to_string())
+            .await
+            .unwrap();
 
         // Get comprehensive statistics
         let stats = manager.get_memory_statistics().await.unwrap();

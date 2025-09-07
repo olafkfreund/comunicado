@@ -1,24 +1,24 @@
 //! Application settings UI components for comprehensive configuration management
 
-use crate::theme::Theme;
 use crate::config::{AppConfig, FocusIndicatorStyle};
+use crate::theme::Theme;
 use crate::ui::account_manager_ui::AccountManagerUI;
 use crate::ui::keyboard_bindings_ui::KeyboardBindingsUI;
+use crossterm::event::{KeyCode, KeyModifiers};
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     text::Line,
     widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Tabs, Wrap},
     Frame,
 };
-use crossterm::event::{KeyCode, KeyModifiers};
 
 /// Settings tab categories - consolidated for better UX
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SettingsTab {
-    Core,        // General + Accounts + Performance
-    Interface,   // UI + Keyboard 
-    Privacy,     // Privacy + AI (AI has privacy implications)
-    Advanced,    // Advanced + System
+    Core,      // General + Accounts + Performance
+    Interface, // UI + Keyboard
+    Privacy,   // Privacy + AI (AI has privacy implications)
+    Advanced,  // Advanced + System
 }
 
 /// Sub-sections within each main tab for better organization
@@ -28,18 +28,18 @@ pub enum SettingsSubSection {
     General,
     Accounts,
     Performance,
-    
-    // Interface tab sub-sections  
+
+    // Interface tab sub-sections
     UITheme,
     ContextIndicators,
     FocusIndicators,
     ResponsiveLayout,
     Keyboard,
-    
+
     // Privacy tab sub-sections
     Privacy,
     AI,
-    
+
     // Advanced tab sub-sections
     System,
     Debug,
@@ -201,7 +201,10 @@ impl SettingsUIState {
 
     pub fn next_sub_section(&mut self) {
         let sub_sections = self.get_sub_sections_for_tab(&self.current_tab);
-        if let Some(current_index) = sub_sections.iter().position(|&s| s == self.current_sub_section) {
+        if let Some(current_index) = sub_sections
+            .iter()
+            .position(|&s| s == self.current_sub_section)
+        {
             self.current_sub_section = sub_sections[(current_index + 1) % sub_sections.len()];
             self.selected_index = 0;
             self.list_state.select(Some(0));
@@ -210,8 +213,12 @@ impl SettingsUIState {
 
     pub fn previous_sub_section(&mut self) {
         let sub_sections = self.get_sub_sections_for_tab(&self.current_tab);
-        if let Some(current_index) = sub_sections.iter().position(|&s| s == self.current_sub_section) {
-            self.current_sub_section = sub_sections[(current_index + sub_sections.len() - 1) % sub_sections.len()];
+        if let Some(current_index) = sub_sections
+            .iter()
+            .position(|&s| s == self.current_sub_section)
+        {
+            self.current_sub_section =
+                sub_sections[(current_index + sub_sections.len() - 1) % sub_sections.len()];
             self.selected_index = 0;
             self.list_state.select(Some(0));
         }
@@ -240,14 +247,8 @@ impl SettingsUIState {
                 SettingsSubSection::ResponsiveLayout,
                 SettingsSubSection::Keyboard,
             ],
-            SettingsTab::Privacy => vec![
-                SettingsSubSection::Privacy,
-                SettingsSubSection::AI,
-            ],
-            SettingsTab::Advanced => vec![
-                SettingsSubSection::System,
-                SettingsSubSection::Debug,
-            ],
+            SettingsTab::Privacy => vec![SettingsSubSection::Privacy, SettingsSubSection::AI],
+            SettingsTab::Advanced => vec![SettingsSubSection::System, SettingsSubSection::Debug],
         }
     }
 
@@ -303,15 +304,15 @@ impl SettingsUIState {
             SettingsSubSection::General => 10, // General email and sync settings
             SettingsSubSection::Accounts => 6, // Account management
             SettingsSubSection::Performance => 6, // Performance and caching
-            SettingsSubSection::UITheme => 7, // UI, theme, and layout
+            SettingsSubSection::UITheme => 7,  // UI, theme, and layout
             SettingsSubSection::ContextIndicators => 7, // Context indicator settings
             SettingsSubSection::FocusIndicators => 4, // Focus indicator settings
             SettingsSubSection::ResponsiveLayout => 8, // Responsive layout settings
             SettingsSubSection::Keyboard => 5, // Keyboard shortcuts and vim mode
-            SettingsSubSection::Privacy => 5, // Privacy and security
-            SettingsSubSection::AI => 8, // AI assistant configuration
-            SettingsSubSection::System => 4, // System paths and maintenance
-            SettingsSubSection::Debug => 2, // Debug and development settings
+            SettingsSubSection::Privacy => 5,  // Privacy and security
+            SettingsSubSection::AI => 8,       // AI assistant configuration
+            SettingsSubSection::System => 4,   // System paths and maintenance
+            SettingsSubSection::Debug => 2,    // Debug and development settings
         }
     }
 }
@@ -329,7 +330,8 @@ pub struct SettingsUI {
 impl SettingsUI {
     pub fn new() -> Self {
         let config = AppConfig::load().unwrap_or_default();
-        let keyboard_bindings_ui = KeyboardBindingsUI::with_bindings(config.keyboard.custom_bindings.clone());
+        let keyboard_bindings_ui =
+            KeyboardBindingsUI::with_bindings(config.keyboard.custom_bindings.clone());
         Self {
             state: SettingsUIState::new(),
             config,
@@ -359,9 +361,14 @@ impl SettingsUI {
     pub fn is_visible(&self) -> bool {
         self.state.is_visible()
     }
-    
+
     /// Initialize account manager with IMAP account manager reference
-    pub fn initialize_account_manager(&mut self, imap_manager: std::sync::Arc<tokio::sync::RwLock<crate::imap::account_manager::ImapAccountManager>>) {
+    pub fn initialize_account_manager(
+        &mut self,
+        imap_manager: std::sync::Arc<
+            tokio::sync::RwLock<crate::imap::account_manager::ImapAccountManager>,
+        >,
+    ) {
         self.account_manager_ui.set_account_manager(imap_manager);
     }
 
@@ -369,7 +376,7 @@ impl SettingsUI {
         if !self.state.visible {
             return false;
         }
-        
+
         // Handle account manager if it's shown
         if self.show_account_manager {
             if self.account_manager_ui.handle_key(key) {
@@ -380,7 +387,7 @@ impl SettingsUI {
                 return true;
             }
         }
-        
+
         // Handle keyboard bindings manager if it's shown
         if self.show_keyboard_bindings {
             if self.keyboard_bindings_ui.handle_key(key) {
@@ -469,30 +476,24 @@ impl SettingsUI {
     fn handle_select(&mut self) {
         // Toggle boolean settings or start editing for other types
         match self.state.current_tab {
-            SettingsTab::Core => {
-                match self.state.current_sub_section {
-                    SettingsSubSection::General => self.handle_general_select(),
-                    SettingsSubSection::Accounts => self.handle_accounts_select(),
-                    SettingsSubSection::Performance => self.handle_performance_select(),
-                    _ => {}
-                }
+            SettingsTab::Core => match self.state.current_sub_section {
+                SettingsSubSection::General => self.handle_general_select(),
+                SettingsSubSection::Accounts => self.handle_accounts_select(),
+                SettingsSubSection::Performance => self.handle_performance_select(),
+                _ => {}
             },
-            SettingsTab::Interface => {
-                match self.state.current_sub_section {
-                    SettingsSubSection::UITheme => self.handle_ui_select(),
-                    SettingsSubSection::ContextIndicators => self.handle_context_indicators_select(),
-                    SettingsSubSection::FocusIndicators => self.handle_focus_indicators_select(),
-                    SettingsSubSection::ResponsiveLayout => self.handle_responsive_layout_select(),
-                    SettingsSubSection::Keyboard => self.handle_keyboard_select(),
-                    _ => {}
-                }
+            SettingsTab::Interface => match self.state.current_sub_section {
+                SettingsSubSection::UITheme => self.handle_ui_select(),
+                SettingsSubSection::ContextIndicators => self.handle_context_indicators_select(),
+                SettingsSubSection::FocusIndicators => self.handle_focus_indicators_select(),
+                SettingsSubSection::ResponsiveLayout => self.handle_responsive_layout_select(),
+                SettingsSubSection::Keyboard => self.handle_keyboard_select(),
+                _ => {}
             },
-            SettingsTab::Privacy => {
-                match self.state.current_sub_section {
-                    SettingsSubSection::Privacy => self.handle_privacy_select(),
-                    SettingsSubSection::AI => self.handle_ai_select(),
-                    _ => {}
-                }
+            SettingsTab::Privacy => match self.state.current_sub_section {
+                SettingsSubSection::Privacy => self.handle_privacy_select(),
+                SettingsSubSection::AI => self.handle_ai_select(),
+                _ => {}
             },
             SettingsTab::Advanced => self.handle_advanced_select(),
         }
@@ -603,30 +604,24 @@ impl SettingsUI {
         // Apply the current edit based on tab and selected index
         let value = self.state.input_buffer.clone();
         match self.state.current_tab {
-            SettingsTab::Core => {
-                match self.state.current_sub_section {
-                    SettingsSubSection::General => self.apply_general_edit(value),
-                    SettingsSubSection::Accounts => self.apply_accounts_edit(value),
-                    SettingsSubSection::Performance => self.apply_performance_edit(value),
-                    _ => {}
-                }
+            SettingsTab::Core => match self.state.current_sub_section {
+                SettingsSubSection::General => self.apply_general_edit(value),
+                SettingsSubSection::Accounts => self.apply_accounts_edit(value),
+                SettingsSubSection::Performance => self.apply_performance_edit(value),
+                _ => {}
             },
-            SettingsTab::Interface => {
-                match self.state.current_sub_section {
-                    SettingsSubSection::UITheme => self.apply_ui_edit(value),
-                    SettingsSubSection::ContextIndicators => self.apply_context_indicators_edit(value),
-                    SettingsSubSection::FocusIndicators => self.apply_focus_indicators_edit(value),
-                    SettingsSubSection::ResponsiveLayout => self.apply_responsive_layout_edit(value),
-                    SettingsSubSection::Keyboard => self.apply_keyboard_edit(value),
-                    _ => {}
-                }
+            SettingsTab::Interface => match self.state.current_sub_section {
+                SettingsSubSection::UITheme => self.apply_ui_edit(value),
+                SettingsSubSection::ContextIndicators => self.apply_context_indicators_edit(value),
+                SettingsSubSection::FocusIndicators => self.apply_focus_indicators_edit(value),
+                SettingsSubSection::ResponsiveLayout => self.apply_responsive_layout_edit(value),
+                SettingsSubSection::Keyboard => self.apply_keyboard_edit(value),
+                _ => {}
             },
-            SettingsTab::Privacy => {
-                match self.state.current_sub_section {
-                    SettingsSubSection::Privacy => self.apply_privacy_edit(value),
-                    SettingsSubSection::AI => self.apply_ai_edit(value),
-                    _ => {}
-                }
+            SettingsTab::Privacy => match self.state.current_sub_section {
+                SettingsSubSection::Privacy => self.apply_privacy_edit(value),
+                SettingsSubSection::AI => self.apply_ai_edit(value),
+                _ => {}
             },
             SettingsTab::Advanced => self.apply_advanced_edit(value),
         }
@@ -635,51 +630,68 @@ impl SettingsUI {
 
     fn apply_general_edit(&mut self, value: String) {
         match self.state.selected_index {
-            1 => { // Sync interval
+            1 => {
+                // Sync interval
                 if let Ok(interval) = value.parse::<u64>() {
-                    if interval >= 1 && interval <= 1440 { // 1 minute to 24 hours
+                    if interval >= 1 && interval <= 1440 {
+                        // 1 minute to 24 hours
                         self.config.general.sync_interval_minutes = interval;
                         if let Err(e) = self.config.save() {
-                            self.state.set_status(format!("Failed to save config: {}", e));
+                            self.state
+                                .set_status(format!("Failed to save config: {}", e));
                         } else {
-                            self.state.set_status(format!("Sync interval set to {} minutes", interval));
+                            self.state
+                                .set_status(format!("Sync interval set to {} minutes", interval));
                         }
                     } else {
-                        self.state.set_status("Sync interval must be between 1 and 1440 minutes".to_string());
+                        self.state.set_status(
+                            "Sync interval must be between 1 and 1440 minutes".to_string(),
+                        );
                     }
                 } else {
                     self.state.set_status("Invalid sync interval".to_string());
                 }
             }
-            4 => { // Max concurrent syncs
+            4 => {
+                // Max concurrent syncs
                 if let Ok(count) = value.parse::<u32>() {
                     if count >= 1 && count <= 10 {
                         self.config.general.max_concurrent_syncs = count;
                         if let Err(e) = self.config.save() {
-                            self.state.set_status(format!("Failed to save config: {}", e));
+                            self.state
+                                .set_status(format!("Failed to save config: {}", e));
                         } else {
-                            self.state.set_status(format!("Max concurrent syncs set to {}", count));
+                            self.state
+                                .set_status(format!("Max concurrent syncs set to {}", count));
                         }
                     } else {
-                        self.state.set_status("Max concurrent syncs must be between 1 and 10".to_string());
+                        self.state.set_status(
+                            "Max concurrent syncs must be between 1 and 10".to_string(),
+                        );
                     }
                 } else {
-                    self.state.set_status("Invalid concurrent sync count".to_string());
+                    self.state
+                        .set_status("Invalid concurrent sync count".to_string());
                 }
             }
-            5 => { // Default folder
+            5 => {
+                // Default folder
                 if !value.trim().is_empty() {
                     self.config.general.default_folder = value.trim().to_string();
                     if let Err(e) = self.config.save() {
-                        self.state.set_status(format!("Failed to save config: {}", e));
+                        self.state
+                            .set_status(format!("Failed to save config: {}", e));
                     } else {
-                        self.state.set_status(format!("Default folder set to '{}'", value.trim()));
+                        self.state
+                            .set_status(format!("Default folder set to '{}'", value.trim()));
                     }
                 } else {
-                    self.state.set_status("Default folder cannot be empty".to_string());
+                    self.state
+                        .set_status("Default folder cannot be empty".to_string());
                 }
             }
-            8 => { // Thread grouping
+            8 => {
+                // Thread grouping
                 use crate::config::ThreadGrouping;
                 let grouping = match value.trim().to_lowercase().as_str() {
                     "subject" => ThreadGrouping::Subject,
@@ -687,15 +699,20 @@ impl SettingsUI {
                     "messageid" => ThreadGrouping::MessageId,
                     "none" => ThreadGrouping::None,
                     _ => {
-                        self.state.set_status("Thread grouping must be one of: Subject, References, MessageId, None".to_string());
+                        self.state.set_status(
+                            "Thread grouping must be one of: Subject, References, MessageId, None"
+                                .to_string(),
+                        );
                         return;
                     }
                 };
                 self.config.general.thread_grouping = grouping;
                 if let Err(e) = self.config.save() {
-                    self.state.set_status(format!("Failed to save config: {}", e));
+                    self.state
+                        .set_status(format!("Failed to save config: {}", e));
                 } else {
-                    self.state.set_status(format!("Thread grouping set to {:?}", grouping));
+                    self.state
+                        .set_status(format!("Thread grouping set to {:?}", grouping));
                 }
             }
             _ => {}
@@ -704,33 +721,40 @@ impl SettingsUI {
 
     fn apply_ui_edit(&mut self, value: String) {
         match self.state.selected_index {
-            4 => { // Font size
+            4 => {
+                // Font size
                 if let Ok(size) = value.parse::<u16>() {
                     if size >= 8 && size <= 24 {
                         self.config.ui.font_size = size;
                         if let Err(e) = self.config.save() {
-                            self.state.set_status(format!("Failed to save config: {}", e));
+                            self.state
+                                .set_status(format!("Failed to save config: {}", e));
                         } else {
                             self.state.set_status(format!("Font size set to {}", size));
                         }
                     } else {
-                        self.state.set_status("Font size must be between 8 and 24".to_string());
+                        self.state
+                            .set_status("Font size must be between 8 and 24".to_string());
                     }
                 } else {
                     self.state.set_status("Invalid font size".to_string());
                 }
             }
-            6 => { // Layout
+            6 => {
+                // Layout
                 let layouts = ["Standard", "Compact", "Wide"];
                 if layouts.contains(&value.trim()) {
                     self.config.ui.layout = value.trim().to_string();
                     if let Err(e) = self.config.save() {
-                        self.state.set_status(format!("Failed to save config: {}", e));
+                        self.state
+                            .set_status(format!("Failed to save config: {}", e));
                     } else {
-                        self.state.set_status(format!("Layout set to {}", value.trim()));
+                        self.state
+                            .set_status(format!("Layout set to {}", value.trim()));
                     }
                 } else {
-                    self.state.set_status("Layout must be one of: Standard, Compact, Wide".to_string());
+                    self.state
+                        .set_status("Layout must be one of: Standard, Compact, Wide".to_string());
                 }
             }
             _ => {}
@@ -739,52 +763,69 @@ impl SettingsUI {
 
     fn apply_performance_edit(&mut self, value: String) {
         match self.state.selected_index {
-            0 => { // Cache size
+            0 => {
+                // Cache size
                 if let Ok(size) = value.parse::<u64>() {
-                    if size <= 10000 { // Max 10GB as per validation
+                    if size <= 10000 {
+                        // Max 10GB as per validation
                         self.config.performance.cache_size_mb = size;
                         if let Err(e) = self.config.save() {
-                            self.state.set_status(format!("Failed to save config: {}", e));
+                            self.state
+                                .set_status(format!("Failed to save config: {}", e));
                         } else {
-                            self.state.set_status(format!("Cache size set to {} MB", size));
+                            self.state
+                                .set_status(format!("Cache size set to {} MB", size));
                         }
                     } else {
-                        self.state.set_status("Cache size must be 10GB or less".to_string());
+                        self.state
+                            .set_status("Cache size must be 10GB or less".to_string());
                     }
                 } else {
                     self.state.set_status("Invalid cache size".to_string());
                 }
             }
-            2 => { // Max concurrent
+            2 => {
+                // Max concurrent
                 if let Ok(count) = value.parse::<u32>() {
                     if count > 0 && count <= 50 {
                         self.config.performance.max_concurrent_operations = count;
                         if let Err(e) = self.config.save() {
-                            self.state.set_status(format!("Failed to save config: {}", e));
+                            self.state
+                                .set_status(format!("Failed to save config: {}", e));
                         } else {
-                            self.state.set_status(format!("Max concurrent operations set to {}", count));
+                            self.state
+                                .set_status(format!("Max concurrent operations set to {}", count));
                         }
                     } else {
-                        self.state.set_status("Concurrent operations must be between 1 and 50".to_string());
+                        self.state.set_status(
+                            "Concurrent operations must be between 1 and 50".to_string(),
+                        );
                     }
                 } else {
-                    self.state.set_status("Invalid concurrent operations count".to_string());
+                    self.state
+                        .set_status("Invalid concurrent operations count".to_string());
                 }
             }
-            4 => { // Cleanup interval
+            4 => {
+                // Cleanup interval
                 if let Ok(hours) = value.parse::<u32>() {
-                    if hours <= 8760 { // Max 1 year as per validation
+                    if hours <= 8760 {
+                        // Max 1 year as per validation
                         self.config.performance.cleanup_interval_hours = hours;
                         if let Err(e) = self.config.save() {
-                            self.state.set_status(format!("Failed to save config: {}", e));
+                            self.state
+                                .set_status(format!("Failed to save config: {}", e));
                         } else {
-                            self.state.set_status(format!("Cleanup interval set to {} hours", hours));
+                            self.state
+                                .set_status(format!("Cleanup interval set to {} hours", hours));
                         }
                     } else {
-                        self.state.set_status("Cleanup interval must be 1 year or less".to_string());
+                        self.state
+                            .set_status("Cleanup interval must be 1 year or less".to_string());
                     }
                 } else {
-                    self.state.set_status("Invalid cleanup interval".to_string());
+                    self.state
+                        .set_status("Invalid cleanup interval".to_string());
                 }
             }
             _ => {}
@@ -793,20 +834,27 @@ impl SettingsUI {
 
     fn apply_privacy_edit(&mut self, value: String) {
         match self.state.selected_index {
-            2 => { // Data retention days
+            2 => {
+                // Data retention days
                 if let Ok(days) = value.parse::<u32>() {
-                    if days >= 30 && days <= 3650 { // 30 days to 10 years as per validation
+                    if days >= 30 && days <= 3650 {
+                        // 30 days to 10 years as per validation
                         self.config.privacy.data_retention_days = days;
                         if let Err(e) = self.config.save() {
-                            self.state.set_status(format!("Failed to save config: {}", e));
+                            self.state
+                                .set_status(format!("Failed to save config: {}", e));
                         } else {
-                            self.state.set_status(format!("Data retention set to {} days", days));
+                            self.state
+                                .set_status(format!("Data retention set to {} days", days));
                         }
                     } else {
-                        self.state.set_status("Data retention must be between 30 days and 10 years".to_string());
+                        self.state.set_status(
+                            "Data retention must be between 30 days and 10 years".to_string(),
+                        );
                     }
                 } else {
-                    self.state.set_status("Invalid data retention period".to_string());
+                    self.state
+                        .set_status("Invalid data retention period".to_string());
                 }
             }
             _ => {}
@@ -815,33 +863,43 @@ impl SettingsUI {
 
     fn apply_keyboard_edit(&mut self, value: String) {
         match self.state.selected_index {
-            2 => { // Repeat delay
+            2 => {
+                // Repeat delay
                 if let Ok(delay) = value.parse::<u32>() {
-                    if delay >= 100 && delay <= 2000 { // 0.1s to 2s
+                    if delay >= 100 && delay <= 2000 {
+                        // 0.1s to 2s
                         self.config.keyboard.repeat_delay = delay;
                         if let Err(e) = self.config.save() {
-                            self.state.set_status(format!("Failed to save config: {}", e));
+                            self.state
+                                .set_status(format!("Failed to save config: {}", e));
                         } else {
-                            self.state.set_status(format!("Repeat delay set to {} ms", delay));
+                            self.state
+                                .set_status(format!("Repeat delay set to {} ms", delay));
                         }
                     } else {
-                        self.state.set_status("Repeat delay must be between 100 and 2000 ms".to_string());
+                        self.state
+                            .set_status("Repeat delay must be between 100 and 2000 ms".to_string());
                     }
                 } else {
                     self.state.set_status("Invalid repeat delay".to_string());
                 }
             }
-            3 => { // Repeat rate
+            3 => {
+                // Repeat rate
                 if let Ok(rate) = value.parse::<u32>() {
-                    if rate >= 10 && rate <= 200 { // 10ms to 200ms
+                    if rate >= 10 && rate <= 200 {
+                        // 10ms to 200ms
                         self.config.keyboard.repeat_rate = rate;
                         if let Err(e) = self.config.save() {
-                            self.state.set_status(format!("Failed to save config: {}", e));
+                            self.state
+                                .set_status(format!("Failed to save config: {}", e));
                         } else {
-                            self.state.set_status(format!("Repeat rate set to {} ms", rate));
+                            self.state
+                                .set_status(format!("Repeat rate set to {} ms", rate));
                         }
                     } else {
-                        self.state.set_status("Repeat rate must be between 10 and 200 ms".to_string());
+                        self.state
+                            .set_status("Repeat rate must be between 10 and 200 ms".to_string());
                     }
                 } else {
                     self.state.set_status("Invalid repeat rate".to_string());
@@ -853,14 +911,16 @@ impl SettingsUI {
 
     fn apply_advanced_edit(&mut self, value: String) {
         match self.state.selected_index {
-            2 => { // Database path
+            2 => {
+                // Database path
                 use std::path::PathBuf;
                 let path = PathBuf::from(value.trim());
                 if let Some(parent) = path.parent() {
                     if parent.exists() || path.is_absolute() {
                         self.config.advanced.database_path = path;
                         if let Err(e) = self.config.save() {
-                            self.state.set_status(format!("Failed to save config: {}", e));
+                            self.state
+                                .set_status(format!("Failed to save config: {}", e));
                         } else {
                             self.state.set_status("Database path updated".to_string());
                         }
@@ -868,20 +928,26 @@ impl SettingsUI {
                         self.state.set_status("Invalid database path".to_string());
                     }
                 } else {
-                    self.state.set_status("Database path must include filename".to_string());
+                    self.state
+                        .set_status("Database path must include filename".to_string());
                 }
             }
-            3 => { // Backup count
+            3 => {
+                // Backup count
                 if let Ok(count) = value.parse::<u32>() {
-                    if count <= 100 { // Max 100 backups
+                    if count <= 100 {
+                        // Max 100 backups
                         self.config.advanced.backup_count = count;
                         if let Err(e) = self.config.save() {
-                            self.state.set_status(format!("Failed to save config: {}", e));
+                            self.state
+                                .set_status(format!("Failed to save config: {}", e));
                         } else {
-                            self.state.set_status(format!("Backup count set to {}", count));
+                            self.state
+                                .set_status(format!("Backup count set to {}", count));
                         }
                     } else {
-                        self.state.set_status("Backup count must be 100 or less".to_string());
+                        self.state
+                            .set_status("Backup count must be 100 or less".to_string());
                     }
                 } else {
                     self.state.set_status("Invalid backup count".to_string());
@@ -893,52 +959,71 @@ impl SettingsUI {
 
     fn apply_accounts_edit(&mut self, value: String) {
         match self.state.selected_index {
-            1 => { // Connection timeout
+            1 => {
+                // Connection timeout
                 if let Ok(timeout) = value.parse::<u32>() {
-                    if timeout >= 5 && timeout <= 300 { // 5 seconds to 5 minutes
+                    if timeout >= 5 && timeout <= 300 {
+                        // 5 seconds to 5 minutes
                         self.config.accounts.connection_timeout = timeout;
                         if let Err(e) = self.config.save() {
-                            self.state.set_status(format!("Failed to save config: {}", e));
+                            self.state
+                                .set_status(format!("Failed to save config: {}", e));
                         } else {
-                            self.state.set_status(format!("Connection timeout set to {} seconds", timeout));
+                            self.state.set_status(format!(
+                                "Connection timeout set to {} seconds",
+                                timeout
+                            ));
                         }
                     } else {
-                        self.state.set_status("Connection timeout must be between 5 and 300 seconds".to_string());
+                        self.state.set_status(
+                            "Connection timeout must be between 5 and 300 seconds".to_string(),
+                        );
                     }
                 } else {
-                    self.state.set_status("Invalid connection timeout".to_string());
+                    self.state
+                        .set_status("Invalid connection timeout".to_string());
                 }
             }
-            2 => { // Retry attempts
+            2 => {
+                // Retry attempts
                 if let Ok(attempts) = value.parse::<u32>() {
                     if attempts >= 1 && attempts <= 10 {
                         self.config.accounts.retry_attempts = attempts;
                         if let Err(e) = self.config.save() {
-                            self.state.set_status(format!("Failed to save config: {}", e));
+                            self.state
+                                .set_status(format!("Failed to save config: {}", e));
                         } else {
-                            self.state.set_status(format!("Retry attempts set to {}", attempts));
+                            self.state
+                                .set_status(format!("Retry attempts set to {}", attempts));
                         }
                     } else {
-                        self.state.set_status("Retry attempts must be between 1 and 10".to_string());
+                        self.state
+                            .set_status("Retry attempts must be between 1 and 10".to_string());
                     }
                 } else {
                     self.state.set_status("Invalid retry attempts".to_string());
                 }
             }
-            3 => { // OAuth redirect port
+            3 => {
+                // OAuth redirect port
                 if let Ok(port) = value.parse::<u16>() {
-                    if port >= 1024 { // Non-privileged ports (u16 max is 65535)
+                    if port >= 1024 {
+                        // Non-privileged ports (u16 max is 65535)
                         self.config.accounts.oauth_redirect_port = port;
                         if let Err(e) = self.config.save() {
-                            self.state.set_status(format!("Failed to save config: {}", e));
+                            self.state
+                                .set_status(format!("Failed to save config: {}", e));
                         } else {
-                            self.state.set_status(format!("OAuth redirect port set to {}", port));
+                            self.state
+                                .set_status(format!("OAuth redirect port set to {}", port));
                         }
                     } else {
-                        self.state.set_status("OAuth port must be between 1024 and 65535".to_string());
+                        self.state
+                            .set_status("OAuth port must be between 1024 and 65535".to_string());
                     }
                 } else {
-                    self.state.set_status("Invalid OAuth redirect port".to_string());
+                    self.state
+                        .set_status("Invalid OAuth redirect port".to_string());
                 }
             }
             _ => {}
@@ -947,98 +1032,124 @@ impl SettingsUI {
 
     fn apply_ai_edit(&mut self, value: String) {
         match self.state.selected_index {
-            1 => { // AI Provider
+            1 => {
+                // AI Provider
                 if !value.trim().is_empty() {
                     self.config.ai.provider = value.trim().to_string();
                     if let Err(e) = self.config.save() {
-                        self.state.set_status(format!("Failed to save config: {}", e));
+                        self.state
+                            .set_status(format!("Failed to save config: {}", e));
                     } else {
-                        self.state.set_status(format!("AI provider set to '{}'", value.trim()));
+                        self.state
+                            .set_status(format!("AI provider set to '{}'", value.trim()));
                     }
                 } else {
-                    self.state.set_status("AI provider cannot be empty".to_string());
+                    self.state
+                        .set_status("AI provider cannot be empty".to_string());
                 }
             }
-            2 => { // AI Model
+            2 => {
+                // AI Model
                 if !value.trim().is_empty() {
                     self.config.ai.model = value.trim().to_string();
                     if let Err(e) = self.config.save() {
-                        self.state.set_status(format!("Failed to save config: {}", e));
+                        self.state
+                            .set_status(format!("Failed to save config: {}", e));
                     } else {
-                        self.state.set_status(format!("AI model set to '{}'", value.trim()));
+                        self.state
+                            .set_status(format!("AI model set to '{}'", value.trim()));
                     }
                 } else {
-                    self.state.set_status("AI model cannot be empty".to_string());
+                    self.state
+                        .set_status("AI model cannot be empty".to_string());
                 }
             }
-            3 => { // API Key
+            3 => {
+                // API Key
                 if !value.trim().is_empty() {
                     self.config.ai.api_key = Some(value.trim().to_string());
                     if let Err(e) = self.config.save() {
-                        self.state.set_status(format!("Failed to save config: {}", e));
+                        self.state
+                            .set_status(format!("Failed to save config: {}", e));
                     } else {
                         self.state.set_status("API key updated".to_string());
                     }
                 } else {
                     self.config.ai.api_key = None;
                     if let Err(e) = self.config.save() {
-                        self.state.set_status(format!("Failed to save config: {}", e));
+                        self.state
+                            .set_status(format!("Failed to save config: {}", e));
                     } else {
                         self.state.set_status("API key cleared".to_string());
                     }
                 }
             }
-            4 => { // Endpoint
+            4 => {
+                // Endpoint
                 if !value.trim().is_empty() {
                     self.config.ai.endpoint = Some(value.trim().to_string());
                     if let Err(e) = self.config.save() {
-                        self.state.set_status(format!("Failed to save config: {}", e));
+                        self.state
+                            .set_status(format!("Failed to save config: {}", e));
                     } else {
-                        self.state.set_status(format!("AI endpoint set to '{}'", value.trim()));
+                        self.state
+                            .set_status(format!("AI endpoint set to '{}'", value.trim()));
                     }
                 } else {
                     self.config.ai.endpoint = None;
                     if let Err(e) = self.config.save() {
-                        self.state.set_status(format!("Failed to save config: {}", e));
+                        self.state
+                            .set_status(format!("Failed to save config: {}", e));
                     } else {
-                        self.state.set_status("AI endpoint reset to default".to_string());
+                        self.state
+                            .set_status("AI endpoint reset to default".to_string());
                     }
                 }
             }
-            6 => { // Temperature
+            6 => {
+                // Temperature
                 if let Ok(temp) = value.parse::<f32>() {
                     if temp >= 0.0 && temp <= 2.0 {
                         self.config.ai.temperature = temp;
                         if let Err(e) = self.config.save() {
-                            self.state.set_status(format!("Failed to save config: {}", e));
+                            self.state
+                                .set_status(format!("Failed to save config: {}", e));
                         } else {
-                            self.state.set_status(format!("AI temperature set to {:.1}", temp));
+                            self.state
+                                .set_status(format!("AI temperature set to {:.1}", temp));
                         }
                     } else {
-                        self.state.set_status("Temperature must be between 0.0 and 2.0".to_string());
+                        self.state
+                            .set_status("Temperature must be between 0.0 and 2.0".to_string());
                     }
                 } else {
-                    self.state.set_status("Invalid temperature value".to_string());
+                    self.state
+                        .set_status("Invalid temperature value".to_string());
                 }
             }
-            7 => { // Max tokens
+            7 => {
+                // Max tokens
                 if let Ok(tokens) = value.parse::<u32>() {
                     if tokens >= 1 && tokens <= 32000 {
                         self.config.ai.max_tokens = tokens;
                         if let Err(e) = self.config.save() {
-                            self.state.set_status(format!("Failed to save config: {}", e));
+                            self.state
+                                .set_status(format!("Failed to save config: {}", e));
                         } else {
-                            self.state.set_status(format!("Max tokens set to {}", tokens));
+                            self.state
+                                .set_status(format!("Max tokens set to {}", tokens));
                         }
                     } else {
-                        self.state.set_status("Max tokens must be between 1 and 32000".to_string());
+                        self.state
+                            .set_status("Max tokens must be between 1 and 32000".to_string());
                     }
                 } else {
                     self.state.set_status("Invalid token count".to_string());
                 }
             }
             _ => {
-                self.state.set_status("This AI setting is not editable".to_string());
+                self.state
+                    .set_status("This AI setting is not editable".to_string());
             }
         }
     }
@@ -1046,9 +1157,14 @@ impl SettingsUI {
     // Real setting actions with config persistence
     fn toggle_auto_sync(&mut self) {
         self.config.general.auto_sync = !self.config.general.auto_sync;
-        let status = if self.config.general.auto_sync { "enabled" } else { "disabled" };
+        let status = if self.config.general.auto_sync {
+            "enabled"
+        } else {
+            "disabled"
+        };
         if let Err(e) = self.config.save() {
-            self.state.set_status(format!("Failed to save config: {}", e));
+            self.state
+                .set_status(format!("Failed to save config: {}", e));
         } else {
             self.state.set_status(format!("Auto-sync {}", status));
         }
@@ -1057,9 +1173,14 @@ impl SettingsUI {
 
     fn toggle_startup_fetch(&mut self) {
         self.config.general.fetch_on_startup = !self.config.general.fetch_on_startup;
-        let status = if self.config.general.fetch_on_startup { "enabled" } else { "disabled" };
+        let status = if self.config.general.fetch_on_startup {
+            "enabled"
+        } else {
+            "disabled"
+        };
         if let Err(e) = self.config.save() {
-            self.state.set_status(format!("Failed to save config: {}", e));
+            self.state
+                .set_status(format!("Failed to save config: {}", e));
         } else {
             self.state.set_status(format!("Startup fetch {}", status));
         }
@@ -1068,20 +1189,31 @@ impl SettingsUI {
 
     fn toggle_confirm_delete(&mut self) {
         self.config.general.confirm_delete = !self.config.general.confirm_delete;
-        let status = if self.config.general.confirm_delete { "enabled" } else { "disabled" };
-        if let Err(e) = self.config.save() {
-            self.state.set_status(format!("Failed to save config: {}", e));
+        let status = if self.config.general.confirm_delete {
+            "enabled"
         } else {
-            self.state.set_status(format!("Delete confirmation {}", status));
+            "disabled"
+        };
+        if let Err(e) = self.config.save() {
+            self.state
+                .set_status(format!("Failed to save config: {}", e));
+        } else {
+            self.state
+                .set_status(format!("Delete confirmation {}", status));
         }
         self.state.modified = true;
     }
 
     fn toggle_show_notifications(&mut self) {
         self.config.general.show_notifications = !self.config.general.show_notifications;
-        let status = if self.config.general.show_notifications { "enabled" } else { "disabled" };
+        let status = if self.config.general.show_notifications {
+            "enabled"
+        } else {
+            "disabled"
+        };
         if let Err(e) = self.config.save() {
-            self.state.set_status(format!("Failed to save config: {}", e));
+            self.state
+                .set_status(format!("Failed to save config: {}", e));
         } else {
             self.state.set_status(format!("Notifications {}", status));
         }
@@ -1090,34 +1222,48 @@ impl SettingsUI {
 
     fn toggle_mark_read_on_reply(&mut self) {
         self.config.general.mark_read_on_reply = !self.config.general.mark_read_on_reply;
-        let status = if self.config.general.mark_read_on_reply { "enabled" } else { "disabled" };
-        if let Err(e) = self.config.save() {
-            self.state.set_status(format!("Failed to save config: {}", e));
+        let status = if self.config.general.mark_read_on_reply {
+            "enabled"
         } else {
-            self.state.set_status(format!("Mark read on reply {}", status));
+            "disabled"
+        };
+        if let Err(e) = self.config.save() {
+            self.state
+                .set_status(format!("Failed to save config: {}", e));
+        } else {
+            self.state
+                .set_status(format!("Mark read on reply {}", status));
         }
         self.state.modified = true;
     }
 
     fn toggle_incremental_sync(&mut self) {
         self.config.general.incremental_sync = !self.config.general.incremental_sync;
-        let status = if self.config.general.incremental_sync { "enabled" } else { "disabled" };
-        if let Err(e) = self.config.save() {
-            self.state.set_status(format!("Failed to save config: {}", e));
+        let status = if self.config.general.incremental_sync {
+            "enabled"
         } else {
-            self.state.set_status(format!("Incremental sync {}", status));
+            "disabled"
+        };
+        if let Err(e) = self.config.save() {
+            self.state
+                .set_status(format!("Failed to save config: {}", e));
+        } else {
+            self.state
+                .set_status(format!("Incremental sync {}", status));
         }
         self.state.modified = true;
     }
 
     fn open_account_manager(&mut self) {
         self.show_account_manager = true;
-        self.state.set_status("Opening account manager...".to_string());
+        self.state
+            .set_status("Opening account manager...".to_string());
         // TODO: Refresh account list when we have the account manager reference
     }
 
     fn test_connection(&mut self) {
-        self.state.set_status("Connection test started...".to_string());
+        self.state
+            .set_status("Connection test started...".to_string());
         // TODO: Implement actual connection testing
         // For now, just show placeholder message
     }
@@ -1144,9 +1290,14 @@ impl SettingsUI {
 
     fn toggle_auto_discover(&mut self) {
         self.config.accounts.auto_discover = !self.config.accounts.auto_discover;
-        let status = if self.config.accounts.auto_discover { "enabled" } else { "disabled" };
+        let status = if self.config.accounts.auto_discover {
+            "enabled"
+        } else {
+            "disabled"
+        };
         if let Err(e) = self.config.save() {
-            self.state.set_status(format!("Failed to save config: {}", e));
+            self.state
+                .set_status(format!("Failed to save config: {}", e));
         } else {
             self.state.set_status(format!("Auto discovery {}", status));
         }
@@ -1155,23 +1306,33 @@ impl SettingsUI {
 
     fn cycle_theme(&mut self) {
         let themes = ["Dark", "Light", "Auto"];
-        let current_index = themes.iter().position(|&t| t == self.config.ui.theme).unwrap_or(0);
+        let current_index = themes
+            .iter()
+            .position(|&t| t == self.config.ui.theme)
+            .unwrap_or(0);
         let next_index = (current_index + 1) % themes.len();
         self.config.ui.theme = themes[next_index].to_string();
-        
+
         if let Err(e) = self.config.save() {
-            self.state.set_status(format!("Failed to save config: {}", e));
+            self.state
+                .set_status(format!("Failed to save config: {}", e));
         } else {
-            self.state.set_status(format!("Theme changed to {}", self.config.ui.theme));
+            self.state
+                .set_status(format!("Theme changed to {}", self.config.ui.theme));
         }
         self.state.modified = true;
     }
 
     fn toggle_compact_mode(&mut self) {
         self.config.ui.compact_mode = !self.config.ui.compact_mode;
-        let status = if self.config.ui.compact_mode { "enabled" } else { "disabled" };
+        let status = if self.config.ui.compact_mode {
+            "enabled"
+        } else {
+            "disabled"
+        };
         if let Err(e) = self.config.save() {
-            self.state.set_status(format!("Failed to save config: {}", e));
+            self.state
+                .set_status(format!("Failed to save config: {}", e));
         } else {
             self.state.set_status(format!("Compact mode {}", status));
         }
@@ -1180,9 +1341,14 @@ impl SettingsUI {
 
     fn toggle_show_sidebar(&mut self) {
         self.config.ui.show_sidebar = !self.config.ui.show_sidebar;
-        let status = if self.config.ui.show_sidebar { "enabled" } else { "disabled" };
+        let status = if self.config.ui.show_sidebar {
+            "enabled"
+        } else {
+            "disabled"
+        };
         if let Err(e) = self.config.save() {
-            self.state.set_status(format!("Failed to save config: {}", e));
+            self.state
+                .set_status(format!("Failed to save config: {}", e));
         } else {
             self.state.set_status(format!("Sidebar {}", status));
         }
@@ -1191,9 +1357,14 @@ impl SettingsUI {
 
     fn toggle_show_status_bar(&mut self) {
         self.config.ui.show_status_bar = !self.config.ui.show_status_bar;
-        let status = if self.config.ui.show_status_bar { "enabled" } else { "disabled" };
+        let status = if self.config.ui.show_status_bar {
+            "enabled"
+        } else {
+            "disabled"
+        };
         if let Err(e) = self.config.save() {
-            self.state.set_status(format!("Failed to save config: {}", e));
+            self.state
+                .set_status(format!("Failed to save config: {}", e));
         } else {
             self.state.set_status(format!("Status bar {}", status));
         }
@@ -1202,9 +1373,14 @@ impl SettingsUI {
 
     fn toggle_animations(&mut self) {
         self.config.ui.animations = !self.config.ui.animations;
-        let status = if self.config.ui.animations { "enabled" } else { "disabled" };
+        let status = if self.config.ui.animations {
+            "enabled"
+        } else {
+            "disabled"
+        };
         if let Err(e) = self.config.save() {
-            self.state.set_status(format!("Failed to save config: {}", e));
+            self.state
+                .set_status(format!("Failed to save config: {}", e));
         } else {
             self.state.set_status(format!("Animations {}", status));
         }
@@ -1217,34 +1393,44 @@ impl SettingsUI {
 
     #[allow(dead_code)] // Future implementation - Keyboard config UI
     fn open_keyboard_config(&mut self) {
-        self.state.set_status("Opening keyboard configuration...".to_string());
+        self.state
+            .set_status("Opening keyboard configuration...".to_string());
     }
 
     fn reset_keyboard_defaults(&mut self) {
         self.config.keyboard = crate::config::KeyboardConfig::default();
         if let Err(e) = self.config.save() {
-            self.state.set_status(format!("Failed to save config: {}", e));
+            self.state
+                .set_status(format!("Failed to save config: {}", e));
         } else {
-            self.state.set_status("Keyboard settings reset to defaults".to_string());
+            self.state
+                .set_status("Keyboard settings reset to defaults".to_string());
         }
         self.state.modified = true;
     }
 
     #[allow(dead_code)] // Future implementation - Import keyboard config
     fn import_keyboard_config(&mut self) {
-        self.state.set_status("Importing keyboard configuration...".to_string());
+        self.state
+            .set_status("Importing keyboard configuration...".to_string());
     }
 
     #[allow(dead_code)] // Future implementation - Export keyboard config
     fn export_keyboard_config(&mut self) {
-        self.state.set_status("Exporting keyboard configuration...".to_string());
+        self.state
+            .set_status("Exporting keyboard configuration...".to_string());
     }
 
     fn toggle_vim_mode(&mut self) {
         self.config.keyboard.vim_mode = !self.config.keyboard.vim_mode;
-        let status = if self.config.keyboard.vim_mode { "enabled" } else { "disabled" };
+        let status = if self.config.keyboard.vim_mode {
+            "enabled"
+        } else {
+            "disabled"
+        };
         if let Err(e) = self.config.save() {
-            self.state.set_status(format!("Failed to save config: {}", e));
+            self.state
+                .set_status(format!("Failed to save config: {}", e));
         } else {
             self.state.set_status(format!("Vim mode {}", status));
         }
@@ -1253,25 +1439,37 @@ impl SettingsUI {
 
     fn configure_custom_bindings(&mut self) {
         self.show_keyboard_bindings = true;
-        self.state.set_status("Opening keyboard bindings configuration...".to_string());
+        self.state
+            .set_status("Opening keyboard bindings configuration...".to_string());
     }
 
     fn toggle_preload_images(&mut self) {
         self.config.performance.preload_images = !self.config.performance.preload_images;
-        let status = if self.config.performance.preload_images { "enabled" } else { "disabled" };
-        if let Err(e) = self.config.save() {
-            self.state.set_status(format!("Failed to save config: {}", e));
+        let status = if self.config.performance.preload_images {
+            "enabled"
         } else {
-            self.state.set_status(format!("Image preloading {}", status));
+            "disabled"
+        };
+        if let Err(e) = self.config.save() {
+            self.state
+                .set_status(format!("Failed to save config: {}", e));
+        } else {
+            self.state
+                .set_status(format!("Image preloading {}", status));
         }
         self.state.modified = true;
     }
 
     fn toggle_background_sync(&mut self) {
         self.config.performance.background_sync = !self.config.performance.background_sync;
-        let status = if self.config.performance.background_sync { "enabled" } else { "disabled" };
+        let status = if self.config.performance.background_sync {
+            "enabled"
+        } else {
+            "disabled"
+        };
         if let Err(e) = self.config.save() {
-            self.state.set_status(format!("Failed to save config: {}", e));
+            self.state
+                .set_status(format!("Failed to save config: {}", e));
         } else {
             self.state.set_status(format!("Background sync {}", status));
         }
@@ -1284,20 +1482,31 @@ impl SettingsUI {
 
     fn toggle_tracking_protection(&mut self) {
         self.config.privacy.tracking_protection = !self.config.privacy.tracking_protection;
-        let status = if self.config.privacy.tracking_protection { "enabled" } else { "disabled" };
-        if let Err(e) = self.config.save() {
-            self.state.set_status(format!("Failed to save config: {}", e));
+        let status = if self.config.privacy.tracking_protection {
+            "enabled"
         } else {
-            self.state.set_status(format!("Tracking protection {}", status));
+            "disabled"
+        };
+        if let Err(e) = self.config.save() {
+            self.state
+                .set_status(format!("Failed to save config: {}", e));
+        } else {
+            self.state
+                .set_status(format!("Tracking protection {}", status));
         }
         self.state.modified = true;
     }
 
     fn toggle_external_images(&mut self) {
         self.config.privacy.external_images = !self.config.privacy.external_images;
-        let status = if self.config.privacy.external_images { "allowed" } else { "blocked" };
+        let status = if self.config.privacy.external_images {
+            "allowed"
+        } else {
+            "blocked"
+        };
         if let Err(e) = self.config.save() {
-            self.state.set_status(format!("Failed to save config: {}", e));
+            self.state
+                .set_status(format!("Failed to save config: {}", e));
         } else {
             self.state.set_status(format!("External images {}", status));
         }
@@ -1306,9 +1515,14 @@ impl SettingsUI {
 
     fn toggle_analytics(&mut self) {
         self.config.privacy.analytics = !self.config.privacy.analytics;
-        let status = if self.config.privacy.analytics { "enabled" } else { "disabled" };
+        let status = if self.config.privacy.analytics {
+            "enabled"
+        } else {
+            "disabled"
+        };
         if let Err(e) = self.config.save() {
-            self.state.set_status(format!("Failed to save config: {}", e));
+            self.state
+                .set_status(format!("Failed to save config: {}", e));
         } else {
             self.state.set_status(format!("Analytics {}", status));
         }
@@ -1317,13 +1531,15 @@ impl SettingsUI {
 
     #[allow(dead_code)] // Future implementation - Data retention settings
     fn configure_data_retention(&mut self) {
-        self.state.set_status("Configuring data retention...".to_string());
+        self.state
+            .set_status("Configuring data retention...".to_string());
     }
 
     fn clear_cache(&mut self) {
         // TODO: Implement actual cache clearing logic
         // For now, just show confirmation
-        self.state.set_status("Cache cleared successfully".to_string());
+        self.state
+            .set_status("Cache cleared successfully".to_string());
         self.state.modified = true;
     }
 
@@ -1334,9 +1550,14 @@ impl SettingsUI {
 
     fn toggle_ai_enabled(&mut self) {
         self.config.ai.enabled = !self.config.ai.enabled;
-        let status = if self.config.ai.enabled { "enabled" } else { "disabled" };
+        let status = if self.config.ai.enabled {
+            "enabled"
+        } else {
+            "disabled"
+        };
         if let Err(e) = self.config.save() {
-            self.state.set_status(format!("Failed to save config: {}", e));
+            self.state
+                .set_status(format!("Failed to save config: {}", e));
         } else {
             self.state.set_status(format!("AI assistant {}", status));
         }
@@ -1351,9 +1572,13 @@ impl SettingsUI {
             AIPrivacyMode::CloudAlways => AIPrivacyMode::LocalOnly,
         };
         if let Err(e) = self.config.save() {
-            self.state.set_status(format!("Failed to save config: {}", e));
+            self.state
+                .set_status(format!("Failed to save config: {}", e));
         } else {
-            self.state.set_status(format!("AI privacy mode set to {:?}", self.config.ai.privacy_mode));
+            self.state.set_status(format!(
+                "AI privacy mode set to {:?}",
+                self.config.ai.privacy_mode
+            ));
         }
         self.state.modified = true;
     }
@@ -1366,17 +1591,20 @@ impl SettingsUI {
 
     #[allow(dead_code)] // Future implementation - AI privacy config
     fn configure_ai_privacy(&mut self) {
-        self.state.set_status("Configuring AI privacy...".to_string());
+        self.state
+            .set_status("Configuring AI privacy...".to_string());
     }
 
     #[allow(dead_code)] // Future implementation - AI connection test
     fn test_ai_connection(&mut self) {
-        self.state.set_status("Testing AI connection...".to_string());
+        self.state
+            .set_status("Testing AI connection...".to_string());
     }
 
     #[allow(dead_code)] // Future implementation - AI features config
     fn configure_ai_features(&mut self) {
-        self.state.set_status("Configuring AI features...".to_string());
+        self.state
+            .set_status("Configuring AI features...".to_string());
     }
 
     #[allow(dead_code)] // Future implementation - AI cache settings
@@ -1386,19 +1614,26 @@ impl SettingsUI {
 
     #[allow(dead_code)] // Future implementation - AI performance settings
     fn ai_performance_settings(&mut self) {
-        self.state.set_status("Configuring AI performance...".to_string());
+        self.state
+            .set_status("Configuring AI performance...".to_string());
     }
 
     #[allow(dead_code)] // Future implementation - Full AI config UI
     fn open_full_ai_config(&mut self) {
-        self.state.set_status("Opening full AI configuration...".to_string());
+        self.state
+            .set_status("Opening full AI configuration...".to_string());
     }
 
     fn toggle_debug_mode(&mut self) {
         self.config.advanced.debug_mode = !self.config.advanced.debug_mode;
-        let status = if self.config.advanced.debug_mode { "enabled" } else { "disabled" };
+        let status = if self.config.advanced.debug_mode {
+            "enabled"
+        } else {
+            "disabled"
+        };
         if let Err(e) = self.config.save() {
-            self.state.set_status(format!("Failed to save config: {}", e));
+            self.state
+                .set_status(format!("Failed to save config: {}", e));
         } else {
             self.state.set_status(format!("Debug mode {}", status));
         }
@@ -1415,9 +1650,13 @@ impl SettingsUI {
             LogLevel::Trace => LogLevel::Error,
         };
         if let Err(e) = self.config.save() {
-            self.state.set_status(format!("Failed to save config: {}", e));
+            self.state
+                .set_status(format!("Failed to save config: {}", e));
         } else {
-            self.state.set_status(format!("Log level set to {:?}", self.config.advanced.log_level));
+            self.state.set_status(format!(
+                "Log level set to {:?}",
+                self.config.advanced.log_level
+            ));
         }
         self.state.modified = true;
     }
@@ -1428,26 +1667,31 @@ impl SettingsUI {
     }
 
     fn database_maintenance(&mut self) {
-        self.state.set_status("Running database maintenance...".to_string());
+        self.state
+            .set_status("Running database maintenance...".to_string());
     }
 
     fn reset_all_settings(&mut self) {
-        self.state.set_status("All settings reset to defaults".to_string());
+        self.state
+            .set_status("All settings reset to defaults".to_string());
         self.state.modified = true;
     }
 
     #[allow(dead_code)] // Future implementation - Export configuration
     fn export_configuration(&mut self) {
-        self.state.set_status("Exporting configuration...".to_string());
+        self.state
+            .set_status("Exporting configuration...".to_string());
     }
 
     #[allow(dead_code)] // Future implementation - Import configuration
     fn import_configuration(&mut self) {
-        self.state.set_status("Importing configuration...".to_string());
+        self.state
+            .set_status("Importing configuration...".to_string());
     }
 
     fn reset_current_setting(&mut self) {
-        self.state.set_status("Setting reset to default".to_string());
+        self.state
+            .set_status("Setting reset to default".to_string());
         self.state.modified = true;
     }
 
@@ -1491,12 +1735,12 @@ impl SettingsUI {
 
         // Render footer with status and shortcuts
         self.render_footer(frame, chunks[2], theme);
-        
+
         // Render account manager overlay if shown
         if self.show_account_manager {
             self.account_manager_ui.render(frame, area, theme);
         }
-        
+
         // Render keyboard bindings manager overlay if shown
         if self.show_keyboard_bindings {
             self.keyboard_bindings_ui.render(frame, area, theme);
@@ -1524,30 +1768,30 @@ impl SettingsUI {
 
     fn render_tab_content(&mut self, frame: &mut Frame, area: Rect, theme: &Theme) {
         match self.state.current_tab {
-            SettingsTab::Core => {
-                match self.state.current_sub_section {
-                    SettingsSubSection::General => self.render_general_tab(frame, area, theme),
-                    SettingsSubSection::Accounts => self.render_accounts_tab(frame, area, theme),
-                    SettingsSubSection::Performance => self.render_performance_tab(frame, area, theme),
-                    _ => {}
-                }
+            SettingsTab::Core => match self.state.current_sub_section {
+                SettingsSubSection::General => self.render_general_tab(frame, area, theme),
+                SettingsSubSection::Accounts => self.render_accounts_tab(frame, area, theme),
+                SettingsSubSection::Performance => self.render_performance_tab(frame, area, theme),
+                _ => {}
             },
-            SettingsTab::Interface => {
-                match self.state.current_sub_section {
-                    SettingsSubSection::UITheme => self.render_ui_tab(frame, area, theme),
-                    SettingsSubSection::ContextIndicators => self.render_context_indicators_tab(frame, area, theme),
-                    SettingsSubSection::FocusIndicators => self.render_focus_indicators_tab(frame, area, theme),
-                    SettingsSubSection::ResponsiveLayout => self.render_responsive_layout_tab(frame, area, theme),
-                    SettingsSubSection::Keyboard => self.render_keyboard_tab(frame, area, theme),
-                    _ => {}
+            SettingsTab::Interface => match self.state.current_sub_section {
+                SettingsSubSection::UITheme => self.render_ui_tab(frame, area, theme),
+                SettingsSubSection::ContextIndicators => {
+                    self.render_context_indicators_tab(frame, area, theme)
                 }
+                SettingsSubSection::FocusIndicators => {
+                    self.render_focus_indicators_tab(frame, area, theme)
+                }
+                SettingsSubSection::ResponsiveLayout => {
+                    self.render_responsive_layout_tab(frame, area, theme)
+                }
+                SettingsSubSection::Keyboard => self.render_keyboard_tab(frame, area, theme),
+                _ => {}
             },
-            SettingsTab::Privacy => {
-                match self.state.current_sub_section {
-                    SettingsSubSection::Privacy => self.render_privacy_tab(frame, area, theme),
-                    SettingsSubSection::AI => self.render_ai_tab(frame, area, theme),
-                    _ => {}
-                }
+            SettingsTab::Privacy => match self.state.current_sub_section {
+                SettingsSubSection::Privacy => self.render_privacy_tab(frame, area, theme),
+                SettingsSubSection::AI => self.render_ai_tab(frame, area, theme),
+                _ => {}
             },
             SettingsTab::Advanced => self.render_advanced_tab(frame, area, theme),
         }
@@ -1555,26 +1799,78 @@ impl SettingsUI {
 
     fn render_general_tab(&mut self, frame: &mut Frame, area: Rect, theme: &Theme) {
         let items = vec![
-            ListItem::new(format!("🔄 Auto-sync emails: {}", 
-                if self.config.general.auto_sync { "Enabled" } else { "Disabled" })),
-            ListItem::new(format!("⏱️  Sync interval: {} minutes", self.config.general.sync_interval_minutes)),
-            ListItem::new(format!("🚀 Fetch on startup: {}", 
-                if self.config.general.fetch_on_startup { "Enabled" } else { "Disabled" })),
-            ListItem::new(format!("📬 Use incremental sync: {}", 
-                if self.config.general.incremental_sync { "Enabled" } else { "Disabled" })),
-            ListItem::new(format!("🔁 Max concurrent syncs: {}", self.config.general.max_concurrent_syncs)),
-            ListItem::new(format!("📂 Default folder: {}", self.config.general.default_folder)),
-            ListItem::new(format!("⚠️  Confirm before delete: {}", 
-                if self.config.general.confirm_delete { "Enabled" } else { "Disabled" })),
-            ListItem::new(format!("🔔 Show notifications: {}", 
-                if self.config.general.show_notifications { "Enabled" } else { "Disabled" })),
-            ListItem::new(format!("🧵 Thread grouping: {:?}", self.config.general.thread_grouping)),
-            ListItem::new(format!("👁️  Mark as read on reply: {}", 
-                if self.config.general.mark_read_on_reply { "Enabled" } else { "Disabled" })),
+            ListItem::new(format!(
+                "🔄 Auto-sync emails: {}",
+                if self.config.general.auto_sync {
+                    "Enabled"
+                } else {
+                    "Disabled"
+                }
+            )),
+            ListItem::new(format!(
+                "⏱️  Sync interval: {} minutes",
+                self.config.general.sync_interval_minutes
+            )),
+            ListItem::new(format!(
+                "🚀 Fetch on startup: {}",
+                if self.config.general.fetch_on_startup {
+                    "Enabled"
+                } else {
+                    "Disabled"
+                }
+            )),
+            ListItem::new(format!(
+                "📬 Use incremental sync: {}",
+                if self.config.general.incremental_sync {
+                    "Enabled"
+                } else {
+                    "Disabled"
+                }
+            )),
+            ListItem::new(format!(
+                "🔁 Max concurrent syncs: {}",
+                self.config.general.max_concurrent_syncs
+            )),
+            ListItem::new(format!(
+                "📂 Default folder: {}",
+                self.config.general.default_folder
+            )),
+            ListItem::new(format!(
+                "⚠️  Confirm before delete: {}",
+                if self.config.general.confirm_delete {
+                    "Enabled"
+                } else {
+                    "Disabled"
+                }
+            )),
+            ListItem::new(format!(
+                "🔔 Show notifications: {}",
+                if self.config.general.show_notifications {
+                    "Enabled"
+                } else {
+                    "Disabled"
+                }
+            )),
+            ListItem::new(format!(
+                "🧵 Thread grouping: {:?}",
+                self.config.general.thread_grouping
+            )),
+            ListItem::new(format!(
+                "👁️  Mark as read on reply: {}",
+                if self.config.general.mark_read_on_reply {
+                    "Enabled"
+                } else {
+                    "Disabled"
+                }
+            )),
         ];
 
         let list = List::new(items)
-            .block(Block::default().title("General Settings").borders(Borders::ALL))
+            .block(
+                Block::default()
+                    .title("General Settings")
+                    .borders(Borders::ALL),
+            )
             .highlight_style(theme.get_component_style("selected", true))
             .highlight_symbol("► ");
 
@@ -1583,17 +1879,36 @@ impl SettingsUI {
 
     fn render_accounts_tab(&mut self, frame: &mut Frame, area: Rect, theme: &Theme) {
         let items = vec![
-            ListItem::new(format!("🔍 Auto discover: {}", 
-                if self.config.accounts.auto_discover { "Enabled" } else { "Disabled" })),
-            ListItem::new(format!("⏱️ Connection timeout: {} seconds", self.config.accounts.connection_timeout)),
-            ListItem::new(format!("🔄 Retry attempts: {}", self.config.accounts.retry_attempts)),
-            ListItem::new(format!("🌐 OAuth redirect port: {}", self.config.accounts.oauth_redirect_port)),
+            ListItem::new(format!(
+                "🔍 Auto discover: {}",
+                if self.config.accounts.auto_discover {
+                    "Enabled"
+                } else {
+                    "Disabled"
+                }
+            )),
+            ListItem::new(format!(
+                "⏱️ Connection timeout: {} seconds",
+                self.config.accounts.connection_timeout
+            )),
+            ListItem::new(format!(
+                "🔄 Retry attempts: {}",
+                self.config.accounts.retry_attempts
+            )),
+            ListItem::new(format!(
+                "🌐 OAuth redirect port: {}",
+                self.config.accounts.oauth_redirect_port
+            )),
             ListItem::new("📧 Manage email accounts"),
             ListItem::new("🔍 Test connection"),
         ];
 
         let list = List::new(items)
-            .block(Block::default().title("Account Management").borders(Borders::ALL))
+            .block(
+                Block::default()
+                    .title("Account Management")
+                    .borders(Borders::ALL),
+            )
             .highlight_style(theme.get_component_style("selected", true))
             .highlight_symbol("► ");
 
@@ -1603,20 +1918,48 @@ impl SettingsUI {
     fn render_ui_tab(&mut self, frame: &mut Frame, area: Rect, theme: &Theme) {
         let items = vec![
             ListItem::new(format!("🎨 Theme: {}", self.config.ui.theme)),
-            ListItem::new(format!("📏 Compact mode: {}", 
-                if self.config.ui.compact_mode { "Enabled" } else { "Disabled" })),
-            ListItem::new(format!("📂 Show sidebar: {}", 
-                if self.config.ui.show_sidebar { "Enabled" } else { "Disabled" })),
-            ListItem::new(format!("📊 Show status bar: {}", 
-                if self.config.ui.show_status_bar { "Enabled" } else { "Disabled" })),
+            ListItem::new(format!(
+                "📏 Compact mode: {}",
+                if self.config.ui.compact_mode {
+                    "Enabled"
+                } else {
+                    "Disabled"
+                }
+            )),
+            ListItem::new(format!(
+                "📂 Show sidebar: {}",
+                if self.config.ui.show_sidebar {
+                    "Enabled"
+                } else {
+                    "Disabled"
+                }
+            )),
+            ListItem::new(format!(
+                "📊 Show status bar: {}",
+                if self.config.ui.show_status_bar {
+                    "Enabled"
+                } else {
+                    "Disabled"
+                }
+            )),
             ListItem::new(format!("🔤 Font size: {}", self.config.ui.font_size)),
-            ListItem::new(format!("✨ Animations: {}", 
-                if self.config.ui.animations { "Enabled" } else { "Disabled" })),
+            ListItem::new(format!(
+                "✨ Animations: {}",
+                if self.config.ui.animations {
+                    "Enabled"
+                } else {
+                    "Disabled"
+                }
+            )),
             ListItem::new(format!("🖼️ Layout: {}", self.config.ui.layout)),
         ];
 
         let list = List::new(items)
-            .block(Block::default().title("UI & Theme Settings").borders(Borders::ALL))
+            .block(
+                Block::default()
+                    .title("UI & Theme Settings")
+                    .borders(Borders::ALL),
+            )
             .highlight_style(theme.get_component_style("selected", true))
             .highlight_symbol("► ");
 
@@ -1625,16 +1968,35 @@ impl SettingsUI {
 
     fn render_keyboard_tab(&mut self, frame: &mut Frame, area: Rect, theme: &Theme) {
         let items = vec![
-            ListItem::new(format!("🅥 Vim mode: {}", 
-                if self.config.keyboard.vim_mode { "Enabled" } else { "Disabled" })),
-            ListItem::new(format!("⌨️ Custom bindings: {} configured", self.config.keyboard.custom_bindings.len())),
-            ListItem::new(format!("⏱️ Repeat delay: {} ms", self.config.keyboard.repeat_delay)),
-            ListItem::new(format!("🔄 Repeat rate: {} ms", self.config.keyboard.repeat_rate)),
+            ListItem::new(format!(
+                "🅥 Vim mode: {}",
+                if self.config.keyboard.vim_mode {
+                    "Enabled"
+                } else {
+                    "Disabled"
+                }
+            )),
+            ListItem::new(format!(
+                "⌨️ Custom bindings: {} configured",
+                self.config.keyboard.custom_bindings.len()
+            )),
+            ListItem::new(format!(
+                "⏱️ Repeat delay: {} ms",
+                self.config.keyboard.repeat_delay
+            )),
+            ListItem::new(format!(
+                "🔄 Repeat rate: {} ms",
+                self.config.keyboard.repeat_rate
+            )),
             ListItem::new("🔄 Reset to defaults"),
         ];
 
         let list = List::new(items)
-            .block(Block::default().title("Keyboard Settings").borders(Borders::ALL))
+            .block(
+                Block::default()
+                    .title("Keyboard Settings")
+                    .borders(Borders::ALL),
+            )
             .highlight_style(theme.get_component_style("selected", true))
             .highlight_symbol("► ");
 
@@ -1643,18 +2005,43 @@ impl SettingsUI {
 
     fn render_performance_tab(&mut self, frame: &mut Frame, area: Rect, theme: &Theme) {
         let items = vec![
-            ListItem::new(format!("💾 Cache size: {} MB", self.config.performance.cache_size_mb)),
-            ListItem::new(format!("🖼️ Preload images: {}", 
-                if self.config.performance.preload_images { "Enabled" } else { "Disabled" })),
-            ListItem::new(format!("🔄 Max concurrent: {}", self.config.performance.max_concurrent_operations)),
-            ListItem::new(format!("⚡ Background sync: {}", 
-                if self.config.performance.background_sync { "Enabled" } else { "Disabled" })),
-            ListItem::new(format!("🧹 Cleanup interval: {} hours", self.config.performance.cleanup_interval_hours)),
+            ListItem::new(format!(
+                "💾 Cache size: {} MB",
+                self.config.performance.cache_size_mb
+            )),
+            ListItem::new(format!(
+                "🖼️ Preload images: {}",
+                if self.config.performance.preload_images {
+                    "Enabled"
+                } else {
+                    "Disabled"
+                }
+            )),
+            ListItem::new(format!(
+                "🔄 Max concurrent: {}",
+                self.config.performance.max_concurrent_operations
+            )),
+            ListItem::new(format!(
+                "⚡ Background sync: {}",
+                if self.config.performance.background_sync {
+                    "Enabled"
+                } else {
+                    "Disabled"
+                }
+            )),
+            ListItem::new(format!(
+                "🧹 Cleanup interval: {} hours",
+                self.config.performance.cleanup_interval_hours
+            )),
             ListItem::new("🗑️ Run cleanup now"),
         ];
 
         let list = List::new(items)
-            .block(Block::default().title("Performance Settings").borders(Borders::ALL))
+            .block(
+                Block::default()
+                    .title("Performance Settings")
+                    .borders(Borders::ALL),
+            )
             .highlight_style(theme.get_component_style("selected", true))
             .highlight_symbol("► ");
 
@@ -1663,18 +2050,43 @@ impl SettingsUI {
 
     fn render_privacy_tab(&mut self, frame: &mut Frame, area: Rect, theme: &Theme) {
         let items = vec![
-            ListItem::new(format!("🛡️ Tracking protection: {}", 
-                if self.config.privacy.tracking_protection { "Enabled" } else { "Disabled" })),
-            ListItem::new(format!("🖼️ External images: {}", 
-                if self.config.privacy.external_images { "Allow" } else { "Block" })),
-            ListItem::new(format!("📅 Data retention: {} days", self.config.privacy.data_retention_days)),
-            ListItem::new(format!("📊 Analytics: {}", 
-                if self.config.privacy.analytics { "Enabled" } else { "Disabled" })),
+            ListItem::new(format!(
+                "🛡️ Tracking protection: {}",
+                if self.config.privacy.tracking_protection {
+                    "Enabled"
+                } else {
+                    "Disabled"
+                }
+            )),
+            ListItem::new(format!(
+                "🖼️ External images: {}",
+                if self.config.privacy.external_images {
+                    "Allow"
+                } else {
+                    "Block"
+                }
+            )),
+            ListItem::new(format!(
+                "📅 Data retention: {} days",
+                self.config.privacy.data_retention_days
+            )),
+            ListItem::new(format!(
+                "📊 Analytics: {}",
+                if self.config.privacy.analytics {
+                    "Enabled"
+                } else {
+                    "Disabled"
+                }
+            )),
             ListItem::new("🗑️ Clear cache"),
         ];
 
         let list = List::new(items)
-            .block(Block::default().title("Privacy Settings").borders(Borders::ALL))
+            .block(
+                Block::default()
+                    .title("Privacy Settings")
+                    .borders(Borders::ALL),
+            )
             .highlight_style(theme.get_component_style("selected", true))
             .highlight_symbol("► ");
 
@@ -1682,27 +2094,55 @@ impl SettingsUI {
     }
 
     fn render_ai_tab(&mut self, frame: &mut Frame, area: Rect, theme: &Theme) {
-        let api_key_display = self.config.ai.api_key.as_ref()
-            .map(|key| if key.len() > 8 { format!("{}...", &key[..8]) } else { "Set".to_string() })
+        let api_key_display = self
+            .config
+            .ai
+            .api_key
+            .as_ref()
+            .map(|key| {
+                if key.len() > 8 {
+                    format!("{}...", &key[..8])
+                } else {
+                    "Set".to_string()
+                }
+            })
             .unwrap_or_else(|| "Not set".to_string());
-        
-        let endpoint_display = self.config.ai.endpoint.as_ref()
-            .unwrap_or(&"Default".to_string()).clone();
+
+        let endpoint_display = self
+            .config
+            .ai
+            .endpoint
+            .as_ref()
+            .unwrap_or(&"Default".to_string())
+            .clone();
 
         let items = vec![
-            ListItem::new(format!("🤖 AI assistant: {}", 
-                if self.config.ai.enabled { "Enabled" } else { "Disabled" })),
+            ListItem::new(format!(
+                "🤖 AI assistant: {}",
+                if self.config.ai.enabled {
+                    "Enabled"
+                } else {
+                    "Disabled"
+                }
+            )),
             ListItem::new(format!("🔧 Provider: {}", self.config.ai.provider)),
             ListItem::new(format!("🤖 Model: {}", self.config.ai.model)),
             ListItem::new(format!("🔑 API key: {}", api_key_display)),
             ListItem::new(format!("🌐 Endpoint: {}", endpoint_display)),
-            ListItem::new(format!("🔒 Privacy mode: {:?}", self.config.ai.privacy_mode)),
+            ListItem::new(format!(
+                "🔒 Privacy mode: {:?}",
+                self.config.ai.privacy_mode
+            )),
             ListItem::new(format!("🌡️ Temperature: {:.1}", self.config.ai.temperature)),
             ListItem::new(format!("📝 Max tokens: {}", self.config.ai.max_tokens)),
         ];
 
         let list = List::new(items)
-            .block(Block::default().title("AI Assistant Settings").borders(Borders::ALL))
+            .block(
+                Block::default()
+                    .title("AI Assistant Settings")
+                    .borders(Borders::ALL),
+            )
             .highlight_style(theme.get_component_style("selected", true))
             .highlight_symbol("► ");
 
@@ -1711,18 +2151,36 @@ impl SettingsUI {
 
     fn render_advanced_tab(&mut self, frame: &mut Frame, area: Rect, theme: &Theme) {
         let items = vec![
-            ListItem::new(format!("🐛 Debug mode: {}", 
-                if self.config.advanced.debug_mode { "Enabled" } else { "Disabled" })),
-            ListItem::new(format!("📝 Log level: {:?}", self.config.advanced.log_level)),
-            ListItem::new(format!("📁 Database path: {}", 
-                self.config.advanced.database_path.display())),
-            ListItem::new(format!("💾 Backup count: {}", self.config.advanced.backup_count)),
+            ListItem::new(format!(
+                "🐛 Debug mode: {}",
+                if self.config.advanced.debug_mode {
+                    "Enabled"
+                } else {
+                    "Disabled"
+                }
+            )),
+            ListItem::new(format!(
+                "📝 Log level: {:?}",
+                self.config.advanced.log_level
+            )),
+            ListItem::new(format!(
+                "📁 Database path: {}",
+                self.config.advanced.database_path.display()
+            )),
+            ListItem::new(format!(
+                "💾 Backup count: {}",
+                self.config.advanced.backup_count
+            )),
             ListItem::new("🗄️ Database maintenance"),
             ListItem::new("⚠️ Reset all settings"),
         ];
 
         let list = List::new(items)
-            .block(Block::default().title("Advanced Settings").borders(Borders::ALL))
+            .block(
+                Block::default()
+                    .title("Advanced Settings")
+                    .borders(Borders::ALL),
+            )
             .highlight_style(theme.get_component_style("selected", true))
             .highlight_symbol("► ");
 
@@ -1731,7 +2189,10 @@ impl SettingsUI {
 
     fn render_footer(&self, frame: &mut Frame, area: Rect, theme: &Theme) {
         let mut footer_text = if self.state.edit_mode {
-            format!("Editing: {} | Enter: Save | Esc: Cancel", self.state.input_buffer)
+            format!(
+                "Editing: {} | Enter: Save | Esc: Cancel",
+                self.state.input_buffer
+            )
         } else {
             "Tab/Shift+Tab: Switch tabs | ↑↓: Navigate | Enter/Space: Select | E: Edit | Ctrl+R: Reset | Ctrl+S: Save | Q/Esc: Close".to_string()
         };
@@ -1755,25 +2216,63 @@ impl SettingsUI {
     // Context Indicators Settings
     fn render_context_indicators_tab(&mut self, frame: &mut Frame, area: Rect, theme: &Theme) {
         let items = vec![
-            ListItem::new(format!("🗺️  Show breadcrumb navigation: {}", 
-                if self.config.ui.context_indicators.show_breadcrumb { "Enabled" } else { "Disabled" })),
-            ListItem::new(format!("🔄 Show mode transitions: {}", 
-                if self.config.ui.context_indicators.show_mode_transitions { "Enabled" } else { "Disabled" })),
-            ListItem::new(format!("💡 Show action hints: {}", 
-                if self.config.ui.context_indicators.show_action_hints { "Enabled" } else { "Disabled" })),
-            ListItem::new(format!("📐 Show layout context: {}", 
-                if self.config.ui.context_indicators.show_layout_context { "Enabled" } else { "Disabled" })),
-            ListItem::new(format!("⌨️  Show keyboard hints: {}", 
-                if self.config.ui.context_indicators.show_keyboard_hints { "Enabled" } else { "Disabled" })),
-            ListItem::new(format!("🔢 Breadcrumb depth: {}", self.config.ui.context_indicators.breadcrumb_depth)),
-            ListItem::new(format!("⏱️  Animation duration: {} ms", self.config.ui.context_indicators.animation_duration_ms)),
+            ListItem::new(format!(
+                "🗺️  Show breadcrumb navigation: {}",
+                if self.config.ui.context_indicators.show_breadcrumb {
+                    "Enabled"
+                } else {
+                    "Disabled"
+                }
+            )),
+            ListItem::new(format!(
+                "🔄 Show mode transitions: {}",
+                if self.config.ui.context_indicators.show_mode_transitions {
+                    "Enabled"
+                } else {
+                    "Disabled"
+                }
+            )),
+            ListItem::new(format!(
+                "💡 Show action hints: {}",
+                if self.config.ui.context_indicators.show_action_hints {
+                    "Enabled"
+                } else {
+                    "Disabled"
+                }
+            )),
+            ListItem::new(format!(
+                "📐 Show layout context: {}",
+                if self.config.ui.context_indicators.show_layout_context {
+                    "Enabled"
+                } else {
+                    "Disabled"
+                }
+            )),
+            ListItem::new(format!(
+                "⌨️  Show keyboard hints: {}",
+                if self.config.ui.context_indicators.show_keyboard_hints {
+                    "Enabled"
+                } else {
+                    "Disabled"
+                }
+            )),
+            ListItem::new(format!(
+                "🔢 Breadcrumb depth: {}",
+                self.config.ui.context_indicators.breadcrumb_depth
+            )),
+            ListItem::new(format!(
+                "⏱️  Animation duration: {} ms",
+                self.config.ui.context_indicators.animation_duration_ms
+            )),
         ];
 
         let list = List::new(items)
-            .block(Block::default()
-                .borders(Borders::ALL)
-                .title("Context Indicators Settings")
-                .style(theme.get_component_style("primary", false)))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title("Context Indicators Settings")
+                    .style(theme.get_component_style("primary", false)),
+            )
             .style(theme.get_component_style("secondary", false))
             .highlight_style(theme.get_component_style("primary", true));
 
@@ -1782,19 +2281,44 @@ impl SettingsUI {
 
     fn handle_context_indicators_select(&mut self) {
         match self.state.selected_index {
-            0 => self.config.ui.context_indicators.show_breadcrumb = !self.config.ui.context_indicators.show_breadcrumb,
-            1 => self.config.ui.context_indicators.show_mode_transitions = !self.config.ui.context_indicators.show_mode_transitions,
-            2 => self.config.ui.context_indicators.show_action_hints = !self.config.ui.context_indicators.show_action_hints,
-            3 => self.config.ui.context_indicators.show_layout_context = !self.config.ui.context_indicators.show_layout_context,
-            4 => self.config.ui.context_indicators.show_keyboard_hints = !self.config.ui.context_indicators.show_keyboard_hints,
+            0 => {
+                self.config.ui.context_indicators.show_breadcrumb =
+                    !self.config.ui.context_indicators.show_breadcrumb
+            }
+            1 => {
+                self.config.ui.context_indicators.show_mode_transitions =
+                    !self.config.ui.context_indicators.show_mode_transitions
+            }
+            2 => {
+                self.config.ui.context_indicators.show_action_hints =
+                    !self.config.ui.context_indicators.show_action_hints
+            }
+            3 => {
+                self.config.ui.context_indicators.show_layout_context =
+                    !self.config.ui.context_indicators.show_layout_context
+            }
+            4 => {
+                self.config.ui.context_indicators.show_keyboard_hints =
+                    !self.config.ui.context_indicators.show_keyboard_hints
+            }
             5 => {
                 self.state.edit_mode = true;
-                self.state.input_buffer = self.config.ui.context_indicators.breadcrumb_depth.to_string();
-            },
+                self.state.input_buffer = self
+                    .config
+                    .ui
+                    .context_indicators
+                    .breadcrumb_depth
+                    .to_string();
+            }
             6 => {
                 self.state.edit_mode = true;
-                self.state.input_buffer = self.config.ui.context_indicators.animation_duration_ms.to_string();
-            },
+                self.state.input_buffer = self
+                    .config
+                    .ui
+                    .context_indicators
+                    .animation_duration_ms
+                    .to_string();
+            }
             _ => {}
         }
         self.state.modified = true;
@@ -1802,20 +2326,22 @@ impl SettingsUI {
 
     fn apply_context_indicators_edit(&mut self, value: String) {
         match self.state.selected_index {
-            5 => { // breadcrumb_depth
+            5 => {
+                // breadcrumb_depth
                 if let Ok(depth) = value.parse::<usize>() {
                     if depth > 0 && depth <= 10 {
                         self.config.ui.context_indicators.breadcrumb_depth = depth;
                     }
                 }
-            },
-            6 => { // animation_duration_ms
+            }
+            6 => {
+                // animation_duration_ms
                 if let Ok(duration) = value.parse::<u64>() {
                     if duration <= 2000 {
                         self.config.ui.context_indicators.animation_duration_ms = duration;
                     }
                 }
-            },
+            }
             _ => {}
         }
     }
@@ -1831,20 +2357,41 @@ impl SettingsUI {
         };
 
         let items = vec![
-            ListItem::new(format!("✨ Focus indicators enabled: {}", 
-                if self.config.ui.focus_indicators.enabled { "Enabled" } else { "Disabled" })),
+            ListItem::new(format!(
+                "✨ Focus indicators enabled: {}",
+                if self.config.ui.focus_indicators.enabled {
+                    "Enabled"
+                } else {
+                    "Disabled"
+                }
+            )),
             ListItem::new(format!("🎨 Focus indicator style: {}", style_text)),
-            ListItem::new(format!("🌈 Color override: {}", 
-                self.config.ui.focus_indicators.color_override.as_ref().unwrap_or(&"Default".to_string()))),
-            ListItem::new(format!("🎭 Animate focus changes: {}", 
-                if self.config.ui.focus_indicators.animate_focus_changes { "Enabled" } else { "Disabled" })),
+            ListItem::new(format!(
+                "🌈 Color override: {}",
+                self.config
+                    .ui
+                    .focus_indicators
+                    .color_override
+                    .as_ref()
+                    .unwrap_or(&"Default".to_string())
+            )),
+            ListItem::new(format!(
+                "🎭 Animate focus changes: {}",
+                if self.config.ui.focus_indicators.animate_focus_changes {
+                    "Enabled"
+                } else {
+                    "Disabled"
+                }
+            )),
         ];
 
         let list = List::new(items)
-            .block(Block::default()
-                .borders(Borders::ALL)
-                .title("Focus Indicators Settings")
-                .style(theme.get_component_style("primary", false)))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title("Focus Indicators Settings")
+                    .style(theme.get_component_style("primary", false)),
+            )
             .style(theme.get_component_style("secondary", false))
             .highlight_style(theme.get_component_style("primary", true));
 
@@ -1856,19 +2403,30 @@ impl SettingsUI {
             0 => self.config.ui.focus_indicators.enabled = !self.config.ui.focus_indicators.enabled,
             1 => {
                 // Cycle through focus indicator styles
-                self.config.ui.focus_indicators.style = match self.config.ui.focus_indicators.style {
+                self.config.ui.focus_indicators.style = match self.config.ui.focus_indicators.style
+                {
                     FocusIndicatorStyle::Outline => FocusIndicatorStyle::Border,
                     FocusIndicatorStyle::Border => FocusIndicatorStyle::Background,
                     FocusIndicatorStyle::Background => FocusIndicatorStyle::Corners,
                     FocusIndicatorStyle::Corners => FocusIndicatorStyle::Glow,
                     FocusIndicatorStyle::Glow => FocusIndicatorStyle::Outline,
                 };
-            },
+            }
             2 => {
                 self.state.edit_mode = true;
-                self.state.input_buffer = self.config.ui.focus_indicators.color_override.as_ref().unwrap_or(&String::new()).clone();
-            },
-            3 => self.config.ui.focus_indicators.animate_focus_changes = !self.config.ui.focus_indicators.animate_focus_changes,
+                self.state.input_buffer = self
+                    .config
+                    .ui
+                    .focus_indicators
+                    .color_override
+                    .as_ref()
+                    .unwrap_or(&String::new())
+                    .clone();
+            }
+            3 => {
+                self.config.ui.focus_indicators.animate_focus_changes =
+                    !self.config.ui.focus_indicators.animate_focus_changes
+            }
             _ => {}
         }
         self.state.modified = true;
@@ -1876,13 +2434,14 @@ impl SettingsUI {
 
     fn apply_focus_indicators_edit(&mut self, value: String) {
         match self.state.selected_index {
-            2 => { // color_override
+            2 => {
+                // color_override
                 if value.is_empty() {
                     self.config.ui.focus_indicators.color_override = None;
                 } else {
                     self.config.ui.focus_indicators.color_override = Some(value);
                 }
-            },
+            }
             _ => {}
         }
     }
@@ -1890,25 +2449,75 @@ impl SettingsUI {
     // Responsive Layout Settings
     fn render_responsive_layout_tab(&mut self, frame: &mut Frame, area: Rect, theme: &Theme) {
         let items = vec![
-            ListItem::new(format!("📱 Responsive layout enabled: {}", 
-                if self.config.ui.responsive.enabled { "Enabled" } else { "Disabled" })),
-            ListItem::new(format!("📏 Extra small breakpoint: {} columns", self.config.ui.responsive.breakpoints.extra_small_max)),
-            ListItem::new(format!("📐 Small breakpoint: {} columns", self.config.ui.responsive.breakpoints.small_max)),
-            ListItem::new(format!("📊 Medium breakpoint: {} columns", self.config.ui.responsive.breakpoints.medium_max)),
-            ListItem::new(format!("📈 Large breakpoint: {} columns", self.config.ui.responsive.breakpoints.large_max)),
-            ListItem::new(format!("🔄 Auto-hide sidebar: {}", 
-                if self.config.ui.responsive.adaptive_behavior.auto_hide_sidebar { "Enabled" } else { "Disabled" })),
-            ListItem::new(format!("📚 Auto-stack panels: {}", 
-                if self.config.ui.responsive.adaptive_behavior.auto_stack_panels { "Enabled" } else { "Disabled" })),
-            ListItem::new(format!("🔍 Scale content: {}", 
-                if self.config.ui.responsive.adaptive_behavior.scale_content { "Enabled" } else { "Disabled" })),
+            ListItem::new(format!(
+                "📱 Responsive layout enabled: {}",
+                if self.config.ui.responsive.enabled {
+                    "Enabled"
+                } else {
+                    "Disabled"
+                }
+            )),
+            ListItem::new(format!(
+                "📏 Extra small breakpoint: {} columns",
+                self.config.ui.responsive.breakpoints.extra_small_max
+            )),
+            ListItem::new(format!(
+                "📐 Small breakpoint: {} columns",
+                self.config.ui.responsive.breakpoints.small_max
+            )),
+            ListItem::new(format!(
+                "📊 Medium breakpoint: {} columns",
+                self.config.ui.responsive.breakpoints.medium_max
+            )),
+            ListItem::new(format!(
+                "📈 Large breakpoint: {} columns",
+                self.config.ui.responsive.breakpoints.large_max
+            )),
+            ListItem::new(format!(
+                "🔄 Auto-hide sidebar: {}",
+                if self
+                    .config
+                    .ui
+                    .responsive
+                    .adaptive_behavior
+                    .auto_hide_sidebar
+                {
+                    "Enabled"
+                } else {
+                    "Disabled"
+                }
+            )),
+            ListItem::new(format!(
+                "📚 Auto-stack panels: {}",
+                if self
+                    .config
+                    .ui
+                    .responsive
+                    .adaptive_behavior
+                    .auto_stack_panels
+                {
+                    "Enabled"
+                } else {
+                    "Disabled"
+                }
+            )),
+            ListItem::new(format!(
+                "🔍 Scale content: {}",
+                if self.config.ui.responsive.adaptive_behavior.scale_content {
+                    "Enabled"
+                } else {
+                    "Disabled"
+                }
+            )),
         ];
 
         let list = List::new(items)
-            .block(Block::default()
-                .borders(Borders::ALL)
-                .title("Responsive Layout Settings")
-                .style(theme.get_component_style("primary", false)))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title("Responsive Layout Settings")
+                    .style(theme.get_component_style("primary", false)),
+            )
             .style(theme.get_component_style("secondary", false))
             .highlight_style(theme.get_component_style("primary", true));
 
@@ -1920,23 +2529,57 @@ impl SettingsUI {
             0 => self.config.ui.responsive.enabled = !self.config.ui.responsive.enabled,
             1 => {
                 self.state.edit_mode = true;
-                self.state.input_buffer = self.config.ui.responsive.breakpoints.extra_small_max.to_string();
-            },
+                self.state.input_buffer = self
+                    .config
+                    .ui
+                    .responsive
+                    .breakpoints
+                    .extra_small_max
+                    .to_string();
+            }
             2 => {
                 self.state.edit_mode = true;
-                self.state.input_buffer = self.config.ui.responsive.breakpoints.small_max.to_string();
-            },
+                self.state.input_buffer =
+                    self.config.ui.responsive.breakpoints.small_max.to_string();
+            }
             3 => {
                 self.state.edit_mode = true;
-                self.state.input_buffer = self.config.ui.responsive.breakpoints.medium_max.to_string();
-            },
+                self.state.input_buffer =
+                    self.config.ui.responsive.breakpoints.medium_max.to_string();
+            }
             4 => {
                 self.state.edit_mode = true;
-                self.state.input_buffer = self.config.ui.responsive.breakpoints.large_max.to_string();
-            },
-            5 => self.config.ui.responsive.adaptive_behavior.auto_hide_sidebar = !self.config.ui.responsive.adaptive_behavior.auto_hide_sidebar,
-            6 => self.config.ui.responsive.adaptive_behavior.auto_stack_panels = !self.config.ui.responsive.adaptive_behavior.auto_stack_panels,
-            7 => self.config.ui.responsive.adaptive_behavior.scale_content = !self.config.ui.responsive.adaptive_behavior.scale_content,
+                self.state.input_buffer =
+                    self.config.ui.responsive.breakpoints.large_max.to_string();
+            }
+            5 => {
+                self.config
+                    .ui
+                    .responsive
+                    .adaptive_behavior
+                    .auto_hide_sidebar = !self
+                    .config
+                    .ui
+                    .responsive
+                    .adaptive_behavior
+                    .auto_hide_sidebar
+            }
+            6 => {
+                self.config
+                    .ui
+                    .responsive
+                    .adaptive_behavior
+                    .auto_stack_panels = !self
+                    .config
+                    .ui
+                    .responsive
+                    .adaptive_behavior
+                    .auto_stack_panels
+            }
+            7 => {
+                self.config.ui.responsive.adaptive_behavior.scale_content =
+                    !self.config.ui.responsive.adaptive_behavior.scale_content
+            }
             _ => {}
         }
         self.state.modified = true;
@@ -1944,34 +2587,38 @@ impl SettingsUI {
 
     fn apply_responsive_layout_edit(&mut self, value: String) {
         match self.state.selected_index {
-            1 => { // extra_small_max
+            1 => {
+                // extra_small_max
                 if let Ok(size) = value.parse::<u16>() {
                     if size >= 20 && size <= 200 {
                         self.config.ui.responsive.breakpoints.extra_small_max = size;
                     }
                 }
-            },
-            2 => { // small_max
+            }
+            2 => {
+                // small_max
                 if let Ok(size) = value.parse::<u16>() {
                     if size >= 40 && size <= 200 {
                         self.config.ui.responsive.breakpoints.small_max = size;
                     }
                 }
-            },
-            3 => { // medium_max
+            }
+            3 => {
+                // medium_max
                 if let Ok(size) = value.parse::<u16>() {
                     if size >= 60 && size <= 300 {
                         self.config.ui.responsive.breakpoints.medium_max = size;
                     }
                 }
-            },
-            4 => { // large_max
+            }
+            4 => {
+                // large_max
                 if let Ok(size) = value.parse::<u16>() {
                     if size >= 80 && size <= 400 {
                         self.config.ui.responsive.breakpoints.large_max = size;
                     }
                 }
-            },
+            }
             _ => {}
         }
     }

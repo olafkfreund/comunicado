@@ -61,8 +61,14 @@ impl ContactsManager {
     }
 
     /// Find contacts by partial email match (for autocomplete)
-    pub async fn find_contacts_by_email_prefix(&self, email_prefix: &str, limit: usize) -> ContactsResult<Vec<Contact>> {
-        self.database.find_contacts_by_email_prefix(email_prefix, limit).await
+    pub async fn find_contacts_by_email_prefix(
+        &self,
+        email_prefix: &str,
+        limit: usize,
+    ) -> ContactsResult<Vec<Contact>> {
+        self.database
+            .find_contacts_by_email_prefix(email_prefix, limit)
+            .await
     }
 
     /// Create a new contact
@@ -251,7 +257,6 @@ impl ContactsManager {
 
         self.search_contacts(&criteria).await
     }
-
 
     /// Get contacts for a specific account
     pub async fn get_account_contacts(

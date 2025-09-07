@@ -1,6 +1,6 @@
 //! Core backup engine for creating and managing backups
 
-use crate::backup::{DataCategory, BackupTarget};
+use crate::backup::{BackupTarget, DataCategory};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -14,28 +14,28 @@ use uuid::Uuid;
 pub enum BackupError {
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
-    
+
     #[error("Serialization error: {0}")]
     Serialization(#[from] serde_json::Error),
-    
+
     #[error("Compression error: {0}")]
     Compression(String),
-    
+
     #[error("Encryption error: {0}")]
     Encryption(String),
-    
+
     #[error("Invalid backup target: {0}")]
     InvalidTarget(String),
-    
+
     #[error("Backup not found: {0}")]
     BackupNotFound(Uuid),
-    
+
     #[error("Insufficient space: need {needed} bytes, have {available}")]
     InsufficientSpace { needed: u64, available: u64 },
-    
+
     #[error("Network error: {0}")]
     Network(String),
-    
+
     #[error("Authentication failed: {0}")]
     Authentication(String),
 }
@@ -63,7 +63,10 @@ pub enum BackupStatus {
     /// Backup is in progress
     Running { progress: f32, current_item: String },
     /// Backup completed successfully
-    Completed { duration_ms: u64, bytes_backed_up: u64 },
+    Completed {
+        duration_ms: u64,
+        bytes_backed_up: u64,
+    },
     /// Backup failed with error
     Failed { error: String },
     /// Backup was cancelled by user
@@ -97,7 +100,7 @@ pub struct BackupConfig {
     pub max_versions: u32,
     /// Exclude patterns (glob patterns)
     pub exclude_patterns: Vec<String>,
-    /// Include patterns (glob patterns) 
+    /// Include patterns (glob patterns)
     pub include_patterns: Vec<String>,
     /// Follow symbolic links
     pub follow_symlinks: bool,
@@ -187,7 +190,7 @@ impl BackupEngine {
     /// Start a new backup operation
     pub async fn start_backup(&mut self, config: &BackupConfig) -> BackupResult<Uuid> {
         let backup_id = Uuid::new_v4();
-        
+
         // Create backup metadata
         let metadata = BackupMetadata {
             id: backup_id,
@@ -225,17 +228,20 @@ impl BackupEngine {
     /// Perform the actual backup operation
     async fn perform_backup(&self, backup_id: Uuid, config: &BackupConfig) -> BackupResult<()> {
         // Update status to running
-        self.update_backup_status(backup_id, BackupStatus::Running {
-            progress: 0.0,
-            current_item: "Analyzing data...".to_string(),
-        })?;
+        self.update_backup_status(
+            backup_id,
+            BackupStatus::Running {
+                progress: 0.0,
+                current_item: "Analyzing data...".to_string(),
+            },
+        )?;
 
         // Analyze what needs to be backed up
         let backup_plan = self.create_backup_plan(config)?;
-        
+
         // Calculate total size
         let total_size = self.calculate_backup_size(&backup_plan)?;
-        
+
         // Check available space
         self.check_available_space(&config.target, total_size)?;
 
@@ -251,10 +257,13 @@ impl BackupEngine {
             let progress = (i as f32 / total_files as f32) * 100.0;
             let current_item = file_path.display().to_string();
 
-            self.update_backup_status(backup_id, BackupStatus::Running {
-                progress,
-                current_item,
-            })?;
+            self.update_backup_status(
+                backup_id,
+                BackupStatus::Running {
+                    progress,
+                    current_item,
+                },
+            )?;
 
             // Copy file to backup
             match self.backup_file(file_path, &backup_dir, config).await {
@@ -263,48 +272,62 @@ impl BackupEngine {
                     bytes_processed += size;
                 }
                 Err(e) => {
-                    self.add_backup_error(backup_id, format!("Failed to backup {}: {}", 
-                        file_path.display(), e))?;
+                    self.add_backup_error(
+                        backup_id,
+                        format!("Failed to backup {}: {}", file_path.display(), e),
+                    )?;
                 }
             }
         }
 
         // Apply compression if enabled
         if config.compression_enabled {
-            self.update_backup_status(backup_id, BackupStatus::Running {
-                progress: 90.0,
-                current_item: "Compressing backup...".to_string(),
-            })?;
+            self.update_backup_status(
+                backup_id,
+                BackupStatus::Running {
+                    progress: 90.0,
+                    current_item: "Compressing backup...".to_string(),
+                },
+            )?;
 
             self.compress_backup(&backup_dir, config.compression_level)?;
         }
 
         // Apply encryption if enabled
         if config.encryption_enabled {
-            self.update_backup_status(backup_id, BackupStatus::Running {
-                progress: 95.0,
-                current_item: "Encrypting backup...".to_string(),
-            })?;
+            self.update_backup_status(
+                backup_id,
+                BackupStatus::Running {
+                    progress: 95.0,
+                    current_item: "Encrypting backup...".to_string(),
+                },
+            )?;
 
             self.encrypt_backup(&backup_dir, config)?;
         }
 
         // Verify integrity if enabled
         if config.verify_integrity {
-            self.update_backup_status(backup_id, BackupStatus::Running {
-                progress: 98.0,
-                current_item: "Verifying backup integrity...".to_string(),
-            })?;
+            self.update_backup_status(
+                backup_id,
+                BackupStatus::Running {
+                    progress: 98.0,
+                    current_item: "Verifying backup integrity...".to_string(),
+                },
+            )?;
 
             self.verify_backup_integrity(&backup_dir)?;
         }
 
         // Update final status
         let duration_ms = self.get_backup_duration(backup_id)?;
-        self.update_backup_status(backup_id, BackupStatus::Completed {
-            duration_ms,
-            bytes_backed_up: bytes_processed,
-        })?;
+        self.update_backup_status(
+            backup_id,
+            BackupStatus::Completed {
+                duration_ms,
+                bytes_backed_up: bytes_processed,
+            },
+        )?;
 
         Ok(())
     }
@@ -312,7 +335,7 @@ impl BackupEngine {
     /// Create a backup plan (list of files to backup)
     fn create_backup_plan(&self, config: &BackupConfig) -> BackupResult<Vec<PathBuf>> {
         let mut files = Vec::new();
-        
+
         for category in &config.included_categories {
             match category {
                 DataCategory::Emails => {
@@ -453,7 +476,7 @@ impl BackupEngine {
     /// Recursively scan a directory for files
     fn scan_directory(&self, dir: &Path) -> BackupResult<Vec<PathBuf>> {
         let mut files = Vec::new();
-        
+
         if !dir.exists() {
             return Ok(files);
         }
@@ -461,7 +484,7 @@ impl BackupEngine {
         for entry in fs::read_dir(dir)? {
             let entry = entry?;
             let path = entry.path();
-            
+
             if path.is_file() {
                 files.push(path);
             } else if path.is_dir() {
@@ -482,10 +505,10 @@ impl BackupEngine {
         // For now, implement simple pattern matching
         // In a full implementation, you'd use glob patterns
         let mut filtered_files = Vec::new();
-        
+
         for file in files {
             let file_str = file.to_string_lossy();
-            
+
             // Check exclude patterns first
             let mut excluded = false;
             for pattern in exclude_patterns {
@@ -494,17 +517,20 @@ impl BackupEngine {
                     break;
                 }
             }
-            
+
             if !excluded {
                 // Check include patterns
-                let mut included = include_patterns.is_empty() || include_patterns.contains(&"*".to_string());
+                let mut included =
+                    include_patterns.is_empty() || include_patterns.contains(&"*".to_string());
                 for pattern in include_patterns {
-                    if pattern == "*" || file_str.contains(pattern.trim_start_matches('*').trim_end_matches('*')) {
+                    if pattern == "*"
+                        || file_str.contains(pattern.trim_start_matches('*').trim_end_matches('*'))
+                    {
                         included = true;
                         break;
                     }
                 }
-                
+
                 if included {
                     filtered_files.push(file);
                 }
@@ -523,20 +549,29 @@ impl BackupEngine {
         Ok(()) // Placeholder
     }
 
-    fn create_backup_directory(&self, backup_id: Uuid, _config: &BackupConfig) -> BackupResult<PathBuf> {
+    fn create_backup_directory(
+        &self,
+        backup_id: Uuid,
+        _config: &BackupConfig,
+    ) -> BackupResult<PathBuf> {
         let dir = self.base_dir.join(format!("backup-{}", backup_id));
         fs::create_dir_all(&dir)?;
         Ok(dir)
     }
 
-    async fn backup_file(&self, source: &Path, backup_dir: &Path, _config: &BackupConfig) -> BackupResult<u64> {
+    async fn backup_file(
+        &self,
+        source: &Path,
+        backup_dir: &Path,
+        _config: &BackupConfig,
+    ) -> BackupResult<u64> {
         let relative_path = source.strip_prefix(&self.data_dir).unwrap_or(source);
         let dest_path = backup_dir.join(relative_path);
-        
+
         if let Some(parent) = dest_path.parent() {
             fs::create_dir_all(parent)?;
         }
-        
+
         fs::copy(source, &dest_path)?;
         Ok(fs::metadata(source)?.len())
     }

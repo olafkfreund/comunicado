@@ -52,7 +52,10 @@ impl AutoUpdateManager {
 
     /// Schedule update checks for deployed version
     pub async fn schedule_update_checks(&self, deployment_id: uuid::Uuid) -> AutoUpdateResult<()> {
-        println!("Auto Update Manager: Scheduling update checks for deployment: {}", deployment_id);
+        println!(
+            "Auto Update Manager: Scheduling update checks for deployment: {}",
+            deployment_id
+        );
         // Implementation would schedule periodic update checks
         Ok(())
     }

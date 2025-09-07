@@ -1,9 +1,8 @@
 pub mod account_inspector;
 pub mod account_manager_ui;
+pub mod account_setup;
 pub mod account_switcher;
-pub mod keyboard_bindings_ui;
 pub mod ai_assistant_ui;
-pub mod components;
 pub mod ai_calendar_ui;
 pub mod ai_config_ui;
 pub mod ai_popup;
@@ -12,57 +11,57 @@ pub mod animated_content;
 pub mod animation;
 pub mod calendar;
 pub mod command_palette;
+pub mod components;
 pub mod compose;
+pub mod config_manager;
 pub mod content_preview;
-pub mod external_editor;
-pub mod context_calendar;
-pub mod context_menu;
 pub mod context_aware_menu;
+pub mod context_calendar;
+pub mod context_indicators;
+pub mod context_menu;
 pub mod context_shortcuts;
-pub mod dynamic_shortcuts;
-pub mod progressive_disclosure;
 pub mod date_picker;
 pub mod draft_list;
+pub mod dynamic_shortcuts;
 pub mod email_viewer;
+pub mod enhanced_progress_overlay;
+pub mod event_driven_account;
+pub mod event_driven_calendar;
+pub mod event_driven_email;
+pub mod event_driven_ui_integration;
+pub mod external_editor;
 pub mod folder_tree;
+pub mod form_validation;
 pub mod fuzzy_search;
 pub mod graphics;
 pub mod help;
 pub mod integrated_layout;
 pub mod invitation_viewer;
+pub mod keyboard_bindings_ui;
 pub mod keyboard_shortcuts;
 pub mod layout;
 pub mod message_list;
+pub mod modal_builder;
+pub mod modal_system;
+pub mod mode_indicator;
+pub mod mouse_handler;
+pub mod notes;
+pub mod onboarding;
+pub mod progressive_disclosure;
 pub mod search;
 pub mod settings_ui;
 pub mod startup_progress;
 pub mod status_bar;
 pub mod sync_progress;
-pub mod enhanced_progress_overlay;
+pub mod terminal_manager;
+pub mod thread_hierarchy_view;
+pub mod threading_display;
 pub mod time_picker;
 pub mod toast;
 pub mod toast_integration_simple;
 pub mod typography;
 pub mod unified_feedback;
 pub mod unified_sidebar;
-pub mod notes;
-pub mod onboarding;
-pub mod mode_indicator;
-pub mod context_indicators;
-pub mod threading_display;
-pub mod thread_hierarchy_view;
-pub mod form_validation;
-pub mod modal_system;
-pub mod modal_builder;
-pub mod terminal_manager;
-pub mod account_setup;
-pub mod config_manager;
-pub mod event_driven_email;
-pub mod event_driven_calendar;
-pub mod event_driven_account;
-pub mod event_driven_ui_integration;
-pub mod mouse_handler;
-
 
 use crate::email::{
     sync_engine::SyncProgress, EmailDatabase, EmailNotification, EmailNotificationManager,
@@ -73,7 +72,7 @@ use crate::keyboard::KeyboardManager;
 use crate::theme::{Theme, ThemeManager};
 use chrono::Duration as ChronoDuration;
 use ratatui::{
-    layout::{Rect, Layout, Direction, Constraint},
+    layout::{Constraint, Direction, Layout, Rect},
     widgets::{Block, Borders, Paragraph},
     Frame,
 };
@@ -82,29 +81,36 @@ use tokio::time::{Duration, Instant};
 
 use self::{
     account_switcher::AccountSwitcher,
-    command_palette::{CommandPalette, CommandContext, CommandAction},
+    command_palette::{CommandAction, CommandContext, CommandPalette},
     compose::ComposeUI,
     content_preview::ContentPreview,
+    context_indicators::{ContextIndicatorConfig, ContextIndicators, FocusIndicatorStyle},
     context_shortcuts::ContextShortcutsPopup,
     draft_list::DraftListUI,
-    dynamic_shortcuts::{DynamicShortcutsManager, DynamicShortcutsRenderer, ShortcutContext, ShortcutDisplayMode, KeyboardShortcut},
-    progressive_disclosure::{ProgressiveDisclosureManager, ProgressiveDisclosureRenderer, Section, ExpandableSection, SectionContent},
+    dynamic_shortcuts::{
+        DynamicShortcutsManager, DynamicShortcutsRenderer, KeyboardShortcut, ShortcutContext,
+        ShortcutDisplayMode,
+    },
     folder_tree::FolderTree,
     help::HelpOverlay,
     keyboard_shortcuts::KeyboardShortcutsUI,
-    layout::{AppLayout, LayoutMode, LayoutBreakpoint, ResponsiveBreakpoints, ComponentMinWidths},
+    layout::{AppLayout, ComponentMinWidths, LayoutBreakpoint, LayoutMode, ResponsiveBreakpoints},
     message_list::MessageList,
+    progressive_disclosure::{
+        ExpandableSection, ProgressiveDisclosureManager, ProgressiveDisclosureRenderer, Section,
+        SectionContent,
+    },
     status_bar::{
-        CalendarStatusSegment, EmailStatusSegment, NavigationHintsSegment, StatusBar, SyncStatus,
-        SystemInfoSegment, StatusBarContext, InformationDensity as StatusBarInformationDensity,
-        ModeIndicatorSegment, SearchStatusSegment,
+        CalendarStatusSegment, EmailStatusSegment,
+        InformationDensity as StatusBarInformationDensity, ModeIndicatorSegment,
+        NavigationHintsSegment, SearchStatusSegment, StatusBar, StatusBarContext, SyncStatus,
+        SystemInfoSegment,
     },
     sync_progress::SyncProgressOverlay,
     toast::ToastManager,
     toast_integration_simple::SimpleToastIntegration,
-    typography::{TypographySystem, InformationDensity},
+    typography::{InformationDensity, TypographySystem},
     unified_feedback::UnifiedFeedbackManager,
-    context_indicators::{ContextIndicators, ContextIndicatorConfig, FocusIndicatorStyle},
 };
 
 // Re-export compose and draft types for external use
@@ -128,35 +134,44 @@ pub use email_viewer::{EmailViewer, EmailViewerAction};
 pub use invitation_viewer::{InvitationAction, InvitationViewer};
 
 // Re-export search types
-pub use search::{SearchAction, SearchEngine, SearchEngineType, SearchMode, SearchResult, SearchUI};
+pub use search::{
+    SearchAction, SearchEngine, SearchEngineType, SearchMode, SearchResult, SearchUI,
+};
 
 // Re-export settings types
-pub use settings_ui::{SettingsUI, SettingsUIState, SettingsTab};
+pub use settings_ui::{SettingsTab, SettingsUI, SettingsUIState};
 
 // Re-export fuzzy search types
-pub use fuzzy_search::{FuzzySearchEngine, FuzzySearchConfig};
+pub use fuzzy_search::{FuzzySearchConfig, FuzzySearchEngine};
 
 // Re-export context menu types
 pub use context_menu::{ContextMenu, ContextMenuAction, ContextMenuItem, ContextType};
 
 // Re-export context-aware menu types
-pub use context_aware_menu::{ContextAwareMenu, ContextAction, MenuContext};
+pub use context_aware_menu::{ContextAction, ContextAwareMenu, MenuContext};
 
 // Re-export dynamic shortcuts types
 // (Types already imported above in use self::dynamic_shortcuts::...)
 
-// Re-export progressive disclosure types  
+// Re-export progressive disclosure types
 // (Types already imported above in use self::progressive_disclosure::...)
 
 // Re-export animation and graphics types
 pub use animated_content::{AnimatedContentManager, AnimatedEmailContent, AnimationControlWidget};
-pub use animation::{Animation, AnimationDecoder, AnimationFormat, AnimationManager, AnimationSettings};
+pub use animation::{
+    Animation, AnimationDecoder, AnimationFormat, AnimationManager, AnimationSettings,
+};
 pub use graphics::{GraphicsProtocol, ImageRenderer, RenderConfig};
 
 // Re-export integrated layout and context-aware calendar types
-pub use context_calendar::{CalendarAction as ContextCalendarAction, ContextAwareCalendar, CalendarDisplayMode, EmailCalendarContext};
-pub use integrated_layout::{IntegratedLayout, IntegratedLayoutManager, IntegratedViewMode, ContentType};
-pub use unified_sidebar::{UnifiedSidebar, SidebarAction, NavigationItem, QuickActionType};
+pub use context_calendar::{
+    CalendarAction as ContextCalendarAction, CalendarDisplayMode, ContextAwareCalendar,
+    EmailCalendarContext,
+};
+pub use integrated_layout::{
+    ContentType, IntegratedLayout, IntegratedLayoutManager, IntegratedViewMode,
+};
+pub use unified_sidebar::{NavigationItem, QuickActionType, SidebarAction, UnifiedSidebar};
 
 // Re-export help system types
 pub use help::{HelpContent, HelpSection, KeyBinding, KeyBindingCategory};
@@ -188,7 +203,7 @@ pub enum UIMode {
     KeyboardShortcuts,
     Settings,
     ContactsPopup, // Quick contacts popup overlay
-    Contacts, // Full-screen contacts/address book interface
+    Contacts,      // Full-screen contacts/address book interface
 }
 
 /// AI operation results for async communication
@@ -262,20 +277,20 @@ pub struct UI {
     contacts_popup: Option<crate::contacts::ContactPopup>,
     // Full-screen address book UI
     address_book_ui: Option<crate::contacts::ui::AddressBookUI>,
-    
+
     // AI Assistant components
     ai_assistant: crate::ui::ai_assistant_ui::AIAssistantUI,
     ai_assistant_state: crate::ui::ai_assistant_ui::AIAssistantUIState,
     ai_config_ui: crate::ui::ai_config_ui::AIConfigUI,
     ai_config_state: crate::ui::ai_config_ui::AIConfigUIState,
     ai_popup: crate::ui::ai_popup::AIPopup,
-    
+
     // Command Palette System
     command_palette: CommandPalette,
-    
+
     // AI operation result channel
     ai_result_rx: Option<tokio::sync::mpsc::UnboundedReceiver<AIOperationResult>>,
-    
+
     // Event-driven handlers for decoupled operations
     event_driven_email: event_driven_email::EventDrivenEmailHandler,
     event_driven_ui_state: event_driven_email::EventDrivenUIState,
@@ -346,27 +361,27 @@ impl UI {
             contacts_popup: None,
             // Initialize address book UI (will be set when contacts manager is available)
             address_book_ui: None,
-            
+
             // Initialize AI components - will be properly initialized when AI service is set
             ai_assistant: {
                 // Create minimal AI service dependencies for UI initialization
-                let config = std::sync::Arc::new(tokio::sync::RwLock::new(crate::ai::config::AIConfig::default()));
+                let config = std::sync::Arc::new(tokio::sync::RwLock::new(
+                    crate::ai::config::AIConfig::default(),
+                ));
                 let provider_manager = std::sync::Arc::new(tokio::sync::RwLock::new(
-                    crate::ai::provider::AIProviderManager::new(config.clone())
+                    crate::ai::provider::AIProviderManager::new(config.clone()),
                 ));
                 let cache = std::sync::Arc::new(crate::ai::cache::AIResponseCache::new(
-                    100, 
-                    std::time::Duration::from_secs(300)
+                    100,
+                    std::time::Duration::from_secs(300),
                 ));
                 let ai_service = std::sync::Arc::new(crate::ai::service::AIService::new(
                     provider_manager,
                     cache,
-                    config.clone()
+                    config.clone(),
                 ));
-                let email_assistant = std::sync::Arc::new(crate::email::AIEmailAssistant::new(
-                    ai_service,
-                    config
-                ));
+                let email_assistant =
+                    std::sync::Arc::new(crate::email::AIEmailAssistant::new(ai_service, config));
                 crate::ui::ai_assistant_ui::AIAssistantUI::new(email_assistant)
             },
             ai_assistant_state: crate::ui::ai_assistant_ui::AIAssistantUIState::new(),
@@ -375,7 +390,7 @@ impl UI {
             ai_popup: crate::ui::ai_popup::AIPopup::new(),
             command_palette: CommandPalette::new(),
             ai_result_rx: None, // Will be set when AI operations are started
-            
+
             // Initialize event-driven handlers
             event_driven_email: event_driven_email::EventDrivenEmailHandler::new(),
             event_driven_ui_state: event_driven_email::EventDrivenUIState::new(),
@@ -389,21 +404,23 @@ impl UI {
 
         // Initialize status bar with default segments
         ui.initialize_status_bar();
-        
+
         // Ensure sample messages are shown when no database is available
         ui.message_list.ensure_sample_messages_if_no_database();
-        
+
         // NOTE: Event bus initialization is deferred to app.rs after tokio runtime is started
         // to avoid spawning async tasks during synchronous UI construction
-        
+
         ui
     }
-    
+
     /// Get mutable access to the UI integration system
-    pub fn ui_integration_mut(&mut self) -> &mut event_driven_ui_integration::EventDrivenUIIntegration {
+    pub fn ui_integration_mut(
+        &mut self,
+    ) -> &mut event_driven_ui_integration::EventDrivenUIIntegration {
         &mut self.ui_integration
     }
-    
+
     /// Get access to the UI integration system
     pub fn ui_integration(&self) -> &event_driven_ui_integration::EventDrivenUIIntegration {
         &self.ui_integration
@@ -411,16 +428,18 @@ impl UI {
 
     fn initialize_status_bar(&mut self) {
         // Set up responsive thresholds and intelligent context management
-        self.status_bar.set_information_density(StatusBarInformationDensity::Standard);
-        
+        self.status_bar
+            .set_information_density(StatusBarInformationDensity::Standard);
+
         // Add mode indicator segment (highest priority)
         let mode_segment = ModeIndicatorSegment {
             current_mode: self.mode.clone(),
             sub_mode: None,
             mode_stack: vec![self.mode.clone()],
         };
-        self.status_bar.add_segment("mode".to_string(), mode_segment);
-        
+        self.status_bar
+            .add_segment("mode".to_string(), mode_segment);
+
         // Add email status segment (will be updated with real data when messages are loaded)
         let email_segment = EmailStatusSegment {
             unread_count: 0,
@@ -466,15 +485,16 @@ impl UI {
         };
         self.status_bar
             .add_segment("navigation".to_string(), nav_segment);
-        
+
         // Add search status segment (initially hidden)
         let search_segment = SearchStatusSegment {
             query: String::new(),
             results_count: 0,
             is_active: false,
         };
-        self.status_bar.add_segment("search".to_string(), search_segment);
-        
+        self.status_bar
+            .add_segment("search".to_string(), search_segment);
+
         // Update context based on current mode
         self.update_status_bar_context();
     }
@@ -489,27 +509,30 @@ impl UI {
             UIMode::Settings => StatusBarContext::SettingsActive,
             _ => StatusBarContext::EmailFocus, // Default fallback
         };
-        
+
         self.status_bar.update_context(context);
-        
+
         // Update status bar density based on layout breakpoint
         let density = match self.layout.current_breakpoint() {
             LayoutBreakpoint::ExtraSmall => StatusBarInformationDensity::Minimal,
             LayoutBreakpoint::Small => StatusBarInformationDensity::Compact,
             LayoutBreakpoint::Medium => StatusBarInformationDensity::Standard,
-            LayoutBreakpoint::Large | LayoutBreakpoint::ExtraLarge => StatusBarInformationDensity::Standard,
+            LayoutBreakpoint::Large | LayoutBreakpoint::ExtraLarge => {
+                StatusBarInformationDensity::Standard
+            }
         };
         self.status_bar.set_information_density(density);
-        
+
         // Update mode indicator segment
         let mode_segment = ModeIndicatorSegment {
             current_mode: self.mode.clone(),
             sub_mode: self.get_current_sub_mode(),
             mode_stack: self.get_mode_stack(),
         };
-        self.status_bar.add_segment("mode".to_string(), mode_segment);
+        self.status_bar
+            .add_segment("mode".to_string(), mode_segment);
     }
-    
+
     /// Get current sub-mode description for more context
     fn get_current_sub_mode(&self) -> Option<String> {
         match self.mode {
@@ -538,7 +561,7 @@ impl UI {
             _ => None,
         }
     }
-    
+
     /// Get mode navigation stack for breadcrumb display
     fn get_mode_stack(&self) -> Vec<UIMode> {
         // For now, just return current mode, but could be expanded
@@ -550,13 +573,12 @@ impl UI {
         self.render_with_keyboard_manager(frame, &KeyboardManager::default())
     }
 
-
     pub fn render_with_keyboard_manager(
         &mut self,
         frame: &mut Frame,
         keyboard_manager: &KeyboardManager,
     ) {
-        let size = frame.size();
+        let size = frame.area();
 
         match self.mode {
             UIMode::Normal => {
@@ -699,10 +721,11 @@ impl UI {
                         .title("Contacts")
                         .borders(Borders::ALL)
                         .border_style(theme.colors.palette.border);
-                    let paragraph = Paragraph::new("Contacts manager not available. Initializing...")
-                        .block(block)
-                        .style(theme.colors.palette.text_primary)
-                        .alignment(ratatui::layout::Alignment::Center);
+                    let paragraph =
+                        Paragraph::new("Contacts manager not available. Initializing...")
+                            .block(block)
+                            .style(theme.colors.palette.text_primary)
+                            .alignment(ratatui::layout::Alignment::Center);
                     frame.render_widget(paragraph, size);
                 }
             }
@@ -713,16 +736,19 @@ impl UI {
         self.unified_feedback.render(frame, size, theme);
 
         // Render context shortcuts popup on top of everything if visible
-        self.context_shortcuts_popup.render(frame, size, theme, &self.mode);
+        self.context_shortcuts_popup
+            .render(frame, size, theme, &self.mode);
 
         // Render help overlay on top of everything if visible
         if self.help_overlay.is_visible() {
-            self.help_overlay.render(frame, size, theme, &self.typography);
+            self.help_overlay
+                .render(frame, size, theme, &self.typography);
         }
 
         // Render context menu on top of everything if visible
         if self.context_menu.is_visible() {
-            self.context_menu.render(frame, size, theme, &self.typography);
+            self.context_menu
+                .render(frame, size, theme, &self.typography);
         }
 
         // Render context-aware menu on top of everything if visible
@@ -734,16 +760,17 @@ impl UI {
         if self.ai_popup.is_visible() {
             self.ai_popup.render(frame, size, theme, &self.typography);
         }
-        
+
         // Render AI assistant if enabled and not hidden
         if self.ai_assistant_state.enabled {
             use crate::ui::ai_assistant_ui::AIAssistantMode;
             if self.ai_assistant_state.mode != AIAssistantMode::Hidden {
                 let ai_area = self.get_ai_assistant_area(size);
-                self.ai_assistant.render(frame, ai_area, &mut self.ai_assistant_state, theme);
+                self.ai_assistant
+                    .render(frame, ai_area, &mut self.ai_assistant_state, theme);
             }
         }
-        
+
         // Render command palette on top of everything if visible
         if self.command_palette.is_visible() {
             self.command_palette.render(frame, theme);
@@ -757,7 +784,9 @@ impl UI {
         // Analyze current email for calendar context first
         let mut calendar_context_mode = CalendarDisplayMode::Hidden;
         if let Some(selected_message) = self.message_list.get_selected_message_for_preview() {
-            calendar_context_mode = self.context_calendar.analyze_message_item_context(&selected_message);
+            calendar_context_mode = self
+                .context_calendar
+                .analyze_message_item_context(&selected_message);
         }
 
         // Render components that need mutable access first
@@ -797,7 +826,8 @@ impl UI {
             .borders(Borders::ALL)
             .border_style(border_style);
 
-        self.message_list.render(frame, area, block, is_focused, theme);
+        self.message_list
+            .render(frame, area, block, is_focused, theme);
     }
 
     /// Render email content details with context awareness
@@ -811,11 +841,17 @@ impl UI {
             .borders(Borders::ALL)
             .border_style(border_style);
 
-        self.content_preview.render(frame, area, block, is_focused, theme);
+        self.content_preview
+            .render(frame, area, block, is_focused, theme);
     }
 
     /// Render context-aware action bar for calendar/email actions
-    fn render_context_aware_actions(&self, frame: &mut Frame, area: Rect, context_mode: CalendarDisplayMode) {
+    fn render_context_aware_actions(
+        &self,
+        frame: &mut Frame,
+        area: Rect,
+        context_mode: CalendarDisplayMode,
+    ) {
         use ratatui::{
             layout::Alignment,
             style::{Modifier, Style},
@@ -824,27 +860,69 @@ impl UI {
         };
 
         let theme = self.theme_manager.current_theme();
-        
+
         let actions = match context_mode {
             CalendarDisplayMode::InvitationDetails => vec![
-                Span::styled(" [←→] Navigate ", Style::default().fg(theme.colors.palette.text_muted)),
-                Span::styled(" [Enter] RSVP ", Style::default().fg(theme.colors.palette.accent).add_modifier(Modifier::BOLD)),
-                Span::styled(" [Esc] Hide ", Style::default().fg(theme.colors.palette.text_muted)),
+                Span::styled(
+                    " [←→] Navigate ",
+                    Style::default().fg(theme.colors.palette.text_muted),
+                ),
+                Span::styled(
+                    " [Enter] RSVP ",
+                    Style::default()
+                        .fg(theme.colors.palette.accent)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    " [Esc] Hide ",
+                    Style::default().fg(theme.colors.palette.text_muted),
+                ),
             ],
             CalendarDisplayMode::DailyAgenda => vec![
-                Span::styled(" [c] Create Event ", Style::default().fg(theme.colors.palette.accent).add_modifier(Modifier::BOLD)),
-                Span::styled(" [r] Reply ", Style::default().fg(theme.colors.palette.text_muted)),
-                Span::styled(" [f] Forward ", Style::default().fg(theme.colors.palette.text_muted)),
+                Span::styled(
+                    " [c] Create Event ",
+                    Style::default()
+                        .fg(theme.colors.palette.accent)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    " [r] Reply ",
+                    Style::default().fg(theme.colors.palette.text_muted),
+                ),
+                Span::styled(
+                    " [f] Forward ",
+                    Style::default().fg(theme.colors.palette.text_muted),
+                ),
             ],
             CalendarDisplayMode::QuickSchedule => vec![
-                Span::styled(" [c] Create Meeting ", Style::default().fg(theme.colors.palette.accent).add_modifier(Modifier::BOLD)),
-                Span::styled(" [s] Schedule ", Style::default().fg(theme.colors.palette.text_muted)),
-                Span::styled(" [r] Reply ", Style::default().fg(theme.colors.palette.text_muted)),
+                Span::styled(
+                    " [c] Create Meeting ",
+                    Style::default()
+                        .fg(theme.colors.palette.accent)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    " [s] Schedule ",
+                    Style::default().fg(theme.colors.palette.text_muted),
+                ),
+                Span::styled(
+                    " [r] Reply ",
+                    Style::default().fg(theme.colors.palette.text_muted),
+                ),
             ],
             _ => vec![
-                Span::styled(" [r] Reply ", Style::default().fg(theme.colors.palette.text_muted)),
-                Span::styled(" [f] Forward ", Style::default().fg(theme.colors.palette.text_muted)),
-                Span::styled(" [c] Compose ", Style::default().fg(theme.colors.palette.text_muted)),
+                Span::styled(
+                    " [r] Reply ",
+                    Style::default().fg(theme.colors.palette.text_muted),
+                ),
+                Span::styled(
+                    " [f] Forward ",
+                    Style::default().fg(theme.colors.palette.text_muted),
+                ),
+                Span::styled(
+                    " [c] Compose ",
+                    Style::default().fg(theme.colors.palette.text_muted),
+                ),
             ],
         };
 
@@ -853,7 +931,7 @@ impl UI {
             .block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .border_style(Style::default().fg(theme.colors.palette.border))
+                    .border_style(Style::default().fg(theme.colors.palette.border)),
             )
             .alignment(Alignment::Center);
 
@@ -879,9 +957,17 @@ impl UI {
         let is_compact = self.should_use_compact_ui();
 
         let border_style = theme.get_component_style("border", is_focused);
-        let title = if is_compact { "Folders" } else { "📁 Folders" };
-        let borders = if is_compact { Borders::TOP | Borders::BOTTOM } else { Borders::ALL };
-        
+        let title = if is_compact {
+            "Folders"
+        } else {
+            "📁 Folders"
+        };
+        let borders = if is_compact {
+            Borders::TOP | Borders::BOTTOM
+        } else {
+            Borders::ALL
+        };
+
         let block = Block::default()
             .title(title)
             .borders(borders)
@@ -889,10 +975,15 @@ impl UI {
 
         self.folder_tree
             .render(frame, area, block, is_focused, theme);
-            
+
         // Render focus indicators if this pane is focused
         if is_focused {
-            self.context_indicators.render_focus_indicator(frame, area, FocusedPane::FolderTree, theme);
+            self.context_indicators.render_focus_indicator(
+                frame,
+                area,
+                FocusedPane::FolderTree,
+                theme,
+            );
         }
     }
 
@@ -909,13 +1000,13 @@ impl UI {
             (false, LayoutMode::SingleColumn) => "📧 Messages (Full Screen)",
             (false, _) => "📧 Messages",
         };
-        
+
         let borders = if is_compact && matches!(layout_mode, LayoutMode::Stacked) {
             Borders::TOP | Borders::BOTTOM
         } else {
             Borders::ALL
         };
-        
+
         let block = Block::default()
             .title(title)
             .borders(borders)
@@ -923,10 +1014,15 @@ impl UI {
 
         self.message_list
             .render(frame, area, block, is_focused, theme);
-            
+
         // Render focus indicators if this pane is focused
         if is_focused {
-            self.context_indicators.render_focus_indicator(frame, area, FocusedPane::MessageList, theme);
+            self.context_indicators.render_focus_indicator(
+                frame,
+                area,
+                FocusedPane::MessageList,
+                theme,
+            );
         }
     }
 
@@ -939,16 +1035,16 @@ impl UI {
         let border_style = theme.get_component_style("border", is_focused);
         let title = match (is_compact, layout_mode) {
             (true, _) => "📄 Content",
-            (false, LayoutMode::TwoColumn) => "📄 Content Preview", 
+            (false, LayoutMode::TwoColumn) => "📄 Content Preview",
             (false, _) => "📄 Email Content",
         };
-        
+
         let borders = if matches!(layout_mode, LayoutMode::SingleColumn | LayoutMode::Stacked) {
             Borders::ALL // Full borders when content has focus
         } else {
             Borders::ALL
         };
-        
+
         let block = Block::default()
             .title(title)
             .borders(borders)
@@ -956,10 +1052,15 @@ impl UI {
 
         self.content_preview
             .render(frame, area, block, is_focused, theme);
-            
-        // Render focus indicators if this pane is focused  
+
+        // Render focus indicators if this pane is focused
         if is_focused {
-            self.context_indicators.render_focus_indicator(frame, area, FocusedPane::ContentPreview, theme);
+            self.context_indicators.render_focus_indicator(
+                frame,
+                area,
+                FocusedPane::ContentPreview,
+                theme,
+            );
         }
     }
 
@@ -995,7 +1096,8 @@ impl UI {
             frame.render_widget(notification_widget, area);
         } else {
             // Enhanced status bar rendering with typography
-            self.status_bar.render_with_typography(frame, area, theme, &self.typography);
+            self.status_bar
+                .render_with_typography(frame, area, theme, &self.typography);
         }
     }
 
@@ -1008,7 +1110,7 @@ impl UI {
         }
 
         let theme = self.theme_manager.current_theme();
-        
+
         // Split status bar area to include context indicators
         let chunks = Layout::default()
             .direction(Direction::Vertical)
@@ -1020,7 +1122,8 @@ impl UI {
 
         // Render context indicators in the top line
         if chunks.len() >= 1 {
-            self.context_indicators.render(frame, chunks[0], theme, &self.typography);
+            self.context_indicators
+                .render(frame, chunks[0], theme, &self.typography);
         }
 
         // Render traditional status bar in the bottom area
@@ -1138,7 +1241,9 @@ impl UI {
         &self.ai_assistant_state
     }
 
-    pub fn ai_assistant_state_mut(&mut self) -> &mut crate::ui::ai_assistant_ui::AIAssistantUIState {
+    pub fn ai_assistant_state_mut(
+        &mut self,
+    ) -> &mut crate::ui::ai_assistant_ui::AIAssistantUIState {
         &mut self.ai_assistant_state
     }
 
@@ -1193,9 +1298,9 @@ impl UI {
         match self.mode {
             UIMode::Compose => true,  // User might be typing an email
             UIMode::Search => true,   // User might be typing a search query
-            UIMode::Settings => true,  // Assume settings might have text input
-            UIMode::EventCreate | UIMode::EventEdit => true,  // Assume event forms have text input
-            _ => false,  // Most modes don't involve text input
+            UIMode::Settings => true, // Assume settings might have text input
+            UIMode::EventCreate | UIMode::EventEdit => true, // Assume event forms have text input
+            _ => false,               // Most modes don't involve text input
         }
     }
 
@@ -1203,27 +1308,32 @@ impl UI {
     /// Used by global quit handling to allow Escape to quit only from main view
     pub fn is_in_main_view(&self) -> bool {
         match self.mode {
-            UIMode::Normal => true,  // Main application view
-            UIMode::DraftList => true,  // Draft list is part of main navigation
-            UIMode::Calendar => true,  // Calendar is part of main navigation
-            UIMode::ContextAware => true,  // Context-aware view is main view
+            UIMode::Normal => true,       // Main application view
+            UIMode::DraftList => true,    // Draft list is part of main navigation
+            UIMode::Calendar => true,     // Calendar is part of main navigation
+            UIMode::ContextAware => true, // Context-aware view is main view
             // The following are considered popups/modals that shouldn't quit on Escape
-            UIMode::Compose => false,  // Compose modal
-            UIMode::EventCreate => false,  // Event creation modal
-            UIMode::EventEdit => false,  // Event editing modal
-            UIMode::EventView => false,  // Event viewing modal
-            UIMode::EmailViewer => false,  // Email viewer modal
+            UIMode::Compose => false,           // Compose modal
+            UIMode::EventCreate => false,       // Event creation modal
+            UIMode::EventEdit => false,         // Event editing modal
+            UIMode::EventView => false,         // Event viewing modal
+            UIMode::EmailViewer => false,       // Email viewer modal
             UIMode::InvitationViewer => false,  // Invitation viewer modal
-            UIMode::Search => false,  // Search modal
-            UIMode::KeyboardShortcuts => false,  // Help modal
-            UIMode::Settings => false,  // Settings modal
-            UIMode::ContactsPopup => false,  // Contacts popup
-            UIMode::Contacts => false,  // Contacts modal
+            UIMode::Search => false,            // Search modal
+            UIMode::KeyboardShortcuts => false, // Help modal
+            UIMode::Settings => false,          // Settings modal
+            UIMode::ContactsPopup => false,     // Contacts popup
+            UIMode::Contacts => false,          // Contacts modal
         }
     }
 
     /// Render components based on responsive layout mode
-    fn render_responsive_layout(&mut self, frame: &mut Frame, chunks: &[Rect], layout_mode: LayoutMode) {
+    fn render_responsive_layout(
+        &mut self,
+        frame: &mut Frame,
+        chunks: &[Rect],
+        layout_mode: LayoutMode,
+    ) {
         match layout_mode {
             LayoutMode::ThreeColumn => {
                 // Full three-column layout
@@ -1254,7 +1364,7 @@ impl UI {
             }
         }
     }
-    
+
     /// Render compact account indicator for narrow layouts
     fn render_compact_account_indicator(&self, frame: &mut Frame, area: Rect) {
         use ratatui::{
@@ -1263,7 +1373,7 @@ impl UI {
             text::{Line, Span},
             widgets::{Block, Borders, Paragraph},
         };
-        
+
         // Create a small overlay in the top-right corner
         let indicator_area = Rect {
             x: area.x + area.width.saturating_sub(25),
@@ -1271,7 +1381,7 @@ impl UI {
             width: 25.min(area.width),
             height: 3,
         };
-        
+
         if let Some(account) = self.account_switcher.get_current_account() {
             let theme = self.theme_manager.current_theme();
             let account_text = if account.email_address.len() > 20 {
@@ -1279,26 +1389,24 @@ impl UI {
             } else {
                 account.email_address.clone()
             };
-            
-            let paragraph = Paragraph::new(Line::from(vec![
-                Span::styled(
-                    format!("📧 {}", account_text),
-                    Style::default()
-                        .fg(theme.colors.palette.text_primary)
-                        .add_modifier(Modifier::BOLD),
-                ),
-            ]))
+
+            let paragraph = Paragraph::new(Line::from(vec![Span::styled(
+                format!("📧 {}", account_text),
+                Style::default()
+                    .fg(theme.colors.palette.text_primary)
+                    .add_modifier(Modifier::BOLD),
+            )]))
             .block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .border_style(theme.get_component_style("account_indicator", false))
+                    .border_style(theme.get_component_style("account_indicator", false)),
             )
             .alignment(Alignment::Center);
-            
+
             frame.render_widget(paragraph, indicator_area);
         }
     }
-    
+
     /// Render navigation overlay for single column mode
     fn render_navigation_overlay(&self, frame: &mut Frame, area: Rect) {
         use ratatui::{
@@ -1307,7 +1415,7 @@ impl UI {
             text::{Line, Span},
             widgets::{Block, Borders, Paragraph},
         };
-        
+
         // Create overlay at the bottom of the message area
         let overlay_area = Rect {
             x: area.x,
@@ -1315,36 +1423,64 @@ impl UI {
             width: area.width,
             height: 4.min(area.height),
         };
-        
+
         let theme = self.theme_manager.current_theme();
-        let help_text = vec![
-            Line::from(vec![
-                Span::styled("Navigation: ", Style::default().fg(theme.colors.palette.text_secondary)),
-                Span::styled("Tab", Style::default().fg(theme.colors.palette.accent).add_modifier(Modifier::BOLD)),
-                Span::styled(" Switch | ", Style::default().fg(theme.colors.palette.text_secondary)),
-                Span::styled("Esc", Style::default().fg(theme.colors.palette.accent).add_modifier(Modifier::BOLD)),
-                Span::styled(" Wide View | ", Style::default().fg(theme.colors.palette.text_secondary)),
-                Span::styled("?", Style::default().fg(theme.colors.palette.accent).add_modifier(Modifier::BOLD)),
-                Span::styled(" Help", Style::default().fg(theme.colors.palette.text_secondary)),
-            ])
-        ];
-        
+        let help_text = vec![Line::from(vec![
+            Span::styled(
+                "Navigation: ",
+                Style::default().fg(theme.colors.palette.text_secondary),
+            ),
+            Span::styled(
+                "Tab",
+                Style::default()
+                    .fg(theme.colors.palette.accent)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                " Switch | ",
+                Style::default().fg(theme.colors.palette.text_secondary),
+            ),
+            Span::styled(
+                "Esc",
+                Style::default()
+                    .fg(theme.colors.palette.accent)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                " Wide View | ",
+                Style::default().fg(theme.colors.palette.text_secondary),
+            ),
+            Span::styled(
+                "?",
+                Style::default()
+                    .fg(theme.colors.palette.accent)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                " Help",
+                Style::default().fg(theme.colors.palette.text_secondary),
+            ),
+        ])];
+
         let paragraph = Paragraph::new(help_text)
             .block(
                 Block::default()
                     .borders(Borders::TOP)
-                    .border_style(theme.get_component_style("navigation_overlay", false))
+                    .border_style(theme.get_component_style("navigation_overlay", false)),
             )
             .alignment(Alignment::Center);
-            
+
         frame.render_widget(paragraph, overlay_area);
     }
-    
+
     /// Get responsive layout information for status bar
     pub fn get_responsive_layout_info(&self) -> (LayoutBreakpoint, LayoutMode) {
-        (self.layout.current_breakpoint(), self.layout.current_layout_mode())
+        (
+            self.layout.current_breakpoint(),
+            self.layout.current_layout_mode(),
+        )
     }
-    
+
     /// Check if responsive layout adaptations should be applied
     pub fn should_use_compact_ui(&self) -> bool {
         matches!(
@@ -1352,11 +1488,11 @@ impl UI {
             LayoutBreakpoint::ExtraSmall | LayoutBreakpoint::Small
         )
     }
-    
+
     /// Toggle to next layout mode (for user override)
     pub fn cycle_layout_mode(&mut self) {
         use crate::ui::layout::{AdaptiveBehavior, ResponsiveConfig};
-        
+
         // Temporarily disable auto-adaptation to allow manual control
         // Create new configuration with manual control enabled
         let behavior = AdaptiveBehavior {
@@ -1365,33 +1501,37 @@ impl UI {
             scale_content: true,
             simplify_interface: true,
         };
-        
+
         let config = ResponsiveConfig {
             breakpoints: ResponsiveBreakpoints::default(),
             min_widths: ComponentMinWidths::default(),
             adaptive_behavior: behavior,
         };
         self.layout.update_responsive_config(config);
-        
+
         // Force re-layout with user preference
         // This will be handled by the next render cycle
         self.update_status_bar_context();
     }
-    
+
     /// Toggle sidebar visibility (manual override)
     pub fn toggle_sidebar(&mut self) {
         // This will be used to manually control sidebar visibility
         // regardless of responsive breakpoints
         self.cycle_layout_mode();
     }
-    
+
     /// Get layout status for debugging and user feedback
     pub fn get_layout_status(&self) -> String {
         format!(
             "Layout: {:?} | Screen: {:?} | Sidebar: {} | Mode: {:?}",
             self.layout.current_layout_mode(),
             self.layout.current_breakpoint(),
-            if self.layout.is_sidebar_visible() { "On" } else { "Off" },
+            if self.layout.is_sidebar_visible() {
+                "On"
+            } else {
+                "Off"
+            },
             self.mode
         )
     }
@@ -1625,10 +1765,10 @@ impl UI {
     pub fn refresh_status_bar(&mut self) {
         // Update system time
         self.update_system_time(chrono::Local::now().format("%H:%M").to_string());
-        
+
         // Update navigation hints for current mode
         self.update_navigation_hints();
-        
+
         // Update email status if we have message data
         let message_count = self.message_list.messages().len();
         let unread_count = self
@@ -1637,16 +1777,16 @@ impl UI {
             .iter()
             .filter(|msg| !msg.is_read)
             .count();
-        
+
         // Determine sync status based on current state
         let sync_status = if self.is_sync_progress_visible() {
             SyncStatus::Syncing
         } else {
             SyncStatus::Online
         };
-        
+
         self.update_email_status(unread_count, message_count, sync_status);
-        
+
         // Update calendar status with current calendar data
         self.refresh_calendar_status();
     }
@@ -1656,10 +1796,10 @@ impl UI {
         // Get current date for today's events calculation
         let today = chrono::Local::now().date_naive();
         let now = chrono::Utc::now();
-        
+
         // Get calendar events from calendar UI
         let events = self.calendar_ui.get_events();
-        
+
         // Calculate events today
         let events_today = events
             .iter()
@@ -1668,28 +1808,28 @@ impl UI {
                 local_start.date_naive() == today
             })
             .count();
-        
+
         // Find next upcoming event
         let mut upcoming_events: Vec<_> = events
             .iter()
             .filter(|event| event.start_time > now)
             .collect();
         upcoming_events.sort_by_key(|event| event.start_time);
-        
+
         let (next_event, next_event_time) = if let Some(next) = upcoming_events.first() {
             let local_time = next.start_time.with_timezone(&chrono::Local);
             (Some(next.title.clone()), Some(local_time))
         } else {
             (None, None)
         };
-        
+
         // Calculate urgent events (events starting within 1 hour)
         let urgent_threshold = now + chrono::Duration::hours(1);
         let urgent_events = upcoming_events
             .iter()
             .filter(|event| event.start_time <= urgent_threshold)
             .count();
-        
+
         self.update_calendar_status(next_event, events_today, next_event_time, urgent_events);
     }
 
@@ -1698,19 +1838,22 @@ impl UI {
         self.message_list.set_database(database.clone());
         self.content_preview.set_database(database.clone());
         self.folder_tree.set_database(database.clone());
-        
+
         // Initialize search engines with database
         self.search_engine = Some(SearchEngine::new(database.clone()));
         self.fuzzy_search_engine = Some(FuzzySearchEngine::new(database));
     }
 
     /// Set the contacts manager and initialize sender recognition
-    pub fn set_contacts_manager(&mut self, contacts_manager: Arc<crate::contacts::ContactsManager>) {
+    pub fn set_contacts_manager(
+        &mut self,
+        contacts_manager: Arc<crate::contacts::ContactsManager>,
+    ) {
         use crate::contacts::SenderRecognitionService;
-        
+
         // Create sender recognition service
         let sender_recognition = Arc::new(SenderRecognitionService::new(contacts_manager));
-        
+
         // Set it up in the message list
         self.message_list.set_sender_recognition(sender_recognition);
     }
@@ -1876,8 +2019,11 @@ impl UI {
     /// Handle a specific email notification
     async fn handle_notification(&mut self, notification: EmailNotification) {
         // Add toast notification for all email notifications
-        SimpleToastIntegration::handle_email_notification(&mut self.toast_manager, notification.clone());
-        
+        SimpleToastIntegration::handle_email_notification(
+            &mut self.toast_manager,
+            notification.clone(),
+        );
+
         match notification {
             EmailNotification::NewMessage {
                 account_id,
@@ -2156,7 +2302,9 @@ impl UI {
     /// Enhanced progress overlay methods
     ///
     /// Get mutable access to enhanced progress overlay
-    pub fn enhanced_progress_overlay_mut(&mut self) -> &mut enhanced_progress_overlay::EnhancedProgressOverlay {
+    pub fn enhanced_progress_overlay_mut(
+        &mut self,
+    ) -> &mut enhanced_progress_overlay::EnhancedProgressOverlay {
         &mut self.enhanced_progress_overlay
     }
 
@@ -2365,7 +2513,8 @@ impl UI {
         key: crossterm::event::KeyCode,
     ) -> Option<ComposeAction> {
         if let Some(ref mut compose_ui) = self.compose_ui {
-            let key_event = crossterm::event::KeyEvent::new(key, crossterm::event::KeyModifiers::empty());
+            let key_event =
+                crossterm::event::KeyEvent::new(key, crossterm::event::KeyModifiers::empty());
             Some(compose_ui.handle_key(key_event).await)
         } else {
             None
@@ -2487,7 +2636,6 @@ impl UI {
         matches!(self.mode, UIMode::Compose)
     }
 
-
     /// Show keyboard shortcuts popup
     pub fn show_keyboard_shortcuts(&mut self) {
         self.mode = UIMode::KeyboardShortcuts;
@@ -2575,8 +2723,6 @@ impl UI {
         self.update_status_bar_context();
     }
 
-
-
     /// Hide calendar interface and return to normal mode
     pub fn hide_calendar(&mut self) {
         self.mode = UIMode::Normal;
@@ -2604,11 +2750,14 @@ impl UI {
     }
 
     /// Set contacts manager for address book UI
-    pub fn set_address_book_contacts_manager(&mut self, contacts_manager: Arc<crate::contacts::ContactsManager>) {
+    pub fn set_address_book_contacts_manager(
+        &mut self,
+        contacts_manager: Arc<crate::contacts::ContactsManager>,
+    ) {
         // Initialize the address book UI with the real contacts manager
         self.address_book_ui = Some(crate::contacts::ui::AddressBookUI::new(contacts_manager));
     }
-    
+
     /// Ensure contacts are loaded in the address book
     pub async fn ensure_address_book_contacts_loaded(&mut self) {
         if let Some(ref mut address_book_ui) = self.address_book_ui {
@@ -2638,7 +2787,7 @@ impl UI {
                 let (_handled, action) = address_book_ui.handle_key(key).await;
                 action
             } else {
-                None  
+                None
             }
         } else {
             None
@@ -2708,7 +2857,8 @@ impl UI {
         let is_visible = self.is_event_form_visible();
         if is_visible {
             if let Some(ref mut event_form) = self.event_form_ui {
-                let key_event = crossterm::event::KeyEvent::new(key, crossterm::event::KeyModifiers::empty());
+                let key_event =
+                    crossterm::event::KeyEvent::new(key, crossterm::event::KeyModifiers::empty());
                 return event_form.handle_key(key_event).await;
             }
         }
@@ -2727,9 +2877,16 @@ impl UI {
 
     /// Set calendar events to display
     pub fn set_calendar_events(&mut self, events: Vec<crate::calendar::Event>) {
-        tracing::info!("🎯 UI: Received {} events to display in calendar", events.len());
+        tracing::info!(
+            "🎯 UI: Received {} events to display in calendar",
+            events.len()
+        );
         for event in &events {
-            tracing::info!("📅 UI:   Event: {} (Start: {})", event.title, event.start_time);
+            tracing::info!(
+                "📅 UI:   Event: {} (Start: {})",
+                event.title,
+                event.start_time
+            );
         }
         self.calendar_ui.set_events(events);
         tracing::info!("✅ UI: Events passed to calendar_ui.set_events()");
@@ -2979,7 +3136,8 @@ impl UI {
                             self.search_ui.set_results(results, search_time);
                         }
                         Err(e) => {
-                            self.search_ui.set_error(format!("Fuzzy search failed: {}", e));
+                            self.search_ui
+                                .set_error(format!("Fuzzy search failed: {}", e));
                         }
                     }
                 }
@@ -3039,7 +3197,10 @@ impl UI {
     }
 
     /// Handle context menu key input
-    pub fn handle_context_menu_key(&mut self, key: crossterm::event::KeyCode) -> Option<ContextMenuAction> {
+    pub fn handle_context_menu_key(
+        &mut self,
+        key: crossterm::event::KeyCode,
+    ) -> Option<ContextMenuAction> {
         self.context_menu.handle_key(key)
     }
 
@@ -3059,7 +3220,12 @@ impl UI {
     }
 
     /// Show context menu at position with specific context
-    pub fn show_context_menu_at_position(&mut self, x: u16, y: u16, context_type: crate::ui::context_menu::ContextType) {
+    pub fn show_context_menu_at_position(
+        &mut self,
+        x: u16,
+        y: u16,
+        context_type: crate::ui::context_menu::ContextType,
+    ) {
         self.context_menu.show_at_position(x, y, context_type);
     }
 
@@ -3094,7 +3260,9 @@ impl UI {
 
     /// Get selected message ID (helper for context actions)
     pub fn get_selected_message_id(&self) -> Option<uuid::Uuid> {
-        self.message_list.selected_message().and_then(|m| m.message_id)
+        self.message_list
+            .selected_message()
+            .and_then(|m| m.message_id)
     }
 
     /// Get default calendar ID (helper for context actions)
@@ -3115,7 +3283,9 @@ impl UI {
 
     /// Get current account ID (helper for context actions)
     pub fn get_current_account_id_string(&self) -> Option<String> {
-        self.account_switcher.get_current_account().map(|a| a.account_id.clone())
+        self.account_switcher
+            .get_current_account()
+            .map(|a| a.account_id.clone())
     }
 
     /// Get current context type based on UI state
@@ -3137,9 +3307,12 @@ impl UI {
             FocusedPane::FolderTree => {
                 // Check if there's a selected folder
                 if let Some(selected_folder) = self.folder_tree.selected_folder() {
-                    let is_special = matches!(selected_folder.name.as_str(), "INBOX" | "Sent" | "Drafts" | "Trash" | "Spam");
+                    let is_special = matches!(
+                        selected_folder.name.as_str(),
+                        "INBOX" | "Sent" | "Drafts" | "Trash" | "Spam"
+                    );
                     let unread_count = selected_folder.unread_count;
-                    
+
                     ContextType::EmailFolder {
                         folder_name: selected_folder.name.clone(),
                         is_special,
@@ -3154,7 +3327,10 @@ impl UI {
                 if let Some(account) = self.account_switcher.get_current_account() {
                     ContextType::Account {
                         account_id: account.account_id.clone(),
-                        is_online: matches!(account.sync_status, AccountSyncStatus::Online | AccountSyncStatus::Syncing),
+                        is_online: matches!(
+                            account.sync_status,
+                            AccountSyncStatus::Online | AccountSyncStatus::Syncing
+                        ),
                     }
                 } else {
                     ContextType::General
@@ -3211,7 +3387,8 @@ impl UI {
     pub fn show_context_aware_interface(&mut self) {
         self.mode = UIMode::ContextAware;
         self.focused_pane = FocusedPane::MessageList;
-        self.integrated_layout.set_view_mode(IntegratedViewMode::ContextAware);
+        self.integrated_layout
+            .set_view_mode(IntegratedViewMode::ContextAware);
         self.update_navigation_hints();
     }
 
@@ -3221,7 +3398,10 @@ impl UI {
     }
 
     /// Handle context-aware calendar key input
-    pub fn handle_context_calendar_key(&mut self, key: crossterm::event::KeyCode) -> Option<ContextCalendarAction> {
+    pub fn handle_context_calendar_key(
+        &mut self,
+        key: crossterm::event::KeyCode,
+    ) -> Option<ContextCalendarAction> {
         if self.is_context_aware_active() {
             self.context_calendar.handle_key(key)
         } else {
@@ -3245,12 +3425,18 @@ impl UI {
         folders: &[(String, String, u32, bool, usize)],
         calendars: &[crate::calendar::Calendar],
     ) {
-        self.unified_sidebar.update_data(accounts, folders, calendars);
+        self.unified_sidebar
+            .update_data(accounts, folders, calendars);
     }
 
     /// Set context-aware calendar events and calendars
-    pub fn update_context_calendar(&mut self, events: Vec<crate::calendar::Event>, calendars: Vec<crate::calendar::Calendar>) {
-        self.context_calendar.update_calendar_data(events, calendars);
+    pub fn update_context_calendar(
+        &mut self,
+        events: Vec<crate::calendar::Event>,
+        calendars: Vec<crate::calendar::Calendar>,
+    ) {
+        self.context_calendar
+            .update_calendar_data(events, calendars);
     }
 
     /// Toggle integrated layout view mode
@@ -3373,17 +3559,13 @@ impl UI {
         match contact {
             Some(contact) => {
                 let message = format!(
-                    "Contact: {} <{}> - Press 'i' to view, Ctrl+i to edit, 'x' to remove", 
-                    contact.display_name, 
-                    email
+                    "Contact: {} <{}> - Press 'i' to view, Ctrl+i to edit, 'x' to remove",
+                    contact.display_name, email
                 );
                 self.show_notification(message, Duration::from_secs(5));
             }
             None => {
-                let message = format!(
-                    "Email: {} - Press 'a' to add as contact", 
-                    email
-                );
+                let message = format!("Email: {} - Press 'a' to add as contact", email);
                 self.show_notification(message, Duration::from_secs(3));
             }
         }
@@ -3397,7 +3579,7 @@ impl UI {
         self.unified_feedback.show_contextual(
             message.into(),
             FeedbackLevel::Info,
-            FeedbackContext::user_action(self.mode.clone(), self.focused_pane)
+            FeedbackContext::user_action(self.mode.clone(), self.focused_pane),
         );
     }
 
@@ -3407,7 +3589,7 @@ impl UI {
         self.unified_feedback.show_contextual(
             message.into(),
             FeedbackLevel::Success,
-            FeedbackContext::user_action(self.mode.clone(), self.focused_pane)
+            FeedbackContext::user_action(self.mode.clone(), self.focused_pane),
         );
     }
 
@@ -3417,7 +3599,7 @@ impl UI {
         self.unified_feedback.show_contextual(
             message.into(),
             FeedbackLevel::Warning,
-            FeedbackContext::user_action(self.mode.clone(), self.focused_pane)
+            FeedbackContext::user_action(self.mode.clone(), self.focused_pane),
         );
     }
 
@@ -3427,7 +3609,7 @@ impl UI {
         self.unified_feedback.show_contextual(
             message.into(),
             FeedbackLevel::Error,
-            FeedbackContext::user_action(self.mode.clone(), self.focused_pane)
+            FeedbackContext::user_action(self.mode.clone(), self.focused_pane),
         );
     }
 
@@ -3437,7 +3619,7 @@ impl UI {
         self.unified_feedback.show_progress(
             message.into(),
             progress,
-            FeedbackContext::system_status(self.mode.clone())
+            FeedbackContext::system_status(self.mode.clone()),
         );
     }
 
@@ -3447,7 +3629,7 @@ impl UI {
         self.unified_feedback.show_contextual(
             message.into(),
             FeedbackLevel::Status,
-            FeedbackContext::system_status(self.mode.clone())
+            FeedbackContext::system_status(self.mode.clone()),
         );
     }
 
@@ -3457,7 +3639,7 @@ impl UI {
         self.unified_feedback.show_contextual(
             message.into(),
             FeedbackLevel::Critical,
-            FeedbackContext::system_error(self.mode.clone())
+            FeedbackContext::system_error(self.mode.clone()),
         );
     }
 
@@ -3516,7 +3698,7 @@ impl UI {
             InformationDensity::Relaxed => InformationDensity::Compact,
         };
         self.set_information_density(next_density);
-        
+
         // Show toast to inform user of the change
         let density_name = match next_density {
             InformationDensity::Compact => "Compact",
@@ -3540,9 +3722,11 @@ impl UI {
     /// Toggle contextual help overlay for current view mode
     pub fn toggle_help(&mut self, view_mode: crate::tea::message::ViewMode) {
         self.help_overlay.toggle(view_mode);
-        
+
         if self.help_overlay.is_visible() {
-            self.show_toast_info("Help overlay displayed. Press Ctrl+H, ? or Esc to close".to_string());
+            self.show_toast_info(
+                "Help overlay displayed. Press Ctrl+H, ? or Esc to close".to_string(),
+            );
         }
     }
 
@@ -3568,11 +3752,17 @@ impl UI {
 
     /// Toggle a section's expanded state
     pub fn toggle_disclosure_section(&mut self, section_id: &str) -> bool {
-        let result = self.progressive_disclosure_manager.toggle_section(section_id);
+        let result = self
+            .progressive_disclosure_manager
+            .toggle_section(section_id);
         if result {
             let section = self.progressive_disclosure_manager.get_section(section_id);
             if let Some(section) = section {
-                let state = if section.is_expanded() { "expanded" } else { "collapsed" };
+                let state = if section.is_expanded() {
+                    "expanded"
+                } else {
+                    "collapsed"
+                };
                 self.show_toast_info(format!("Section '{}' {}", section.meta.title, state));
             }
         }
@@ -3611,7 +3801,7 @@ impl UI {
                 self.show_toast_info(format!("Focused: {}", section.meta.title));
             }
         }
-        result 
+        result
     }
 
     /// Navigate to previous disclosure section
@@ -3628,13 +3818,11 @@ impl UI {
     /// Setup default progressive disclosure sections for email view
     pub fn setup_email_disclosure_sections(&mut self) {
         // Email metadata section
-        let email_meta = ExpandableSection::new(
-            "email_metadata".to_string(),
-            "Email Metadata".to_string()
-        )
-        .with_subtitle("Headers and technical details".to_string())
-        .expanded(false)
-        .with_priority(1);
+        let email_meta =
+            ExpandableSection::new("email_metadata".to_string(), "Email Metadata".to_string())
+                .with_subtitle("Headers and technical details".to_string())
+                .expanded(false)
+                .with_priority(1);
 
         let meta_content = SectionContent::KeyValue(vec![
             ("From".to_string(), "sender@example.com".to_string()),
@@ -3646,13 +3834,11 @@ impl UI {
         self.add_disclosure_section(Section::new(email_meta, meta_content));
 
         // Attachments section
-        let attachments = ExpandableSection::new(
-            "attachments".to_string(),
-            "Attachments".to_string()
-        )
-        .with_item_count(3)
-        .expanded(true)
-        .with_priority(2);
+        let attachments =
+            ExpandableSection::new("attachments".to_string(), "Attachments".to_string())
+                .with_item_count(3)
+                .expanded(true)
+                .with_priority(2);
 
         let attachment_content = SectionContent::List(vec![
             "document.pdf (1.2 MB)".to_string(),
@@ -3663,12 +3849,10 @@ impl UI {
         self.add_disclosure_section(Section::new(attachments, attachment_content));
 
         // Email actions section
-        let actions = ExpandableSection::new(
-            "email_actions".to_string(),
-            "Quick Actions".to_string()
-        )
-        .expanded(false)
-        .with_priority(3);
+        let actions =
+            ExpandableSection::new("email_actions".to_string(), "Quick Actions".to_string())
+                .expanded(false)
+                .with_priority(3);
 
         let action_content = SectionContent::List(vec![
             "Reply (R)".to_string(),
@@ -3684,12 +3868,10 @@ impl UI {
     /// Setup default progressive disclosure sections for calendar view
     pub fn setup_calendar_disclosure_sections(&mut self) {
         // Event details section
-        let event_details = ExpandableSection::new(
-            "event_details".to_string(),
-            "Event Details".to_string()
-        )
-        .expanded(true)
-        .with_priority(1);
+        let event_details =
+            ExpandableSection::new("event_details".to_string(), "Event Details".to_string())
+                .expanded(true)
+                .with_priority(1);
 
         let details_content = SectionContent::KeyValue(vec![
             ("Title".to_string(), "Team Meeting".to_string()),
@@ -3702,12 +3884,10 @@ impl UI {
         self.add_disclosure_section(Section::new(event_details, details_content));
 
         // Calendar views section
-        let views = ExpandableSection::new(
-            "calendar_views".to_string(),
-            "View Options".to_string()
-        )
-        .expanded(false)
-        .with_priority(2);
+        let views =
+            ExpandableSection::new("calendar_views".to_string(), "View Options".to_string())
+                .expanded(false)
+                .with_priority(2);
 
         let views_content = SectionContent::List(vec![
             "Day view (D)".to_string(),
@@ -3718,10 +3898,10 @@ impl UI {
 
         self.add_disclosure_section(Section::new(views, views_content));
 
-        // Calendar actions section  
+        // Calendar actions section
         let cal_actions = ExpandableSection::new(
             "calendar_actions".to_string(),
-            "Calendar Actions".to_string()
+            "Calendar Actions".to_string(),
         )
         .expanded(false)
         .with_priority(3);
@@ -3742,10 +3922,10 @@ impl UI {
         let theme = self.theme_manager.current_theme();
         ProgressiveDisclosureRenderer::render_sections(
             frame,
-            area, 
+            area,
             &self.progressive_disclosure_manager,
             theme,
-            &self.typography
+            &self.typography,
         );
     }
 
@@ -3767,7 +3947,7 @@ impl UI {
     /// Set shortcut display mode
     pub fn set_shortcut_display_mode(&mut self, mode: ShortcutDisplayMode) {
         self.dynamic_shortcuts_manager.set_display_mode(mode);
-        
+
         let mode_name = match mode {
             ShortcutDisplayMode::StatusBar => "Status bar",
             ShortcutDisplayMode::Popup => "Popup",
@@ -3799,11 +3979,17 @@ impl UI {
 
     /// Add custom shortcut
     pub fn add_custom_shortcut(&mut self, id: String, shortcut: KeyboardShortcut) {
-        self.dynamic_shortcuts_manager.add_custom_shortcut(id, shortcut);
+        self.dynamic_shortcuts_manager
+            .add_custom_shortcut(id, shortcut);
     }
 
     /// Setup contextual shortcuts for email list view
-    pub fn setup_email_list_shortcuts(&mut self, has_selection: bool, can_compose: bool, folder_name: String) {
+    pub fn setup_email_list_shortcuts(
+        &mut self,
+        has_selection: bool,
+        can_compose: bool,
+        folder_name: String,
+    ) {
         let context = ShortcutContext::EmailList {
             has_selection,
             can_compose,
@@ -3813,7 +3999,12 @@ impl UI {
     }
 
     /// Setup contextual shortcuts for email reading view
-    pub fn setup_email_reading_shortcuts(&mut self, is_draft: bool, has_attachments: bool, can_reply: bool) {
+    pub fn setup_email_reading_shortcuts(
+        &mut self,
+        is_draft: bool,
+        has_attachments: bool,
+        can_reply: bool,
+    ) {
         let context = ShortcutContext::EmailReading {
             is_draft,
             has_attachments,
@@ -3823,14 +4014,27 @@ impl UI {
     }
 
     /// Setup contextual shortcuts for calendar view
-    pub fn setup_calendar_shortcuts(&mut self, view_mode: crate::calendar::CalendarViewMode, has_selection: bool, can_create: bool) {
+    pub fn setup_calendar_shortcuts(
+        &mut self,
+        view_mode: crate::calendar::CalendarViewMode,
+        has_selection: bool,
+        can_create: bool,
+    ) {
         let shortcut_view_mode = match view_mode {
-            crate::calendar::CalendarViewMode::Day => crate::ui::dynamic_shortcuts::CalendarViewMode::Day,
-            crate::calendar::CalendarViewMode::Week => crate::ui::dynamic_shortcuts::CalendarViewMode::Week,
-            crate::calendar::CalendarViewMode::Month => crate::ui::dynamic_shortcuts::CalendarViewMode::Month,
-            crate::calendar::CalendarViewMode::Agenda => crate::ui::dynamic_shortcuts::CalendarViewMode::Agenda,
+            crate::calendar::CalendarViewMode::Day => {
+                crate::ui::dynamic_shortcuts::CalendarViewMode::Day
+            }
+            crate::calendar::CalendarViewMode::Week => {
+                crate::ui::dynamic_shortcuts::CalendarViewMode::Week
+            }
+            crate::calendar::CalendarViewMode::Month => {
+                crate::ui::dynamic_shortcuts::CalendarViewMode::Month
+            }
+            crate::calendar::CalendarViewMode::Agenda => {
+                crate::ui::dynamic_shortcuts::CalendarViewMode::Agenda
+            }
         };
-        
+
         let context = ShortcutContext::Calendar {
             view_mode: shortcut_view_mode,
             has_selection,
@@ -3849,14 +4053,19 @@ impl UI {
     }
 
     /// Setup contextual shortcuts for search interface
-    pub fn setup_search_shortcuts(&mut self, is_active: bool, has_results: bool, search_type: String) {
+    pub fn setup_search_shortcuts(
+        &mut self,
+        is_active: bool,
+        has_results: bool,
+        search_type: String,
+    ) {
         let shortcut_search_type = match search_type.as_str() {
             "email" => crate::ui::dynamic_shortcuts::SearchType::Email,
             "calendar" => crate::ui::dynamic_shortcuts::SearchType::Calendar,
             "contacts" => crate::ui::dynamic_shortcuts::SearchType::Contacts,
             _ => crate::ui::dynamic_shortcuts::SearchType::Global,
         };
-        
+
         let context = ShortcutContext::Search {
             is_active,
             has_results,
@@ -3883,7 +4092,7 @@ impl UI {
             area,
             &self.dynamic_shortcuts_manager,
             theme,
-            &self.typography
+            &self.typography,
         );
     }
 
@@ -3895,7 +4104,7 @@ impl UI {
             area,
             &self.dynamic_shortcuts_manager,
             theme,
-            &self.typography
+            &self.typography,
         );
     }
 
@@ -3907,19 +4116,24 @@ impl UI {
             area,
             &self.dynamic_shortcuts_manager,
             theme,
-            &self.typography
+            &self.typography,
         );
     }
 
     /// Render inline shortcut hint for a specific shortcut
-    pub fn render_inline_shortcut_hint(&self, frame: &mut Frame, area: Rect, shortcut: &KeyboardShortcut) {
+    pub fn render_inline_shortcut_hint(
+        &self,
+        frame: &mut Frame,
+        area: Rect,
+        shortcut: &KeyboardShortcut,
+    ) {
         let theme = self.theme_manager.current_theme();
         DynamicShortcutsRenderer::render_inline_hint(
             frame,
             area,
             shortcut,
             theme,
-            &self.typography
+            &self.typography,
         );
     }
 
@@ -3934,16 +4148,16 @@ impl UI {
     }
 
     // AI Assistant methods
-    
+
     /// Toggle AI assistant panel visibility
     pub fn toggle_ai_assistant(&mut self) {
         use crate::ui::ai_assistant_ui::AIAssistantMode;
-        
+
         if self.ai_assistant_state.mode == AIAssistantMode::Hidden {
             self.ai_assistant_state.enable(); // Enable the assistant
             self.ai_assistant_state.mode = AIAssistantMode::Compose;
             self.ai_assistant_state.loading = true;
-            
+
             // Generate default composition assistance for demo/testing
             let demo_assistance = crate::email::EmailCompositionAssistance {
                 subject_suggestions: vec![
@@ -3972,7 +4186,7 @@ impl UI {
                     "Await confirmation from recipient".to_string(),
                 ],
             };
-            
+
             self.ai_assistant_state.set_compose_mode(demo_assistance);
             self.ai_assistant_state.loading = false;
             self.show_toast_info("AI Assistant enabled with composition suggestions");
@@ -3985,21 +4199,24 @@ impl UI {
     /// Show AI email suggestions for a message
     pub fn show_ai_email_suggestions(&mut self, subject: &str, sender: &str) {
         use crate::ui::ai_assistant_ui::AIAssistantMode;
-        
+
         self.ai_assistant_state.mode = AIAssistantMode::Reply;
         self.ai_assistant_state.loading = true;
-        
+
         // Show toast notification for now
-        self.show_toast_info(format!("AI analyzing email from {} about '{}'", sender, subject));
+        self.show_toast_info(format!(
+            "AI analyzing email from {} about '{}'",
+            sender, subject
+        ));
     }
 
     /// Show AI compose suggestions
     pub fn show_ai_compose_suggestions(&mut self) {
         use crate::ui::ai_assistant_ui::AIAssistantMode;
-        
+
         self.ai_assistant_state.mode = AIAssistantMode::Compose;
         self.ai_assistant_state.loading = true;
-        
+
         // Show toast notification for now
         self.show_toast_info("AI compose assistance activated");
     }
@@ -4007,17 +4224,18 @@ impl UI {
     /// Start AI email summarization with popup
     pub fn start_ai_email_summarization(&mut self, message: crate::email::EmailMessage) {
         // Show loading popup
-        self.ai_popup.show_loading("Analyzing email content...".to_string());
-        
+        self.ai_popup
+            .show_loading("Analyzing email content...".to_string());
+
         // Show toast notification
         let preview = if message.subject().len() > 30 {
             format!("{}...", &message.subject()[..30])
         } else {
             message.subject().to_string()
         };
-        
+
         self.show_toast_info(format!("AI summarizing: {}", preview));
-        
+
         // Start async AI summarization
         self.start_ai_email_summarization_task(message);
     }
@@ -4038,20 +4256,24 @@ impl UI {
     }
 
     /// Spawn async task for AI email summarization
-    fn spawn_ai_summarization_task(&self, message: crate::email::EmailMessage, tx: tokio::sync::mpsc::UnboundedSender<AIOperationResult>) {
+    fn spawn_ai_summarization_task(
+        &self,
+        message: crate::email::EmailMessage,
+        tx: tokio::sync::mpsc::UnboundedSender<AIOperationResult>,
+    ) {
         let assistant = self.ai_assistant.assistant().clone();
         let request_id = uuid::Uuid::new_v4();
-        
+
         tokio::spawn(async move {
             // Call real AI service for summarization
             let result = assistant.summarize_email(&message).await;
-            
+
             // Send result back to UI
             let ai_result = AIOperationResult::EmailSummarized {
                 request_id,
                 result: result.map_err(|e| e.to_string()),
             };
-            
+
             if let Err(e) = tx.send(ai_result) {
                 tracing::error!("Failed to send AI summarization result: {}", e);
             }
@@ -4061,17 +4283,17 @@ impl UI {
     /// Show AI summarization for email content (legacy method)
     pub fn show_ai_summarization(&mut self, content: &str) {
         use crate::ui::ai_assistant_ui::AIAssistantMode;
-        
+
         self.ai_assistant_state.mode = AIAssistantMode::Summarize;
         self.ai_assistant_state.loading = true;
-        
+
         // Show toast notification for now
         let preview = if content.len() > 50 {
             format!("{}...", &content[..50])
         } else {
             content.to_string()
         };
-        
+
         self.show_toast_info(format!("AI summarizing: {}", preview));
     }
 
@@ -4083,8 +4305,9 @@ impl UI {
 
     /// Show AI configuration settings
     pub fn show_ai_configuration(&mut self) {
-        self.ai_config_state.show(crate::ai::config::AIConfig::default());
-        
+        self.ai_config_state
+            .show(crate::ai::config::AIConfig::default());
+
         // Show toast notification for now
         self.show_toast_info("AI configuration opened (Ctrl+Alt+G)");
     }
@@ -4108,10 +4331,10 @@ impl UI {
     pub fn update_animations(&mut self, delta_time: f32) {
         // Update context indicators animations
         self.context_indicators.update_animations(delta_time);
-        
+
         // Update AI popup animation
         self.ai_popup.update_animation();
-        
+
         // Update other animations as needed
         // (This can be extended with other UI components that have animations)
     }
@@ -4119,17 +4342,21 @@ impl UI {
     /// Handle AI popup actions
     pub fn handle_ai_popup_action(&mut self, action: crate::ui::ai_popup::PopupAction) {
         use crate::ui::ai_popup::PopupAction;
-        
+
         match action {
             PopupAction::GenerateReply(tone) => {
                 // Get current selected message
                 if let Some(message_item) = self.message_list.get_selected_message_for_preview() {
-                    self.ai_popup.show_loading(format!("Generating {} reply...", tone.display_name().to_lowercase()));
-                    
+                    self.ai_popup.show_loading(format!(
+                        "Generating {} reply...",
+                        tone.display_name().to_lowercase()
+                    ));
+
                     // Start async AI reply generation
                     self.start_ai_reply_generation(message_item, tone);
                 } else {
-                    self.ai_popup.show_error("No email selected".to_string(), false);
+                    self.ai_popup
+                        .show_error("No email selected".to_string(), false);
                 }
             }
             PopupAction::Close => {
@@ -4150,7 +4377,11 @@ impl UI {
             }
             PopupAction::ApplyEventModification(category, suggestion) => {
                 // TODO: Apply event modification suggestion
-                self.show_toast_info(format!("Applied {} modification: {}", category.display_name(), suggestion));
+                self.show_toast_info(format!(
+                    "Applied {} modification: {}",
+                    category.display_name(),
+                    suggestion
+                ));
                 self.ai_popup.hide();
             }
             PopupAction::SelectMeetingTime(time_index) => {
@@ -4166,13 +4397,16 @@ impl UI {
     }
 
     /// Convert MessageItem to EmailMessage (simplified conversion)
-    pub fn message_item_to_email_message(&self, item: &crate::ui::message_list::MessageItem) -> crate::email::EmailMessage {
+    pub fn message_item_to_email_message(
+        &self,
+        item: &crate::ui::message_list::MessageItem,
+    ) -> crate::email::EmailMessage {
         use crate::email::{EmailMessage, MessageId};
         use chrono::Utc;
-        
+
         let message_id = MessageId::new(format!("msg_{}", item.message_id.unwrap_or_default()));
         let content = format!("Email content for: {}", item.subject); // Placeholder content
-        
+
         EmailMessage::new(
             message_id,
             item.subject.clone(),
@@ -4184,12 +4418,16 @@ impl UI {
     }
 
     /// Start async AI reply generation
-    pub fn start_ai_reply_generation(&mut self, message_item: crate::ui::message_list::MessageItem, tone: crate::ui::ai_popup::ReplyTone) {
+    pub fn start_ai_reply_generation(
+        &mut self,
+        message_item: crate::ui::message_list::MessageItem,
+        tone: crate::ui::ai_popup::ReplyTone,
+    ) {
         // Create channel if not exists
         if self.ai_result_rx.is_none() {
             let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
             self.ai_result_rx = Some(rx);
-            
+
             // Store sender in UI for future operations (we'll add this)
             // For now, we'll pass it to the async task
             self.spawn_ai_reply_task(message_item, tone, tx);
@@ -4203,26 +4441,33 @@ impl UI {
     }
 
     /// Spawn async task for AI reply generation
-    fn spawn_ai_reply_task(&self, message_item: crate::ui::message_list::MessageItem, tone: crate::ui::ai_popup::ReplyTone, tx: tokio::sync::mpsc::UnboundedSender<AIOperationResult>) {
+    fn spawn_ai_reply_task(
+        &self,
+        message_item: crate::ui::message_list::MessageItem,
+        tone: crate::ui::ai_popup::ReplyTone,
+        tx: tokio::sync::mpsc::UnboundedSender<AIOperationResult>,
+    ) {
         let assistant = self.ai_assistant.assistant().clone();
         let request_id = uuid::Uuid::new_v4();
-        
+
         tokio::spawn(async move {
             // Convert MessageItem to EmailMessage
             let email_message = Self::convert_message_item_to_email(&message_item);
-            
+
             // Get tone context
             let tone_context = format!("{} tone", tone.display_name().to_lowercase());
-            
+
             // Call real AI service
-            let result = assistant.get_reply_assistance(&email_message, Some(&tone_context)).await;
-            
+            let result = assistant
+                .get_reply_assistance(&email_message, Some(&tone_context))
+                .await;
+
             // Send result back to UI
             let ai_result = AIOperationResult::ReplyGenerated {
                 request_id,
                 result: result.map_err(|e| e.to_string()),
             };
-            
+
             if let Err(e) = tx.send(ai_result) {
                 tracing::error!("Failed to send AI reply result: {}", e);
             }
@@ -4230,13 +4475,15 @@ impl UI {
     }
 
     /// Static helper to convert MessageItem to EmailMessage
-    fn convert_message_item_to_email(item: &crate::ui::message_list::MessageItem) -> crate::email::EmailMessage {
+    fn convert_message_item_to_email(
+        item: &crate::ui::message_list::MessageItem,
+    ) -> crate::email::EmailMessage {
         use crate::email::{EmailMessage, MessageId};
         use chrono::Utc;
-        
+
         let message_id = MessageId::new(format!("msg_{}", item.message_id.unwrap_or_default()));
         let content = format!("Email content for: {}", item.subject); // TODO: Load real content
-        
+
         EmailMessage::new(
             message_id,
             item.subject.clone(),
@@ -4256,39 +4503,48 @@ impl UI {
                 results.push(result);
             }
         }
-        
+
         // Process collected results
         for result in results {
             match result {
-                AIOperationResult::ReplyGenerated { request_id: _, result } => {
-                    match result {
-                        Ok(reply_assistance) => {
-                            self.ai_popup.set_reply_assistance(reply_assistance);
-                            self.show_toast_success("AI reply suggestions generated successfully");
-                        }
-                        Err(error) => {
-                            self.ai_popup.show_error(format!("Failed to generate reply: {}", error), true);
-                            self.show_toast_error(&format!("AI error: {}", error));
-                        }
+                AIOperationResult::ReplyGenerated {
+                    request_id: _,
+                    result,
+                } => match result {
+                    Ok(reply_assistance) => {
+                        self.ai_popup.set_reply_assistance(reply_assistance);
+                        self.show_toast_success("AI reply suggestions generated successfully");
                     }
-                }
-                AIOperationResult::EmailSummarized { request_id: _, result } => {
-                    match result {
-                        Ok(summary) => {
-                            self.ai_popup.show_email_summary(summary);
-                            self.show_toast_success("Email summary generated successfully");
-                        }
-                        Err(error) => {
-                            self.ai_popup.show_error(format!("Failed to summarize email: {}", error), true);
-                            self.show_toast_error(&format!("AI error: {}", error));
-                        }
+                    Err(error) => {
+                        self.ai_popup
+                            .show_error(format!("Failed to generate reply: {}", error), true);
+                        self.show_toast_error(&format!("AI error: {}", error));
                     }
-                }
-                AIOperationResult::CompositionAssisted { request_id: _, result } => {
+                },
+                AIOperationResult::EmailSummarized {
+                    request_id: _,
+                    result,
+                } => match result {
+                    Ok(summary) => {
+                        self.ai_popup.show_email_summary(summary);
+                        self.show_toast_success("Email summary generated successfully");
+                    }
+                    Err(error) => {
+                        self.ai_popup
+                            .show_error(format!("Failed to summarize email: {}", error), true);
+                        self.show_toast_error(&format!("AI error: {}", error));
+                    }
+                },
+                AIOperationResult::CompositionAssisted {
+                    request_id: _,
+                    result,
+                } => {
                     match result {
                         Ok(_composition_assistance) => {
                             // TODO: Handle composition assistance
-                            self.show_toast_success("Composition assistance generated successfully");
+                            self.show_toast_success(
+                                "Composition assistance generated successfully",
+                            );
                         }
                         Err(error) => {
                             self.show_toast_error(&format!("AI error: {}", error));
@@ -4302,10 +4558,10 @@ impl UI {
     /// Show AI quick reply suggestions
     pub fn show_ai_quick_reply(&mut self, sender: &str, _content: &str) {
         use crate::ui::ai_assistant_ui::AIAssistantMode;
-        
+
         self.ai_assistant_state.mode = AIAssistantMode::Reply;
         self.ai_assistant_state.loading = true;
-        
+
         // Show toast notification for now
         self.show_toast_info(format!("AI generating quick reply to {}", sender));
     }
@@ -4313,10 +4569,10 @@ impl UI {
     /// Show AI email analysis
     pub fn show_ai_email_analysis(&mut self, _content: &str, subject: &str) {
         use crate::ui::ai_assistant_ui::AIAssistantMode;
-        
+
         self.ai_assistant_state.mode = AIAssistantMode::BulkAnalysis;
         self.ai_assistant_state.loading = true;
-        
+
         // Show toast notification for now
         self.show_toast_info(format!("AI analyzing email: {}", subject));
     }
@@ -4329,63 +4585,63 @@ impl UI {
         } else {
             content.to_string()
         };
-        
+
         self.show_toast_info(format!("AI parsing schedule from: {}", preview));
     }
 
     /// Show AI content generation
     pub fn show_ai_content_generation(&mut self) {
         use crate::ui::ai_assistant_ui::AIAssistantMode;
-        
+
         self.ai_assistant_state.mode = AIAssistantMode::Compose;
         self.ai_assistant_state.loading = true;
-        
+
         // Show toast notification for now
         self.show_toast_info("AI content generation activated");
     }
 
     // Command Palette Methods
-    
+
     /// Show command palette with appropriate context
     pub fn show_command_palette(&mut self) {
         let context = self.get_current_command_context();
         self.command_palette.show(context);
     }
-    
+
     /// Hide command palette
     pub fn hide_command_palette(&mut self) {
         self.command_palette.hide();
     }
-    
+
     /// Check if command palette is visible
     pub fn is_command_palette_visible(&self) -> bool {
         self.command_palette.is_visible()
     }
-    
+
     /// Handle character input for command palette
     pub fn handle_command_palette_char(&mut self, c: char) -> Option<CommandAction> {
         self.command_palette.handle_char(c)
     }
-    
+
     /// Navigate command palette selection up
     pub fn command_palette_select_previous(&mut self) {
         self.command_palette.select_previous();
     }
-    
+
     /// Navigate command palette selection down
     pub fn command_palette_select_next(&mut self) {
         self.command_palette.select_next();
     }
-    
+
     /// Execute currently selected command in palette
     pub fn execute_selected_command(&mut self) -> Option<CommandAction> {
         self.command_palette.execute_selected()
     }
-    
+
     /// Get current command context based on UI state
     fn get_current_command_context(&self) -> CommandContext {
         use crate::ui::command_palette::CommandContext;
-        
+
         match self.mode {
             UIMode::EmailViewer => CommandContext::EmailViewer,
             UIMode::Calendar => CommandContext::Calendar,
@@ -4403,173 +4659,173 @@ impl UI {
             }
         }
     }
-    
+
     /// Execute a command action - returns Some(EventResult) if the action needs app-level handling
     pub fn execute_command_action(&mut self, action: CommandAction) -> Option<EventResult> {
         // Try to handle with event-driven system first
         if let Ok(()) = event_driven_email::EventMigrationHelper::handle_command_action(
-            &action, 
-            &self.event_driven_email, 
-            &mut self.event_driven_ui_state
+            &action,
+            &self.event_driven_email,
+            &mut self.event_driven_ui_state,
         ) {
             // Event-driven handling succeeded, sync UI state
             self.sync_ui_state_from_events();
             return None; // No legacy event result needed
         }
-        
+
         // Fallback to legacy handling for actions not yet migrated
         match action {
             CommandAction::ToggleAIAssistant => {
                 self.toggle_ai_assistant();
-            },
+            }
             CommandAction::OpenSettings => {
                 self.show_settings();
-            },
+            }
             CommandAction::ComposeEmail => {
                 self.show_compose_mode();
-            },
+            }
             CommandAction::SearchEmails => {
                 self.show_search_mode();
-            },
+            }
             CommandAction::ToggleCalendar => {
                 self.show_calendar_mode();
-            },
+            }
             CommandAction::SyncEmails => {
                 // This needs to be handled by the App layer - return sync event
                 self.show_toast_info("Email sync initiated - refreshing all accounts");
                 return Some(EventResult::TriggerEmailSync);
-            },
+            }
             CommandAction::ShowHelp => {
                 self.mode = UIMode::KeyboardShortcuts;
-            },
+            }
             CommandAction::ToggleFolder => {
                 self.focused_pane = FocusedPane::FolderTree;
-            },
+            }
             CommandAction::MarkAsRead => {
                 // Mark current message as read
                 self.show_toast_info("Message marked as read");
-            },
+            }
             CommandAction::MarkAsUnread => {
-                // Mark current message as unread  
+                // Mark current message as unread
                 self.show_toast_info("Message marked as unread");
-            },
+            }
             CommandAction::DeleteEmail => {
                 // Delete current message
                 self.show_toast_info("Message deleted");
-            },
+            }
             CommandAction::ReplyEmail => {
                 // Start reply
                 self.show_toast_info("Reply started");
-            },
+            }
             CommandAction::ForwardEmail => {
                 // Start forward
                 self.show_toast_info("Forward started");
-            },
+            }
             CommandAction::CreateEvent => {
                 // Create calendar event
                 self.show_toast_info("Creating calendar event");
-            },
+            }
             CommandAction::ViewEvent => {
                 // View calendar event
                 self.show_toast_info("Viewing calendar event");
-            },
+            }
             CommandAction::ExportData => {
                 self.show_toast_info("Data export initiated");
-            },
+            }
             CommandAction::ImportData => {
                 self.show_toast_info("Data import initiated");
-            },
+            }
             CommandAction::ChangeTheme => {
                 self.show_toast_info("Theme selection opened");
-            },
+            }
             CommandAction::ShowKeyboardShortcuts => {
                 self.mode = UIMode::KeyboardShortcuts;
-            },
+            }
             CommandAction::Custom(cmd) => {
                 self.show_toast_info(format!("Custom command: {}", cmd));
-            },
-            
+            }
+
             // New command actions - placeholder implementations
             CommandAction::ToggleContacts => {
                 // Return event to be handled by app.rs like the keyboard shortcut
                 return Some(EventResult::ContactsPopup);
-            },
+            }
             CommandAction::ReplyAllEmail => {
                 self.show_toast_info("Reply All started");
-            },
+            }
             CommandAction::ArchiveEmail => {
                 self.show_toast_info("Message archived");
-            },
+            }
             CommandAction::FlagEmail => {
                 self.show_toast_info("Message flagged");
-            },
+            }
             CommandAction::MoveEmail => {
                 self.show_toast_info("Move email dialog opened");
-            },
+            }
             CommandAction::EditEvent => {
                 self.show_toast_info("Editing calendar event");
-            },
+            }
             CommandAction::DeleteEvent => {
                 self.show_toast_info("Calendar event deleted");
-            },
+            }
             CommandAction::CreateTodo => {
                 self.show_toast_info("Creating todo item");
-            },
+            }
             CommandAction::ViewWeek => {
                 self.show_toast_info("Switched to week view");
-            },
+            }
             CommandAction::ViewMonth => {
                 self.show_toast_info("Switched to month view");
-            },
+            }
             CommandAction::ViewDay => {
                 self.show_toast_info("Switched to day view");
-            },
+            }
             CommandAction::SyncCalendar => {
                 self.show_toast_info("Calendar sync initiated");
-            },
+            }
             CommandAction::CreateContact => {
                 self.show_toast_info("Creating new contact");
-            },
+            }
             CommandAction::EditContact => {
                 self.show_toast_info("Editing contact");
-            },
+            }
             CommandAction::DeleteContact => {
                 self.show_toast_info("Contact deleted");
-            },
+            }
             CommandAction::ViewContact => {
                 self.show_toast_info("Viewing contact details");
-            },
+            }
             CommandAction::SearchContacts => {
                 self.show_toast_info("Searching contacts");
-            },
+            }
             CommandAction::ImportContacts => {
                 self.show_toast_info("Importing contacts");
-            },
+            }
             CommandAction::ExportContacts => {
                 self.show_toast_info("Exporting contacts");
-            },
+            }
             CommandAction::AddToFavorites => {
                 self.show_toast_info("Added to favorites");
-            },
+            }
             CommandAction::SendEmail => {
                 self.show_toast_info("Email sent");
-            },
+            }
             CommandAction::SaveDraft => {
                 self.show_toast_info("Draft saved");
-            },
+            }
             CommandAction::AttachFile => {
                 self.show_toast_info("File attachment dialog opened");
-            },
+            }
             CommandAction::ToggleFormat => {
                 self.show_toast_info("Email format toggled");
-            },
+            }
             CommandAction::InsertSignature => {
                 self.show_toast_info("Signature inserted");
-            },
+            }
         }
         None // Default return - no app-level action needed
     }
-    
+
     /// Synchronize UI state with event-driven state changes
     fn sync_ui_state_from_events(&mut self) {
         // Sync pane changes
@@ -4577,85 +4833,97 @@ impl UI {
         if current_pane != self.focused_pane {
             self.focused_pane = current_pane;
         }
-        
+
         // Sync mode changes
         let current_mode = self.event_driven_ui_state.current_mode().clone();
         if current_mode != self.mode {
             self.mode = current_mode;
         }
     }
-    
+
     /// Update the event-driven email handler context with current UI state
-    pub fn update_email_context(&mut self, account_id: Option<String>, email_id: Option<uuid::Uuid>, folder: Option<String>) {
-        self.event_driven_email.update_context(account_id, email_id, folder);
+    pub fn update_email_context(
+        &mut self,
+        account_id: Option<String>,
+        email_id: Option<uuid::Uuid>,
+        folder: Option<String>,
+    ) {
+        self.event_driven_email
+            .update_context(account_id, email_id, folder);
     }
-    
+
     /// Update the calendar state through the event-driven system
-    pub fn update_calendar_state(&mut self, view_type: String, selected_date: Option<chrono::NaiveDate>) {
+    pub fn update_calendar_state(
+        &mut self,
+        view_type: String,
+        selected_date: Option<chrono::NaiveDate>,
+    ) {
         self.event_driven_calendar.update_view(view_type);
         if let Some(date) = selected_date {
             self.event_driven_calendar_state.set_selected_date(date);
         }
     }
-    
+
     /// Update the account state through the event-driven system
     pub fn update_account_state(&mut self, account_id: String, status: String) {
-        self.event_driven_account.update_status(account_id.clone(), status);
-        self.event_driven_account_state.set_active_account(account_id);
+        self.event_driven_account
+            .update_status(account_id.clone(), status);
+        self.event_driven_account_state
+            .set_active_account(account_id);
     }
-    
+
     // Mouse Support Methods
-    
+
     /// Scroll the message list up (mouse wheel support)
     pub fn scroll_message_list_up(&mut self) {
         self.message_list.handle_up();
         tracing::debug!("Scrolled message list up");
     }
-    
+
     /// Scroll the message list down (mouse wheel support)
     pub fn scroll_message_list_down(&mut self) {
         self.message_list.handle_down();
         tracing::debug!("Scrolled message list down");
     }
-    
+
     /// Scroll the folder tree up (mouse wheel support)
     pub fn scroll_folder_tree_up(&mut self) {
         self.folder_tree.handle_up();
         tracing::debug!("Scrolled folder tree up");
     }
-    
+
     /// Scroll the folder tree down (mouse wheel support)
     pub fn scroll_folder_tree_down(&mut self) {
         self.folder_tree.handle_down();
         tracing::debug!("Scrolled folder tree down");
     }
-    
+
     /// Scroll the email viewer up (mouse wheel support)
     pub fn scroll_email_viewer_up(&mut self) {
         self.email_viewer.scroll_up(1);
         tracing::debug!("Scrolled email viewer up");
     }
-    
+
     /// Scroll the email viewer down (mouse wheel support)
     pub fn scroll_email_viewer_down(&mut self) {
         self.email_viewer.scroll_down(1);
         tracing::debug!("Scrolled email viewer down");
     }
-    
+
     /// Scroll the calendar up (mouse wheel support)
     pub fn scroll_calendar_up(&mut self) {
         // Calendar UI doesn't have scroll methods, use generic navigation
         // TODO: Add proper calendar navigation methods to CalendarUI
         tracing::debug!("Calendar scroll up requested (not yet implemented)");
     }
-    
-    /// Scroll the calendar down (mouse wheel support) 
+
+    /// Scroll the calendar down (mouse wheel support)
     pub fn scroll_calendar_down(&mut self) {
         // Calendar UI doesn't have scroll methods, use generic navigation
-        // TODO: Add proper calendar navigation methods to CalendarUI  
+        // TODO: Add proper calendar navigation methods to CalendarUI
         tracing::debug!("Calendar scroll down requested (not yet implemented)");
     }
-    
+
     /// Scroll the currently focused component up
     pub fn scroll_focused_component_up(&mut self) {
         match self.focused_pane {
@@ -4664,11 +4932,14 @@ impl UI {
             FocusedPane::ContentPreview => self.scroll_email_viewer_up(),
             FocusedPane::Calendar => self.scroll_calendar_up(),
             _ => {
-                tracing::debug!("No scroll support for focused pane: {:?}", self.focused_pane);
+                tracing::debug!(
+                    "No scroll support for focused pane: {:?}",
+                    self.focused_pane
+                );
             }
         }
     }
-    
+
     /// Scroll the currently focused component down
     pub fn scroll_focused_component_down(&mut self) {
         match self.focused_pane {
@@ -4677,17 +4948,20 @@ impl UI {
             FocusedPane::ContentPreview => self.scroll_email_viewer_down(),
             FocusedPane::Calendar => self.scroll_calendar_down(),
             _ => {
-                tracing::debug!("No scroll support for focused pane: {:?}", self.focused_pane);
+                tracing::debug!(
+                    "No scroll support for focused pane: {:?}",
+                    self.focused_pane
+                );
             }
         }
     }
-    
+
     /// Set selected message index (mouse click support)
     pub fn set_selected_message_index(&mut self, index: usize) {
         self.message_list.set_selected_index(index);
         tracing::debug!("Set selected message index to: {}", index);
     }
-    
+
     /// Get folder at specific row (mouse click support)
     pub fn get_folder_at_row(&self, row: usize) -> Option<String> {
         // TODO: Implement get_folder_at_row in folder_tree
@@ -4695,25 +4969,28 @@ impl UI {
         tracing::debug!("Get folder at row {} (not yet implemented)", row);
         None
     }
-    
+
     /// Handle folder click (mouse click support)
     pub async fn handle_folder_click(&mut self, folder_path: &str) {
         // TODO: Implement folder selection in folder_tree
         // self.folder_tree.select_folder(folder_path);
-        tracing::debug!("Clicked folder: {} (selection not yet implemented)", folder_path);
+        tracing::debug!(
+            "Clicked folder: {} (selection not yet implemented)",
+            folder_path
+        );
     }
-    
+
     /// Set focused pane (mouse click support)
     pub fn set_focused_pane(&mut self, pane: FocusedPane) {
         self.focused_pane = pane;
-        
+
         // Update context indicators with new focus
         self.context_indicators.update_context(
             self.mode.clone(),
             pane,
             None, // Sub-context can be added later
         );
-        
+
         tracing::debug!("Set focused pane to: {:?}", pane);
     }
 
@@ -4722,14 +4999,11 @@ impl UI {
         if mode != self.mode {
             tracing::debug!("UI mode changing from {:?} to {:?}", self.mode, mode);
             self.mode = mode.clone();
-            
+
             // Update context indicators with new mode
-            self.context_indicators.update_context(
-                mode,
-                self.focused_pane,
-                sub_context,
-            );
-            
+            self.context_indicators
+                .update_context(mode, self.focused_pane, sub_context);
+
             // Update status bar context for consistency
             self.update_status_bar_context();
         }
@@ -4749,7 +5023,7 @@ impl UI {
     pub fn set_focus_style(&mut self, style: FocusIndicatorStyle) {
         self.context_indicators.set_focus_style(style);
     }
-    
+
     /// Render command palette if visible
     pub fn render_command_palette(&mut self, frame: &mut Frame) {
         if self.command_palette.is_visible() {
@@ -4757,7 +5031,7 @@ impl UI {
             self.command_palette.render(frame, theme);
         }
     }
-    
+
     /// Show compose mode (from command palette)
     fn show_compose_mode(&mut self) {
         // The compose UI requires proper initialization from the App layer with ContactsManager
@@ -4766,7 +5040,7 @@ impl UI {
             UIMode::Normal | UIMode::EmailViewer => {
                 self.show_toast_info("To compose email: Press 'c' key in email view");
                 self.show_toast_info("Or use File menu > New Email");
-            },
+            }
             _ => {
                 self.show_toast_info("Email composition requires proper account setup");
                 self.show_toast_info("1. Configure email accounts in Settings");
@@ -4774,33 +5048,27 @@ impl UI {
             }
         }
     }
-    
+
     /// Show search mode (simplified version for command palette)  
     fn show_search_mode(&mut self) {
         self.mode = UIMode::Search;
         self.show_toast_info("Switched to search mode");
     }
-    
+
     /// Show calendar mode (simplified version for command palette)
     fn show_calendar_mode(&mut self) {
         self.mode = UIMode::Calendar;
         self.show_toast_info("Switched to calendar mode");
     }
-    
+
     /// Get area for AI assistant (right sidebar)
     fn get_ai_assistant_area(&self, full_area: Rect) -> Rect {
         let width = full_area.width.min(40); // Max 40 columns wide
         let height = full_area.height.saturating_sub(4); // Leave space for borders
-        
-        Rect::new(
-            full_area.width.saturating_sub(width),
-            2,
-            width,
-            height,
-        )
+
+        Rect::new(full_area.width.saturating_sub(width), 2, width, height)
     }
 }
-
 
 impl Default for UI {
     fn default() -> Self {

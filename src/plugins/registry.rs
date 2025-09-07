@@ -76,7 +76,7 @@ impl PluginRegistry {
     pub fn unregister_plugin(&mut self, plugin_id: &Uuid) -> PluginResult<()> {
         // Remove plugin
         let plugin_removed = self.plugins.remove(plugin_id).is_some();
-        
+
         if !plugin_removed {
             return Err(PluginError::NotFound(plugin_id.to_string()));
         }
@@ -115,9 +115,7 @@ impl PluginRegistry {
 
     /// Get a plugin by name
     pub fn get_plugin_by_name(&self, name: &str) -> Option<&dyn Plugin> {
-        self.name_to_id
-            .get(name)
-            .and_then(|id| self.get_plugin(id))
+        self.name_to_id.get(name).and_then(|id| self.get_plugin(id))
     }
 
     /// Check if plugin exists by name
@@ -238,13 +236,16 @@ impl PluginRegistry {
     /// Search plugins by name or description
     pub fn search_plugins(&self, query: &str) -> Vec<PluginInfo> {
         let query_lower = query.to_lowercase();
-        
+
         self.plugin_info
             .values()
             .filter(|info| {
                 info.name.to_lowercase().contains(&query_lower)
                     || info.description.to_lowercase().contains(&query_lower)
-                    || info.tags.iter().any(|tag| tag.to_lowercase().contains(&query_lower))
+                    || info
+                        .tags
+                        .iter()
+                        .any(|tag| tag.to_lowercase().contains(&query_lower))
             })
             .cloned()
             .collect()
@@ -285,7 +286,8 @@ impl PluginRegistry {
         // Count by status
         stats.running_plugins = self.plugin_count_by_status(PluginStatus::Running);
         stats.paused_plugins = self.plugin_count_by_status(PluginStatus::Paused);
-        stats.error_plugins = self.plugin_status
+        stats.error_plugins = self
+            .plugin_status
             .values()
             .filter(|status| matches!(status, PluginStatus::Error(_)))
             .count();
@@ -301,7 +303,7 @@ impl PluginRegistry {
             if !dependency.optional {
                 // Check if dependency is loaded
                 let dependency_loaded = self.name_to_id.contains_key(&dependency.name);
-                
+
                 if !dependency_loaded {
                     missing_dependencies.push(dependency.name.clone());
                 } else {
@@ -310,9 +312,7 @@ impl PluginRegistry {
                         if dep_info.version != dependency.version {
                             missing_dependencies.push(format!(
                                 "{} (version mismatch: expected {}, found {})",
-                                dependency.name,
-                                dependency.version,
-                                dep_info.version
+                                dependency.name, dependency.version, dep_info.version
                             ));
                         }
                     }

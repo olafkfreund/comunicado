@@ -130,44 +130,52 @@ impl SessionManager {
 
     /// Persist session state to disk
     pub fn persist_state(&self, state: &SessionState) -> MultiplexerResult<()> {
-        let session_file = self.config.session_storage_path.join(format!("{}.json", state.id));
-        
-        let json = serde_json::to_string_pretty(state)
-            .map_err(|e| MultiplexerError::Serialization(e))?;
-        
+        let session_file = self
+            .config
+            .session_storage_path
+            .join(format!("{}.json", state.id));
+
+        let json =
+            serde_json::to_string_pretty(state).map_err(|e| MultiplexerError::Serialization(e))?;
+
         std::fs::create_dir_all(&self.config.session_storage_path)?;
         std::fs::write(session_file, json)?;
-        
+
         Ok(())
     }
 
     /// Load session state from disk
     pub fn load_state(&mut self, session_id: Uuid) -> MultiplexerResult<SessionState> {
-        let session_file = self.config.session_storage_path.join(format!("{}.json", session_id));
-        
+        let session_file = self
+            .config
+            .session_storage_path
+            .join(format!("{}.json", session_id));
+
         if !session_file.exists() {
-            return Err(MultiplexerError::SessionError("Session file not found".to_string()));
+            return Err(MultiplexerError::SessionError(
+                "Session file not found".to_string(),
+            ));
         }
-        
+
         let json = std::fs::read_to_string(session_file)?;
-        let state: SessionState = serde_json::from_str(&json)
-            .map_err(|e| MultiplexerError::Serialization(e))?;
-        
+        let state: SessionState =
+            serde_json::from_str(&json).map_err(|e| MultiplexerError::Serialization(e))?;
+
         Ok(state)
     }
 
     /// List all saved sessions
     pub fn list_saved_sessions(&self) -> MultiplexerResult<Vec<SessionState>> {
         let mut sessions = Vec::new();
-        
+
         if !self.config.session_storage_path.exists() {
             return Ok(sessions);
         }
-        
+
         for entry in std::fs::read_dir(&self.config.session_storage_path)? {
             let entry = entry?;
             let path = entry.path();
-            
+
             if path.extension().and_then(|s| s.to_str()) == Some("json") {
                 if let Ok(json) = std::fs::read_to_string(&path) {
                     if let Ok(state) = serde_json::from_str::<SessionState>(&json) {
@@ -176,29 +184,32 @@ impl SessionManager {
                 }
             }
         }
-        
+
         // Sort by last accessed time
         sessions.sort_by(|a, b| b.last_accessed.cmp(&a.last_accessed));
-        
+
         Ok(sessions)
     }
 
     /// Clean up old sessions
     pub fn cleanup_old_sessions(&self) -> MultiplexerResult<()> {
         let sessions = self.list_saved_sessions()?;
-        
+
         if sessions.len() <= self.config.max_saved_sessions {
             return Ok(());
         }
-        
+
         // Remove oldest sessions beyond the limit
         for session in sessions.iter().skip(self.config.max_saved_sessions) {
-            let session_file = self.config.session_storage_path.join(format!("{}.json", session.id));
+            let session_file = self
+                .config
+                .session_storage_path
+                .join(format!("{}.json", session.id));
             if session_file.exists() {
                 std::fs::remove_file(session_file)?;
             }
         }
-        
+
         Ok(())
     }
 
@@ -211,7 +222,10 @@ impl SessionManager {
         Ok(())
     }
 
-    pub fn update_calendar_state(&mut self, calendar_state: CalendarSessionState) -> MultiplexerResult<()> {
+    pub fn update_calendar_state(
+        &mut self,
+        calendar_state: CalendarSessionState,
+    ) -> MultiplexerResult<()> {
         if let Some(ref mut state) = self.current_state {
             state.calendar_state = calendar_state;
             state.last_accessed = chrono::Utc::now();

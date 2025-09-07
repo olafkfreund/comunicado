@@ -1,10 +1,10 @@
 //! OpenAI provider implementation
 
-use crate::ai::{AIContext, AIResult};
 use crate::ai::config::AIConfig;
 use crate::ai::error::AIError;
 use crate::ai::provider::{AIProvider, ProviderCapabilities};
 use crate::ai::service::{EmailCategory, SchedulingIntent};
+use crate::ai::{AIContext, AIResult};
 use async_trait::async_trait;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -136,11 +136,13 @@ impl OpenAIProvider {
 
     /// Create OpenAI provider from config
     pub fn from_config(config: &AIConfig) -> AIResult<Self> {
-        let api_key = config.get_api_key("openai")
+        let api_key = config
+            .get_api_key("openai")
             .ok_or_else(|| AIError::config_error("OpenAI API key not configured"))?
             .clone();
 
-        let model = config.local_model
+        let model = config
+            .local_model
             .as_ref()
             .unwrap_or(&"gpt-3.5-turbo".to_string())
             .clone();
@@ -149,7 +151,11 @@ impl OpenAIProvider {
     }
 
     /// Make a request to OpenAI API
-    async fn make_request(&self, messages: Vec<OpenAIMessage>, temperature: Option<f32>) -> AIResult<String> {
+    async fn make_request(
+        &self,
+        messages: Vec<OpenAIMessage>,
+        temperature: Option<f32>,
+    ) -> AIResult<String> {
         let request = OpenAIRequest {
             model: self.model.clone(),
             messages,
@@ -160,13 +166,14 @@ impl OpenAIProvider {
             presence_penalty: None,
         };
 
-        let response = timeout(self.request_timeout,
+        let response = timeout(
+            self.request_timeout,
             self.client
                 .post("https://api.openai.com/v1/chat/completions")
                 .header("Authorization", format!("Bearer {}", self.api_key))
                 .header("Content-Type", "application/json")
                 .json(&request)
-                .send()
+                .send(),
         )
         .await
         .map_err(|_| AIError::timeout(self.request_timeout))?
@@ -175,13 +182,16 @@ impl OpenAIProvider {
         if !response.status().is_success() {
             let status = response.status();
             let error_text = response.text().await.unwrap_or_default();
-            
+
             return match status.as_u16() {
                 401 => Err(AIError::auth_failure("OpenAI")),
                 429 => Err(AIError::rate_limit("OpenAI", Some(Duration::from_secs(60)))),
                 400 => {
-                    if let Ok(error_response) = serde_json::from_str::<OpenAIErrorResponse>(&error_text) {
-                        if error_response.error.code.as_deref() == Some("content_policy_violation") {
+                    if let Ok(error_response) =
+                        serde_json::from_str::<OpenAIErrorResponse>(&error_text)
+                    {
+                        if error_response.error.code.as_deref() == Some("content_policy_violation")
+                        {
                             Err(AIError::content_filtered(error_response.error.message))
                         } else {
                             Err(AIError::invalid_response(error_response.error.message))
@@ -189,17 +199,19 @@ impl OpenAIProvider {
                     } else {
                         Err(AIError::invalid_response(error_text))
                     }
-                },
+                }
                 413 => Err(AIError::request_too_large(0)), // Size unknown from status
                 500..=599 => Err(AIError::provider_unavailable("OpenAI server error")),
-                _ => Err(AIError::provider_unavailable(format!("OpenAI API error: {}", status))),
+                _ => Err(AIError::provider_unavailable(format!(
+                    "OpenAI API error: {}",
+                    status
+                ))),
             };
         }
 
-        let openai_response: OpenAIResponse = response
-            .json()
-            .await
-            .map_err(|e| AIError::invalid_response(format!("Failed to parse OpenAI response: {}", e)))?;
+        let openai_response: OpenAIResponse = response.json().await.map_err(|e| {
+            AIError::invalid_response(format!("Failed to parse OpenAI response: {}", e))
+        })?;
 
         if openai_response.choices.is_empty() {
             return Err(AIError::invalid_response("No choices in OpenAI response"));
@@ -225,26 +237,56 @@ impl OpenAIProvider {
     /// Parse email category from AI response
     fn parse_category_from_response(&self, response: &str) -> EmailCategory {
         let response_lower = response.to_lowercase();
-        
-        if response_lower.contains("work") || response_lower.contains("business") || response_lower.contains("professional") {
+
+        if response_lower.contains("work")
+            || response_lower.contains("business")
+            || response_lower.contains("professional")
+        {
             EmailCategory::Work
-        } else if response_lower.contains("personal") || response_lower.contains("family") || response_lower.contains("friend") {
+        } else if response_lower.contains("personal")
+            || response_lower.contains("family")
+            || response_lower.contains("friend")
+        {
             EmailCategory::Personal
-        } else if response_lower.contains("promotional") || response_lower.contains("marketing") || response_lower.contains("advertisement") {
+        } else if response_lower.contains("promotional")
+            || response_lower.contains("marketing")
+            || response_lower.contains("advertisement")
+        {
             EmailCategory::Promotional
-        } else if response_lower.contains("social") || response_lower.contains("facebook") || response_lower.contains("twitter") {
+        } else if response_lower.contains("social")
+            || response_lower.contains("facebook")
+            || response_lower.contains("twitter")
+        {
             EmailCategory::Social
-        } else if response_lower.contains("financial") || response_lower.contains("bank") || response_lower.contains("payment") {
+        } else if response_lower.contains("financial")
+            || response_lower.contains("bank")
+            || response_lower.contains("payment")
+        {
             EmailCategory::Financial
-        } else if response_lower.contains("travel") || response_lower.contains("flight") || response_lower.contains("hotel") {
+        } else if response_lower.contains("travel")
+            || response_lower.contains("flight")
+            || response_lower.contains("hotel")
+        {
             EmailCategory::Travel
-        } else if response_lower.contains("shopping") || response_lower.contains("order") || response_lower.contains("purchase") {
+        } else if response_lower.contains("shopping")
+            || response_lower.contains("order")
+            || response_lower.contains("purchase")
+        {
             EmailCategory::Shopping
-        } else if response_lower.contains("newsletter") || response_lower.contains("subscription") || response_lower.contains("digest") {
+        } else if response_lower.contains("newsletter")
+            || response_lower.contains("subscription")
+            || response_lower.contains("digest")
+        {
             EmailCategory::Newsletter
-        } else if response_lower.contains("system") || response_lower.contains("automated") || response_lower.contains("notification") {
+        } else if response_lower.contains("system")
+            || response_lower.contains("automated")
+            || response_lower.contains("notification")
+        {
             EmailCategory::System
-        } else if response_lower.contains("spam") || response_lower.contains("suspicious") || response_lower.contains("phishing") {
+        } else if response_lower.contains("spam")
+            || response_lower.contains("suspicious")
+            || response_lower.contains("phishing")
+        {
             EmailCategory::Spam
         } else {
             EmailCategory::Uncategorized
@@ -266,7 +308,9 @@ impl OpenAIProvider {
         // Extract title from AI response (look for structured output)
         let title = ai_response
             .lines()
-            .find(|line| line.to_lowercase().contains("title") || line.to_lowercase().contains("subject"))
+            .find(|line| {
+                line.to_lowercase().contains("title") || line.to_lowercase().contains("subject")
+            })
             .and_then(|line| line.split(':').nth(1))
             .map(|s| s.trim().to_string());
 
@@ -304,14 +348,13 @@ impl AIProvider for OpenAIProvider {
 
     async fn health_check(&self) -> AIResult<bool> {
         // Simple API availability check
-        let messages = vec![
-            OpenAIMessage {
-                role: "user".to_string(),
-                content: "Hello".to_string(),
-            }
-        ];
+        let messages = vec![OpenAIMessage {
+            role: "user".to_string(),
+            content: "Hello".to_string(),
+        }];
 
-        match timeout(Duration::from_secs(10), 
+        match timeout(
+            Duration::from_secs(10),
             self.client
                 .post("https://api.openai.com/v1/chat/completions")
                 .header("Authorization", format!("Bearer {}", self.api_key))
@@ -325,35 +368,38 @@ impl AIProvider for OpenAIProvider {
                     frequency_penalty: None,
                     presence_penalty: None,
                 })
-                .send()
-        ).await {
+                .send(),
+        )
+        .await
+        {
             Ok(Ok(response)) => Ok(response.status().is_success()),
             _ => Ok(false),
         }
     }
 
     async fn complete_text(&self, prompt: &str, context: Option<&AIContext>) -> AIResult<String> {
-        let temperature = context
-            .and_then(|c| c.creativity)
-            .unwrap_or(0.7);
+        let temperature = context.and_then(|c| c.creativity).unwrap_or(0.7);
 
         let system_prompt = "You are a helpful AI assistant for email and calendar management. Provide clear, concise, and professional responses.";
-        
+
         let enhanced_prompt = if let Some(ctx) = context {
             let mut full_prompt = prompt.to_string();
-            
+
             if let Some(ref email_thread) = ctx.email_thread {
                 full_prompt = format!("Email context: {}\n\nRequest: {}", email_thread, prompt);
             }
-            
+
             if let Some(ref calendar_context) = ctx.calendar_context {
                 full_prompt = format!("{}\n\nCalendar context: {}", full_prompt, calendar_context);
             }
-            
+
             if let Some(max_length) = ctx.max_length {
-                full_prompt = format!("{}\n\nPlease keep the response under {} characters.", full_prompt, max_length);
+                full_prompt = format!(
+                    "{}\n\nPlease keep the response under {} characters.",
+                    full_prompt, max_length
+                );
             }
-            
+
             full_prompt
         } else {
             prompt.to_string()
@@ -363,7 +409,11 @@ impl AIProvider for OpenAIProvider {
         self.make_request(messages, Some(temperature)).await
     }
 
-    async fn summarize_content(&self, content: &str, max_length: Option<usize>) -> AIResult<String> {
+    async fn summarize_content(
+        &self,
+        content: &str,
+        max_length: Option<usize>,
+    ) -> AIResult<String> {
         let max_len = max_length.unwrap_or(200);
         let system_prompt = "You are an expert at creating concise, informative summaries. Focus on key points and main messages.";
         let user_prompt = format!(
@@ -384,15 +434,17 @@ impl AIProvider for OpenAIProvider {
 
         let messages = self.create_messages(system_prompt, &user_prompt);
         let response = self.make_request(messages, Some(0.6)).await?;
-        
+
         // Parse the numbered responses
         let suggestions: Vec<String> = response
             .lines()
             .filter_map(|line| {
                 let trimmed = line.trim();
-                if let Some(content) = trimmed.strip_prefix("1. ")
+                if let Some(content) = trimmed
+                    .strip_prefix("1. ")
                     .or_else(|| trimmed.strip_prefix("2. "))
-                    .or_else(|| trimmed.strip_prefix("3. ")) {
+                    .or_else(|| trimmed.strip_prefix("3. "))
+                {
                     Some(content.to_string())
                 } else {
                     None
@@ -421,7 +473,8 @@ impl AIProvider for OpenAIProvider {
     }
 
     async fn categorize_email(&self, content: &str) -> AIResult<EmailCategory> {
-        let system_prompt = "You are an email categorization expert. Classify emails into appropriate categories.";
+        let system_prompt =
+            "You are an email categorization expert. Classify emails into appropriate categories.";
         let user_prompt = format!(
             "Categorize this email content into one of these categories: Work, Personal, Promotional, Social, Financial, Travel, Shopping, Newsletter, System, Spam, or Uncategorized.\n\nEmail content: \"{}\"\n\nRespond with the category name and a brief explanation.",
             content
@@ -459,7 +512,7 @@ impl AIProvider for OpenAIProvider {
 
         let messages = self.create_messages(system_prompt, &user_prompt);
         let response = self.make_request(messages, Some(0.3)).await?;
-        
+
         let key_points: Vec<String> = response
             .lines()
             .map(|line| line.trim().to_string())
@@ -496,7 +549,7 @@ mod tests {
     fn test_message_creation() {
         let provider = create_test_provider();
         let messages = provider.create_messages("System prompt", "User prompt");
-        
+
         assert_eq!(messages.len(), 2);
         assert_eq!(messages[0].role, "system");
         assert_eq!(messages[0].content, "System prompt");
@@ -507,12 +560,12 @@ mod tests {
     #[test]
     fn test_category_parsing() {
         let provider = create_test_provider();
-        
+
         assert_eq!(
             provider.parse_category_from_response("This appears to be a work-related email"),
             EmailCategory::Work
         );
-        
+
         assert_eq!(
             provider.parse_category_from_response("This looks like a promotional marketing email"),
             EmailCategory::Promotional
@@ -533,7 +586,10 @@ mod tests {
             "gpt-4-turbo".to_string(),
             Duration::from_secs(30),
         );
-        assert_eq!(gpt4_turbo_provider.capabilities().max_context_length, 128000);
+        assert_eq!(
+            gpt4_turbo_provider.capabilities().max_context_length,
+            128000
+        );
     }
 
     #[tokio::test]
@@ -541,10 +597,10 @@ mod tests {
         let mut config = AIConfig::default();
         config.set_api_key("openai".to_string(), "test-key".to_string());
         config.local_model = Some("gpt-4".to_string());
-        
+
         let provider = OpenAIProvider::from_config(&config);
         assert!(provider.is_ok());
-        
+
         let provider = provider.unwrap();
         assert_eq!(provider.model, "gpt-4");
         assert_eq!(provider.api_key, "test-key");

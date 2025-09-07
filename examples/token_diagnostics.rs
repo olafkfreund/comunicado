@@ -46,7 +46,7 @@ async fn main() -> Result<()> {
             for scope in &account.scopes {
                 println!("      • {}", scope);
             }
-            
+
             // Load tokens into token manager
             let token_response = comunicado::oauth2::TokenResponse {
                 access_token: account.access_token.clone(),

@@ -7,10 +7,10 @@
 use crate::theme::Theme;
 use crate::ui::form_validation::{FormValidationSystem, ValidationRule};
 use ratatui::{
-    layout::{Alignment, Constraint, Direction, Layout, Rect, Margin},
+    layout::{Alignment, Constraint, Direction, Layout, Margin, Rect},
     style::{Modifier, Style},
     text::Line,
-    widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Wrap, Gauge},
+    widgets::{Block, Borders, Clear, Gauge, List, ListItem, ListState, Paragraph, Wrap},
     Frame,
 };
 use std::collections::HashMap;
@@ -18,22 +18,22 @@ use std::collections::HashMap;
 /// Modal dialog types with different behaviors and layouts
 #[derive(Debug, Clone, PartialEq)]
 pub enum ModalType {
-    Confirmation,   // Yes/No confirmation
-    Information,    // Information display with OK button
-    Warning,        // Warning message with acknowledgment
-    Error,          // Error message with acknowledgment
-    Input,          // Input form with validation
-    Choice,         // Multiple choice selection
-    Progress,       // Progress indicator
-    Custom,         // Custom content
+    Confirmation, // Yes/No confirmation
+    Information,  // Information display with OK button
+    Warning,      // Warning message with acknowledgment
+    Error,        // Error message with acknowledgment
+    Input,        // Input form with validation
+    Choice,       // Multiple choice selection
+    Progress,     // Progress indicator
+    Custom,       // Custom content
 }
 
 /// Modal size presets
 #[derive(Debug, Clone, PartialEq)]
 pub enum ModalSize {
-    Small,    // 40x8
-    Medium,   // 60x12
-    Large,    // 80x20
+    Small,      // 40x8
+    Medium,     // 60x12
+    Large,      // 80x20
     FullScreen, // 95% of screen
     Custom { width: u16, height: u16 },
 }
@@ -51,10 +51,10 @@ pub struct ModalButton {
 /// Button styling options
 #[derive(Debug, Clone, PartialEq)]
 pub enum ButtonStyle {
-    Primary,    // Accent color, for main actions
-    Secondary,  // Muted color, for cancel/back actions
-    Danger,     // Warning color, for destructive actions
-    Success,    // Success color, for positive actions
+    Primary,   // Accent color, for main actions
+    Secondary, // Muted color, for cancel/back actions
+    Danger,    // Warning color, for destructive actions
+    Success,   // Success color, for positive actions
 }
 
 /// Modal dialog state and configuration
@@ -69,17 +69,17 @@ pub struct Modal {
     pub is_closable: bool, // Can be closed with Escape
     pub auto_close_delay: Option<std::time::Duration>,
     pub created_at: std::time::Instant,
-    
+
     // Navigation state
     pub selected_button: usize,
     pub selected_item: usize,
     pub list_state: ListState,
-    
+
     // Form state (for input modals)
     pub form_validation: Option<FormValidationSystem>,
     pub input_values: HashMap<String, String>,
     pub focused_field: Option<String>,
-    
+
     // Custom state
     pub custom_data: HashMap<String, String>,
 }
@@ -91,7 +91,11 @@ pub enum ModalContent {
     RichText(Vec<Line<'static>>),
     List(Vec<String>),
     Form(Vec<FormField>),
-    Progress { current: u64, total: u64, message: String },
+    Progress {
+        current: u64,
+        total: u64,
+        message: String,
+    },
     Custom(String), // Identifier for custom renderer
 }
 
@@ -136,22 +140,22 @@ impl ModalSystem {
             global_shortcuts_enabled: true,
         }
     }
-    
+
     /// Set a theme override for all modals
     pub fn set_theme_override(&mut self, theme: Option<Theme>) {
         self.theme_override = theme;
     }
-    
+
     /// Get the current theme override
     pub fn theme_override(&self) -> Option<&Theme> {
         self.theme_override.as_ref()
     }
-    
+
     /// Enable or disable global shortcuts while modals are open
     pub fn set_global_shortcuts_enabled(&mut self, enabled: bool) {
         self.global_shortcuts_enabled = enabled;
     }
-    
+
     /// Check if global shortcuts are enabled
     pub fn global_shortcuts_enabled(&self) -> bool {
         self.global_shortcuts_enabled
@@ -166,32 +170,32 @@ impl ModalSystem {
         confirm_label: Option<String>,
         cancel_label: Option<String>,
     ) -> &mut Modal {
-        use crate::ui::modal_builder::{ModalBuilder, ButtonBuilder};
-        
+        use crate::ui::modal_builder::{ButtonBuilder, ModalBuilder};
+
         let mut builder = ModalBuilder::confirmation(id, title, message);
-        
+
         // Customize button labels if provided
         if confirm_label.is_some() || cancel_label.is_some() {
             let cancel_btn = ButtonBuilder::new(
-                cancel_label.unwrap_or_else(|| "Cancel".to_string()), 
-                "cancel"
+                cancel_label.unwrap_or_else(|| "Cancel".to_string()),
+                "cancel",
             )
             .secondary()
             .shortcut('c')
             .build();
-            
+
             let confirm_btn = ButtonBuilder::new(
                 confirm_label.unwrap_or_else(|| "Confirm".to_string()),
-                "confirm"
+                "confirm",
             )
             .primary()
             .default()
             .shortcut('y')
             .build();
-            
+
             builder = builder.buttons(vec![cancel_btn, confirm_btn]);
         }
-        
+
         let modal = builder.build();
         self.add_modal(modal)
     }
@@ -199,7 +203,7 @@ impl ModalSystem {
     /// Show an information dialog
     pub fn show_info(&mut self, id: String, title: String, message: String) -> &mut Modal {
         use crate::ui::modal_builder::ModalBuilder;
-        
+
         let modal = ModalBuilder::info(id, title, message).build();
         self.add_modal(modal)
     }
@@ -207,7 +211,7 @@ impl ModalSystem {
     /// Show a warning dialog
     pub fn show_warning(&mut self, id: String, title: String, message: String) -> &mut Modal {
         use crate::ui::modal_builder::ModalBuilder;
-        
+
         let modal = ModalBuilder::warning(id, title, message).build();
         self.add_modal(modal)
     }
@@ -215,7 +219,7 @@ impl ModalSystem {
     /// Show an error dialog
     pub fn show_error(&mut self, id: String, title: String, message: String) -> &mut Modal {
         use crate::ui::modal_builder::ModalBuilder;
-        
+
         let modal = ModalBuilder::error(id, title, message).build();
         self.add_modal(modal)
     }
@@ -228,7 +232,7 @@ impl ModalSystem {
         fields: Vec<FormField>,
     ) -> &mut Modal {
         use crate::ui::modal_builder::ModalBuilder;
-        
+
         let modal = ModalBuilder::input_form(id, title, fields).build();
         self.add_modal(modal)
     }
@@ -242,7 +246,7 @@ impl ModalSystem {
         choices: Vec<String>,
     ) -> &mut Modal {
         use crate::ui::modal_builder::ModalBuilder;
-        
+
         let modal = ModalBuilder::choice(id, title, message, choices).build();
         self.add_modal(modal)
     }
@@ -257,7 +261,7 @@ impl ModalSystem {
         total: u64,
     ) -> &mut Modal {
         use crate::ui::modal_builder::ModalBuilder;
-        
+
         let modal = ModalBuilder::progress(id, title, message, current, total).build();
         self.add_modal(modal)
     }
@@ -294,7 +298,12 @@ impl ModalSystem {
     /// Update progress for a progress modal
     pub fn update_progress(&mut self, id: &str, current: u64, total: u64, message: Option<String>) {
         if let Some(modal) = self.modals.iter_mut().find(|m| m.id == id) {
-            if let ModalContent::Progress { current: c, total: t, message: msg } = &mut modal.content {
+            if let ModalContent::Progress {
+                current: c,
+                total: t,
+                message: msg,
+            } = &mut modal.content
+            {
                 *c = current;
                 *t = total;
                 if let Some(new_message) = message {
@@ -316,10 +325,10 @@ impl ModalSystem {
     /// Render a single modal
     fn render_modal(frame: &mut Frame, area: Rect, modal: &mut Modal, theme: &Theme) {
         let modal_area = Self::calculate_modal_area(area, &modal.size);
-        
+
         // Clear the modal area
         frame.render_widget(Clear, modal_area);
-        
+
         // Create modal layout
         let layout = Layout::default()
             .direction(Direction::Vertical)
@@ -332,10 +341,10 @@ impl ModalSystem {
 
         // Render modal background and title
         Self::render_modal_title(frame, layout[0], modal, theme);
-        
+
         // Render content based on modal type
         Self::render_modal_content(frame, layout[1], modal, theme);
-        
+
         // Render buttons
         Self::render_modal_buttons(frame, layout[2], modal, theme);
     }
@@ -386,7 +395,7 @@ impl ModalSystem {
         };
 
         let title = format!("{} {}", title_icon, modal.title);
-        
+
         let title_block = Block::default()
             .borders(Borders::ALL)
             .border_style(title_style)
@@ -446,7 +455,11 @@ impl ModalSystem {
                 Self::render_form_content(frame, area, modal, fields, theme);
             }
 
-            ModalContent::Progress { current, total, message } => {
+            ModalContent::Progress {
+                current,
+                total,
+                message,
+            } => {
                 let progress_area = Layout::default()
                     .direction(Direction::Vertical)
                     .constraints([
@@ -489,14 +502,20 @@ impl ModalSystem {
     }
 
     /// Render form content for input modals
-    fn render_form_content(frame: &mut Frame, area: Rect, modal: &mut Modal, fields: &[FormField], theme: &Theme) {
+    fn render_form_content(
+        frame: &mut Frame,
+        area: Rect,
+        modal: &mut Modal,
+        fields: &[FormField],
+        theme: &Theme,
+    ) {
         if fields.is_empty() {
             return;
         }
 
         let field_height = 3;
         let total_height = fields.len() as u16 * field_height;
-        
+
         if total_height <= area.height {
             // All fields fit, render normally
             let constraints: Vec<Constraint> = (0..fields.len())
@@ -526,7 +545,12 @@ impl ModalSystem {
                 .constraints(constraints)
                 .split(area);
 
-            for (i, field) in fields.iter().enumerate().skip(start_index).take(end_index - start_index) {
+            for (i, field) in fields
+                .iter()
+                .enumerate()
+                .skip(start_index)
+                .take(end_index - start_index)
+            {
                 let area_index = i - start_index;
                 Self::render_form_field(frame, field_areas[area_index], modal, field, i, theme);
             }
@@ -534,9 +558,23 @@ impl ModalSystem {
     }
 
     /// Render a single form field
-    fn render_form_field(frame: &mut Frame, area: Rect, modal: &mut Modal, field: &FormField, _field_index: usize, theme: &Theme) {
-        let is_focused = modal.focused_field.as_ref().map_or(false, |f| f == &field.name);
-        let value = modal.input_values.get(&field.name).cloned().unwrap_or_default();
+    fn render_form_field(
+        frame: &mut Frame,
+        area: Rect,
+        modal: &mut Modal,
+        field: &FormField,
+        _field_index: usize,
+        theme: &Theme,
+    ) {
+        let is_focused = modal
+            .focused_field
+            .as_ref()
+            .map_or(false, |f| f == &field.name);
+        let value = modal
+            .input_values
+            .get(&field.name)
+            .cloned()
+            .unwrap_or_default();
 
         let border_style = if is_focused {
             Style::default().fg(theme.colors.palette.accent)
@@ -551,10 +589,12 @@ impl ModalSystem {
         };
 
         let paragraph = Paragraph::new(content)
-            .block(Block::default()
-                .title(field.label.clone())
-                .borders(Borders::ALL)
-                .border_style(border_style))
+            .block(
+                Block::default()
+                    .title(field.label.clone())
+                    .borders(Borders::ALL)
+                    .border_style(border_style),
+            )
             .style(Style::default().fg(theme.colors.palette.text_primary));
 
         frame.render_widget(paragraph, area);
@@ -567,7 +607,8 @@ impl ModalSystem {
         }
 
         let button_width = area.width / modal.buttons.len() as u16;
-        let constraints: Vec<Constraint> = modal.buttons
+        let constraints: Vec<Constraint> = modal
+            .buttons
             .iter()
             .map(|_| Constraint::Length(button_width))
             .collect();
@@ -575,12 +616,15 @@ impl ModalSystem {
         let button_areas = Layout::default()
             .direction(Direction::Horizontal)
             .constraints(constraints)
-            .split(area.inner(&Margin { horizontal: 1, vertical: 1 }));
+            .split(area.inner(Margin {
+                horizontal: 1,
+                vertical: 1,
+            }));
 
         for (i, button) in modal.buttons.iter().enumerate() {
             let is_selected = i == modal.selected_button;
             let button_style = Self::get_button_style(button, is_selected, theme);
-            
+
             let button_text = if let Some(shortcut) = button.shortcut {
                 format!("[{}] {}", shortcut.to_uppercase(), button.label)
             } else {
@@ -588,7 +632,11 @@ impl ModalSystem {
             };
 
             let button_paragraph = Paragraph::new(button_text)
-                .block(Block::default().borders(Borders::ALL).border_style(button_style))
+                .block(
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .border_style(button_style),
+                )
                 .style(button_style)
                 .alignment(Alignment::Center);
 
@@ -606,11 +654,13 @@ impl ModalSystem {
         };
 
         let mut style = Style::default().fg(base_color);
-        
+
         if is_selected {
-            style = style.add_modifier(Modifier::BOLD).bg(theme.colors.palette.selection);
+            style = style
+                .add_modifier(Modifier::BOLD)
+                .bg(theme.colors.palette.selection);
         }
-        
+
         if button.is_default {
             style = style.add_modifier(Modifier::UNDERLINED);
         }
@@ -688,13 +738,16 @@ impl Modal {
     /// Navigate to previous button
     pub fn previous_button(&mut self) {
         if !self.buttons.is_empty() {
-            self.selected_button = (self.selected_button + self.buttons.len() - 1) % self.buttons.len();
+            self.selected_button =
+                (self.selected_button + self.buttons.len() - 1) % self.buttons.len();
         }
     }
 
     /// Get selected button action
     pub fn get_selected_button_action(&self) -> Option<&str> {
-        self.buttons.get(self.selected_button).map(|b| b.action.as_str())
+        self.buttons
+            .get(self.selected_button)
+            .map(|b| b.action.as_str())
     }
 }
 
@@ -735,7 +788,8 @@ mod tests {
             ModalSize::Medium,
             "Test".to_string(),
             ModalContent::Text("Test".to_string()),
-        ).with_buttons(vec![
+        )
+        .with_buttons(vec![
             ModalButton {
                 label: "Cancel".to_string(),
                 action: "cancel".to_string(),

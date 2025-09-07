@@ -1,8 +1,7 @@
 /// Modern toast notification system for user feedback
-/// 
+///
 /// Provides non-intrusive, temporary notifications that appear at the top-right
 /// of the screen and automatically dismiss after a configurable duration.
-
 use crate::tea::message::ToastLevel;
 use crate::theme::Theme;
 use ratatui::{
@@ -147,7 +146,7 @@ impl ToastManager {
         if self.toasts.len() >= self.max_visible {
             self.toasts.pop_front();
         }
-        
+
         self.toasts.push_back(toast);
     }
 
@@ -284,7 +283,11 @@ impl ToastRenderer {
         // Render icon
         if let Some(icon_area) = chunks.get(0) {
             let icon_paragraph = Paragraph::new(toast.icon())
-                .style(Style::default().fg(accent_color).add_modifier(Modifier::BOLD))
+                .style(
+                    Style::default()
+                        .fg(accent_color)
+                        .add_modifier(Modifier::BOLD),
+                )
                 .alignment(Alignment::Center);
             frame.render_widget(icon_paragraph, *icon_area);
         }
@@ -329,8 +332,8 @@ impl ToastRenderer {
             String::new()
         };
 
-        let progress_paragraph = Paragraph::new(progress_content)
-            .style(Style::default().fg(accent_color));
+        let progress_paragraph =
+            Paragraph::new(progress_content).style(Style::default().fg(accent_color));
 
         frame.render_widget(progress_paragraph, progress_area);
     }
@@ -424,14 +427,11 @@ mod tests {
 
     #[test]
     fn test_toast_progress() {
-        let mut toast = Toast::with_duration(
-            "Test".to_string(),
-            ToastLevel::Info,
-            Duration::from_secs(2),
-        );
+        let mut toast =
+            Toast::with_duration("Test".to_string(), ToastLevel::Info, Duration::from_secs(2));
 
         assert_eq!(toast.remaining_percentage(), 1.0);
-        
+
         // Simulate some time passing
         std::thread::sleep(Duration::from_millis(100));
         toast.update_progress();

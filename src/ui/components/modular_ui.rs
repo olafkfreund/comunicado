@@ -3,25 +3,23 @@
 //! Replaces the monolithic UI struct with a component-based architecture.
 
 use super::{
-    ComponentRegistry, UIServices, LayoutManager, EmailComponent, CalendarComponent, 
-    ContactsComponent, ComponentId, UIComponent, ComponentResult,
-    UIEvent, EventResult, ComponentMetrics, LayoutSpec, LayoutTemplate,
+    CalendarComponent, ComponentId, ComponentMetrics, ComponentRegistry, ComponentResult,
+    ContactsComponent, EmailComponent, EventResult, LayoutManager, LayoutSpec, LayoutTemplate,
+    UIComponent, UIEvent, UIServices,
 };
 use crate::{
-    theme::Theme,
-    email::EmailDatabase,
-    calendar::CalendarManager,
-    contacts::ContactsManager,
-    notifications::UnifiedNotificationManager,
-    oauth2::SecureStorage,
-    imap::ImapAccountManager,
-    smtp::SmtpService,
-    ui::settings_ui::SettingsUI,
+    calendar::CalendarManager, contacts::ContactsManager, email::EmailDatabase,
+    imap::ImapAccountManager, notifications::UnifiedNotificationManager, oauth2::SecureStorage,
+    smtp::SmtpService, theme::Theme, ui::settings_ui::SettingsUI,
 };
-use ratatui::{layout::Rect, Frame, style::{Style, Modifier}};
-use std::sync::Arc;
-use std::collections::HashMap;
 use crossterm::event::KeyCode;
+use ratatui::{
+    layout::Rect,
+    style::{Modifier, Style},
+    Frame,
+};
+use std::collections::HashMap;
+use std::sync::Arc;
 
 /// Application modes for the modular UI
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -37,7 +35,7 @@ impl AppMode {
     pub fn name(&self) -> &'static str {
         match self {
             AppMode::Email => "Email",
-            AppMode::Calendar => "Calendar", 
+            AppMode::Calendar => "Calendar",
             AppMode::Contacts => "Contacts",
             AppMode::Settings => "Settings",
             AppMode::Help => "Help",
@@ -61,17 +59,17 @@ pub struct ModularUI {
     component_registry: ComponentRegistry,
     ui_services: UIServices,
     layout_manager: LayoutManager,
-    
+
     // Component IDs for direct access
     email_component_id: Option<ComponentId>,
     calendar_component_id: Option<ComponentId>,
     contacts_component_id: Option<ComponentId>,
-    
+
     // Application state
     current_mode: AppMode,
     previous_mode: Option<AppMode>,
     mode_history: Vec<AppMode>,
-    
+
     // Global UI state
     is_initialized: bool,
     show_help: bool,
@@ -79,7 +77,7 @@ pub struct ModularUI {
     settings_ui: SettingsUI,
     #[allow(dead_code)]
     global_focus: bool,
-    
+
     // Performance tracking
     frame_count: u64,
     #[allow(dead_code)]
@@ -110,7 +108,7 @@ impl ModularUI {
             average_frame_time: std::time::Duration::ZERO,
         })
     }
-    
+
     /// Initialize the modular UI with all services and components
     pub async fn initialize(
         &mut self,
@@ -123,23 +121,28 @@ impl ModularUI {
         secure_storage: Option<SecureStorage>,
     ) -> ComponentResult<()> {
         // Initialize UI services
-        self.ui_services.initialize(
-            database.clone(),
-            imap_manager,
-            smtp_service,
-            calendar_manager.clone(),
-            contacts_manager.clone(),
-            notification_manager,
-            secure_storage,
-        ).await.map_err(|e| super::ComponentError::InitializationFailed(e.to_string()))?;
-        
+        self.ui_services
+            .initialize(
+                database.clone(),
+                imap_manager,
+                smtp_service,
+                calendar_manager.clone(),
+                contacts_manager.clone(),
+                notification_manager,
+                secure_storage,
+            )
+            .await
+            .map_err(|e| super::ComponentError::InitializationFailed(e.to_string()))?;
+
         // Create and register email component
-        let mut email_component = EmailComponent::new()
-            .with_services(database, None /* sender_recognition service */, None /* contacts_manager */);
+        let mut email_component = EmailComponent::new().with_services(
+            database, None, /* sender_recognition service */
+            None, /* contacts_manager */
+        );
         email_component.initialize()?;
         let email_id = self.component_registry.register(email_component)?;
         self.email_component_id = Some(email_id);
-        
+
         // Create and register calendar component
         let mut calendar_component = CalendarComponent::new();
         if let Some(cal_manager) = calendar_manager {
@@ -148,24 +151,24 @@ impl ModularUI {
         calendar_component.initialize()?;
         let calendar_id = self.component_registry.register(calendar_component)?;
         self.calendar_component_id = Some(calendar_id);
-        
+
         // Create and register contacts component
         let mut contacts_component = ContactsComponent::new()
             .with_services(contacts_manager, None /* sender_recognition service */);
         contacts_component.initialize()?;
         let contacts_id = self.component_registry.register(contacts_component)?;
         self.contacts_component_id = Some(contacts_id);
-        
+
         // Set initial focus to email component
         self.component_registry.set_focus(Some(email_id))?;
-        
+
         // Register custom layouts for different modes
         self.register_custom_layouts();
-        
+
         self.is_initialized = true;
         Ok(())
     }
-    
+
     /// Register custom layouts for different application modes
     fn register_custom_layouts(&mut self) {
         // Email mode layout - three pane with folder tree, message list, and preview
@@ -173,22 +176,20 @@ impl ModularUI {
             "email_mode".to_string(),
             LayoutTemplate::ThreePane {
                 left: 0.25,   // Folder tree
-                center: 0.35, // Message list  
+                center: 0.35, // Message list
                 right: 0.40,  // Email preview
             },
         )
         .with_responsive_rule(
-            super::ResponsiveRule::when_width_lt(120)
-                .use_two_pane(0.4, 0.6) // Collapse to list + preview
+            super::ResponsiveRule::when_width_lt(120).use_two_pane(0.4, 0.6), // Collapse to list + preview
         )
         .with_responsive_rule(
-            super::ResponsiveRule::when_width_lt(80)
-                .use_full_screen() // Single pane on small screens
+            super::ResponsiveRule::when_width_lt(80).use_full_screen(), // Single pane on small screens
         )
         .with_min_size(60, 20);
-        
+
         self.layout_manager.register_layout(email_layout);
-        
+
         // Calendar mode layout - header/footer with main calendar view
         let calendar_layout = LayoutSpec::new(
             "calendar_mode".to_string(),
@@ -197,49 +198,43 @@ impl ModularUI {
                 footer_height: 1,
             },
         )
-        .with_responsive_rule(
-            super::ResponsiveRule::when_height_lt(20)
-                .use_full_screen()
-        );
-        
+        .with_responsive_rule(super::ResponsiveRule::when_height_lt(20).use_full_screen());
+
         self.layout_manager.register_layout(calendar_layout);
-        
+
         // Contacts mode layout - sidebar with contact list and details
         let contacts_layout = LayoutSpec::new(
             "contacts_mode".to_string(),
             LayoutTemplate::TwoPane {
-                left: 0.6,   // Contact list
-                right: 0.4,  // Contact details
+                left: 0.6,  // Contact list
+                right: 0.4, // Contact details
             },
         )
-        .with_responsive_rule(
-            super::ResponsiveRule::when_width_lt(100)
-                .use_full_screen()
-        );
-        
+        .with_responsive_rule(super::ResponsiveRule::when_width_lt(100).use_full_screen());
+
         self.layout_manager.register_layout(contacts_layout);
     }
-    
+
     /// Get the current application mode
     pub fn current_mode(&self) -> AppMode {
         self.current_mode
     }
-    
+
     /// Switch to a different application mode
     pub fn switch_mode(&mut self, mode: AppMode) -> ComponentResult<()> {
         if self.current_mode != mode {
             // Store previous mode
             self.previous_mode = Some(self.current_mode);
             self.mode_history.push(self.current_mode);
-            
+
             // Limit history size
             if self.mode_history.len() > 10 {
                 self.mode_history.remove(0);
             }
-            
+
             // Update current mode
             self.current_mode = mode;
-            
+
             // Update component focus based on mode
             let component_id = match mode {
                 AppMode::Email => self.email_component_id,
@@ -247,15 +242,15 @@ impl ModularUI {
                 AppMode::Contacts => self.contacts_component_id,
                 AppMode::Settings | AppMode::Help => None, // These don't have dedicated components yet
             };
-            
+
             if let Some(id) = component_id {
                 self.component_registry.set_focus(Some(id))?;
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// Go back to the previous mode
     pub fn go_back(&mut self) -> ComponentResult<()> {
         if let Some(prev_mode) = self.previous_mode {
@@ -263,22 +258,22 @@ impl ModularUI {
         }
         Ok(())
     }
-    
+
     /// Toggle help overlay
     pub fn toggle_help(&mut self) {
         self.show_help = !self.show_help;
     }
-    
+
     /// Toggle settings overlay  
     pub fn toggle_settings(&mut self) {
         self.show_settings = !self.show_settings;
     }
-    
+
     /// Check if the UI is initialized
     pub fn is_initialized(&self) -> bool {
         self.is_initialized
     }
-    
+
     /// Get direct access to email component
     pub fn email_component(&mut self) -> Option<&mut super::ComponentHandle> {
         if let Some(id) = self.email_component_id {
@@ -287,7 +282,7 @@ impl ModularUI {
             None
         }
     }
-    
+
     /// Get direct access to calendar component
     pub fn calendar_component(&mut self) -> Option<&mut super::ComponentHandle> {
         if let Some(id) = self.calendar_component_id {
@@ -296,7 +291,7 @@ impl ModularUI {
             None
         }
     }
-    
+
     /// Get direct access to contacts component
     pub fn contacts_component(&mut self) -> Option<&mut super::ComponentHandle> {
         if let Some(id) = self.contacts_component_id {
@@ -305,29 +300,29 @@ impl ModularUI {
             None
         }
     }
-    
+
     /// Render the entire modular UI
     pub fn render(&mut self, frame: &mut Frame, area: Rect, theme: &Theme) -> ComponentResult<()> {
         let start_time = std::time::Instant::now();
-        
+
         if !self.is_initialized {
             // Render loading screen
             self.render_loading_screen(frame, area, theme);
             return Ok(());
         }
-        
+
         // Get layout for current mode
         let layout_id = match self.current_mode {
             AppMode::Email => "email_mode",
-            AppMode::Calendar => "calendar_mode", 
+            AppMode::Calendar => "calendar_mode",
             AppMode::Contacts => "contacts_mode",
             AppMode::Settings | AppMode::Help => "fullscreen", // Use default fullscreen
         };
-        
+
         let layout_areas = self.layout_manager.calculate_layout(layout_id, area)?;
         let main_area = layout_areas.get(0).copied().unwrap_or(area);
-        
-        // Render components based on current mode 
+
+        // Render components based on current mode
         // TODO: Fix borrowing issues with component rendering
         match self.current_mode {
             AppMode::Settings => {
@@ -338,50 +333,55 @@ impl ModularUI {
             }
             _ => {
                 // Render a placeholder for now while we work on the borrowing issues
+                use ratatui::style::{Color, Style};
                 use ratatui::widgets::{Block, Borders, Paragraph};
-                use ratatui::style::{Style, Color};
-                
+
                 let mode_name = match self.current_mode {
                     AppMode::Email => "Email",
-                    AppMode::Calendar => "Calendar", 
+                    AppMode::Calendar => "Calendar",
                     AppMode::Contacts => "Contacts",
                     _ => "Unknown",
                 };
-                
-                let placeholder = Paragraph::new(format!("{} Component - Under Development", mode_name))
-                    .block(Block::default().borders(Borders::ALL).title(format!("{} Mode", mode_name)))
-                    .style(Style::default().fg(Color::Yellow));
-                    
+
+                let placeholder =
+                    Paragraph::new(format!("{} Component - Under Development", mode_name))
+                        .block(
+                            Block::default()
+                                .borders(Borders::ALL)
+                                .title(format!("{} Mode", mode_name)),
+                        )
+                        .style(Style::default().fg(Color::Yellow));
+
                 frame.render_widget(placeholder, main_area);
             }
         }
-        
+
         // Render mode tabs at the top
         self.render_mode_tabs(frame, area, theme)?;
-        
+
         // Render overlays
         if self.show_help {
             self.render_help_overlay(frame, area, theme);
         }
-        
+
         if self.show_settings {
             self.render_settings_overlay(frame, area, theme);
         }
-        
+
         // Update performance metrics
         let frame_time = start_time.elapsed();
         self.frame_count += 1;
-        
+
         // Update average frame time (exponential moving average)
         let weight = 0.05; // 5% weight to new frame
         self.average_frame_time = std::time::Duration::from_nanos(
-            (self.average_frame_time.as_nanos() as f64 * (1.0 - weight) +
-             frame_time.as_nanos() as f64 * weight) as u64
+            (self.average_frame_time.as_nanos() as f64 * (1.0 - weight)
+                + frame_time.as_nanos() as f64 * weight) as u64,
         );
-        
+
         Ok(())
     }
-    
+
     /// Handle global UI events
     pub fn handle_event(&mut self, event: UIEvent) -> ComponentResult<EventResult> {
         // Handle global shortcuts first
@@ -421,16 +421,16 @@ impl ModularUI {
                 _ => {}
             }
         }
-        
+
         // Route event to active component
         self.component_registry.handle_event(&event)
     }
-    
+
     /// Get comprehensive performance metrics
     pub fn performance_metrics(&self) -> ModularUIMetrics {
         let registry_metrics = self.component_registry.performance_metrics();
         let (cache_hits, cache_misses, cache_hit_rate) = self.layout_manager.cache_stats();
-        
+
         ModularUIMetrics {
             total_components: registry_metrics.total_components,
             total_render_time: registry_metrics.total_render_time,
@@ -445,80 +445,82 @@ impl ModularUI {
             component_metrics: registry_metrics.component_metrics,
         }
     }
-    
+
     /// Render loading screen
     fn render_loading_screen(&self, frame: &mut Frame, area: Rect, theme: &Theme) {
-        use ratatui::widgets::{Block, Borders, Paragraph};
         use ratatui::layout::Alignment;
-        use ratatui::style::{Style, Modifier};
-        
+        use ratatui::style::{Modifier, Style};
+        use ratatui::widgets::{Block, Borders, Paragraph};
+
         let loading_text = "🚀 Loading Comunicado...\n\nInitializing components and services...";
         let loading_widget = Paragraph::new(loading_text)
             .block(
                 Block::default()
                     .title("Comunicado")
                     .borders(Borders::ALL)
-                    .border_style(Style::default().fg(theme.colors.palette.accent))
+                    .border_style(Style::default().fg(theme.colors.palette.accent)),
             )
             .style(
                 Style::default()
                     .fg(theme.colors.palette.text_primary)
-                    .add_modifier(Modifier::BOLD)
+                    .add_modifier(Modifier::BOLD),
             )
             .alignment(Alignment::Center);
-            
+
         frame.render_widget(loading_widget, area);
     }
-    
+
     /// Render mode tabs
-    fn render_mode_tabs(&self, frame: &mut Frame, area: Rect, theme: &Theme) -> ComponentResult<()> {
-        use ratatui::widgets::Tabs;
+    fn render_mode_tabs(
+        &self,
+        frame: &mut Frame,
+        area: Rect,
+        theme: &Theme,
+    ) -> ComponentResult<()> {
+        use ratatui::layout::{Constraint, Direction, Layout};
         use ratatui::text::Line;
-        use ratatui::layout::{Layout, Constraint, Direction};
-        
+        use ratatui::widgets::Tabs;
+
         // Create small area at top for tabs
         let chunks = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Length(1),
-                Constraint::Min(0),
-            ])
+            .constraints([Constraint::Length(1), Constraint::Min(0)])
             .split(area);
-        
+
         let tab_titles: Vec<Line> = AppMode::all()
             .iter()
             .map(|mode| Line::from(mode.name()))
             .collect();
-        
+
         let current_tab_index = AppMode::all()
             .iter()
             .position(|&mode| mode == self.current_mode)
             .unwrap_or(0);
-        
+
         let tabs = Tabs::new(tab_titles)
             .highlight_style(
                 Style::default()
                     .fg(theme.colors.palette.accent)
-                    .add_modifier(Modifier::BOLD)
+                    .add_modifier(Modifier::BOLD),
             )
             .select(current_tab_index);
-        
+
         frame.render_widget(tabs, chunks[0]);
         Ok(())
     }
-    
+
     /// Render settings interface
     fn render_settings(&mut self, frame: &mut Frame, area: Rect, theme: &Theme) {
         self.settings_ui.render(frame, area, theme);
     }
-    
+
     /// Render help interface
     fn render_help(&self, frame: &mut Frame, area: Rect, theme: &Theme) {
-        use ratatui::widgets::{Block, Borders, Paragraph, List, ListItem};
         use ratatui::layout::{Alignment, Constraint, Direction, Layout};
-        use ratatui::text::{Line, Span};
         use ratatui::style::{Color, Modifier};
-        
+        use ratatui::text::{Line, Span};
+        use ratatui::widgets::{Block, Borders, List, ListItem, Paragraph};
+
         // Create layout with title and main content
         let chunks = Layout::default()
             .direction(Direction::Vertical)
@@ -527,54 +529,70 @@ impl ModularUI {
                 Constraint::Min(0),    // Content area
             ])
             .split(area);
-        
+
         // Title area
         let title_widget = Paragraph::new("🔥 Comunicado Help System")
             .block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .border_style(Style::default().fg(theme.colors.palette.border))
+                    .border_style(Style::default().fg(theme.colors.palette.border)),
             )
             .alignment(Alignment::Center)
-            .style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD));
-        
+            .style(
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            );
+
         frame.render_widget(title_widget, chunks[0]);
-        
+
         // Main content area with keyboard shortcuts
         let help_content = vec![
-            ListItem::new(Line::from(vec![
-                Span::styled("📧 EMAIL SHORTCUTS", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
-            ])),
+            ListItem::new(Line::from(vec![Span::styled(
+                "📧 EMAIL SHORTCUTS",
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            )])),
             ListItem::new("  F3 / e       - Switch to Email mode"),
             ListItem::new("  ↑↓ / j/k     - Navigate email list"),
             ListItem::new("  Enter        - View selected email"),
             ListItem::new("  d            - Delete email"),
-            ListItem::new("  a            - Archive email"), 
+            ListItem::new("  a            - Archive email"),
             ListItem::new("  r            - Mark as read/unread"),
             ListItem::new("  Shift+S      - Save attachment"),
             ListItem::new("  s            - Save attachment (in viewer)"),
             ListItem::new(""),
-            ListItem::new(Line::from(vec![
-                Span::styled("📅 CALENDAR SHORTCUTS", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD))
-            ])),
+            ListItem::new(Line::from(vec![Span::styled(
+                "📅 CALENDAR SHORTCUTS",
+                Style::default()
+                    .fg(Color::Green)
+                    .add_modifier(Modifier::BOLD),
+            )])),
             ListItem::new("  F4 / c       - Switch to Calendar mode"),
             ListItem::new("  ←→           - Navigate periods"),
             ListItem::new("  n            - New event"),
             ListItem::new("  Enter        - View/Edit event"),
             ListItem::new("  d            - Delete event"),
             ListItem::new(""),
-            ListItem::new(Line::from(vec![
-                Span::styled("👥 CONTACT SHORTCUTS", Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD))
-            ])),
+            ListItem::new(Line::from(vec![Span::styled(
+                "👥 CONTACT SHORTCUTS",
+                Style::default()
+                    .fg(Color::Magenta)
+                    .add_modifier(Modifier::BOLD),
+            )])),
             ListItem::new("  F5 / o       - Switch to Contacts mode"),
             ListItem::new("  ↑↓ / j/k     - Navigate contact list"),
             ListItem::new("  Enter        - View contact details"),
             ListItem::new("  n            - New contact"),
             ListItem::new("  e            - Edit contact"),
             ListItem::new(""),
-            ListItem::new(Line::from(vec![
-                Span::styled("⚙️  GLOBAL SHORTCUTS", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))
-            ])),
+            ListItem::new(Line::from(vec![Span::styled(
+                "⚙️  GLOBAL SHORTCUTS",
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            )])),
             ListItem::new("  F1 / ?       - Toggle this help"),
             ListItem::new("  F2           - Settings"),
             ListItem::new("  Ctrl+D       - Command palette"),
@@ -582,32 +600,38 @@ impl ModularUI {
             ListItem::new("  Esc          - Close overlays/go back"),
             ListItem::new("  Ctrl+C / q   - Quit application"),
             ListItem::new(""),
-            ListItem::new(Line::from(vec![
-                Span::styled("Press F1 or ? to close this help", Style::default().fg(Color::Gray).add_modifier(Modifier::ITALIC))
-            ])),
+            ListItem::new(Line::from(vec![Span::styled(
+                "Press F1 or ? to close this help",
+                Style::default()
+                    .fg(Color::Gray)
+                    .add_modifier(Modifier::ITALIC),
+            )])),
         ];
-        
+
         let help_list = List::new(help_content)
             .block(
                 Block::default()
                     .title("Keyboard Shortcuts & Usage Guide")
                     .borders(Borders::ALL)
-                    .border_style(Style::default().fg(theme.colors.palette.border))
+                    .border_style(Style::default().fg(theme.colors.palette.border)),
             )
             .style(Style::default().fg(theme.colors.palette.text_primary));
-        
+
         frame.render_widget(help_list, chunks[1]);
     }
-    
+
     /// Render help overlay
     fn render_help_overlay(&self, frame: &mut Frame, area: Rect, theme: &Theme) {
-        use ratatui::widgets::{Block, Borders, Paragraph, Clear};
         use ratatui::layout::{Alignment, Margin};
-        
-        let popup_area = area.inner(&Margin { vertical: 4, horizontal: 8 });
-        
+        use ratatui::widgets::{Block, Borders, Clear, Paragraph};
+
+        let popup_area = area.inner(Margin {
+            vertical: 4,
+            horizontal: 8,
+        });
+
         frame.render_widget(Clear, popup_area);
-        
+
         let help_text = "🔥 Comunicado Keyboard Shortcuts\n\n\
             F1: Toggle this help\n\
             F2: Settings\n\
@@ -620,29 +644,32 @@ impl ModularUI {
             ↑↓: Navigate lists\n\
             ←→: Navigate periods (calendar)\n\n\
             Press Esc to close this help";
-        
+
         let help_widget = Paragraph::new(help_text)
             .block(
                 Block::default()
                     .title("Help")
                     .borders(Borders::ALL)
-                    .border_style(Style::default().fg(theme.colors.palette.accent))
+                    .border_style(Style::default().fg(theme.colors.palette.accent)),
             )
             .style(Style::default().fg(theme.colors.palette.text_primary))
             .alignment(Alignment::Left);
-            
+
         frame.render_widget(help_widget, popup_area);
     }
-    
+
     /// Render settings overlay
     fn render_settings_overlay(&self, frame: &mut Frame, area: Rect, theme: &Theme) {
-        use ratatui::widgets::{Block, Borders, Paragraph, Clear};
         use ratatui::layout::{Alignment, Margin};
-        
-        let popup_area = area.inner(&Margin { vertical: 4, horizontal: 8 });
-        
+        use ratatui::widgets::{Block, Borders, Clear, Paragraph};
+
+        let popup_area = area.inner(Margin {
+            vertical: 4,
+            horizontal: 8,
+        });
+
         frame.render_widget(Clear, popup_area);
-        
+
         let metrics = self.performance_metrics();
         let settings_text = format!(
             "⚙️ Comunicado Settings & Stats\n\n\
@@ -661,17 +688,17 @@ impl ModularUI {
             metrics.layout_cache_hit_rate * 100.0,
             metrics.current_mode.name()
         );
-        
+
         let settings_widget = Paragraph::new(settings_text)
             .block(
                 Block::default()
                     .title("Settings")
                     .borders(Borders::ALL)
-                    .border_style(Style::default().fg(theme.colors.palette.accent))
+                    .border_style(Style::default().fg(theme.colors.palette.accent)),
             )
             .style(Style::default().fg(theme.colors.palette.text_primary))
             .alignment(Alignment::Left);
-            
+
         frame.render_widget(settings_widget, popup_area);
     }
 }
@@ -722,51 +749,51 @@ impl Default for ModularUI {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_modular_ui_creation() {
         let ui = ModularUI::new().unwrap();
         assert!(!ui.is_initialized());
         assert_eq!(ui.current_mode(), AppMode::Email);
     }
-    
+
     #[test]
     fn test_mode_switching() {
         let mut ui = ModularUI::new().unwrap();
-        
+
         // Switch to calendar mode
         ui.switch_mode(AppMode::Calendar).unwrap();
         assert_eq!(ui.current_mode(), AppMode::Calendar);
         assert_eq!(ui.previous_mode, Some(AppMode::Email));
-        
+
         // Switch to contacts mode
         ui.switch_mode(AppMode::Contacts).unwrap();
         assert_eq!(ui.current_mode(), AppMode::Contacts);
         assert_eq!(ui.previous_mode, Some(AppMode::Calendar));
-        
+
         // Go back to previous mode
         ui.go_back().unwrap();
         assert_eq!(ui.current_mode(), AppMode::Calendar);
     }
-    
+
     #[test]
     fn test_help_and_settings_toggle() {
         let mut ui = ModularUI::new().unwrap();
-        
+
         assert!(!ui.show_help);
         ui.toggle_help();
         assert!(ui.show_help);
-        
+
         assert!(!ui.show_settings);
         ui.toggle_settings();
         assert!(ui.show_settings);
     }
-    
+
     #[test]
     fn test_performance_metrics() {
         let ui = ModularUI::new().unwrap();
         let metrics = ui.performance_metrics();
-        
+
         assert_eq!(metrics.total_components, 0); // No components registered yet
         assert_eq!(metrics.frame_count, 0);
         assert_eq!(metrics.current_mode, AppMode::Email);

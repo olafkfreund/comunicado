@@ -27,9 +27,9 @@ pub enum TransitionEffect {
 /// Mode indicator display style
 #[derive(Debug, Clone, PartialEq)]
 pub enum IndicatorStyle {
-    Compact,    // Icon + name only
-    Detailed,   // Icon + name + context
-    Full,       // Icon + name + context + breadcrumb
+    Compact,  // Icon + name only
+    Detailed, // Icon + name + context
+    Full,     // Icon + name + context + breadcrumb
 }
 
 /// Visual mode indicator system
@@ -65,7 +65,9 @@ impl ModeIndicator {
     pub fn set_mode(&mut self, new_mode: UIMode, sub_context: Option<String>) {
         if new_mode != self.current_mode {
             // Add to history
-            if !self.mode_history.is_empty() && *self.mode_history.back().unwrap() != self.current_mode {
+            if !self.mode_history.is_empty()
+                && *self.mode_history.back().unwrap() != self.current_mode
+            {
                 self.mode_history.push_back(self.current_mode.clone());
             } else if self.mode_history.is_empty() {
                 self.mode_history.push_back(self.current_mode.clone());
@@ -80,7 +82,7 @@ impl ModeIndicator {
             self.current_mode = new_mode;
             self.sub_context = sub_context;
             self.transition_progress = 0.0;
-            
+
             // Flash for important mode changes
             if self.is_important_mode_change(&self.current_mode) {
                 self.flash_countdown = 3;
@@ -165,14 +167,20 @@ impl ModeIndicator {
         // Add sub-context if available
         if let Some(ref context) = self.sub_context {
             spans.extend(vec![
-                Span::styled(" (", Style::default().fg(theme.colors.palette.text_secondary)),
+                Span::styled(
+                    " (",
+                    Style::default().fg(theme.colors.palette.text_secondary),
+                ),
                 Span::styled(
                     context.clone(),
                     Style::default()
                         .fg(theme.colors.palette.text_secondary)
                         .add_modifier(Modifier::ITALIC),
                 ),
-                Span::styled(")", Style::default().fg(theme.colors.palette.text_secondary)),
+                Span::styled(
+                    ")",
+                    Style::default().fg(theme.colors.palette.text_secondary),
+                ),
             ]);
         }
 
@@ -190,8 +198,7 @@ impl ModeIndicator {
             ]);
         }
 
-        let paragraph = Paragraph::new(Line::from(spans))
-            .alignment(Alignment::Center);
+        let paragraph = Paragraph::new(Line::from(spans)).alignment(Alignment::Center);
 
         frame.render_widget(paragraph, area);
     }
@@ -233,11 +240,10 @@ impl ModeIndicator {
         if let Some(ref prev_mode) = self.previous_mode {
             let prev_info = self.get_mode_info_for_mode(prev_mode);
             let curr_info = self.get_mode_info();
-            
+
             let transition_text = format!(
                 "{} {} → {} {}",
-                prev_info.icon, prev_info.name,
-                curr_info.icon, curr_info.name
+                prev_info.icon, prev_info.name, curr_info.icon, curr_info.name
             );
 
             let progress_bar = Gauge::default()
@@ -258,12 +264,15 @@ impl ModeIndicator {
 
         let mut spans = Vec::new();
         let recent_modes: Vec<_> = self.mode_history.iter().rev().take(3).collect();
-        
+
         for (i, mode) in recent_modes.iter().enumerate() {
             if i > 0 {
-                spans.push(Span::styled(" ← ", Style::default().fg(theme.colors.palette.text_muted)));
+                spans.push(Span::styled(
+                    " ← ",
+                    Style::default().fg(theme.colors.palette.text_muted),
+                ));
             }
-            
+
             let mode_info = self.get_mode_info_for_mode(mode);
             spans.push(Span::styled(
                 format!("{} {}", mode_info.icon, mode_info.name),
@@ -292,7 +301,7 @@ impl ModeIndicator {
             .collect();
 
         let content = hints_text.join(" | ");
-        
+
         let paragraph = Paragraph::new(content)
             .alignment(Alignment::Center)
             .style(Style::default().fg(theme.colors.palette.text_muted))
@@ -313,7 +322,7 @@ impl ModeIndicator {
     fn get_mode_info(&self) -> ModeInfo {
         self.get_mode_info_for_mode(&self.current_mode)
     }
-    
+
     /// Get the description of the current mode
     pub fn get_mode_description(&self) -> &'static str {
         self.get_mode_info().description
@@ -496,11 +505,11 @@ mod tests {
     #[test]
     fn test_mode_transitions() {
         let mut indicator = ModeIndicator::new();
-        
+
         indicator.set_mode(UIMode::Compose, Some("new email".to_string()));
         assert_eq!(*indicator.current_mode(), UIMode::Compose);
         assert_eq!(indicator.mode_history().len(), 1);
-        
+
         indicator.set_mode(UIMode::Settings, None);
         assert_eq!(*indicator.current_mode(), UIMode::Settings);
         assert_eq!(indicator.mode_history().len(), 2);
@@ -509,20 +518,24 @@ mod tests {
     #[test]
     fn test_history_limit() {
         let mut indicator = ModeIndicator::new();
-        
+
         // Add more than 5 modes to test limit
         for i in 0..10 {
-            let mode = if i % 2 == 0 { UIMode::Compose } else { UIMode::Calendar };
+            let mode = if i % 2 == 0 {
+                UIMode::Compose
+            } else {
+                UIMode::Calendar
+            };
             indicator.set_mode(mode, None);
         }
-        
+
         assert!(indicator.mode_history().len() <= 5);
     }
 
     #[test]
     fn test_important_mode_changes() {
         let indicator = ModeIndicator::new();
-        
+
         assert!(indicator.is_important_mode_change(&UIMode::Compose));
         assert!(indicator.is_important_mode_change(&UIMode::Settings));
         assert!(!indicator.is_important_mode_change(&UIMode::Normal));

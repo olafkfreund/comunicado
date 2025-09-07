@@ -115,7 +115,10 @@ impl RetryManager {
         while attempt < self.config.max_attempts {
             attempt += 1;
 
-            debug!("Attempting AI operation (attempt {}/{})", attempt, self.config.max_attempts);
+            debug!(
+                "Attempting AI operation (attempt {}/{})",
+                attempt, self.config.max_attempts
+            );
 
             match operation().await {
                 Ok(result) => {
@@ -144,7 +147,7 @@ impl RetryManager {
 
                     // Calculate delay for next attempt
                     let delay = self.calculate_delay(attempt, &error);
-                    
+
                     warn!(
                         "AI operation failed (attempt {}), retrying in {:?}: {}",
                         attempt, delay, error
@@ -185,7 +188,8 @@ impl RetryManager {
 
         // Calculate exponential backoff delay
         let delay_ms = (self.config.base_delay.as_millis() as f64
-            * self.config.backoff_multiplier.powi((attempt - 1) as i32)) as u64;
+            * self.config.backoff_multiplier.powi((attempt - 1) as i32))
+            as u64;
 
         let mut delay = Duration::from_millis(delay_ms);
 
@@ -203,11 +207,11 @@ impl RetryManager {
     /// Add random jitter to delay to prevent thundering herd
     fn add_jitter(&self, delay: Duration) -> Duration {
         use rand::Rng;
-        
+
         let jitter_range = delay.as_millis() as f64 * 0.1; // 10% jitter
         let mut rng = rand::thread_rng();
         let jitter = rng.gen_range(-jitter_range..=jitter_range);
-        
+
         let adjusted_ms = (delay.as_millis() as f64 + jitter).max(0.0) as u64;
         Duration::from_millis(adjusted_ms)
     }
@@ -301,13 +305,17 @@ impl RetryStats {
 
     /// Get the success rate (1.0 if succeeded, 0.0 if failed)
     pub fn success_rate(&self) -> f64 {
-        if self.success { 1.0 } else { 0.0 }
+        if self.success {
+            1.0
+        } else {
+            0.0
+        }
     }
 
     /// Get a summary of error types encountered
     pub fn error_summary(&self) -> std::collections::HashMap<String, usize> {
         let mut summary = std::collections::HashMap::new();
-        
+
         for error in &self.errors {
             let error_type = match error {
                 AIError::NetworkError { .. } => "NetworkError",
@@ -319,10 +327,10 @@ impl RetryStats {
                 AIError::InternalError { .. } => "InternalError",
                 _ => "Other",
             };
-            
+
             *summary.entry(error_type.to_string()).or_insert(0) += 1;
         }
-        
+
         summary
     }
 }
@@ -343,11 +351,15 @@ pub fn retry_config_for_error(error: &AIError) -> RetryConfig {
 #[macro_export]
 macro_rules! retry_ai_operation {
     ($retry_manager:expr, $operation:expr) => {
-        $retry_manager.execute_with_retry(|| async { $operation }).await
+        $retry_manager
+            .execute_with_retry(|| async { $operation })
+            .await
     };
-    
+
     ($retry_manager:expr, $config:expr, $operation:expr) => {
-        $retry_manager.execute_with_custom_config(|| async { $operation }, $config).await
+        $retry_manager
+            .execute_with_custom_config(|| async { $operation }, $config)
+            .await
     };
 }
 
@@ -363,7 +375,7 @@ mod tests {
         let result = retry_manager
             .execute_with_retry(|| async { Ok::<i32, AIError>(42) })
             .await;
-        
+
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), 42);
     }

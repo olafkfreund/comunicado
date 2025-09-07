@@ -1,10 +1,10 @@
 //! Plugin architecture for Comunicado
-//! 
+//!
 //! This module provides a comprehensive plugin system that allows third-party developers
 //! to extend Comunicado's functionality through well-defined interfaces.
 //!
 //! # Plugin Types
-//! 
+//!
 //! - **Email Plugins**: Process incoming/outgoing emails, add filters, modify content
 //! - **UI Plugins**: Add custom UI components, modify layouts, add new views
 //! - **Calendar Plugins**: Extend calendar functionality, add new calendar sources
@@ -41,28 +41,25 @@
 //! ```
 
 pub mod core;
-pub mod manager;
-pub mod registry;
 pub mod loader;
-pub mod types;
+pub mod manager;
 pub mod notes;
-
+pub mod registry;
+pub mod types;
 
 // Re-export main types for convenience
-pub use core::{Plugin, PluginInfo, PluginResult, PluginError, PluginType, PluginStatus};
+pub use core::{Plugin, PluginError, PluginInfo, PluginResult, PluginStatus, PluginType};
+pub use loader::PluginLoader;
 pub use manager::PluginManager;
 pub use registry::PluginRegistry;
-pub use loader::PluginLoader;
 
 // Notes plugin
 pub use notes::NotesPlugin;
 
 // Plugin trait specializations
 pub use types::{
-    EmailPlugin, EmailPluginContext, EmailProcessResult,
-    UIPlugin, UIPluginContext, UIComponentResult,
-    CalendarPlugin, CalendarPluginContext, CalendarEventResult,
-    NotificationPlugin, NotificationPluginContext, NotificationResult,
-    SearchPlugin, SearchPluginContext, SearchResult,
-    ImportExportPlugin, ImportExportPluginContext, ImportExportResult,
+    CalendarEventResult, CalendarPlugin, CalendarPluginContext, EmailPlugin, EmailPluginContext,
+    EmailProcessResult, ImportExportPlugin, ImportExportPluginContext, ImportExportResult,
+    NotificationPlugin, NotificationPluginContext, NotificationResult, SearchPlugin,
+    SearchPluginContext, SearchResult, UIComponentResult, UIPlugin, UIPluginContext,
 };

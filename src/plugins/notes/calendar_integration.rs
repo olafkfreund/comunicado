@@ -1,20 +1,20 @@
 //! Calendar integration for the notes plugin
-//! 
+//!
 //! Provides seamless integration between calendar events and notes, including
 //! automatic meeting note creation, event linking, and agenda management.
 
-use super::types::{Note, NoteId, NoteFrontmatter};
 use super::manager::NoteResult;
 use super::storage::NoteStorage;
-use crate::calendar::{Event, CalendarManager};
+use super::types::{Note, NoteFrontmatter, NoteId};
+use crate::calendar::{CalendarManager, Event};
 
+use chrono::{DateTime, Duration, Utc};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tokio::sync::{RwLock, mpsc};
-use chrono::{DateTime, Utc, Duration};
-use serde::{Deserialize, Serialize};
-use tracing::{info, debug};
+use tokio::sync::{mpsc, RwLock};
+use tracing::{debug, info};
 use uuid::Uuid;
 
 /// Service that bridges calendar events with notes
@@ -189,7 +189,7 @@ impl CalendarNotesIntegration {
         config: CalendarNotesConfig,
     ) -> NoteResult<Self> {
         let (notification_tx, _notification_rx) = mpsc::unbounded_channel();
-        
+
         Ok(Self {
             note_storage,
             calendar_manager,
@@ -200,18 +200,25 @@ impl CalendarNotesIntegration {
     }
 
     /// Scan upcoming events and identify those needing notes
-    pub async fn scan_upcoming_events(&self, hours_ahead: i64) -> NoteResult<Vec<UpcomingEventInfo>> {
+    pub async fn scan_upcoming_events(
+        &self,
+        hours_ahead: i64,
+    ) -> NoteResult<Vec<UpcomingEventInfo>> {
         debug!("Scanning upcoming events for note creation opportunities");
-        
+
         let now = Utc::now();
         let scan_until = now + Duration::hours(hours_ahead);
-        
+
         // Get events from all calendars
         let calendars = self.calendar_manager.get_calendars().await;
         let mut upcoming_events = Vec::new();
-        
+
         for calendar in calendars {
-            match self.calendar_manager.get_events(&calendar.id, Some(now), Some(scan_until)).await {
+            match self
+                .calendar_manager
+                .get_events(&calendar.id, Some(now), Some(scan_until))
+                .await
+            {
                 Ok(events) => {
                     for event in events {
                         if let Some(info) = self.analyze_event_for_notes(&event).await? {
@@ -224,38 +231,45 @@ impl CalendarNotesIntegration {
                 }
             }
         }
-        
+
         // Sort by time until event
         upcoming_events.sort_by_key(|info| info.time_until_event);
-        
-        info!("Found {} upcoming events for note analysis", upcoming_events.len());
+
+        info!(
+            "Found {} upcoming events for note analysis",
+            upcoming_events.len()
+        );
         Ok(upcoming_events)
     }
 
     /// Analyze an event to determine if it needs notes
-    async fn analyze_event_for_notes(&self, event: &Event) -> NoteResult<Option<UpcomingEventInfo>> {
+    async fn analyze_event_for_notes(
+        &self,
+        event: &Event,
+    ) -> NoteResult<Option<UpcomingEventInfo>> {
         let now = Utc::now();
         let time_until_event = event.start_time - now;
-        
+
         // Skip past events
         if time_until_event < Duration::zero() {
             return Ok(None);
         }
-        
+
         // Check for existing notes
         let existing_notes = self.get_notes_for_event(&event.id).await?;
-        
+
         // Determine if this event needs a note
         let existing_note_ids: Vec<NoteId> = existing_notes.iter().map(|n| n.id.clone()).collect();
-        let needs_note = self.should_create_note_for_event(event, &existing_note_ids, time_until_event);
-        
+        let needs_note =
+            self.should_create_note_for_event(event, &existing_note_ids, time_until_event);
+
         if !needs_note && existing_notes.is_empty() {
             return Ok(None);
         }
-        
+
         let suggested_title = self.generate_meeting_note_title(event);
         let suggested_tags = self.generate_meeting_note_tags(event);
-        
+
         Ok(Some(UpcomingEventInfo {
             event: event.clone(),
             needs_note,
@@ -267,52 +281,68 @@ impl CalendarNotesIntegration {
     }
 
     /// Create a meeting note for a calendar event
-    pub async fn create_meeting_note(&self, event: &Event, link_type: EventLinkType) -> NoteResult<MeetingNote> {
+    pub async fn create_meeting_note(
+        &self,
+        event: &Event,
+        link_type: EventLinkType,
+    ) -> NoteResult<MeetingNote> {
         info!("Creating meeting note for event: {}", event.title);
-        
+
         let note_id = format!("meeting-{}", Uuid::new_v4());
         let note_title = self.generate_meeting_note_title(event);
-        
+
         // Generate note content from template
         let content = self.generate_meeting_note_content(event, &link_type)?;
-        
+
         // Create frontmatter with meeting metadata
         let mut frontmatter = NoteFrontmatter::new();
         frontmatter.title = Some(note_title.clone());
         frontmatter.add_tags(self.generate_meeting_note_tags(event));
         frontmatter.add_tag("meeting".to_string());
         frontmatter.add_tag("calendar".to_string());
-        
+
         // Add event metadata
-        frontmatter.set_metadata("event_id".to_string(), serde_yaml::Value::String(event.id.clone()));
-        frontmatter.set_metadata("event_uid".to_string(), serde_yaml::Value::String(event.uid.clone()));
-        frontmatter.set_metadata("meeting_date".to_string(), 
-            serde_yaml::Value::String(event.start_time.to_rfc3339()));
-        frontmatter.set_metadata("calendar_id".to_string(), serde_yaml::Value::String(event.calendar_id.clone()));
-        
-        if let Some(location) = &event.location {
-            frontmatter.set_metadata("location".to_string(), serde_yaml::Value::String(location.clone()));
-        }
-        
-        // Create the note
-        let file_path = self.config.calendar_notes_directory
-            .join(format!("{}.md", note_title.replace(' ', "-").to_lowercase()));
-        
-        let mut note = Note::new(
-            note_id.clone(),
-            note_title.clone(),
-            content,
-            file_path,
+        frontmatter.set_metadata(
+            "event_id".to_string(),
+            serde_yaml::Value::String(event.id.clone()),
         );
+        frontmatter.set_metadata(
+            "event_uid".to_string(),
+            serde_yaml::Value::String(event.uid.clone()),
+        );
+        frontmatter.set_metadata(
+            "meeting_date".to_string(),
+            serde_yaml::Value::String(event.start_time.to_rfc3339()),
+        );
+        frontmatter.set_metadata(
+            "calendar_id".to_string(),
+            serde_yaml::Value::String(event.calendar_id.clone()),
+        );
+
+        if let Some(location) = &event.location {
+            frontmatter.set_metadata(
+                "location".to_string(),
+                serde_yaml::Value::String(location.clone()),
+            );
+        }
+
+        // Create the note
+        let file_path = self.config.calendar_notes_directory.join(format!(
+            "{}.md",
+            note_title.replace(' ', "-").to_lowercase()
+        ));
+
+        let mut note = Note::new(note_id.clone(), note_title.clone(), content, file_path);
         note.frontmatter = Some(frontmatter);
         note.tags = self.generate_meeting_note_tags(event);
-        
+
         // Store the note (using directory ID 1 for calendar notes)
         self.note_storage.store_note(&note, 1).await?;
-        
+
         // Link note to event
-        self.link_note_to_event(&note_id, &event.id, link_type.clone()).await?;
-        
+        self.link_note_to_event(&note_id, &event.id, link_type.clone())
+            .await?;
+
         // Create meeting note structure
         let meeting_note = MeetingNote {
             note_id: note_id.clone(),
@@ -327,40 +357,51 @@ impl CalendarNotesIntegration {
             is_recurring: event.recurrence.is_some(),
             series_id: event.recurrence.as_ref().map(|_| event.uid.clone()),
         };
-        
+
         // Send notification event
-        let _ = self.notification_tx.send(CalendarNoteEvent::MeetingNoteCreated {
-            event_id: event.id.clone(),
-            note_id: note_id.clone(),
-            event_title: event.title.clone(),
-        });
-        
+        let _ = self
+            .notification_tx
+            .send(CalendarNoteEvent::MeetingNoteCreated {
+                event_id: event.id.clone(),
+                note_id: note_id.clone(),
+                event_title: event.title.clone(),
+            });
+
         info!("Successfully created meeting note: {}", note_id);
         Ok(meeting_note)
     }
 
     /// Link a note to a calendar event
-    pub async fn link_note_to_event(&self, note_id: &NoteId, event_id: &str, link_type: EventLinkType) -> NoteResult<()> {
+    pub async fn link_note_to_event(
+        &self,
+        note_id: &NoteId,
+        event_id: &str,
+        link_type: EventLinkType,
+    ) -> NoteResult<()> {
         let mut event_notes = self.event_notes.write().await;
-        
-        let notes = event_notes.entry(event_id.to_string()).or_insert_with(Vec::new);
-        
+
+        let notes = event_notes
+            .entry(event_id.to_string())
+            .or_insert_with(Vec::new);
+
         if !notes.contains(note_id) {
             notes.push(note_id.clone());
-            
+
             // Limit the number of notes per event
             if notes.len() > self.config.max_notes_per_event {
                 notes.remove(0); // Remove oldest
             }
         }
-        
+
         // Send notification event
-        let _ = self.notification_tx.send(CalendarNoteEvent::NoteLinkedToEvent {
-            note_id: note_id.clone(),
-            event_id: event_id.to_string(),
-            link_type,
-        });
-        
+        let _ = self
+            .notification_tx
+            .send(CalendarNoteEvent::NoteLinkedToEvent {
+                note_id: note_id.clone(),
+                event_id: event_id.to_string(),
+                link_type,
+            });
+
         debug!("Linked note {} to event {}", note_id, event_id);
         Ok(())
     }
@@ -368,16 +409,16 @@ impl CalendarNotesIntegration {
     /// Get notes associated with a specific calendar event
     pub async fn get_notes_for_event(&self, event_id: &str) -> NoteResult<Vec<Note>> {
         let event_notes = self.event_notes.read().await;
-        
+
         if let Some(note_ids) = event_notes.get(event_id) {
             let mut notes = Vec::new();
-            
+
             for note_id in note_ids {
                 if let Some(note) = self.note_storage.get_note(note_id).await? {
                     notes.push(note);
                 }
             }
-            
+
             Ok(notes)
         } else {
             Ok(Vec::new())
@@ -385,36 +426,50 @@ impl CalendarNotesIntegration {
     }
 
     /// Generate meeting note content from template
-    fn generate_meeting_note_content(&self, event: &Event, link_type: &EventLinkType) -> NoteResult<String> {
+    fn generate_meeting_note_content(
+        &self,
+        event: &Event,
+        link_type: &EventLinkType,
+    ) -> NoteResult<String> {
         let template = match link_type {
             EventLinkType::MeetingNotes => &self.config.meeting_note_template,
             EventLinkType::Preparation => "# Preparation: {{title}}\n\n**Date:** {{date}}\n**Time:** {{time}}\n\n## Pre-meeting Checklist\n- [ ] Review agenda\n- [ ] Prepare materials\n- [ ] Test technology\n\n## Key Points to Discuss\n- \n\n## Questions to Ask\n- \n\n---\n*Preparation notes for calendar event*",
             EventLinkType::FollowUp => "# Follow-up: {{title}}\n\n**Date:** {{date}}\n**Meeting Date:** {{meeting_date}}\n\n## Summary\n\n\n## Decisions Made\n- \n\n## Action Items\n- [ ] \n\n## Next Steps\n- \n\n---\n*Follow-up notes for calendar event*",
             _ => &self.config.meeting_note_template,
         };
-        
+
         let duration = event.end_time - event.start_time;
         let duration_text = if duration.num_hours() > 0 {
-            format!("{} hours {} minutes", duration.num_hours(), duration.num_minutes() % 60)
+            format!(
+                "{} hours {} minutes",
+                duration.num_hours(),
+                duration.num_minutes() % 60
+            )
         } else {
             format!("{} minutes", duration.num_minutes())
         };
-        
+
         let attendees_text = if self.config.include_attendees {
             self.format_attendees_for_note(event)
         } else {
             "See calendar for attendees".to_string()
         };
-        
+
         let content = template
             .replace("{{title}}", &event.title)
             .replace("{{date}}", &event.start_time.format("%Y-%m-%d").to_string())
             .replace("{{time}}", &event.start_time.format("%H:%M").to_string())
-            .replace("{{meeting_date}}", &event.start_time.format("%Y-%m-%d %H:%M").to_string())
-            .replace("{{location}}", &event.location.as_ref().unwrap_or(&"TBD".to_string()))
+            .replace(
+                "{{meeting_date}}",
+                &event.start_time.format("%Y-%m-%d %H:%M").to_string(),
+            )
+            .replace(
+                "{{location}}",
+                &event.location.as_ref().unwrap_or(&"TBD".to_string()),
+            )
             .replace("{{duration}}", &duration_text)
             .replace("{{attendees}}", &attendees_text);
-        
+
         Ok(content)
     }
 
@@ -422,10 +477,10 @@ impl CalendarNotesIntegration {
     pub async fn get_stats(&self) -> NoteResult<CalendarNotesStats> {
         let event_notes = self.event_notes.read().await;
         let _today = Utc::now().date_naive();
-        
+
         // Count notes created today (would need database query in production)
         let notes_created_today = 0; // Placeholder
-        
+
         Ok(CalendarNotesStats {
             total_meeting_notes: 0, // Would track in persistent storage
             notes_created_today,
@@ -438,22 +493,27 @@ impl CalendarNotesIntegration {
 
     // Helper methods
 
-    fn should_create_note_for_event(&self, event: &Event, existing_notes: &[NoteId], time_until_event: Duration) -> bool {
+    fn should_create_note_for_event(
+        &self,
+        event: &Event,
+        existing_notes: &[NoteId],
+        time_until_event: Duration,
+    ) -> bool {
         // Don't create notes if auto-creation is disabled
         if !self.config.auto_create_meeting_notes {
             return false;
         }
-        
+
         // Don't create if note already exists
         if !existing_notes.is_empty() {
             return false;
         }
-        
+
         // Only create notes for events with multiple attendees (meetings)
         if event.attendees.len() < 2 {
             return false;
         }
-        
+
         // Create notes within the configured time window
         let hours_until = time_until_event.num_hours();
         hours_until <= self.config.create_notes_hours_before && hours_until >= 0
@@ -465,63 +525,88 @@ impl CalendarNotesIntegration {
 
     fn generate_meeting_note_tags(&self, event: &Event) -> Vec<String> {
         let mut tags = vec!["meeting".to_string(), "calendar".to_string()];
-        
+
         // Add calendar-specific tag
         tags.push(format!("calendar:{}", event.calendar_id));
-        
+
         // Add location-based tag if available
         if let Some(location) = &event.location {
             if !location.is_empty() {
-                tags.push(format!("location:{}", location.to_lowercase().replace(' ', "-")));
+                tags.push(format!(
+                    "location:{}",
+                    location.to_lowercase().replace(' ', "-")
+                ));
             }
         }
-        
+
         // Add organizer tag if available
         if let Some(organizer) = &event.organizer {
-            tags.push(format!("organizer:{}", organizer.email.replace('@', "-at-")));
+            tags.push(format!(
+                "organizer:{}",
+                organizer.email.replace('@', "-at-")
+            ));
         }
-        
+
         // Add recurring tag if applicable
         if event.recurrence.is_some() {
             tags.push("recurring".to_string());
         }
-        
+
         tags
     }
 
     fn extract_attendees(&self, event: &Event) -> Vec<MeetingAttendee> {
-        event.attendees.iter().map(|attendee| {
-            MeetingAttendee {
-                name: attendee.name.clone().unwrap_or_else(|| attendee.email.clone()),
+        event
+            .attendees
+            .iter()
+            .map(|attendee| MeetingAttendee {
+                name: attendee
+                    .name
+                    .clone()
+                    .unwrap_or_else(|| attendee.email.clone()),
                 email: attendee.email.clone(),
                 status: match attendee.status {
                     crate::calendar::event::AttendeeStatus::Accepted => AttendeeStatus::Accepted,
                     crate::calendar::event::AttendeeStatus::Declined => AttendeeStatus::Declined,
                     crate::calendar::event::AttendeeStatus::Tentative => AttendeeStatus::Tentative,
-                    crate::calendar::event::AttendeeStatus::NeedsAction => AttendeeStatus::NeedsAction,
-                    crate::calendar::event::AttendeeStatus::Delegated => AttendeeStatus::NeedsAction,
+                    crate::calendar::event::AttendeeStatus::NeedsAction => {
+                        AttendeeStatus::NeedsAction
+                    }
+                    crate::calendar::event::AttendeeStatus::Delegated => {
+                        AttendeeStatus::NeedsAction
+                    }
                 },
-                is_organizer: event.organizer.as_ref().map_or(false, |org| org.email == attendee.email),
-            }
-        }).collect()
+                is_organizer: event
+                    .organizer
+                    .as_ref()
+                    .map_or(false, |org| org.email == attendee.email),
+            })
+            .collect()
     }
 
     fn format_attendees_for_note(&self, event: &Event) -> String {
         if event.attendees.is_empty() {
             return "No attendees listed".to_string();
         }
-        
+
         let mut attendees_text = String::new();
-        
+
         // Add organizer first if available
         if let Some(organizer) = &event.organizer {
             let org_name = organizer.name.as_deref().unwrap_or(&organizer.email);
-            attendees_text.push_str(&format!("- **{}** ({}) - Organizer\n", org_name, organizer.email));
+            attendees_text.push_str(&format!(
+                "- **{}** ({}) - Organizer\n",
+                org_name, organizer.email
+            ));
         }
-        
+
         // Add other attendees
         for attendee in &event.attendees {
-            if event.organizer.as_ref().map_or(true, |org| org.email != attendee.email) {
+            if event
+                .organizer
+                .as_ref()
+                .map_or(true, |org| org.email != attendee.email)
+            {
                 let status = match attendee.status {
                     crate::calendar::event::AttendeeStatus::Accepted => "✓",
                     crate::calendar::event::AttendeeStatus::Declined => "✗",
@@ -530,10 +615,11 @@ impl CalendarNotesIntegration {
                     crate::calendar::event::AttendeeStatus::Delegated => "↗",
                 };
                 let att_name = attendee.name.as_deref().unwrap_or(&attendee.email);
-                attendees_text.push_str(&format!("- {} {} ({})\n", status, att_name, attendee.email));
+                attendees_text
+                    .push_str(&format!("- {} {} ({})\n", status, att_name, attendee.email));
             }
         }
-        
+
         attendees_text
     }
 }
@@ -542,7 +628,7 @@ impl CalendarNotesIntegration {
 mod tests {
     use super::*;
     use crate::calendar::event::EventAttendee;
-    
+
     use tempfile::TempDir;
 
     fn create_test_event() -> Event {
@@ -553,16 +639,19 @@ mod tests {
             now + Duration::hours(2),
             now + Duration::hours(3),
         );
-        
+
         event.description = Some("Discuss Q1 goals and planning".to_string());
         event.location = Some("Conference Room A".to_string());
         event.attendees = vec![
             EventAttendee::new("john@example.com".to_string(), Some("John Doe".to_string())),
-            EventAttendee::new("jane@example.com".to_string(), Some("Jane Smith".to_string())),
+            EventAttendee::new(
+                "jane@example.com".to_string(),
+                Some("Jane Smith".to_string()),
+            ),
         ];
         event.attendees[0].status = crate::calendar::event::AttendeeStatus::Accepted;
         event.attendees[1].status = crate::calendar::event::AttendeeStatus::Tentative;
-        
+
         event
     }
 
@@ -570,9 +659,11 @@ mod tests {
     async fn test_calendar_notes_integration_creation() {
         let temp_dir = TempDir::new().unwrap();
         let _note_storage = Arc::new(
-            crate::plugins::notes::NoteStorage::new(temp_dir.path()).await.unwrap()
+            crate::plugins::notes::NoteStorage::new(temp_dir.path())
+                .await
+                .unwrap(),
         );
-        
+
         // Create a mock calendar manager (would need proper setup in real tests)
         // For now, skip this test if calendar manager can't be created
         println!("✓ Calendar notes integration concept validated");
@@ -582,30 +673,33 @@ mod tests {
     fn test_meeting_note_title_generation() {
         let event = create_test_event();
         let _config = CalendarNotesConfig::default();
-        
+
         // Since we can't create the full integration in tests, test the logic
         let title = format!("Meeting: {}", event.title);
         assert_eq!(title, "Meeting: Important Team Meeting");
-        
+
         println!("✓ Meeting note title generation works correctly");
     }
 
     #[test]
     fn test_meeting_note_tags_generation() {
         let event = create_test_event();
-        
+
         let mut tags = vec!["meeting".to_string(), "calendar".to_string()];
         tags.push(format!("calendar:{}", event.calendar_id));
-        
+
         if let Some(location) = &event.location {
-            tags.push(format!("location:{}", location.to_lowercase().replace(' ', "-")));
+            tags.push(format!(
+                "location:{}",
+                location.to_lowercase().replace(' ', "-")
+            ));
         }
-        
+
         assert!(tags.contains(&"meeting".to_string()));
         assert!(tags.contains(&"calendar".to_string()));
         assert!(tags.contains(&"calendar:test-calendar".to_string()));
         assert!(tags.contains(&"location:conference-room-a".to_string()));
-        
+
         println!("✓ Meeting note tags generation works correctly");
     }
 
@@ -613,15 +707,18 @@ mod tests {
     fn test_template_processing() {
         let event = create_test_event();
         let template = "# Meeting: {{title}}\n\n**Date:** {{date}}\n**Location:** {{location}}";
-        
+
         let processed = template
             .replace("{{title}}", &event.title)
             .replace("{{date}}", &event.start_time.format("%Y-%m-%d").to_string())
-            .replace("{{location}}", &event.location.as_ref().unwrap_or(&"TBD".to_string()));
-        
+            .replace(
+                "{{location}}",
+                &event.location.as_ref().unwrap_or(&"TBD".to_string()),
+            );
+
         assert!(processed.contains("Important Team Meeting"));
         assert!(processed.contains("Conference Room A"));
-        
+
         println!("✓ Template processing works correctly");
     }
 }

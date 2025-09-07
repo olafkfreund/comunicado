@@ -1,9 +1,9 @@
 //! Smart compose AI feature for email composition assistance
-//! 
+//!
 //! This module provides AI-powered email composition suggestions with context-aware
 //! writing assistance, including auto-completion, tone suggestions, and smart drafting.
 
-use crate::ai::{AIResult, EnhancedAIService, EnhancedAIRequest, AIOperationType};
+use crate::ai::{AIOperationType, AIResult, EnhancedAIRequest, EnhancedAIService};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -421,7 +421,7 @@ impl SmartComposeService {
 
         // Generate cache key
         let cache_key = self.generate_cache_key(current_text, context, &cursor_position);
-        
+
         // Check cache if enabled
         if config.enable_suggestion_caching {
             let cache = self.suggestion_cache.read().await;
@@ -450,7 +450,10 @@ impl SmartComposeService {
         }
 
         // Add body completion suggestions
-        suggestions.extend(self.generate_body_completion_suggestions(current_text, context).await?);
+        suggestions.extend(
+            self.generate_body_completion_suggestions(current_text, context)
+                .await?,
+        );
 
         // Add closing suggestions if near the end
         if self.is_closing_context(&cursor_position, current_text) {
@@ -458,10 +461,17 @@ impl SmartComposeService {
         }
 
         // Add tone adjustment suggestions
-        suggestions.extend(self.generate_tone_suggestions(current_text, context).await?);
+        suggestions.extend(
+            self.generate_tone_suggestions(current_text, context)
+                .await?,
+        );
 
         // Limit to max suggestions and sort by confidence
-        suggestions.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap_or(std::cmp::Ordering::Equal));
+        suggestions.sort_by(|a, b| {
+            b.confidence
+                .partial_cmp(&a.confidence)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         suggestions.truncate(max_suggestions);
 
         let processing_time = start_time.elapsed().as_millis() as u64;
@@ -485,16 +495,22 @@ impl SmartComposeService {
         // Update statistics
         self.update_stats(&response).await;
 
-        info!("Generated {} smart compose suggestions in {}ms", 
-              response.suggestions.len(), processing_time);
+        info!(
+            "Generated {} smart compose suggestions in {}ms",
+            response.suggestions.len(),
+            processing_time
+        );
 
         Ok(response)
     }
 
     /// Generate subject line suggestions
-    async fn generate_subject_suggestions(&self, context: &CompositionContext) -> AIResult<Vec<ComposeSuggestion>> {
+    async fn generate_subject_suggestions(
+        &self,
+        context: &CompositionContext,
+    ) -> AIResult<Vec<ComposeSuggestion>> {
         let prompt = self.build_subject_prompt(context);
-        
+
         let ai_request = EnhancedAIRequest::high_priority(AIOperationType::Custom {
             operation_name: "subject_suggestions".to_string(),
             prompt,
@@ -502,9 +518,10 @@ impl SmartComposeService {
         });
 
         let response = self.ai_service.process_request(ai_request).await?;
-        
+
         // Parse the response into suggestions
-        let subject_lines: Vec<String> = response.content
+        let subject_lines: Vec<String> = response
+            .content
             .lines()
             .filter(|line| !line.trim().is_empty())
             .map(|line| line.trim().to_string())
@@ -535,9 +552,12 @@ impl SmartComposeService {
     }
 
     /// Generate email opening suggestions
-    async fn generate_opening_suggestions(&self, context: &CompositionContext) -> AIResult<Vec<ComposeSuggestion>> {
+    async fn generate_opening_suggestions(
+        &self,
+        context: &CompositionContext,
+    ) -> AIResult<Vec<ComposeSuggestion>> {
         let prompt = self.build_opening_prompt(context);
-        
+
         let ai_request = EnhancedAIRequest::new(AIOperationType::Custom {
             operation_name: "opening_suggestions".to_string(),
             prompt,
@@ -545,8 +565,9 @@ impl SmartComposeService {
         });
 
         let response = self.ai_service.process_request(ai_request).await?;
-        
-        let openings: Vec<String> = response.content
+
+        let openings: Vec<String> = response
+            .content
             .split('\n')
             .filter(|line| !line.trim().is_empty())
             .map(|line| line.trim().to_string())
@@ -583,7 +604,7 @@ impl SmartComposeService {
         context: &CompositionContext,
     ) -> AIResult<Vec<ComposeSuggestion>> {
         let prompt = self.build_completion_prompt(current_text, context);
-        
+
         let ai_request = EnhancedAIRequest::new(AIOperationType::Custom {
             operation_name: "body_completion".to_string(),
             prompt,
@@ -591,8 +612,9 @@ impl SmartComposeService {
         });
 
         let response = self.ai_service.process_request(ai_request).await?;
-        
-        let completions: Vec<String> = response.content
+
+        let completions: Vec<String> = response
+            .content
             .split('\n')
             .filter(|line| !line.trim().is_empty())
             .map(|line| line.trim().to_string())
@@ -612,7 +634,14 @@ impl SmartComposeService {
                     line: current_text.lines().count(),
                     character: current_text.len(),
                     word_position: WordPosition::WordEnd,
-                    surrounding_text: current_text.chars().rev().take(50).collect::<String>().chars().rev().collect(),
+                    surrounding_text: current_text
+                        .chars()
+                        .rev()
+                        .take(50)
+                        .collect::<String>()
+                        .chars()
+                        .rev()
+                        .collect(),
                 },
                 alternatives: vec![],
                 metadata: HashMap::new(),
@@ -623,9 +652,12 @@ impl SmartComposeService {
     }
 
     /// Generate email closing suggestions
-    async fn generate_closing_suggestions(&self, context: &CompositionContext) -> AIResult<Vec<ComposeSuggestion>> {
+    async fn generate_closing_suggestions(
+        &self,
+        context: &CompositionContext,
+    ) -> AIResult<Vec<ComposeSuggestion>> {
         let prompt = self.build_closing_prompt(context);
-        
+
         let ai_request = EnhancedAIRequest::new(AIOperationType::Custom {
             operation_name: "closing_suggestions".to_string(),
             prompt,
@@ -633,8 +665,9 @@ impl SmartComposeService {
         });
 
         let response = self.ai_service.process_request(ai_request).await?;
-        
-        let closings: Vec<String> = response.content
+
+        let closings: Vec<String> = response
+            .content
             .lines()
             .filter(|line| !line.trim().is_empty())
             .map(|line| line.trim().to_string())
@@ -680,7 +713,7 @@ impl SmartComposeService {
             context.style_preferences.tone,
             context.recipients.first().map(|r| &r.relationship).unwrap_or(&RelationshipType::Unknown)
         );
-        
+
         let ai_request = EnhancedAIRequest::new(AIOperationType::Custom {
             operation_name: "tone_analysis".to_string(),
             prompt,
@@ -688,7 +721,7 @@ impl SmartComposeService {
         });
 
         let response = self.ai_service.process_request(ai_request).await?;
-        
+
         if response.content.contains("appropriate") || response.content.contains("good") {
             return Ok(vec![]); // Tone is already appropriate
         }
@@ -720,14 +753,15 @@ impl SmartComposeService {
         used_content: Option<String>,
     ) -> AIResult<()> {
         let mut stats = self.stats.write().await;
-        
+
         if accepted {
             stats.accepted_suggestions += 1;
         }
-        
+
         // Update acceptance rate
         if stats.total_suggestions > 0 {
-            stats.acceptance_rate = (stats.accepted_suggestions as f32 / stats.total_suggestions as f32) * 100.0;
+            stats.acceptance_rate =
+                (stats.accepted_suggestions as f32 / stats.total_suggestions as f32) * 100.0;
         }
 
         // If learning mode is enabled, update user writing style
@@ -738,8 +772,11 @@ impl SmartComposeService {
             }
         }
 
-        debug!("Recorded suggestion feedback: {} (accepted: {})", suggestion_id, accepted);
-        
+        debug!(
+            "Recorded suggestion feedback: {} (accepted: {})",
+            suggestion_id, accepted
+        );
+
         Ok(())
     }
 
@@ -749,16 +786,18 @@ impl SmartComposeService {
         // For now, we'll implement a simple placeholder
         let mut writing_data = self.writing_style_data.write().await;
         let user_id = "default_user".to_string(); // Would be actual user ID
-        
-        let style = writing_data.entry(user_id).or_insert_with(|| UserWritingStyle {
-            common_phrases: vec![],
-            sentence_patterns: vec![],
-            vocabulary_preferences: HashMap::new(),
-            avg_email_length: 0,
-            signatures: vec![],
-            tone_by_recipient: HashMap::new(),
-            last_updated: chrono::Utc::now().timestamp() as u64,
-        });
+
+        let style = writing_data
+            .entry(user_id)
+            .or_insert_with(|| UserWritingStyle {
+                common_phrases: vec![],
+                sentence_patterns: vec![],
+                vocabulary_preferences: HashMap::new(),
+                avg_email_length: 0,
+                signatures: vec![],
+                tone_by_recipient: HashMap::new(),
+                last_updated: chrono::Utc::now().timestamp() as u64,
+            });
 
         // Extract and learn from phrases
         let words: Vec<&str> = content.split_whitespace().collect();
@@ -784,7 +823,8 @@ impl SmartComposeService {
             _ => "Email about",
         };
 
-        let context_info = context.business_context
+        let context_info = context
+            .business_context
             .as_deref()
             .unwrap_or("general business communication");
 
@@ -803,19 +843,25 @@ impl SmartComposeService {
 
     /// Build opening generation prompt
     fn build_opening_prompt(&self, context: &CompositionContext) -> String {
-        let relationship = context.recipients.first()
+        let relationship = context
+            .recipients
+            .first()
             .map(|r| &r.relationship)
             .unwrap_or(&RelationshipType::Unknown);
 
         let formality = &context.style_preferences.formality;
-        
+
         format!(
             "Generate 2 appropriate email openings for {} communication with a {:?}. \
             Formality level: {:?} \
             Email type: {:?} \
             Make openings natural and context-appropriate. \
             List one per line.",
-            if context.recipients.len() > 1 { "group" } else { "individual" },
+            if context.recipients.len() > 1 {
+                "group"
+            } else {
+                "individual"
+            },
             relationship,
             formality,
             context.email_type
@@ -840,7 +886,9 @@ impl SmartComposeService {
 
     /// Build closing generation prompt
     fn build_closing_prompt(&self, context: &CompositionContext) -> String {
-        let relationship = context.recipients.first()
+        let relationship = context
+            .recipients
+            .first()
             .map(|r| &r.relationship)
             .unwrap_or(&RelationshipType::Unknown);
 
@@ -850,9 +898,7 @@ impl SmartComposeService {
             Tone: {:?} \
             Make closings professional yet appropriate for the relationship. \
             List one per line.",
-            relationship,
-            context.style_preferences.formality,
-            context.style_preferences.tone
+            relationship, context.style_preferences.formality, context.style_preferences.tone
         )
     }
 
@@ -883,7 +929,7 @@ impl SmartComposeService {
         context.style_preferences.formality.hash(&mut hasher);
         context.style_preferences.tone.hash(&mut hasher);
         position.line.hash(&mut hasher);
-        
+
         format!("smart_compose_{:x}", hasher.finish())
     }
 
@@ -902,12 +948,13 @@ impl SmartComposeService {
     async fn update_stats(&self, response: &SmartComposeResponse) {
         let mut stats = self.stats.write().await;
         stats.total_suggestions += response.suggestions.len();
-        
+
         // Update average response time
         if stats.total_suggestions > 0 {
             let total_requests = stats.total_suggestions / response.suggestions.len().max(1);
-            stats.avg_response_time_ms = 
-                (stats.avg_response_time_ms * (total_requests - 1) as f64 + response.processing_time_ms as f64) / total_requests as f64;
+            stats.avg_response_time_ms = (stats.avg_response_time_ms * (total_requests - 1) as f64
+                + response.processing_time_ms as f64)
+                / total_requests as f64;
         }
 
         // Update suggestions by type
@@ -918,7 +965,10 @@ impl SmartComposeService {
 
         // Update cache hit rate
         if response.from_cache {
-            stats.cache_hit_rate = ((stats.cache_hit_rate * (stats.total_suggestions - response.suggestions.len()) as f32) + response.suggestions.len() as f32) / stats.total_suggestions as f32;
+            stats.cache_hit_rate = ((stats.cache_hit_rate
+                * (stats.total_suggestions - response.suggestions.len()) as f32)
+                + response.suggestions.len() as f32)
+                / stats.total_suggestions as f32;
         }
     }
 
@@ -1021,7 +1071,7 @@ mod tests {
             word_position: WordPosition::WordMiddle,
             surrounding_text: "test context".to_string(),
         };
-        
+
         // Test would verify cache key generation logic
         assert!(position.line == 1);
         assert!(context.email_type == EmailType::New);

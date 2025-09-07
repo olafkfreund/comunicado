@@ -1,10 +1,10 @@
 //! Note storage implementation
-//! 
+//!
 //! Handles persistent storage of notes using SQLite database with full-text search.
 
-use super::types::{Note, NoteId, WatchedDirectory, NoteSearchResult};
-use super::manager::NoteResult;
 use super::database::NotesDatabase;
+use super::manager::NoteResult;
+use super::types::{Note, NoteId, NoteSearchResult, WatchedDirectory};
 
 use std::path::Path;
 use std::sync::Arc;
@@ -20,7 +20,7 @@ impl NoteStorage {
     pub async fn new(data_dir: &Path) -> NoteResult<Self> {
         let db_path = data_dir.join("notes.db");
         let database = NotesDatabase::new(&db_path).await?;
-        
+
         Ok(Self {
             database: Arc::new(database),
         })
@@ -51,7 +51,10 @@ impl NoteStorage {
     }
 
     /// Add a watched directory
-    pub async fn add_watched_directory(&self, directory: WatchedDirectory) -> NoteResult<WatchedDirectory> {
+    pub async fn add_watched_directory(
+        &self,
+        directory: WatchedDirectory,
+    ) -> NoteResult<WatchedDirectory> {
         self.database.add_watched_directory(directory).await
     }
 
@@ -61,7 +64,11 @@ impl NoteStorage {
     }
 
     /// Search notes using full-text search
-    pub async fn search_notes(&self, query: &str, limit: usize) -> NoteResult<Vec<NoteSearchResult>> {
+    pub async fn search_notes(
+        &self,
+        query: &str,
+        limit: usize,
+    ) -> NoteResult<Vec<NoteSearchResult>> {
         self.database.search_notes(query, limit).await
     }
 
@@ -78,8 +85,8 @@ impl NoteStorage {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::types::{NoteFrontmatter, WatchedDirectory};
+    use super::*;
     use std::path::PathBuf;
     use tempfile::TempDir;
 
@@ -90,7 +97,7 @@ mod tests {
     #[tokio::test]
     async fn test_storage_creation() {
         let _storage = create_test_storage().await;
-        
+
         // Basic creation test - should not panic
         assert!(true);
     }
@@ -99,27 +106,28 @@ mod tests {
     async fn test_file_storage_creation() {
         let temp_dir = TempDir::new().unwrap();
         let result = NoteStorage::new(temp_dir.path()).await;
-        
+
         // Should succeed now that it's implemented
         if result.is_err() {
             // Skip if environment doesn't support file databases
             println!("Skipping file storage test: {}", result.unwrap_err());
             return;
         }
-        
+
         assert!(result.is_ok());
     }
 
     #[tokio::test]
     async fn test_add_and_get_watched_directory() {
         let storage = create_test_storage().await;
-        
-        let directory = WatchedDirectory::new(
-            PathBuf::from("/home/user/notes"),
-            "Test Notes".to_string(),
-        );
 
-        let stored_dir = storage.add_watched_directory(directory.clone()).await.unwrap();
+        let directory =
+            WatchedDirectory::new(PathBuf::from("/home/user/notes"), "Test Notes".to_string());
+
+        let stored_dir = storage
+            .add_watched_directory(directory.clone())
+            .await
+            .unwrap();
         assert!(stored_dir.id > 0);
         assert_eq!(stored_dir.path, directory.path);
         assert_eq!(stored_dir.name, directory.name);
@@ -132,12 +140,9 @@ mod tests {
     #[tokio::test]
     async fn test_store_and_get_note() {
         let storage = create_test_storage().await;
-        
+
         // Add a directory first
-        let directory = WatchedDirectory::new(
-            PathBuf::from("/test"),
-            "Test Dir".to_string(),
-        );
+        let directory = WatchedDirectory::new(PathBuf::from("/test"), "Test Dir".to_string());
         let stored_dir = storage.add_watched_directory(directory).await.unwrap();
 
         // Create a test note
@@ -158,7 +163,7 @@ mod tests {
         // Retrieve the note
         let retrieved = storage.get_note(&note.id).await.unwrap();
         assert!(retrieved.is_some());
-        
+
         let retrieved_note = retrieved.unwrap();
         assert_eq!(retrieved_note.id, note.id);
         assert_eq!(retrieved_note.title, note.title);
@@ -170,12 +175,9 @@ mod tests {
     #[tokio::test]
     async fn test_store_note_with_frontmatter() {
         let storage = create_test_storage().await;
-        
+
         // Add directory
-        let directory = WatchedDirectory::new(
-            PathBuf::from("/test"),
-            "Test Dir".to_string(),
-        );
+        let directory = WatchedDirectory::new(PathBuf::from("/test"), "Test Dir".to_string());
         let stored_dir = storage.add_watched_directory(directory).await.unwrap();
 
         // Create note with frontmatter
@@ -204,12 +206,9 @@ mod tests {
     #[tokio::test]
     async fn test_delete_note() {
         let storage = create_test_storage().await;
-        
+
         // Add directory and note
-        let directory = WatchedDirectory::new(
-            PathBuf::from("/test"),
-            "Test Dir".to_string(),
-        );
+        let directory = WatchedDirectory::new(PathBuf::from("/test"), "Test Dir".to_string());
         let stored_dir = storage.add_watched_directory(directory).await.unwrap();
 
         let note = Note::new(
@@ -234,7 +233,7 @@ mod tests {
     #[tokio::test]
     async fn test_get_nonexistent_note() {
         let storage = create_test_storage().await;
-        
+
         let result = storage.get_note(&"nonexistent".to_string()).await.unwrap();
         assert!(result.is_none());
     }
@@ -242,12 +241,9 @@ mod tests {
     #[tokio::test]
     async fn test_search_notes() {
         let storage = create_test_storage().await;
-        
+
         // Add directory
-        let directory = WatchedDirectory::new(
-            PathBuf::from("/test"),
-            "Test Dir".to_string(),
-        );
+        let directory = WatchedDirectory::new(PathBuf::from("/test"), "Test Dir".to_string());
         let stored_dir = storage.add_watched_directory(directory).await.unwrap();
 
         // Store searchable notes
@@ -273,7 +269,7 @@ mod tests {
         // Search for "programming"
         let results = storage.search_notes("programming", 10).await.unwrap();
         assert!(!results.is_empty());
-        
+
         // Should find at least the Rust note
         let rust_found = results.iter().any(|r| r.note.title.contains("Rust"));
         assert!(rust_found);
@@ -282,12 +278,9 @@ mod tests {
     #[tokio::test]
     async fn test_get_notes_by_tag() {
         let storage = create_test_storage().await;
-        
+
         // Add directory
-        let directory = WatchedDirectory::new(
-            PathBuf::from("/test"),
-            "Test Dir".to_string(),
-        );
+        let directory = WatchedDirectory::new(PathBuf::from("/test"), "Test Dir".to_string());
         let stored_dir = storage.add_watched_directory(directory).await.unwrap();
 
         // Store notes with tags
@@ -322,12 +315,9 @@ mod tests {
     #[tokio::test]
     async fn test_get_recent_notes() {
         let storage = create_test_storage().await;
-        
+
         // Add directory
-        let directory = WatchedDirectory::new(
-            PathBuf::from("/test"),
-            "Test Dir".to_string(),
-        );
+        let directory = WatchedDirectory::new(PathBuf::from("/test"), "Test Dir".to_string());
         let stored_dir = storage.add_watched_directory(directory).await.unwrap();
 
         // Store some notes
@@ -352,7 +342,7 @@ mod tests {
         let recent_notes = storage.get_recent_notes(5).await.unwrap();
         assert!(!recent_notes.is_empty());
         assert!(recent_notes.len() <= 5);
-        
+
         // Should have both notes
         assert_eq!(recent_notes.len(), 2);
     }

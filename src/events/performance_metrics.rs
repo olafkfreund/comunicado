@@ -237,20 +237,20 @@ impl PerformanceMonitor {
                 // Update throughput metrics
                 {
                     let mut throughput = throughput_metrics.write().await;
-                    
+
                     // Update throughput windows (simplified calculation)
                     throughput.events_per_second_1m = Self::update_exponential_average(
                         throughput.events_per_second_1m,
                         current_throughput,
                         0.1, // Weight for 1-minute window
                     );
-                    
+
                     throughput.events_per_second_5m = Self::update_exponential_average(
                         throughput.events_per_second_5m,
                         current_throughput,
                         0.02, // Weight for 5-minute window
                     );
-                    
+
                     throughput.events_per_second_15m = Self::update_exponential_average(
                         throughput.events_per_second_15m,
                         current_throughput,
@@ -287,9 +287,10 @@ impl PerformanceMonitor {
                 last_measurement = now;
 
                 // Log performance summary every minute
-                if collection_interval >= Duration::from_secs(60) || 
-                   (now.elapsed().as_secs() % 60 == 0 && collection_interval < Duration::from_secs(60)) {
-                    
+                if collection_interval >= Duration::from_secs(60)
+                    || (now.elapsed().as_secs() % 60 == 0
+                        && collection_interval < Duration::from_secs(60))
+                {
                     let throughput = throughput_metrics.read().await;
                     info!(
                         "Event performance: {:.2} events/sec (1m), queue depth: {}, total events: {}",
@@ -304,13 +305,17 @@ impl PerformanceMonitor {
 
     /// Record an event being processed
     pub async fn record_event_start(&self, _event_type: &str) {
-        self.metrics.events_in_processing.fetch_add(1, Ordering::Relaxed);
+        self.metrics
+            .events_in_processing
+            .fetch_add(1, Ordering::Relaxed);
         let new_queue_depth = self.metrics.current_queue_depth.load(Ordering::Relaxed);
-        
+
         // Update max queue depth if necessary
         let current_max = self.metrics.max_queue_depth.load(Ordering::Relaxed);
         if new_queue_depth > current_max {
-            self.metrics.max_queue_depth.store(new_queue_depth, Ordering::Relaxed);
+            self.metrics
+                .max_queue_depth
+                .store(new_queue_depth, Ordering::Relaxed);
         }
     }
 
@@ -323,11 +328,12 @@ impl PerformanceMonitor {
     ) {
         // Update global metrics
         self.metrics.total_events.fetch_add(1, Ordering::Relaxed);
-        self.metrics.events_in_processing.fetch_sub(1, Ordering::Relaxed);
-        self.metrics.total_processing_time.fetch_add(
-            processing_time.as_millis() as u64,
-            Ordering::Relaxed,
-        );
+        self.metrics
+            .events_in_processing
+            .fetch_sub(1, Ordering::Relaxed);
+        self.metrics
+            .total_processing_time
+            .fetch_add(processing_time.as_millis() as u64, Ordering::Relaxed);
 
         if !success {
             self.metrics.failed_events.fetch_add(1, Ordering::Relaxed);
@@ -335,19 +341,20 @@ impl PerformanceMonitor {
 
         // Update handler-specific metrics
         let mut handlers = self.handler_metrics.write().await;
-        let handler_metrics = handlers.entry(handler_name.to_string()).or_insert_with(|| {
-            HandlerMetrics {
-                handler_name: handler_name.to_string(),
-                ..Default::default()
-            }
-        });
+        let handler_metrics =
+            handlers
+                .entry(handler_name.to_string())
+                .or_insert_with(|| HandlerMetrics {
+                    handler_name: handler_name.to_string(),
+                    ..Default::default()
+                });
 
         // Update handler metrics
         handler_metrics.events_processed += 1;
         if !success {
             handler_metrics.events_failed += 1;
         }
-        
+
         handler_metrics.last_processing_time = processing_time;
         handler_metrics.last_processed = Instant::now();
 
@@ -369,12 +376,16 @@ impl PerformanceMonitor {
 
     /// Update queue depth
     pub fn update_queue_depth(&self, new_depth: usize) {
-        self.metrics.current_queue_depth.store(new_depth, Ordering::Relaxed);
-        
+        self.metrics
+            .current_queue_depth
+            .store(new_depth, Ordering::Relaxed);
+
         // Update max queue depth if necessary
         let current_max = self.metrics.max_queue_depth.load(Ordering::Relaxed);
         if new_depth > current_max {
-            self.metrics.max_queue_depth.store(new_depth, Ordering::Relaxed);
+            self.metrics
+                .max_queue_depth
+                .store(new_depth, Ordering::Relaxed);
         }
     }
 
@@ -446,8 +457,9 @@ impl PerformanceMonitor {
                 events_processed: metrics.events_processed,
                 avg_processing_time: metrics.avg_processing_time,
                 success_rate: if metrics.events_processed > 0 {
-                    ((metrics.events_processed - metrics.events_failed) as f64 
-                     / metrics.events_processed as f64) * 100.0
+                    ((metrics.events_processed - metrics.events_failed) as f64
+                        / metrics.events_processed as f64)
+                        * 100.0
                 } else {
                     100.0
                 },
@@ -460,7 +472,11 @@ impl PerformanceMonitor {
             .collect();
 
         // Sort by throughput (events per second)
-        rankings.sort_by(|a, b| b.throughput.partial_cmp(&a.throughput).unwrap_or(std::cmp::Ordering::Equal));
+        rankings.sort_by(|a, b| {
+            b.throughput
+                .partial_cmp(&a.throughput)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         rankings
     }
@@ -502,18 +518,23 @@ impl PerformanceMonitor {
     }
 
     /// Record memory usage update
-    pub async fn update_memory_usage(&self, memory_bytes: u64, queue_size: usize, handler_count: usize) {
+    pub async fn update_memory_usage(
+        &self,
+        memory_bytes: u64,
+        queue_size: usize,
+        handler_count: usize,
+    ) {
         let mut memory_metrics = self.memory_metrics.write().await;
-        
+
         memory_metrics.current_memory_usage = memory_bytes;
         memory_metrics.event_queue_size = queue_size;
         memory_metrics.handler_cache_size = handler_count;
-        
+
         // Update peak memory usage
         if memory_bytes > memory_metrics.peak_memory_usage {
             memory_metrics.peak_memory_usage = memory_bytes;
         }
-        
+
         // Add memory data point to history
         let data_point = MemoryDataPoint {
             timestamp: Instant::now(),
@@ -522,21 +543,21 @@ impl PerformanceMonitor {
             handler_count,
             garbage_collection_pressure: self.calculate_gc_pressure(&memory_metrics).await,
         };
-        
+
         memory_metrics.memory_usage_history.push_back(data_point);
-        
+
         // Keep history bounded
         while memory_metrics.memory_usage_history.len() > self.max_history_length {
             memory_metrics.memory_usage_history.pop_front();
         }
-        
+
         // Update memory efficiency ratio
         if memory_metrics.allocated_memory > 0 {
-            memory_metrics.memory_efficiency_ratio = 
-                (memory_metrics.allocated_memory as f64 - memory_metrics.deallocated_memory as f64) 
+            memory_metrics.memory_efficiency_ratio = (memory_metrics.allocated_memory as f64
+                - memory_metrics.deallocated_memory as f64)
                 / memory_metrics.allocated_memory as f64;
         }
-        
+
         // Update metrics history data point with memory info
         {
             let mut history = self.metrics_history.write().await;
@@ -548,83 +569,88 @@ impl PerformanceMonitor {
             }
         }
     }
-    
+
     /// Record memory allocation/deallocation
     pub async fn record_memory_allocation(&self, allocated_bytes: u64, deallocated_bytes: u64) {
         let mut memory_metrics = self.memory_metrics.write().await;
         memory_metrics.allocated_memory += allocated_bytes;
         memory_metrics.deallocated_memory += deallocated_bytes;
     }
-    
+
     /// Get current memory metrics
     pub async fn get_memory_metrics(&self) -> MemoryMetrics {
         self.memory_metrics.read().await.clone()
     }
-    
+
     /// Get memory usage trend (bytes per second change)
     pub async fn get_memory_usage_trend(&self) -> f64 {
         let memory_metrics = self.memory_metrics.read().await;
-        
+
         if memory_metrics.memory_usage_history.len() < 2 {
             return 0.0;
         }
-        
+
         let recent = memory_metrics.memory_usage_history.back().unwrap();
-        let older = &memory_metrics.memory_usage_history[memory_metrics.memory_usage_history.len() - 2];
-        
+        let older =
+            &memory_metrics.memory_usage_history[memory_metrics.memory_usage_history.len() - 2];
+
         let memory_diff = recent.memory_usage_bytes as i64 - older.memory_usage_bytes as i64;
-        let time_diff = recent.timestamp.duration_since(older.timestamp).as_secs_f64();
-        
+        let time_diff = recent
+            .timestamp
+            .duration_since(older.timestamp)
+            .as_secs_f64();
+
         if time_diff > 0.0 {
             memory_diff as f64 / time_diff
         } else {
             0.0
         }
     }
-    
+
     /// Check for memory leaks or excessive usage
     pub async fn check_memory_health(&self) -> Vec<String> {
         let memory_metrics = self.memory_metrics.read().await;
         let mut issues = Vec::new();
-        
+
         // Check for excessive memory usage (more than 1GB)
         if memory_metrics.current_memory_usage > 1_024_000_000 {
             issues.push(format!(
-                "High memory usage: {:.2} MB", 
+                "High memory usage: {:.2} MB",
                 memory_metrics.current_memory_usage as f64 / 1_048_576.0
             ));
         }
-        
+
         // Check memory efficiency ratio
         if memory_metrics.memory_efficiency_ratio < 0.5 && memory_metrics.allocated_memory > 0 {
             issues.push(format!(
-                "Poor memory efficiency: {:.1}%", 
+                "Poor memory efficiency: {:.1}%",
                 memory_metrics.memory_efficiency_ratio * 100.0
             ));
         }
-        
+
         // Check for rapid memory growth trend
         drop(memory_metrics);
         let trend = self.get_memory_usage_trend().await;
-        if trend > 10_000_000.0 { // More than 10MB/second growth
+        if trend > 10_000_000.0 {
+            // More than 10MB/second growth
             issues.push("Rapid memory growth detected - possible memory leak".to_string());
         }
-        
+
         // Check queue size growth
         let memory_metrics = self.memory_metrics.read().await;
         if memory_metrics.event_queue_size > 10000 {
             issues.push("Event queue growing excessively".to_string());
         }
-        
+
         issues
     }
-    
+
     /// Calculate garbage collection pressure estimate
     async fn calculate_gc_pressure(&self, memory_metrics: &MemoryMetrics) -> Option<f64> {
         if memory_metrics.memory_usage_history.len() < 10 {
             return None;
         }
-        
+
         // Simple heuristic: calculate variance in recent memory usage
         let recent_points: Vec<_> = memory_metrics
             .memory_usage_history
@@ -632,22 +658,24 @@ impl PerformanceMonitor {
             .rev()
             .take(10)
             .collect();
-        
+
         let avg_memory: f64 = recent_points
             .iter()
             .map(|p| p.memory_usage_bytes as f64)
-            .sum::<f64>() / recent_points.len() as f64;
-        
+            .sum::<f64>()
+            / recent_points.len() as f64;
+
         let variance: f64 = recent_points
             .iter()
             .map(|p| {
                 let diff = p.memory_usage_bytes as f64 - avg_memory;
                 diff * diff
             })
-            .sum::<f64>() / recent_points.len() as f64;
-        
+            .sum::<f64>()
+            / recent_points.len() as f64;
+
         let std_dev = variance.sqrt();
-        
+
         // Normalize by average memory usage to get pressure ratio
         if avg_memory > 0.0 {
             Some(std_dev / avg_memory)
@@ -655,7 +683,7 @@ impl PerformanceMonitor {
             None
         }
     }
-    
+
     /// Helper function for exponential moving average
     fn update_exponential_average(current: f64, new_value: f64, alpha: f64) -> f64 {
         current * (1.0 - alpha) + new_value * alpha
@@ -715,7 +743,7 @@ impl std::fmt::Display for PerformanceHealth {
 /// Trait for integrating performance monitoring with event handlers
 pub trait MonitoredEventHandler {
     fn handler_name(&self) -> &str;
-    
+
     fn handle_with_monitoring<T, F, Fut>(
         &self,
         monitor: &PerformanceMonitor,
@@ -723,24 +751,23 @@ pub trait MonitoredEventHandler {
     ) -> impl std::future::Future<Output = Result<T, Box<dyn std::error::Error + Send + Sync>>> + Send
     where
         F: FnOnce() -> Fut + Send,
-        Fut: std::future::Future<Output = Result<T, Box<dyn std::error::Error + Send + Sync>>> + Send,
+        Fut: std::future::Future<Output = Result<T, Box<dyn std::error::Error + Send + Sync>>>
+            + Send,
         T: Send,
         Self: Sync,
     {
         async move {
-        let start_time = Instant::now();
-        monitor.record_event_start("test_event").await;
-        
-        let result = operation().await;
-        let processing_time = start_time.elapsed();
-        
-        monitor.record_event_completion(
-            self.handler_name(),
-            processing_time,
-            result.is_ok(),
-        ).await;
-        
-        result
+            let start_time = Instant::now();
+            monitor.record_event_start("test_event").await;
+
+            let result = operation().await;
+            let processing_time = start_time.elapsed();
+
+            monitor
+                .record_event_completion(self.handler_name(), processing_time, result.is_ok())
+                .await;
+
+            result
         }
     }
 }
@@ -752,29 +779,25 @@ mod tests {
     #[tokio::test]
     async fn test_performance_monitor_basic_functionality() {
         let monitor = PerformanceMonitor::new();
-        
+
         // Record some events
         monitor.record_event_start("test_event").await;
-        monitor.record_event_completion(
-            "test_handler",
-            Duration::from_millis(100),
-            true,
-        ).await;
-        
+        monitor
+            .record_event_completion("test_handler", Duration::from_millis(100), true)
+            .await;
+
         monitor.record_event_start("test_event").await;
-        monitor.record_event_completion(
-            "test_handler",
-            Duration::from_millis(200),
-            false,
-        ).await;
+        monitor
+            .record_event_completion("test_handler", Duration::from_millis(200), false)
+            .await;
 
         let summary = monitor.get_performance_summary().await;
-        
+
         assert_eq!(summary.total_events, 2);
         assert_eq!(summary.failed_events, 1);
         assert_eq!(summary.success_rate, 50.0);
         assert!(summary.handler_metrics.contains_key("test_handler"));
-        
+
         let handler_metrics = &summary.handler_metrics["test_handler"];
         assert_eq!(handler_metrics.events_processed, 2);
         assert_eq!(handler_metrics.events_failed, 1);
@@ -783,11 +806,11 @@ mod tests {
     #[tokio::test]
     async fn test_queue_depth_tracking() {
         let monitor = PerformanceMonitor::new();
-        
+
         monitor.update_queue_depth(100);
         monitor.update_queue_depth(200);
         monitor.update_queue_depth(50);
-        
+
         let summary = monitor.get_performance_summary().await;
         assert_eq!(summary.current_queue_depth, 50);
         assert_eq!(summary.max_queue_depth, 200);
@@ -796,29 +819,25 @@ mod tests {
     #[tokio::test]
     async fn test_performance_health_check() {
         let monitor = PerformanceMonitor::new();
-        
+
         // Add some successful events
         for _ in 0..100 {
-            monitor.record_event_completion(
-                "test_handler",
-                Duration::from_millis(10),
-                true,
-            ).await;
+            monitor
+                .record_event_completion("test_handler", Duration::from_millis(10), true)
+                .await;
         }
-        
+
         let health = monitor.check_performance_health().await;
         assert_eq!(health.status, PerformanceHealth::Healthy);
         assert!(health.issues.is_empty());
-        
+
         // Add failed events to degrade performance
         for _ in 0..20 {
-            monitor.record_event_completion(
-                "test_handler",
-                Duration::from_millis(10),
-                false,
-            ).await;
+            monitor
+                .record_event_completion("test_handler", Duration::from_millis(10), false)
+                .await;
         }
-        
+
         let health = monitor.check_performance_health().await;
         assert_eq!(health.status, PerformanceHealth::Degraded);
         assert!(!health.issues.is_empty());
@@ -827,17 +846,25 @@ mod tests {
     #[tokio::test]
     async fn test_handler_rankings() {
         let monitor = PerformanceMonitor::new();
-        
+
         // Add metrics for multiple handlers
-        monitor.record_event_completion("fast_handler", Duration::from_millis(10), true).await;
-        monitor.record_event_completion("fast_handler", Duration::from_millis(20), true).await;
-        
-        monitor.record_event_completion("slow_handler", Duration::from_millis(100), true).await;
-        monitor.record_event_completion("slow_handler", Duration::from_millis(200), true).await;
-        
+        monitor
+            .record_event_completion("fast_handler", Duration::from_millis(10), true)
+            .await;
+        monitor
+            .record_event_completion("fast_handler", Duration::from_millis(20), true)
+            .await;
+
+        monitor
+            .record_event_completion("slow_handler", Duration::from_millis(100), true)
+            .await;
+        monitor
+            .record_event_completion("slow_handler", Duration::from_millis(200), true)
+            .await;
+
         let rankings = monitor.get_handler_rankings().await;
         assert_eq!(rankings.len(), 2);
-        
+
         // Rankings should be sorted by throughput (higher is better)
         assert!(rankings[0].throughput >= rankings[1].throughput);
     }

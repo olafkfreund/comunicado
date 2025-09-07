@@ -1,17 +1,17 @@
 //! Email integration for notes plugin
-//! 
+//!
 //! Provides functionality to link notes with emails, contacts, and email threads
 //! for practical note-taking in an email client context.
 
-use super::types::{Note, NoteId};
-use super::storage::NoteStorage;
 use super::manager::NoteResult;
+use super::storage::NoteStorage;
+use super::types::{Note, NoteId};
 use crate::email::message::EmailMessage;
 
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use chrono::{DateTime, Utc};
-use serde::{Serialize, Deserialize};
 
 /// Email-linked note with metadata about the email connection
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -124,11 +124,11 @@ impl EmailIntegrationService {
         // Create the note
         let note_path = self.generate_note_path(&note_id, link_type)?;
         let mut note = Note::new(note_id.clone(), note_title, note_content, note_path);
-        
+
         // Add email-related tags
         note.tags.push("email-linked".to_string());
         note.tags.push(format!("sender:{}", email_message.sender()));
-        
+
         match link_type {
             EmailLinkType::ContactNote => note.tags.push("contact".to_string()),
             EmailLinkType::ThreadNote => note.tags.push("thread".to_string()),
@@ -152,7 +152,8 @@ impl EmailIntegrationService {
 
         // Update mappings
         self.update_email_note_mapping(&email_note).await?;
-        self.update_contact_registry(email_message, &note_id).await?;
+        self.update_contact_registry(email_message, &note_id)
+            .await?;
 
         Ok(email_note)
     }
@@ -214,7 +215,7 @@ impl EmailIntegrationService {
     pub async fn search_email_related_notes(&self, query: &str) -> NoteResult<Vec<Note>> {
         // Use the storage search functionality
         let search_results = self.storage.search_notes(query, 50).await?;
-        
+
         // Filter for email-related notes
         let mut email_related = Vec::new();
         for result in search_results {
@@ -232,7 +233,8 @@ impl EmailIntegrationService {
         email_message: &EmailMessage,
         note_content: String,
     ) -> NoteResult<EmailNote> {
-        self.create_email_note(email_message, note_content, EmailLinkType::EmailNote).await
+        self.create_email_note(email_message, note_content, EmailLinkType::EmailNote)
+            .await
     }
 
     /// Create a contact note
@@ -241,7 +243,8 @@ impl EmailIntegrationService {
         email_message: &EmailMessage,
         note_content: String,
     ) -> NoteResult<EmailNote> {
-        self.create_email_note(email_message, note_content, EmailLinkType::ContactNote).await
+        self.create_email_note(email_message, note_content, EmailLinkType::ContactNote)
+            .await
     }
 
     /// Get contact information
@@ -253,7 +256,8 @@ impl EmailIntegrationService {
     /// Get all contacts with notes
     pub async fn get_contacts_with_notes(&self) -> Vec<EmailContact> {
         let contacts = self.contacts.read().await;
-        contacts.values()
+        contacts
+            .values()
             .filter(|contact| !contact.note_ids.is_empty())
             .cloned()
             .collect()
@@ -311,7 +315,11 @@ impl EmailIntegrationService {
     // ==================== Private Helper Methods ====================
 
     /// Generate appropriate file path for email-linked note
-    fn generate_note_path(&self, note_id: &str, link_type: EmailLinkType) -> NoteResult<std::path::PathBuf> {
+    fn generate_note_path(
+        &self,
+        note_id: &str,
+        link_type: EmailLinkType,
+    ) -> NoteResult<std::path::PathBuf> {
         let folder = match link_type {
             EmailLinkType::EmailNote => "email-notes",
             EmailLinkType::ContactNote => "contacts",
@@ -320,24 +328,33 @@ impl EmailIntegrationService {
             EmailLinkType::FollowUpNote => "follow-ups",
         };
 
-        Ok(std::path::PathBuf::from(format!("notes/{}/{}.md", folder, note_id)))
+        Ok(std::path::PathBuf::from(format!(
+            "notes/{}/{}.md",
+            folder, note_id
+        )))
     }
 
     /// Update email-to-note mapping
     async fn update_email_note_mapping(&self, email_note: &EmailNote) -> NoteResult<()> {
         let mut email_notes = self.email_notes.write().await;
-        email_notes.entry(email_note.message_id.clone())
+        email_notes
+            .entry(email_note.message_id.clone())
             .or_insert_with(Vec::new)
             .push(email_note.note.id.clone());
         Ok(())
     }
 
     /// Update contact registry with new interaction
-    async fn update_contact_registry(&self, email_message: &EmailMessage, note_id: &str) -> NoteResult<()> {
+    async fn update_contact_registry(
+        &self,
+        email_message: &EmailMessage,
+        note_id: &str,
+    ) -> NoteResult<()> {
         let mut contacts = self.contacts.write().await;
         let now = Utc::now();
 
-        let contact = contacts.entry(email_message.sender().to_string())
+        let contact = contacts
+            .entry(email_message.sender().to_string())
             .or_insert_with(|| EmailContact {
                 email: email_message.sender().to_string(),
                 name: None, // TODO: Extract from display name
@@ -357,10 +374,14 @@ impl EmailIntegrationService {
     }
 
     /// Reconstruct EmailNote from stored note
-    async fn reconstruct_email_note(&self, note: Note, message_id: &str) -> NoteResult<Option<EmailNote>> {
+    async fn reconstruct_email_note(
+        &self,
+        note: Note,
+        message_id: &str,
+    ) -> NoteResult<Option<EmailNote>> {
         // This is a simplified reconstruction - in a real implementation,
         // we'd store email metadata in the note frontmatter or separate table
-        
+
         // Extract email info from tags
         let mut email_sender = "unknown@example.com".to_string();
         for tag in &note.tags {
@@ -432,14 +453,14 @@ pub struct EmailNotesStats {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::plugins::notes::storage::NoteStorage;
     use crate::email::message::{EmailMessage, MessageId};
+    use crate::plugins::notes::storage::NoteStorage;
     use chrono::Utc;
     use std::sync::Arc;
 
     async fn create_test_storage() -> Arc<NoteStorage> {
         let storage = Arc::new(NoteStorage::new_in_memory().await.unwrap());
-        
+
         // Add a test directory for storing notes
         use crate::plugins::notes::types::WatchedDirectory;
         let directory = WatchedDirectory::new(
@@ -447,7 +468,7 @@ mod tests {
             "Test Directory".to_string(),
         );
         storage.add_watched_directory(directory).await.unwrap();
-        
+
         storage
     }
 
@@ -468,11 +489,14 @@ mod tests {
         let service = EmailIntegrationService::new(storage);
         let email = create_test_email();
 
-        let email_note = service.create_email_note(
-            &email,
-            "This is a note about the email".to_string(),
-            EmailLinkType::EmailNote,
-        ).await.unwrap();
+        let email_note = service
+            .create_email_note(
+                &email,
+                "This is a note about the email".to_string(),
+                EmailLinkType::EmailNote,
+            )
+            .await
+            .unwrap();
 
         assert_eq!(email_note.link_type, EmailLinkType::EmailNote);
         assert_eq!(email_note.email_sender, "sender@example.com");
@@ -486,10 +510,10 @@ mod tests {
         let service = EmailIntegrationService::new(storage);
         let email = create_test_email();
 
-        let email_note = service.create_contact_note(
-            &email,
-            "This person is a key client".to_string(),
-        ).await.unwrap();
+        let email_note = service
+            .create_contact_note(&email, "This person is a key client".to_string())
+            .await
+            .unwrap();
 
         assert_eq!(email_note.link_type, EmailLinkType::ContactNote);
         assert!(email_note.note.tags.contains(&"contact".to_string()));
@@ -504,8 +528,14 @@ mod tests {
         let message_id = email.message_id().as_str();
 
         // Create multiple notes for the same email
-        service.create_email_note(&email, "Note 1".to_string(), EmailLinkType::EmailNote).await.unwrap();
-        service.create_email_note(&email, "Note 2".to_string(), EmailLinkType::FollowUpNote).await.unwrap();
+        service
+            .create_email_note(&email, "Note 1".to_string(), EmailLinkType::EmailNote)
+            .await
+            .unwrap();
+        service
+            .create_email_note(&email, "Note 2".to_string(), EmailLinkType::FollowUpNote)
+            .await
+            .unwrap();
 
         let notes = service.get_email_notes(message_id).await.unwrap();
         assert_eq!(notes.len(), 2);
@@ -517,7 +547,10 @@ mod tests {
         let service = EmailIntegrationService::new(storage);
         let email = create_test_email();
 
-        service.create_contact_note(&email, "Important client".to_string()).await.unwrap();
+        service
+            .create_contact_note(&email, "Important client".to_string())
+            .await
+            .unwrap();
 
         let contact = service.get_contact("sender@example.com").await.unwrap();
         assert_eq!(contact.email, "sender@example.com");
@@ -531,10 +564,10 @@ mod tests {
         let service = EmailIntegrationService::new(storage);
         let email = create_test_email();
 
-        let email_note = service.quick_note_from_email(
-            &email,
-            "Quick note about this email".to_string(),
-        ).await.unwrap();
+        let email_note = service
+            .quick_note_from_email(&email, "Quick note about this email".to_string())
+            .await
+            .unwrap();
 
         assert_eq!(email_note.link_type, EmailLinkType::EmailNote);
     }
@@ -545,11 +578,18 @@ mod tests {
         let service = EmailIntegrationService::new(storage);
         let email = create_test_email();
 
-        service.create_email_note(&email, "Important client meeting notes".to_string(), EmailLinkType::EmailNote).await.unwrap();
+        service
+            .create_email_note(
+                &email,
+                "Important client meeting notes".to_string(),
+                EmailLinkType::EmailNote,
+            )
+            .await
+            .unwrap();
 
         let results = service.search_email_related_notes("client").await.unwrap();
         assert!(!results.is_empty());
-        
+
         // All results should be email-linked
         for note in results {
             assert!(note.tags.contains(&"email-linked".to_string()));
@@ -561,12 +601,18 @@ mod tests {
         let storage = create_test_storage().await;
         let service = EmailIntegrationService::new(storage);
 
-        service.register_email_thread(
-            "thread-123".to_string(),
-            "Project Discussion".to_string(),
-            vec!["msg1".to_string(), "msg2".to_string()],
-            vec!["alice@example.com".to_string(), "bob@example.com".to_string()],
-        ).await.unwrap();
+        service
+            .register_email_thread(
+                "thread-123".to_string(),
+                "Project Discussion".to_string(),
+                vec!["msg1".to_string(), "msg2".to_string()],
+                vec![
+                    "alice@example.com".to_string(),
+                    "bob@example.com".to_string(),
+                ],
+            )
+            .await
+            .unwrap();
 
         let thread_notes = service.get_thread_notes("thread-123").await.unwrap();
         assert_eq!(thread_notes.len(), 0); // No notes yet
@@ -578,7 +624,10 @@ mod tests {
         let service = EmailIntegrationService::new(storage);
         let email = create_test_email();
 
-        let email_note = service.create_email_note(&email, "Test note".to_string(), EmailLinkType::EmailNote).await.unwrap();
+        let email_note = service
+            .create_email_note(&email, "Test note".to_string(), EmailLinkType::EmailNote)
+            .await
+            .unwrap();
         let note_id = email_note.note.id.clone();
 
         service.delete_email_note(&note_id).await.unwrap();
@@ -594,8 +643,14 @@ mod tests {
         let service = EmailIntegrationService::new(storage);
         let email = create_test_email();
 
-        service.create_email_note(&email, "Note 1".to_string(), EmailLinkType::EmailNote).await.unwrap();
-        service.create_contact_note(&email, "Contact note".to_string()).await.unwrap();
+        service
+            .create_email_note(&email, "Note 1".to_string(), EmailLinkType::EmailNote)
+            .await
+            .unwrap();
+        service
+            .create_contact_note(&email, "Contact note".to_string())
+            .await
+            .unwrap();
 
         let stats = service.get_email_notes_stats().await;
         assert_eq!(stats.total_email_notes, 2);
@@ -609,7 +664,10 @@ mod tests {
         let service = EmailIntegrationService::new(storage);
         let email = create_test_email();
 
-        service.create_contact_note(&email, "Important contact".to_string()).await.unwrap();
+        service
+            .create_contact_note(&email, "Important contact".to_string())
+            .await
+            .unwrap();
 
         let contacts = service.get_contacts_with_notes().await;
         assert_eq!(contacts.len(), 1);

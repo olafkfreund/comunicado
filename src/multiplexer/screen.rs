@@ -6,7 +6,7 @@
 //! - Key binding setup
 //! - Multi-user session support
 
-use super::{MultiplexerError, MultiplexerResult, SessionInfo, MultiplexerType};
+use super::{MultiplexerError, MultiplexerResult, MultiplexerType, SessionInfo};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::process::{Command, Stdio};
@@ -59,13 +59,13 @@ pub enum SessionStatus {
 /// Screen window flags
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum WindowFlag {
-    Active,      // *
-    Previous,    // -
-    Bell,        // !
-    Activity,    // @
-    Monitor,     // #
-    Silence,     // $
-    Zombie,      // Z
+    Active,   // *
+    Previous, // -
+    Bell,     // !
+    Activity, // @
+    Monitor,  // #
+    Silence,  // $
+    Zombie,   // Z
 }
 
 impl ScreenIntegration {
@@ -81,13 +81,13 @@ impl ScreenIntegration {
     pub fn initialize(&mut self) -> MultiplexerResult<()> {
         // Verify screen is available
         self.check_screen_available()?;
-        
+
         // Get current session info
         self.update_session_info()?;
-        
+
         // Load current windows
         self.refresh_windows()?;
-        
+
         Ok(())
     }
 
@@ -99,15 +99,16 @@ impl ScreenIntegration {
             .stderr(Stdio::null())
             .status()
             .map_err(|e| MultiplexerError::NotFound(format!("screen not found: {}", e)))?;
-        
+
         Ok(())
     }
 
     /// Update session information from environment
     pub fn update_session_info(&mut self) -> MultiplexerResult<()> {
-        let sty = std::env::var("STY")
-            .map_err(|_| MultiplexerError::SessionError("Not running in screen session".to_string()))?;
-        
+        let sty = std::env::var("STY").map_err(|_| {
+            MultiplexerError::SessionError("Not running in screen session".to_string())
+        })?;
+
         // Parse STY format: "pid.session_name"
         let parts: Vec<&str> = sty.split('.').collect();
         let session_name = if parts.len() > 1 {
@@ -133,10 +134,10 @@ impl ScreenIntegration {
     pub fn refresh_windows(&mut self) -> MultiplexerResult<()> {
         // Get current window list
         let output = self.run_screen_command(&["-Q", "windows"])?;
-        
+
         self.windows.clear();
         self.parse_windows(&output)?;
-        
+
         Ok(())
     }
 
@@ -144,16 +145,18 @@ impl ScreenIntegration {
     pub fn create_window(&mut self, name: &str) -> MultiplexerResult<String> {
         // Create new screen window
         self.run_screen_command(&["-X", "screen", "-t", name])?;
-        
+
         // Get the new window number
         let windows_output = self.run_screen_command(&["-Q", "windows"])?;
-        
+
         // Parse to find the newly created window
         if let Some(window) = self.find_window_by_name(&windows_output, name)? {
             self.refresh_windows()?;
             Ok(window.id)
         } else {
-            Err(MultiplexerError::CommandFailed("Failed to create window".to_string()))
+            Err(MultiplexerError::CommandFailed(
+                "Failed to create window".to_string(),
+            ))
         }
     }
 
@@ -165,14 +168,18 @@ impl ScreenIntegration {
 
         // Set hardstatus line
         self.run_screen_command(&[
-            "-X", "hardstatus", "alwayslastline",
-            &self.config.hardstatus_format
+            "-X",
+            "hardstatus",
+            "alwayslastline",
+            &self.config.hardstatus_format,
         ])?;
 
         // Configure caption (window list)
         self.run_screen_command(&[
-            "-X", "caption", "always",
-            "%{= kw}%-w%{= BW}%n %t%{-}%+w %= 📧 Comunicado | %c %d/%m/%y"
+            "-X",
+            "caption",
+            "always",
+            "%{= kw}%-w%{= BW}%n %t%{-}%+w %= 📧 Comunicado | %c %d/%m/%y",
         ])?;
 
         Ok(())
@@ -181,10 +188,12 @@ impl ScreenIntegration {
     /// Set up screen key bindings
     pub fn setup_keybindings(&mut self) -> MultiplexerResult<()> {
         // Set escape character if configured
-        if self.config.escape_char != '\x01' { // Default is Ctrl-A
+        if self.config.escape_char != '\x01' {
+            // Default is Ctrl-A
             self.run_screen_command(&[
-                "-X", "escape", 
-                &format!("{}{}", self.config.escape_char, self.config.escape_char)
+                "-X",
+                "escape",
+                &format!("{}{}", self.config.escape_char, self.config.escape_char),
             ])?;
         }
 
@@ -194,7 +203,6 @@ impl ScreenIntegration {
             ("bind", "m", "stuff", "📧 New Email^M"),
             ("bind", "c", "stuff", "📅 Calendar^M"),
             ("bind", "s", "stuff", "⚙️ Settings^M"),
-            
             // Window management
             ("bind", "E", "screen", "-t Email"),
             ("bind", "C", "screen", "-t Calendar"),
@@ -211,10 +219,10 @@ impl ScreenIntegration {
     pub fn send_notification(&self, message: &str) -> MultiplexerResult<()> {
         // Send message to hardstatus
         self.run_screen_command(&["-X", "echo", message])?;
-        
+
         // Optional bell
         self.run_screen_command(&["-X", "bell_msg", message])?;
-        
+
         Ok(())
     }
 
@@ -289,7 +297,9 @@ impl ScreenIntegration {
         if let Some(ref info) = self.session_info {
             Ok(info.session_name.clone())
         } else {
-            Err(MultiplexerError::SessionError("No session info available".to_string()))
+            Err(MultiplexerError::SessionError(
+                "No session info available".to_string(),
+            ))
         }
     }
 
@@ -352,7 +362,11 @@ impl ScreenIntegration {
         }))
     }
 
-    fn find_window_by_name(&self, _output: &str, _name: &str) -> MultiplexerResult<Option<ScreenWindow>> {
+    fn find_window_by_name(
+        &self,
+        _output: &str,
+        _name: &str,
+    ) -> MultiplexerResult<Option<ScreenWindow>> {
         // This is a simplified implementation
         // In practice, you'd need to parse the full window list with titles
         Ok(None)
@@ -360,13 +374,13 @@ impl ScreenIntegration {
 
     fn parse_sessions(&self, output: &str) -> MultiplexerResult<Vec<ScreenSession>> {
         let mut sessions = Vec::new();
-        
+
         for line in output.lines() {
             if let Some(session) = self.parse_session_line(line)? {
                 sessions.push(session);
             }
         }
-        
+
         Ok(sessions)
     }
 
@@ -402,7 +416,7 @@ impl ScreenIntegration {
             pid,
             status,
             created: chrono::Utc::now(), // Screen doesn't provide creation time easily
-            windows: Vec::new(), // Would need separate call to populate
+            windows: Vec::new(),         // Would need separate call to populate
         }))
     }
 }
