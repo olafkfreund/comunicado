@@ -1,19 +1,29 @@
 // RFC Standards Implementation for vCard and iCalendar parsing
 // Using calcard crate for RFC 6350 (vCard) and RFC 5545 (iCalendar) compliance
 
+#[cfg(feature = "rfc-standards")]
 use crate::calendar::{Event, EventPriority, EventStatus};
+#[cfg(feature = "rfc-standards")]
 use crate::contacts::{Contact, ContactEmail, ContactPhone, ContactSource};
+#[cfg(feature = "rfc-standards")]
 use calcard::icalendar::ICalendar;
+#[cfg(feature = "rfc-standards")]
 use calcard::vcard::{VCard, VCardParameter, VCardProperty, VCardValue};
+#[cfg(feature = "rfc-standards")]
 use calcard::{Entry, Parser};
+#[cfg(feature = "rfc-standards")]
 use chrono::{DateTime, Utc};
+#[cfg(feature = "rfc-standards")]
 use tracing::{debug, error, warn};
+#[cfg(feature = "rfc-standards")]
 use uuid::Uuid;
 
 /// RFC standards parser for vCard and iCalendar data
+#[cfg(feature = "rfc-standards")]
 #[allow(dead_code)]
 pub struct RfcStandardsParser;
 
+#[cfg(feature = "rfc-standards")]
 impl RfcStandardsParser {
     /// Parse vCard data (RFC 6350) into Contact objects
     #[allow(dead_code)]
@@ -366,6 +376,7 @@ impl RfcStandardsParser {
 }
 
 /// Errors that can occur during RFC standards parsing
+#[cfg(feature = "rfc-standards")]
 #[derive(Debug, thiserror::Error)]
 pub enum RfcStandardsError {
     #[error("Parse error: {0}")]
@@ -381,7 +392,43 @@ pub enum RfcStandardsError {
     ConversionError(String),
 }
 
-#[cfg(test)]
+// Stub implementations when rfc-standards feature is disabled
+#[cfg(not(feature = "rfc-standards"))]
+pub struct RfcStandardsParser;
+
+#[cfg(not(feature = "rfc-standards"))]
+#[derive(Debug, thiserror::Error)]
+pub enum RfcStandardsError {
+    #[error("RFC standards functionality disabled - enable 'rfc-standards' feature")]
+    Disabled,
+}
+
+#[cfg(not(feature = "rfc-standards"))]
+impl RfcStandardsParser {
+    pub fn parse_vcard_to_contact(
+        _vcard_data: &str,
+        _source: crate::contacts::ContactSource,
+    ) -> Result<Vec<crate::contacts::Contact>, RfcStandardsError> {
+        Err(RfcStandardsError::Disabled)
+    }
+    
+    pub fn contact_to_vcard(_contact: &crate::contacts::Contact) -> Result<String, RfcStandardsError> {
+        Err(RfcStandardsError::Disabled)
+    }
+    
+    pub fn parse_icalendar_to_event(
+        _icalendar_data: &str,
+        _calendar_id: String,
+    ) -> Result<Vec<crate::calendar::Event>, RfcStandardsError> {
+        Err(RfcStandardsError::Disabled)
+    }
+    
+    pub fn event_to_icalendar(_events: &[crate::calendar::Event]) -> Result<String, RfcStandardsError> {
+        Err(RfcStandardsError::Disabled)
+    }
+}
+
+#[cfg(all(test, feature = "rfc-standards"))]
 mod tests {
     use super::*;
 

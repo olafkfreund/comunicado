@@ -74,8 +74,8 @@ async-trait = "0.1"
 # Fuzzy matching for command palette
 fuzzy-matcher = "0.3"
 
-# vCard/iCalendar parsing with RFC compliance
-calcard = "0.1"
+# vCard/iCalendar parsing with RFC compliance (currently disabled for MSRV compatibility)
+calcard = { version = "=0.1.0", optional = true }
 
 # Desktop notifications - optional dependency for feature flag
 notify-rust = { version = "4.10", optional = true }
@@ -139,6 +139,8 @@ modular-ui = []
 webp-images = ["image/webp"]
 jpeg-images = ["image/jpeg"]
 experimental-crypto = ["sequoia-openpgp/allow-experimental-crypto", "sequoia-openpgp/allow-variable-time-crypto"]
+# RFC standards compliance - disabled by default for MSRV compatibility
+rfc-standards = ["calcard"]
 
 [[bin]]
 name = "comunicado"
