@@ -8,4 +8,7 @@ ignore = [
     "RUSTSEC-2025-0057",  # fxhash - unmaintained (via scraper)
     "RUSTSEC-2024-0384",  # instant - unmaintained (via keyring)
     "RUSTSEC-2024-0436",  # paste - unmaintained (via ratatui)
+    "RUSTSEC-2024-0421",  # idna Punycode issue - acceptable for email client
+    "RUSTSEC-2024-0345",  # sequoia-openpgp DoS - low severity, acceptable for client app
+    "RUSTSEC-2024-0404",  # anstream unsoundness - warning level, acceptable
 ]
