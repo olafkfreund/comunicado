@@ -169,34 +169,31 @@ jobs:
         directory: ./coverage/
         fail_ci_if_error: false
 
-  benchmark:
-    name: Performance Benchmarks
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-
-    - name: Install Rust toolchain
-      uses: dtolnay/rust-toolchain@stable
-
-    - name: Install system dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y \
-          libssl-dev \
-          libsqlite3-dev \
-          pkg-config \
-          libdbus-1-dev
-
-    - name: Run benchmarks
-      run: cargo bench || echo "Benchmarks failed but continuing"
-
-    - name: Store benchmark results
-      uses: benchmark-action/github-action-benchmark@v1
-      with:
-        tool: 'cargo'
-        output-file-path: target/criterion/report/index.html
-        github-token: ${{ secrets.GITHUB_TOKEN }}
-        auto-push: true
-        comment-on-alert: true
+  # Benchmarks disabled - no criterion benchmarks configured
+  # benchmark:
+  #   name: Performance Benchmarks
+  #   runs-on: ubuntu-latest
+  #   if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+  #   steps:
+  #   - name: Checkout repository
+  #     uses: actions/checkout@v4
+  #   - name: Install Rust toolchain
+  #     uses: dtolnay/rust-toolchain@stable
+  #   - name: Install system dependencies
+  #     run: |
+  #       sudo apt-get update
+  #       sudo apt-get install -y \
+  #         libssl-dev \
+  #         libsqlite3-dev \
+  #         pkg-config \
+  #         libdbus-1-dev
+  #   - name: Run benchmarks
+  #     run: cargo bench
+  #   - name: Store benchmark results
+  #     uses: benchmark-action/github-action-benchmark@v1
+  #     with:
+  #       tool: 'cargo'
+  #       output-file-path: target/criterion/report/index.html
+  #       github-token: ${{ secrets.GITHUB_TOKEN }}
+  #       auto-push: true
+  #       comment-on-alert: true
