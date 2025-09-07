@@ -15,7 +15,7 @@ default-run = "comunicado"
 ratatui = { version = "0.28", features = ["serde"] }
 crossterm = "0.27"
 tui-textarea = "0.4"
-arboard = "3.4"
+arboard = "=3.3.0"
 
 # Async Runtime - optimized for performance
 tokio = { version = "1.35", features = ["rt-multi-thread", "net", "fs", "time", "macros", "sync", "io-util", "process", "signal"] }
@@ -51,7 +51,7 @@ ammonia = "3.3"   # Security-first HTML sanitization using html5ever
 pulldown-cmark = "0.9"  # Enhanced markdown support for better text formatting
 
 # Image processing and terminal graphics - optimized
-image = { version = "0.24", default-features = false, features = ["png", "gif"] }
+image = { version = "=0.24.9", default-features = false, features = ["png", "gif"] }
 gif = "0.13"
 
 # Email and networking
