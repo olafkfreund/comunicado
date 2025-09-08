@@ -1,5 +1,20 @@
 use chrono::{DateTime, Datelike, Timelike, Utc};
-use notify_rust::{Notification, NotificationHandle, Timeout, Urgency};
+use notify_rust::{Notification, Timeout};
+
+#[cfg(not(target_os = "windows"))]
+use notify_rust::NotificationHandle;
+
+#[cfg(target_os = "windows")]
+#[derive(Debug, Clone)]
+pub struct NotificationHandle;
+
+#[cfg(target_os = "windows")]
+#[derive(Debug, Clone)]
+pub enum Urgency {
+    Low,
+    Normal,
+    Critical,
+}
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -614,11 +629,17 @@ impl DesktopNotificationService {
                 NotificationPriority::High => Timeout::Milliseconds(10000),
                 _ => Timeout::Milliseconds(5000),
             })
-            .urgency(match priority {
-                NotificationPriority::Critical => Urgency::Critical,
-                NotificationPriority::High => Urgency::Normal,
-                _ => Urgency::Low,
+            ;
+
+        // Set urgency (only available on non-Windows platforms)
+        #[cfg(not(target_os = "windows"))]
+        {
+            notification.urgency(match priority {
+                NotificationPriority::Critical => notify_rust::Urgency::Critical,
+                NotificationPriority::High => notify_rust::Urgency::Normal,
+                _ => notify_rust::Urgency::Low,
             });
+        }
 
         // Add sound if enabled
         if self.config.notification_sounds.enabled {
