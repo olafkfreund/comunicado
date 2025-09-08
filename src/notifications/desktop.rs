@@ -660,13 +660,23 @@ impl DesktopNotificationService {
         // Attempt to send the notification
         match notification.show() {
             Ok(handle) => {
+                #[cfg(target_os = "windows")]
+                let _ = handle; // Suppress unused warning on Windows
                 debug!("Desktop notification sent successfully: {}", title);
 
                 // Track active notification
                 let notification_id = Uuid::new_v4();
+                
+                // Handle platform-specific notification handle
+                #[cfg(not(target_os = "windows"))]
+                let notification_handle = Some(handle);
+                
+                #[cfg(target_os = "windows")]
+                let notification_handle = Some(NotificationHandle);
+                
                 let active_notification = ActiveNotification {
                     id: notification_id,
-                    handle: Some(handle),
+                    handle: notification_handle,
                     title: title.to_string(),
                     notification_type: NotificationEventType::System, // Default type
                     created_at: Utc::now(),
